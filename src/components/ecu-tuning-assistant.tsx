@@ -261,6 +261,8 @@ export default function EcuTuningAssistant() {
             aggressiveness: aggressiveness / 100,
             eixo_x: axes.x,
             eixo_y: axes.y,
+            eixo_x_label: axes.xLabel,
+            eixo_y_label: axes.yLabel,
         };
 
         const result = await suggestMapCorrections(input);

@@ -24,6 +24,8 @@ const SuggestMapCorrectionsActionInputSchema = z.object({
   aggressiveness: z.number().min(0).max(1),
   eixo_x: z.array(z.number()),
   eixo_y: z.array(z.number()),
+  eixo_x_label: z.string(),
+  eixo_y_label: z.string(),
 });
 
 export async function suggestMapCorrections(input: SuggestMapCorrectionsInput): Promise<{ success: boolean; data?: SuggestMapCorrectionsOutput; error?: string }> {

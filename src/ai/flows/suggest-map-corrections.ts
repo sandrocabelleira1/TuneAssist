@@ -27,6 +27,8 @@ const SuggestMapCorrectionsInputSchema = z.object({
   aggressiveness: z.number().describe('A agressividade da correção (0-1).'),
   eixo_x: z.array(z.number()).describe('Valores do eixo X (ex. Carga)'),
   eixo_y: z.array(z.number()).describe('Valores do eixo Y (ex. RPM)'),
+  eixo_x_label: z.string().describe('Rótulo para o eixo X.'),
+  eixo_y_label: z.string().describe('Rótulo para o eixo Y.'),
 });
 export type SuggestMapCorrectionsInput = z.infer<typeof SuggestMapCorrectionsInputSchema>;
 
@@ -61,12 +63,18 @@ const prompt = ai.definePrompt({
     output: {schema: AiOutputSchema},
     prompt: `Você é um engenheiro de calibração de motores. A sua única tarefa é analisar os dados de um mapa de combustível e os dados de um teste para criar uma grelha de valores de lambda medidos.
 
+**CONTEXTO DOS EIXOS**:
+- O eixo Y do mapa é identificado pelo rótulo: **{{{eixo_y_label}}}**. Seus valores estão em \`eixo_y\`.
+- O eixo X do mapa é identificado pelo rótulo: **{{{eixo_x_label}}}**. Seus valores estão em \`eixo_x\`.
+
+Os dados de teste (\`testData\`) contêm as chaves \`rpm\` (rotações por minuto) e \`carga\` (carga do motor). Você deve associar \`rpm\` e \`carga\` aos eixos corretos com base nos seus rótulos. Por exemplo, se \`eixo_y_label\` for algo como 'RPM', então \`eixo_y\` corresponde a \`rpm\` dos dados de teste. Se \`eixo_x_label\` for algo como 'Carga' ou 'Load', então \`eixo_x\` corresponde a \`carga\`.
+
 **SAÍDA OBRIGATÓRIA**:
 A sua saída DEVE ser um único objeto JSON contendo APENAS a chave \`lambdaMeasuredGrid\`.
 
 - **\`lambdaMeasuredGrid\`**: Crie uma grelha com as mesmas dimensões do \`mapData\` de entrada.
-  - Para cada célula na grelha nas coordenadas \`[y][x]\`, encontre o RPM correspondente em \`eixo_y[y]\` e a Carga em \`eixo_x[x]\`.
-  - Em seguida, procure nos \`testData\` os pontos onde o \`rpm\` e a \`carga\` são mais próximos dos valores da célula.
+  - Para cada célula na grelha nas coordenadas \`[y][x]\`, determine o valor do eixo Y (\`eixo_y[y]\`) e do eixo X (\`eixo_x[x]\`).
+  - Em seguida, procure nos \`testData\` os pontos onde o \`rpm\` e a \`carga\` são mais próximos dos valores da célula, respeitando a associação de eixos que você determinou a partir dos rótulos.
   - Se encontrar pontos de dados de teste relevantes para uma célula, calcule o valor **MÉDIO** do \`lambda\` desses pontos e preencha a célula com esse valor.
   - Para células do mapa que **não tenham dados de teste correspondentes** (ou próximos o suficiente), o valor da célula DEVE ser \`null\`.
   - Esta grelha DEVE ter exatamente as mesmas dimensões (linhas e colunas) que o \`mapData\` original.
@@ -78,6 +86,8 @@ mapData: {{{json mapData}}}
 testData: {{{json testData}}}
 eixo_x: {{{json eixo_x}}}
 eixo_y: {{{json eixo_y}}}
+eixo_x_label: {{{eixo_x_label}}}
+eixo_y_label: {{{eixo_y_label}}}
 `,
 });
 
