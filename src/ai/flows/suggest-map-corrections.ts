@@ -61,25 +61,36 @@ const prompt = ai.definePrompt({
     name: 'generateLambdaMeasuredGridPrompt',
     input: {schema: SuggestMapCorrectionsInputSchema},
     output: {schema: AiOutputSchema},
-    prompt: `Você é um engenheiro de calibração de motores. A sua única tarefa é analisar os dados de um mapa de combustível e os dados de um teste para criar uma grelha de valores de lambda medidos.
+    prompt: `Você é um engenheiro de calibração de motores. A sua tarefa é mapear dados de ensaio para uma grelha, e apenas isso.
 
 **CONTEXTO DOS EIXOS**:
-- O eixo Y do mapa é identificado pelo rótulo: **{{{eixo_y_label}}}**. Seus valores estão em \`eixo_y\`.
-- O eixo X do mapa é identificado pelo rótulo: **{{{eixo_x_label}}}**. Seus valores estão em \`eixo_x\`.
+- O eixo Y do mapa (\`eixo_y\`) corresponde a **{{{eixo_y_label}}}**.
+- O eixo X do mapa (\`eixo_x\`) corresponde a **{{{eixo_x_label}}}**.
+- Associe \`rpm\` e \`carga\` dos \`testData\` aos eixos corretos com base nestes rótulos.
 
-Os dados de teste (\`testData\`) contêm as chaves \`rpm\` (rotações por minuto) e \`carga\` (carga do motor). Você deve associar \`rpm\` e \`carga\` aos eixos corretos com base nos seus rótulos. Por exemplo, se \`eixo_y_label\` for algo como 'RPM', então \`eixo_y\` corresponde a \`rpm\` dos dados de teste. Se \`eixo_x_label\` for algo como 'Carga' ou 'Load', então \`eixo_x\` corresponde a \`carga\`.
+**LÓGICA OBRIGATÓRIA**:
+A sua única saída deve ser um objeto JSON com a chave \`lambdaMeasuredGrid\`. Siga estes passos EXATAMENTE:
 
-**SAÍDA OBRIGATÓRIA**:
-A sua saída DEVE ser um único objeto JSON contendo APENAS a chave \`lambdaMeasuredGrid\`.
+1.  Crie uma grelha \`lambdaMeasuredGrid\` com as mesmas dimensões do \`mapData\` de entrada (mesmo número de linhas e colunas) e inicialize TODAS as suas células com o valor \`null\`.
+2.  Crie uma estrutura de dados temporária (por exemplo, um dicionário ou mapa em memória) para armazenar correspondências. As chaves serão as coordenadas da grelha (ex: "y_x") e os valores serão listas de valores de lambda.
+3.  **Itere sobre cada ponto em \`testData\`** (cada objeto com \`rpm\`, \`carga\`, \`lambda\`).
+4.  Para cada ponto de ensaio, encontre a célula **única** na grelha que corresponde mais de perto aos valores de \`rpm\` e \`carga\` do ponto. Determine o índice \`y\` mais próximo em \`eixo_y\` e o índice \`x\` mais próximo em \`eixo_x\`.
+5.  Adicione o valor de \`lambda\` desse ponto de ensaio à lista de lambdas para a coordenada encontrada (\`[y][x]\`) na sua estrutura temporária.
+6.  Após iterar sobre TODOS os \`testData\`, percorra a sua estrutura temporária.
+7.  Para cada coordenada \`[y][x]\` que tiver uma lista de lambdas, calcule a **média** desses valores.
+8.  Atualize a célula \`[y][x]\` na sua \`lambdaMeasuredGrid\` com o valor médio calculado. As células que não tiveram correspondência com nenhum ponto de ensaio DEVEM permanecer \`null\`.
 
-- **\`lambdaMeasuredGrid\`**: Crie uma grelha com as mesmas dimensões do \`mapData\` de entrada.
-  - Para cada célula na grelha nas coordenadas \`[y][x]\`, determine o valor do eixo Y (\`eixo_y[y]\`) e do eixo X (\`eixo_x[x]\`).
-  - Em seguida, procure nos \`testData\` os pontos onde o \`rpm\` e a \`carga\` são mais próximos dos valores da célula, respeitando a associação de eixos que você determinou a partir dos rótulos.
-  - Se encontrar pontos de dados de teste relevantes para uma célula, calcule o valor **MÉDIO** do \`lambda\` desses pontos e preencha a célula com esse valor.
-  - Para células do mapa que **não tenham dados de teste correspondentes** (ou próximos o suficiente), o valor da célula DEVE ser \`null\`.
-  - Esta grelha DEVE ter exatamente as mesmas dimensões (linhas e colunas) que o \`mapData\` original.
+**EXEMPLO**:
+- Se \`eixo_y\` é RPM e \`eixo_x\` é Carga.
+- Um ponto de ensaio é \`{rpm: 2050, carga: 42, lambda: 0.95}\`.
+- \`eixo_y\` tem os valores \`[..., 2000, 2200, ...]\` e \`eixo_x\` tem \`[..., 40, 50, ...]\`.
+- A célula mais próxima é a que corresponde a \`2000\` RPM (índice \`y\`) e \`40\` Carga (índice \`x\`).
+- Você adicionaria \`0.95\` à lista de lambdas para a célula \`[y][x]\`.
+- Se outro ponto de ensaio também corresponder à mesma célula \`[y][x]\`, você adicionaria o seu lambda à mesma lista.
+- No final, você calcularia a média da lista para essa célula.
 
-**NÃO FAÇA MAIS NADA.** Não calcule mapas corrigidos nem percentagens de correção. A sua única responsabilidade é gerar a \`lambdaMeasuredGrid\`. O formato deve corresponder exatamente ao schema de saída fornecido.
+**RESULTADO FINAL**:
+A \`lambdaMeasuredGrid\` resultante conterá valores numéricos apenas para as células que corresponderam diretamente aos dados de ensaio, e \`null\` para todas as outras. Não preencha células vazias. Não faça interpolação entre células.
 
 Dados de Entrada:
 mapData: {{{json mapData}}}
@@ -98,7 +109,7 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     outputSchema: SuggestMapCorrectionsOutputSchema,
   },
   async (input) => {
-    // 1. Ask the AI to do the one thing it's good at: interpolate test data onto a grid.
+    // 1. Ask the AI to do the one thing it's good at: map test data to a grid.
     const { output: aiOutput } = await prompt(input);
     
     if (!aiOutput || !aiOutput.lambdaMeasuredGrid) {
@@ -128,8 +139,9 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     const correctedMap = mapData.map((row, y) => {
         return row.map((originalValue, x) => {
             const correctionPercent = correctionPercentageMap[y]?.[x];
-            if (originalValue === null || originalValue === undefined || correctionPercent === null || correctionPercent === undefined) {
-                return originalValue; // Keep original value if it's null or no correction exists
+            // If there is no correction, or the original value is invalid, return the original value.
+            if (correctionPercent === 0 || originalValue === null || originalValue === undefined) {
+                return originalValue;
             }
             // Formula: original * (1 + (correctionPercent / 100) * aggressiveness)
             const newValue = originalValue * (1 + (correctionPercent / 100) * aggressiveness);
