@@ -218,7 +218,7 @@ export default function EcuTuningAssistant() {
             const sortedAxes = {
               x: sortableX.map(item => parseFloat(item.value.toFixed(1))),
               y: sortableY.map(item => Math.round(Number(item.value))),
-              xLabel: definition.xAxisDef?.label || 'Load',
+              xLabel: definition.xAxisDef?.label || 'Carga',
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
             
