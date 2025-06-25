@@ -359,7 +359,7 @@ export default function EcuTuningAssistant() {
         setIsFetchingManual(true);
         addLog(`A procurar informações do manual para "${manualSearchModel}"...`, 'info');
 
-        const result = await fetchManualInformation({ model: manualSearchModel });
+        const result = await fetchManualInformation({ query: manualSearchModel });
         
         if (result.success && result.data) {
             setFactorySpecs(result.data);
@@ -443,7 +443,7 @@ export default function EcuTuningAssistant() {
                                     </CardDescription>
                                      <div className="flex items-center gap-2">
                                         <Input
-                                            placeholder="Modelo da moto, ex: MT-07"
+                                            placeholder="Marca e modelo, ex: Honda CB 500F"
                                             value={manualSearchModel}
                                             onChange={(e) => setManualSearchModel(e.target.value)}
                                             disabled={!originalMap || isFetchingManual}

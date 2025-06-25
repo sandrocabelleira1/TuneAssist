@@ -37,7 +37,7 @@ export async function suggestMapCorrections(input: any): Promise<{ success: bool
 }
 
 const SearchForManualsActionInputSchema = z.object({
-  model: z.string(),
+  query: z.string(),
 });
 
 export async function searchForManuals(input: MotorcycleManualFlowInput): Promise<{ success: boolean; data?: MotorcycleManualFlowOutput; error?: string }> {
@@ -55,20 +55,20 @@ export async function searchForManuals(input: MotorcycleManualFlowInput): Promis
 }
 
 const FetchManualInfoActionInputSchema = z.object({
-  model: z.string().min(1, 'O modelo é obrigatório.'),
+  query: z.string().min(1, 'A consulta é obrigatória.'),
 });
 
-export async function fetchManualInformation(input: { model: string }): Promise<{ success: boolean; data?: string; error?: string }> {
+export async function fetchManualInformation(input: { query: string }): Promise<{ success: boolean; data?: string; error?: string }> {
   try {
     const validatedInput = FetchManualInfoActionInputSchema.parse(input);
     const manuals = await motorcycleManualFlow(validatedInput);
 
     if (!manuals || manuals.length === 0) {
-      return { success: true, data: 'Nenhum manual encontrado para este modelo. Por favor, insira as especificações manualmente.' };
+      return { success: true, data: 'Nenhum manual encontrado para esta consulta. Por favor, insira as especificações manualmente.' };
     }
 
     const formattedData = manuals.map(manual => 
-      `Manual Encontrado: "${manual.title}" (Modelo: ${manual.model}, Ano: ${manual.year}).`
+      `Manual Encontrado: "${manual.title}" (Marca: ${manual.brand}, Modelo: ${manual.model}, Ano: ${manual.year}).`
     ).join('\n');
 
     const resultText = `A IA encontrou os seguintes manuais que podem ser relevantes. Use estas informações como contexto para a afinação:\n\n${formattedData}`;

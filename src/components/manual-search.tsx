@@ -7,7 +7,6 @@ import type { MotorcycleManualFlowOutput } from '@/ai/flows/motorcycle-manual-fl
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Loader2, Search, Wrench, ExternalLink, BookUser } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
@@ -15,18 +14,18 @@ type Manual = MotorcycleManualFlowOutput[0];
 
 export default function ManualSearch() {
   const { toast } = useToast();
-  const [model, setModel] = useState('');
+  const [query, setQuery] = useState('');
   const [results, setResults] = useState<Manual[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!model) return;
+    if (!query) return;
 
     setIsLoading(true);
     setResults([]);
 
-    const result = await searchForManuals({ model });
+    const result = await searchForManuals({ query });
     setIsLoading(false);
 
     if (result.success && result.data) {
@@ -34,7 +33,7 @@ export default function ManualSearch() {
       if (result.data.length === 0) {
         toast({
           title: "Nenhum resultado",
-          description: "Não foram encontrados manuais para o modelo especificado.",
+          description: "Não foram encontrados manuais para a sua pesquisa.",
         });
       }
     } else {
@@ -50,10 +49,10 @@ export default function ManualSearch() {
     <div className="max-w-4xl mx-auto">
       <header className="text-center mb-8">
         <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
-          <Wrench className="text-primary w-8 h-8" /> Pesquisa de Manuais Yamaha
+          <Wrench className="text-primary w-8 h-8" /> Pesquisa de Manuais de Motocicleta
         </h1>
         <p className="text-lg text-muted-foreground mt-2">
-          Encontre manuais do proprietário e de serviço para a sua moto.
+          Encontre manuais do proprietário e de serviço para qualquer marca e modelo.
         </p>
       </header>
 
@@ -61,20 +60,20 @@ export default function ManualSearch() {
         <form onSubmit={handleSearch}>
           <CardHeader>
             <CardTitle>Procurar Manual</CardTitle>
-            <CardDescription>Insira o modelo da moto (ex: R1, MT-07, Lander)</CardDescription>
+            <CardDescription>Insira a marca e modelo da moto (ex: Honda CB 500F, Yamaha MT-07 2022)</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex gap-4">
               <Input
-                id="model"
+                id="query"
                 type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="Ex: MT-09"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Ex: Kawasaki Ninja ZX-10R 2024"
                 className="flex-grow"
                 disabled={isLoading}
               />
-              <Button type="submit" disabled={isLoading || !model}>
+              <Button type="submit" disabled={isLoading || !query}>
                 {isLoading ? (
                   <Loader2 className="mr-2 animate-spin" />
                 ) : (
@@ -102,7 +101,7 @@ export default function ManualSearch() {
                         <BookUser className="text-primary w-7 h-7 mt-1"/>
                         <span>{manual.title}</span>
                     </CardTitle>
-                    <CardDescription>Modelo: {manual.model} | Ano: {manual.year}</CardDescription>
+                    <CardDescription>Marca: {manual.brand} | Modelo: {manual.model} | Ano: {manual.year}</CardDescription>
                 </CardHeader>
                 <CardFooter>
                     <Button asChild className="w-full">

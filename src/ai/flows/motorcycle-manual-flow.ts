@@ -8,11 +8,11 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { searchYamahaManuals } from '@/ai/tools/yamaha-manual-search';
+import { searchMotorcycleManuals } from '@/ai/tools/yamaha-manual-search';
 import { z } from 'genkit';
 
 const MotorcycleManualFlowInputSchema = z.object({
-  model: z.string().describe("The user's search query for a motorcycle manual."),
+  query: z.string().describe("The user's search query for a motorcycle manual."),
 });
 export type MotorcycleManualFlowInput = z.infer<typeof MotorcycleManualFlowInputSchema>;
 
@@ -22,21 +22,22 @@ const MotorcycleManualFlowOutputSchema = z.array(
         url: z.string().url().describe('The URL to the manual.'),
         model: z.string().describe('The specific model name for the manual.'),
         year: z.number().describe('The year of the manual.'),
+        brand: z.string().describe('The brand of the motorcycle.'),
     })
 );
 export type MotorcycleManualFlowOutput = z.infer<typeof MotorcycleManualFlowOutputSchema>;
 
-const motorcycleManualFlowPrompt = `Você é um assistente especialista em pesquisar manuais de motocicletas Yamaha.
-Sua tarefa é analisar a solicitação do usuário e usar a ferramenta 'searchYamahaManuals' para encontrar os manuais mais relevantes.
-Preste atenção aos detalhes como modelo da moto, ano e tipo de manual (por exemplo, "proprietário" ou "serviço") na solicitação do usuário.
+const motorcycleManualFlowPrompt = `Você é um assistente especialista em pesquisar manuais de motocicletas.
+Sua tarefa é analisar a solicitação do usuário e usar a ferramenta 'searchMotorcycleManuals' para encontrar os manuais mais relevantes.
+Preste atenção aos detalhes como MARCA, MODELO, ANO e TIPO de manual (por exemplo, "proprietário" ou "serviço") na solicitação do usuário.
 Use esses detalhes para preencher os parâmetros da ferramenta da forma mais precisa possível para obter os melhores resultados.
 
 Solicitação do usuário: "{{query}}"`;
 
 export async function motorcycleManualFlow(input: MotorcycleManualFlowInput): Promise<MotorcycleManualFlowOutput> {
   const llmResponse = await ai.generate({
-    prompt: motorcycleManualFlowPrompt.replace('{{query}}', input.model),
-    tools: [searchYamahaManuals],
+    prompt: motorcycleManualFlowPrompt.replace('{{query}}', input.query),
+    tools: [searchMotorcycleManuals],
     model: 'googleai/gemini-2.0-flash',
   });
 
