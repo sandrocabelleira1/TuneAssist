@@ -62,11 +62,11 @@ const prompt = ai.definePrompt({
     name: 'generateLambdaMeasuredGridPrompt',
     input: {schema: SuggestMapCorrectionsInputSchema},
     output: {schema: AiOutputSchema},
-    prompt: `Você é um engenheiro de calibração de motores. A sua tarefa é mapear dados de ensaio para uma grelha, e apenas isso.
+    prompt: `Você é um engenheiro de calibração de motores. A sua tarefa é analisar os dados fornecidos e mapear os dados de ensaio para uma grelha \`lambdaMeasuredGrid\`.
 
 {{#if factorySpecs}}
-**INFORMAÇÕES DE FÁBRICA (Contexto Adicional)**:
-As seguintes especificações foram fornecidas pelo utilizador. Use-as como contexto para entender melhor o comportamento do motor, mas a sua tarefa principal continua a ser mapear os dados de ensaio medidos para a grelha de lambda. Não use esta informação para fazer cálculos de correção.
+**INFORMAÇÕES DE FÁBRICA (Contexto Crucial para Análise)**:
+As seguintes especificações foram fornecidas pelo utilizador. **Confronte** os \`testData\` medidos com estas especificações de fábrica. O seu objetivo é usar este contexto para produzir uma grelha \`lambdaMeasuredGrid\` mais precisa e inteligente. Por exemplo, as especificações podem ajudar a validar se um ponto de ensaio é um valor atípico ou uma medição fiável, influenciando o valor médio que calcula para uma célula.
 {{{factorySpecs}}}
 {{/if}}
 
@@ -84,7 +84,7 @@ A sua única saída deve ser um objeto JSON com a chave \`lambdaMeasuredGrid\`. 
 4.  Para cada ponto de ensaio, encontre a célula **única** na grelha que corresponde mais de perto aos valores de \`rpm\` e \`carga\` do ponto. Determine o índice \`y\` mais próximo em \`eixo_y\` e o índice \`x\` mais próximo em \`eixo_x\`.
 5.  Adicione o valor de \`lambda\` desse ponto de ensaio à lista de lambdas para a coordenada encontrada (\`[y][x]\`) na sua estrutura temporária.
 6.  Após iterar sobre TODOS os \`testData\`, percorra a sua estrutura temporária.
-7.  Para cada coordenada \`[y][x]\` que tiver uma lista de lambdas, calcule a **média** desses valores.
+7.  Para cada coordenada \`[y][x]\` que tiver uma lista de lambdas, calcule a **média** desses valores. Use as \`factorySpecs\` como referência para validar os dados e refinar a média se necessário.
 8.  Atualize a célula \`[y][x]\` na sua \`lambdaMeasuredGrid\` com o valor médio calculado. As células que não tiveram correspondência com nenhum ponto de ensaio DEVEM permanecer \`null\`.
 
 **EXEMPLO**:
@@ -94,7 +94,7 @@ A sua única saída deve ser um objeto JSON com a chave \`lambdaMeasuredGrid\`. 
 - A célula mais próxima é a que corresponde a \`2000\` RPM (índice \`y\`) e \`40\` Carga (índice \`x\`).
 - Você adicionaria \`0.95\` à lista de lambdas para a célula \`[y][x]\`.
 - Se outro ponto de ensaio também corresponder à mesma célula \`[y][x]\`, você adicionaria o seu lambda à mesma lista.
-- No final, você calcularia a média da lista para essa célula.
+- No final, você calcularia a média da lista para essa célula, possivelmente ajustando-a com base nas especificações de fábrica.
 
 **RESULTADO FINAL**:
 A \`lambdaMeasuredGrid\` resultante conterá valores numéricos apenas para as células que corresponderam diretamente aos dados de ensaio, e \`null\` para todas as outras. Não preencha células vazias. Não faça interpolação entre células.
