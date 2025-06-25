@@ -8,23 +8,20 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'zod';
+import { 
+    GenerateManualContentInputSchema, 
+    GenerateManualContentOutputSchema,
+    type GenerateManualContentInput,
+    type GenerateManualContentOutput,
+} from '@/ai/schemas';
 
-export const GenerateManualContentInputSchema = z.object({
-  title: z.string().describe('The title of the manual.'),
-  brand: z.string().describe('The brand of the motorcycle.'),
-  model: z.string().describe('The model of the motorcycle.'),
-  year: z.number().describe('The year of the motorcycle.'),
-});
-export type GenerateManualContentInput = z.infer<typeof GenerateManualContentInputSchema>;
+// Re-exporting types for consumers of this flow file
+export type { GenerateManualContentInput, GenerateManualContentOutput };
 
-export const GenerateManualContentOutputSchema = z.object({
-  content: z.string().describe('The generated content of the manual, formatted with Markdown.'),
-});
-export type GenerateManualContentOutput = z.infer<typeof GenerateManualContentOutputSchema>;
 
 const prompt = ai.definePrompt({
     name: 'generateManualContentPrompt',
+    model: 'googleai/gemini-2.0-flash',
     input: { schema: GenerateManualContentInputSchema },
     output: { schema: GenerateManualContentOutputSchema },
     prompt: `Você é um redator técnico especialista em motocicletas. Sua tarefa é gerar um capítulo de exemplo para um manual de motocicleta com base nas informações fornecidas.

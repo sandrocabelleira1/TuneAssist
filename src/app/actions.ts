@@ -1,7 +1,8 @@
 'use server';
-import { suggestMapCorrections as suggestMapCorrectionsFlow, SuggestMapCorrectionsInput, SuggestMapCorrectionsOutput } from '@/ai/flows/suggest-map-corrections';
-import { motorcycleManualFlow, MotorcycleManualFlowInput, MotorcycleManualFlowOutput } from '@/ai/flows/motorcycle-manual-flow';
-import { generateManualContent as generateManualContentFlow, GenerateManualContentInput, GenerateManualContentInputSchema, GenerateManualContentOutput } from '@/ai/flows/generate-manual-content-flow';
+import { suggestMapCorrections as suggestMapCorrectionsFlow, type SuggestMapCorrectionsInput, type SuggestMapCorrectionsOutput } from '@/ai/flows/suggest-map-corrections';
+import { motorcycleManualFlow, type MotorcycleManualFlowInput, type MotorcycleManualFlowOutput } from '@/ai/flows/motorcycle-manual-flow';
+import { generateManualContent as generateManualContentFlow, type GenerateManualContentInput, type GenerateManualContentOutput } from '@/ai/flows/generate-manual-content-flow';
+import { GenerateManualContentInputSchema } from '@/ai/schemas';
 import { z } from 'zod';
 
 // We need to validate the input on the server side as well for security.
