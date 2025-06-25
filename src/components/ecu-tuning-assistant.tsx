@@ -15,6 +15,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Settings, Sparkles, Trash2, XCircle } from 'lucide-react';
@@ -128,7 +129,8 @@ export default function EcuTuningAssistant() {
     // Modal state
     const [isLogModalOpen, setIsLogModalOpen] = useState(false);
     const [isAxesModalOpen, setIsAxesModalOpen] = useState(false);
-    
+    const [isChecksumWarningOpen, setIsChecksumWarningOpen] = useState(false);
+
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
 
@@ -164,7 +166,7 @@ export default function EcuTuningAssistant() {
                 if (type === 'bin') {
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
-                    addLog(`Ficheiro BIN carregado: ${file.name}`, 'success');
+                    addLog(`Ficheiro BIN carregado: ${file.name} (Checksum: ${checksum})`, 'success');
                 } else {
                     const text = new TextDecoder().decode(buffer);
                     const definitions = parseXDF(text);
@@ -283,10 +285,19 @@ export default function EcuTuningAssistant() {
     const handleSaveClick = () => {
         if (!correctedMap || !binFile || !xdfFile || !selectedMapName || !sortOrder) {
             addLog('Não é possível guardar: faltam dados do mapa corrigido ou definições de ficheiro.', 'error');
+            toast({ variant: 'destructive', title: "Erro ao Guardar", description: 'Faltam dados para guardar.' });
+            return;
+        }
+        setIsChecksumWarningOpen(true);
+    };
+
+    const handleConfirmSave = () => {
+        if (!correctedMap || !binFile || !xdfFile || !selectedMapName || !sortOrder) {
             return;
         }
         const definition = xdfFile.definitions.find(d => d.name === selectedMapName);
         if (!definition) return;
+
         try {
             saveBinFile(binFile.buffer, correctedMap, definition, sortOrder);
             addLog('Novo ficheiro BIN guardado com sucesso.', 'success');
@@ -295,7 +306,9 @@ export default function EcuTuningAssistant() {
             addLog(`Erro ao guardar o ficheiro: ${(error as Error).message}`, 'error');
             toast({ variant: 'destructive', title: 'Erro ao Guardar', description: (error as Error).message });
         }
+        setIsChecksumWarningOpen(false);
     };
+
 
     const handleLambdaCellChange = (y: number, x: number, value: number) => {
         if (!targetLambdaMap) return;
@@ -478,6 +491,25 @@ export default function EcuTuningAssistant() {
                 {/* Modals */}
                 <ManualLogModal open={isLogModalOpen} onOpenChange={setIsLogModalOpen} onConfirm={handleConfirmLogData} />
                 <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={axes} />
+                <AlertDialog open={isChecksumWarningOpen} onOpenChange={setIsChecksumWarningOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Aviso Importante Sobre o Checksum</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                A aplicação vai guardar o ficheiro .BIN com as suas modificações.
+                                <br /><br />
+                                <strong>Atenção:</strong> O <strong>checksum</strong> do ficheiro (a soma de verificação) <strong>não foi corrigido automaticamente</strong>.
+                                Dependendo da sua ECU, pode ser necessário usar uma ferramenta externa para corrigir o checksum antes de programar o ficheiro no veículo.
+                                <br /><br />
+                                Programar um ficheiro com um checksum incorreto pode fazer com que a ECU não o aceite. Deseja continuar?
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleConfirmSave}>Confirmar e Guardar</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </div>
         </TooltipProvider>
     );
