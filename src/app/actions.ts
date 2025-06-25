@@ -17,6 +17,7 @@ const SuggestMapCorrectionsActionInputSchema = z.object({
   eixo_y: z.array(z.number()),
   eixo_x_label: z.string(),
   eixo_y_label: z.string(),
+  factorySpecs: z.string().optional(),
 });
 
 export async function suggestMapCorrections(input: any): Promise<{ success: boolean; data?: SuggestMapCorrectionsOutput; error?: string }> {

@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Settings, Sparkles, Trash2, XCircle, Wrench } from 'lucide-react';
 
 // MapTable Component
@@ -126,6 +127,7 @@ export default function EcuTuningAssistant() {
     const [correctionPercentageMap, setCorrectionPercentageMap] = useState<MapData | null>(null);
     const [aggressiveness, setAggressiveness] = useState(20);
     const [isLoading, setIsLoading] = useState(false);
+    const [factorySpecs, setFactorySpecs] = useState('');
 
     // Modal state
     const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -150,6 +152,7 @@ export default function EcuTuningAssistant() {
         setOriginalMap(null); setSortOrder({ x: [], y: [] }); setAxes(null);
         setTestData([]); setTargetLambdaMap(null); setCorrectedMap(null); setCorrectionPercentageMap(null);
         setCustomAxes({});
+        setFactorySpecs('');
         setIsLoading(false);
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
@@ -267,6 +270,7 @@ export default function EcuTuningAssistant() {
             eixo_y: axes.y,
             eixo_x_label: axes.xLabel,
             eixo_y_label: axes.yLabel,
+            factorySpecs,
         };
 
         const result = await suggestMapCorrections(input);
@@ -410,8 +414,20 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 </div>
 
+                                <div className="space-y-2">
+                                    <h3 className="font-semibold text-primary">4. Informações de Fábrica (Opcional)</h3>
+                                    <CardDescription className="text-xs pb-2">Forneça informações do manual para contextualizar a IA.</CardDescription>
+                                    <Textarea
+                                        placeholder="Ex: Lambda alvo em WOT: 0.88. Limite de RPM: 9000."
+                                        value={factorySpecs}
+                                        onChange={(e) => setFactorySpecs(e.target.value)}
+                                        className="h-24"
+                                        disabled={!originalMap}
+                                    />
+                                </div>
+
                                 <div className="space-y-4">
-                                     <h3 className="font-semibold text-primary">4. Análise IA</h3>
+                                     <h3 className="font-semibold text-primary">5. Análise IA</h3>
                                     <div>
                                         <Label htmlFor="aggressiveness" className="flex justify-between">
                                             Agressividade <span>{aggressiveness}%</span>

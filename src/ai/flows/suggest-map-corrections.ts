@@ -8,7 +8,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z} from 'zod';
 
 const SuggestMapCorrectionsInputSchema = z.object({
   mapData: z.array(
@@ -29,6 +29,7 @@ const SuggestMapCorrectionsInputSchema = z.object({
   eixo_y: z.array(z.number()).describe('Valores do eixo Y (ex. RPM)'),
   eixo_x_label: z.string().describe('Rótulo para o eixo X.'),
   eixo_y_label: z.string().describe('Rótulo para o eixo Y.'),
+  factorySpecs: z.string().optional().describe('Especificações de fábrica ou notas fornecidas pelo utilizador para dar contexto à IA.')
 });
 export type SuggestMapCorrectionsInput = z.infer<typeof SuggestMapCorrectionsInputSchema>;
 
@@ -62,6 +63,12 @@ const prompt = ai.definePrompt({
     input: {schema: SuggestMapCorrectionsInputSchema},
     output: {schema: AiOutputSchema},
     prompt: `Você é um engenheiro de calibração de motores. A sua tarefa é mapear dados de ensaio para uma grelha, e apenas isso.
+
+{{#if factorySpecs}}
+**INFORMAÇÕES DE FÁBRICA (Contexto Adicional)**:
+As seguintes especificações foram fornecidas pelo utilizador. Use-as como contexto para entender melhor o comportamento do motor, mas a sua tarefa principal continua a ser mapear os dados de ensaio medidos para a grelha de lambda. Não use esta informação para fazer cálculos de correção.
+{{{factorySpecs}}}
+{{/if}}
 
 **CONTEXTO DOS EIXOS**:
 - O eixo Y do mapa (\`eixo_y\`) corresponde a **{{{eixo_y_label}}}**.
@@ -99,6 +106,9 @@ eixo_x: {{{json eixo_x}}}
 eixo_y: {{{json eixo_y}}}
 eixo_x_label: {{{eixo_x_label}}}
 eixo_y_label: {{{eixo_y_label}}}
+{{#if factorySpecs}}
+factorySpecs: {{{factorySpecs}}}
+{{/if}}
 `,
 });
 
