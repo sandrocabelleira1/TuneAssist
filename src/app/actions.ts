@@ -1,6 +1,7 @@
 'use server';
 import { suggestMapCorrections as suggestMapCorrectionsFlow, SuggestMapCorrectionsInput, SuggestMapCorrectionsOutput } from '@/ai/flows/suggest-map-corrections';
 import { motorcycleManualFlow, MotorcycleManualFlowInput, MotorcycleManualFlowOutput } from '@/ai/flows/motorcycle-manual-flow';
+import { generateManualContent as generateManualContentFlow, GenerateManualContentInput, GenerateManualContentInputSchema, GenerateManualContentOutput } from '@/ai/flows/generate-manual-content-flow';
 import { z } from 'zod';
 
 // We need to validate the input on the server side as well for security.
@@ -76,6 +77,21 @@ export async function fetchManualInformation(input: { query: string }): Promise<
     return { success: true, data: resultText };
   } catch (error) {
     console.error("Error in fetchManualInformation action:", error);
+    if (error instanceof z.ZodError) {
+      return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
+    }
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+
+export async function generateManualContent(input: GenerateManualContentInput): Promise<{ success: boolean; data?: GenerateManualContentOutput; error?: string }> {
+  try {
+    const validatedInput = GenerateManualContentInputSchema.parse(input);
+    const result = await generateManualContentFlow(validatedInput);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error("Error in generateManualContent action:", error);
     if (error instanceof z.ZodError) {
       return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
     }
