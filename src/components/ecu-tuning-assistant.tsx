@@ -113,6 +113,7 @@ export default function EcuTuningAssistant() {
     const [originalMap, setOriginalMap] = useState<MapData | null>(null);
     const [sortOrder, setSortOrder] = useState<OriginalSortOrder>({ x: [], y: [] });
     const [axes, setAxes] = useState<{ x: number[], y: number[], xLabel: string, yLabel: string } | null>(null);
+    const [customAxes, setCustomAxes] = useState<Record<string, { x: number[], y: number[] }>>({});
 
     // AI & Correction state
     const [testData, setTestData] = useState<TestDataEntry[]>([]);
@@ -143,6 +144,7 @@ export default function EcuTuningAssistant() {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
         setOriginalMap(null); setSortOrder({ x: [], y: [] }); setAxes(null);
         setTestData([]); setTargetAfrMap(null); setCorrectedMap(null); setCorrectionPercentageMap(null);
+        setCustomAxes({});
         setIsLoading(false);
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
@@ -219,7 +221,14 @@ export default function EcuTuningAssistant() {
             };
             
             setOriginalMap(sortedMap);
-            setAxes(sortedAxes);
+            
+            const userAxes = customAxes[name];
+            if (userAxes) {
+                setAxes({ ...sortedAxes, x: userAxes.x, y: userAxes.y });
+            } else {
+                setAxes(sortedAxes);
+            }
+
             setSortOrder({ x: sortableX, y: sortableY });
             
             const afrMap = Array(sortedAxes.y.length).fill(0).map(() => Array(sortedAxes.x.length).fill(14.7));
@@ -297,16 +306,25 @@ export default function EcuTuningAssistant() {
         addLog(`Adicionados ${data.length} pontos de dados de ensaio.`, 'success');
     };
     
-    const handleConfirmAxes = (newAxes: { y: string, x: string }) => {
-        if (!axes) return;
-        const newY = newAxes.y.split(',').map(s => parseFloat(s.trim()));
-        const newX = newAxes.x.split(',').map(s => parseFloat(s.trim()));
+    const handleConfirmAxes = (newAxesData: { y: string, x: string }) => {
+        if (!axes || !selectedMapName) return;
+        const newY = newAxesData.y.split(',').map(s => parseFloat(s.trim()));
+        const newX = newAxesData.x.split(',').map(s => parseFloat(s.trim()));
 
         if (newY.some(isNaN) || newX.some(isNaN) || newY.length !== axes.y.length || newX.length !== axes.x.length) {
             addLog('Valores dos eixos inválidos. Certifique-se de que são números separados por vírgulas e que correspondem às dimensões originais.', 'error');
+            toast({ variant: 'destructive', title: "Erro nos Eixos", description: "Valores inválidos. Verifique os números e as dimensões." });
             return;
         }
-        setAxes(prev => prev ? { ...prev, x: newX, y: newY } : null);
+        
+        const newAxesState = { ...axes, x: newX, y: newY };
+        setAxes(newAxesState);
+
+        setCustomAxes(prev => ({
+            ...prev,
+            [selectedMapName]: { x: newX, y: newY }
+        }));
+        
         setIsAxesModalOpen(false);
         addLog('Eixos do mapa atualizados.', 'success');
     };
