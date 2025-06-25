@@ -12,10 +12,10 @@ import {z} from 'genkit';
 
 const SuggestMapCorrectionsInputSchema = z.object({
   mapData: z.array(
-    z.array(z.number()).describe('Os dados originais do mapa da ECU (array 2D).')
+    z.array(z.number().nullable()).describe('Os dados originais do mapa da ECU (array 2D).')
   ).describe('Dados originais do mapa da ECU.'),
   lambdaTarget: z.array(
-    z.array(z.number()).describe('Os valores Lambda alvo para o mapa da ECU.')
+    z.array(z.number().nullable()).describe('Os valores Lambda alvo para o mapa da ECU.')
   ).describe('Valores Lambda alvo.'),
   testData: z.array(
     z.object({
