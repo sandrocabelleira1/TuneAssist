@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, TestDataEntry, OriginalSortOrder } from '@/lib/types';
 import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, saveBinFile } from '@/lib/ecu';
-import { suggestMapCorrections } from '@/app/actions';
+import { suggestMapCorrections, fetchManualInformation } from '@/app/actions';
 import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import Link from 'next/link';
@@ -20,7 +20,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Settings, Sparkles, Trash2, XCircle, Wrench } from 'lucide-react';
+import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Search, Settings, Sparkles, Trash2, XCircle, Wrench } from 'lucide-react';
 
 // MapTable Component
 function MapTable({
@@ -128,6 +128,8 @@ export default function EcuTuningAssistant() {
     const [aggressiveness, setAggressiveness] = useState(20);
     const [isLoading, setIsLoading] = useState(false);
     const [factorySpecs, setFactorySpecs] = useState('');
+    const [manualSearchModel, setManualSearchModel] = useState('');
+    const [isFetchingManual, setIsFetchingManual] = useState(false);
 
     // Modal state
     const [isLogModalOpen, setIsLogModalOpen] = useState(false);
@@ -154,6 +156,7 @@ export default function EcuTuningAssistant() {
         setCustomAxes({});
         setFactorySpecs('');
         setIsLoading(false);
+        setManualSearchModel('');
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
         addLog('O estado foi reiniciado.', 'info');
@@ -351,6 +354,25 @@ export default function EcuTuningAssistant() {
         addLog('Eixos do mapa atualizados.', 'success');
     };
 
+    const handleFetchManualInfo = async () => {
+        if (!manualSearchModel) return;
+        setIsFetchingManual(true);
+        addLog(`A procurar informações do manual para "${manualSearchModel}"...`, 'info');
+
+        const result = await fetchManualInformation({ model: manualSearchModel });
+        
+        if (result.success && result.data) {
+            setFactorySpecs(result.data);
+            addLog('Informações do manual preenchidas automaticamente.', 'success');
+            toast({ title: 'Informações Preenchidas', description: 'O contexto foi preenchido com base nos manuais encontrados.' });
+        } else {
+            addLog(`Falha ao buscar informações do manual: ${result.error}`, 'error');
+            toast({ variant: 'destructive', title: 'Erro na Busca', description: result.error });
+        }
+
+        setIsFetchingManual(false);
+    };
+
     const isAnalyzeDisabled = !originalMap || testData.length === 0 || isLoading;
     const isSaveDisabled = !correctedMap || isLoading;
     
@@ -416,9 +438,27 @@ export default function EcuTuningAssistant() {
 
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">4. Informações de Fábrica (Opcional)</h3>
-                                    <CardDescription className="text-xs pb-2">Forneça informações do manual para contextualizar a IA.</CardDescription>
+                                     <CardDescription className="text-xs pb-2">
+                                        A IA pode buscar o manual do seu veículo para obter contexto, ou pode inserir as informações manualmente.
+                                    </CardDescription>
+                                     <div className="flex items-center gap-2">
+                                        <Input
+                                            placeholder="Modelo da moto, ex: MT-07"
+                                            value={manualSearchModel}
+                                            onChange={(e) => setManualSearchModel(e.target.value)}
+                                            disabled={!originalMap || isFetchingManual}
+                                            className="flex-grow"
+                                        />
+                                        <Button 
+                                            onClick={handleFetchManualInfo} 
+                                            disabled={!originalMap || !manualSearchModel || isFetchingManual}
+                                            size="icon"
+                                        >
+                                            {isFetchingManual ? <Loader2 className="animate-spin" /> : <Search />}
+                                        </Button>
+                                    </div>
                                     <Textarea
-                                        placeholder="Ex: Lambda alvo em WOT: 0.88. Limite de RPM: 9000."
+                                        placeholder="Informações do manual aparecerão aqui... Ex: Lambda alvo em WOT: 0.88. Limite de RPM: 9000."
                                         value={factorySpecs}
                                         onChange={(e) => setFactorySpecs(e.target.value)}
                                         className="h-24"

@@ -53,3 +53,32 @@ export async function searchForManuals(input: MotorcycleManualFlowInput): Promis
     return { success: false, error: (error as Error).message };
   }
 }
+
+const FetchManualInfoActionInputSchema = z.object({
+  model: z.string().min(1, 'O modelo é obrigatório.'),
+});
+
+export async function fetchManualInformation(input: { model: string }): Promise<{ success: boolean; data?: string; error?: string }> {
+  try {
+    const validatedInput = FetchManualInfoActionInputSchema.parse(input);
+    const manuals = await motorcycleManualFlow(validatedInput);
+
+    if (!manuals || manuals.length === 0) {
+      return { success: true, data: 'Nenhum manual encontrado para este modelo. Por favor, insira as especificações manualmente.' };
+    }
+
+    const formattedData = manuals.map(manual => 
+      `Manual Encontrado: "${manual.title}" (Modelo: ${manual.model}, Ano: ${manual.year}).`
+    ).join('\n');
+
+    const resultText = `A IA encontrou os seguintes manuais que podem ser relevantes. Use estas informações como contexto para a afinação:\n\n${formattedData}`;
+
+    return { success: true, data: resultText };
+  } catch (error) {
+    console.error("Error in fetchManualInformation action:", error);
+    if (error instanceof z.ZodError) {
+      return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
+    }
+    return { success: false, error: (error as Error).message };
+  }
+}
