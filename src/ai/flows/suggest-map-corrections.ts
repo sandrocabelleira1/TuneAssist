@@ -51,45 +51,19 @@ const prompt = ai.definePrompt({
     name: 'suggestMapCorrectionsPrompt',
     input: {schema: SuggestMapCorrectionsInputSchema},
     output: {schema: SuggestMapCorrectionsOutputSchema},
-    prompt: `É um especialista em afinação de motores, especializado em calibração de ECUs. A sua tarefa é analisar os dados de desempenho do motor e sugerir correções para um mapa de combustível para atingir um Fator Lambda alvo.
+    prompt: `Você é um engenheiro de calibração de motores de classe mundial. Sua tarefa é analisar os dados de um mapa de combustível de uma ECU, juntamente com os dados de um teste de dinamômetro, e gerar um mapa de combustível corrigido.
 
-DADOS DE ENTRADA:
-- mapData: O mapa de combustível original.
-- lambdaTarget: O mapa com os valores Lambda desejados para cada célula.
-- testData: Uma lista de pontos de dados com RPM, carga do motor, e Lambda medido.
-- aggressiveness: Um fator de 0 a 1 que controla a magnitude das alterações sugeridas.
-- eixo_x: Os valores do eixo X do mapa (ex: Carga).
-- eixo_y: Os valores do eixo Y do mapa (ex: RPM).
+O seu objetivo é ajustar o \`mapData\` original para que o \`lambda\` real do motor corresponda ao \`lambdaTarget\` para cada ponto de operação (RPM e Carga).
 
-PASSOS A EXECUTAR:
-1.  **Criar uma Grelha de Lambda Medido ('lambdaMeasuredGrid'):**
-    - Crie uma nova grelha com as mesmas dimensões do 'mapData', inicializada com 'null'.
-    - Para cada ponto em 'testData', encontre a célula mais próxima na grelha usando 'eixo_x' e 'eixo_y'.
-    - Coloque o valor 'lambda' medido nessa célula.
-    - Se múltiplos pontos de teste mapearem para a mesma célula, faça a média dos seus valores de lambda.
-    - O resultado é a 'lambdaMeasuredGrid'.
+Você deve fornecer três peças de dados como saída em formato JSON. Siga esta ordem:
 
-2.  **Calcular o Mapa de Percentagem de Correção ('correctionPercentageMap'):**
-    - Crie uma grelha 'correctionPercentageMap' com as mesmas dimensões, inicializada com 0.
-    - Para cada célula (y, x) onde 'lambdaMeasuredGrid' tem um valor não-nulo:
-        - lambdaMedido = lambdaMeasuredGrid[y][x]
-        - lambdaAlvo = lambdaTarget[y][x]
-        - percentualCorrecao = (lambdaMedido / lambdaAlvo) - 1
-        - Armazene 'percentualCorrecao * 100' em 'correctionPercentageMap[y][x]'.
+1.  **\`lambdaMeasuredGrid\`**: Primeiro, crie uma grelha com as mesmas dimensões do \`mapData\`, preenchida com os valores de lambda dos \`testData\`. Para cada ponto de teste, encontre a célula correspondente no mapa (usando \`eixo_x\` e \`eixo_y\`) e coloque o valor de lambda. Se houver vários pontos para a mesma célula, use a média. Para células sem dados, use \`null\`.
 
-3.  **Calcular o Mapa Corrigido ('correctedMap'):**
-    - Comece com uma cópia do 'mapData'.
-    - Para cada célula (y, x) onde 'lambdaMeasuredGrid' tem um valor não-nulo:
-        - valorOriginal = mapData[y][x]
-        - lambdaMedido = lambdaMeasuredGrid[y][x]
-        - lambdaAlvo = lambdaTarget[y][x]
-        - percentualCorrecao = (lambdaMedido / lambdaAlvo) - 1
-        - ajuste = valorOriginal * percentualCorrecao * aggressiveness
-        - valorAjustado = valorOriginal + ajuste
-        - Armazene o 'valorAjustado' no 'correctedMap[y][x]'. As células não afetadas devem manter os seus valores originais.
+2.  **\`correctionPercentageMap\`**: Em seguida, crie um mapa que mostra a alteração percentual necessária para cada célula. Para células onde \`lambdaMeasuredGrid\` tem um valor, a fórmula é \`((lambdaMeasuredGrid[y][x] / lambdaTarget[y][x]) - 1) * 100\`. Para células onde \`lambdaMeasuredGrid\` é \`null\`, o valor DEVE ser \`0\`. Este mapa DEVE ter as mesmas dimensões do \`mapData\`.
 
-SAÍDA:
-Devolva os resultados no formato JSON especificado, com as chaves 'correctedMap', 'correctionPercentageMap', e 'lambdaMeasuredGrid'. Certifique-se de que todos os arrays têm as dimensões corretas. Não inclua explicações, apenas o JSON.
+3.  **\`correctedMap\`**: Finalmente, crie o mapa de combustível ajustado. Para cada célula, o novo valor deve ser calculado com base na correção. A fórmula geral para o ajuste é: \`valorOriginal * (1 + (correctionPercentageMap[y][x] / 100) * aggressiveness)\`. Células onde a correção é 0 devem manter o seu valor original do \`mapData\`.
+
+**MUITO IMPORTANTE**: A sua saída deve ser um único objeto JSON contendo OBRIGATORIAMENTE as três chaves: \`correctedMap\`, \`correctionPercentageMap\`, e \`lambdaMeasuredGrid\`. Todos os três mapas devem ter as mesmas dimensões do \`mapData\` de entrada. Não inclua nenhuma outra informação, texto ou explicação. A estrutura do JSON deve corresponder exatamente ao schema de saída fornecido. A falta de qualquer uma das chaves resultará em falha.
 
 Dados de Entrada:
 mapData: {{{json mapData}}}
@@ -108,21 +82,36 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     outputSchema: SuggestMapCorrectionsOutputSchema,
   },
   async input => {
-    // A lógica algorítmica foi substituída por uma chamada ao modelo de IA
     const {output} = await prompt(input);
     if (!output) {
-      throw new Error("A IA não conseguiu gerar uma resposta. Tente novamente.");
+      throw new Error("A IA não conseguiu gerar uma resposta ou a resposta foi inválida. Tente novamente.");
     }
 
-    // A IA pode retornar NaN que não é um JSON válido. O Zod também não gosta.
-    // Vamos substituir por null para garantir a consistência dos dados.
-    const cleanGrid = output.lambdaMeasuredGrid.map(row => 
-        row.map(cell => (cell === null || (typeof cell === 'number' && isNaN(cell))) ? null : cell)
+    // A IA pode retornar NaN que não é um JSON válido e não passa no Zod.
+    // Limpamos os dados para garantir a consistência, mesmo que o prompt deva evitar isso.
+    const cleanNumber = (val: any, fallback = 0): number => 
+        (typeof val === 'number' && !isNaN(val)) ? val : fallback;
+        
+    const cleanNullableNumber = (val: any): number | null => 
+        (typeof val === 'number' && !isNaN(val)) ? val : null;
+    
+    // A validação do schema já ocorreu via Genkit. Se chegamos aqui, as propriedades existem.
+    const correctedMap = output.correctedMap.map(row => 
+        (row || []).map(cell => cleanNumber(cell, input.mapData[0][0] || 0)) // Fallback to a value from original map if possible
+    );
+
+    const correctionPercentageMap = output.correctionPercentageMap.map(row => 
+        (row || []).map(cell => cleanNumber(cell, 0))
+    );
+    
+    const lambdaMeasuredGrid = output.lambdaMeasuredGrid.map(row => 
+        (row || []).map(cell => cleanNullableNumber(cell))
     );
 
     return {
-        ...output,
-        lambdaMeasuredGrid: cleanGrid,
+      correctedMap,
+      correctionPercentageMap,
+      lambdaMeasuredGrid,
     };
   }
 );
