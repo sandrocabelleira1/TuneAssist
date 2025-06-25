@@ -38,7 +38,7 @@ const SuggestMapCorrectionsOutputSchema = z.object({
     z.array(z.number()).describe('A percentagem de correção aplicada a cada célula no mapa da ECU.')
   ).describe('Mapa de percentagem de correção.'),
   lambdaMeasuredGrid: z.array(
-    z.array(z.number()).describe('Os valores de Lambda medidos interpolados para a grelha do mapa da ECU.')
+    z.array(z.number().nullable()).describe('Os valores de Lambda medidos interpolados para a grelha do mapa da ECU. Use null para células sem dados.')
   ).describe('Grelha de Lambda medido.'),
 });
 export type SuggestMapCorrectionsOutput = z.infer<typeof SuggestMapCorrectionsOutputSchema>;
@@ -47,6 +47,60 @@ export async function suggestMapCorrections(input: SuggestMapCorrectionsInput): 
   return suggestMapCorrectionsFlow(input);
 }
 
+const prompt = ai.definePrompt({
+    name: 'suggestMapCorrectionsPrompt',
+    input: {schema: SuggestMapCorrectionsInputSchema},
+    output: {schema: SuggestMapCorrectionsOutputSchema},
+    prompt: `É um especialista em afinação de motores, especializado em calibração de ECUs. A sua tarefa é analisar os dados de desempenho do motor e sugerir correções para um mapa de combustível para atingir um Fator Lambda alvo.
+
+DADOS DE ENTRADA:
+- mapData: O mapa de combustível original.
+- lambdaTarget: O mapa com os valores Lambda desejados para cada célula.
+- testData: Uma lista de pontos de dados com RPM, carga do motor, e Lambda medido.
+- aggressiveness: Um fator de 0 a 1 que controla a magnitude das alterações sugeridas.
+- eixo_x: Os valores do eixo X do mapa (ex: Carga).
+- eixo_y: Os valores do eixo Y do mapa (ex: RPM).
+
+PASSOS A EXECUTAR:
+1.  **Criar uma Grelha de Lambda Medido ('lambdaMeasuredGrid'):**
+    - Crie uma nova grelha com as mesmas dimensões do 'mapData', inicializada com 'null'.
+    - Para cada ponto em 'testData', encontre a célula mais próxima na grelha usando 'eixo_x' e 'eixo_y'.
+    - Coloque o valor 'lambda' medido nessa célula.
+    - Se múltiplos pontos de teste mapearem para a mesma célula, faça a média dos seus valores de lambda.
+    - O resultado é a 'lambdaMeasuredGrid'.
+
+2.  **Calcular o Mapa de Percentagem de Correção ('correctionPercentageMap'):**
+    - Crie uma grelha 'correctionPercentageMap' com as mesmas dimensões, inicializada com 0.
+    - Para cada célula (y, x) onde 'lambdaMeasuredGrid' tem um valor não-nulo:
+        - lambdaMedido = lambdaMeasuredGrid[y][x]
+        - lambdaAlvo = lambdaTarget[y][x]
+        - percentualCorrecao = (lambdaMedido / lambdaAlvo) - 1
+        - Armazene 'percentualCorrecao * 100' em 'correctionPercentageMap[y][x]'.
+
+3.  **Calcular o Mapa Corrigido ('correctedMap'):**
+    - Comece com uma cópia do 'mapData'.
+    - Para cada célula (y, x) onde 'lambdaMeasuredGrid' tem um valor não-nulo:
+        - valorOriginal = mapData[y][x]
+        - lambdaMedido = lambdaMeasuredGrid[y][x]
+        - lambdaAlvo = lambdaTarget[y][x]
+        - percentualCorrecao = (lambdaMedido / lambdaAlvo) - 1
+        - ajuste = valorOriginal * percentualCorrecao * aggressiveness
+        - valorAjustado = valorOriginal + ajuste
+        - Armazene o 'valorAjustado' no 'correctedMap[y][x]'. As células não afetadas devem manter os seus valores originais.
+
+SAÍDA:
+Devolva os resultados no formato JSON especificado, com as chaves 'correctedMap', 'correctionPercentageMap', e 'lambdaMeasuredGrid'. Certifique-se de que todos os arrays têm as dimensões corretas. Não inclua explicações, apenas o JSON.
+
+Dados de Entrada:
+mapData: {{{json mapData}}}
+lambdaTarget: {{{json lambdaTarget}}}
+testData: {{{json testData}}}
+aggressiveness: {{{aggressiveness}}}
+eixo_x: {{{json eixo_x}}}
+eixo_y: {{{json eixo_y}}}
+`,
+});
+
 const suggestMapCorrectionsFlow = ai.defineFlow(
   {
     name: 'suggestMapCorrectionsFlow',
@@ -54,61 +108,21 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     outputSchema: SuggestMapCorrectionsOutputSchema,
   },
   async input => {
-    const { mapData, lambdaTarget, testData, aggressiveness, eixo_x, eixo_y } = input;
-
-    // Initialize data structures for calculations
-    let correctedMap = JSON.parse(JSON.stringify(mapData)); // Deep copy
-    let correctionPercentageMap = Array(eixo_y.length).fill(0).map(() => Array(eixo_x.length).fill(0));
-    let lambdaMeasuredGrid = Array(eixo_y.length).fill(0).map(() => Array(eixo_x.length).fill(NaN));
-    let contagemPontosCelula = Array(eixo_y.length).fill(0).map(() => Array(eixo_x.length).fill(0));
-
-    // Helper function to find the closest index in an array
-    function encontrarIndiceMaisProximo(arr: number[], val: number): number {
-      if (!arr || arr.length === 0) return -1;
-      return arr.reduce((bestIndex, currentVal, currentIndex, array) =>
-          Math.abs(currentVal - val) < Math.abs(array[bestIndex] - val) ? currentIndex : bestIndex,
-        0);
+    // A lógica algorítmica foi substituída por uma chamada ao modelo de IA
+    const {output} = await prompt(input);
+    if (!output) {
+      throw new Error("A IA não conseguiu gerar uma resposta. Tente novamente.");
     }
 
-    // Populate the measured Lambda grid by averaging Lambda values for each cell
-    for (const ponto of testData) {
-      const idx_rpm = encontrarIndiceMaisProximo(eixo_y, ponto.rpm);
-      const idx_carga = encontrarIndiceMaisProximo(eixo_x, ponto.carga);
-      if (idx_rpm === -1 || idx_carga === -1) continue;
-
-      if (isNaN(lambdaMeasuredGrid[idx_rpm][idx_carga])) {
-        lambdaMeasuredGrid[idx_rpm][idx_carga] = ponto.lambda;
-      } else {
-        const totalAnterior = lambdaMeasuredGrid[idx_rpm][idx_carga] * contagemPontosCelula[idx_rpm][idx_carga];
-        lambdaMeasuredGrid[idx_rpm][idx_carga] = (totalAnterior + ponto.lambda) / (contagemPontosCelula[idx_rpm][idx_carga] + 1);
-      }
-      contagemPontosCelula[idx_rpm][idx_carga]++;
-    }
-
-    // Calculate corrections based on the difference between measured and target Lambda
-    for (let r_idx = 0; r_idx < eixo_y.length; r_idx++) {
-      for (let c_idx = 0; c_idx < eixo_x.length; c_idx++) {
-        const lambdaMedido = lambdaMeasuredGrid[r_idx][c_idx];
-        const lambdaAlvo = lambdaTarget[r_idx][c_idx];
-
-        if (!isNaN(lambdaMedido)) {
-          const desvioLambda = lambdaMedido - lambdaAlvo;
-          if (Math.abs(desvioLambda) > 0.01) { // Adjusted threshold for lambda
-            const valorOriginal = correctedMap[r_idx][c_idx];
-            const percentualCorrecao = (lambdaMedido / lambdaAlvo) - 1;
-            const ajuste = valorOriginal * percentualCorrecao * aggressiveness;
-            let valorAjustado = valorOriginal + ajuste;
-            correctedMap[r_idx][c_idx] = valorAjustado;
-            correctionPercentageMap[r_idx][c_idx] = ((valorAjustado / valorOriginal) - 1) * 100;
-          }
-        }
-      }
-    }
+    // A IA pode retornar NaN que não é um JSON válido. O Zod também não gosta.
+    // Vamos substituir por null para garantir a consistência dos dados.
+    const cleanGrid = output.lambdaMeasuredGrid.map(row => 
+        row.map(cell => (cell === null || (typeof cell === 'number' && isNaN(cell))) ? null : cell)
+    );
 
     return {
-      correctedMap: correctedMap,
-      correctionPercentageMap: correctionPercentageMap,
-      lambdaMeasuredGrid: lambdaMeasuredGrid,
+        ...output,
+        lambdaMeasuredGrid: cleanGrid,
     };
   }
 );
