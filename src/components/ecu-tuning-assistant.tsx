@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, TestDataEntry, OriginalSortOrder } from '@/lib/types';
 import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, saveBinFile } from '@/lib/ecu';
 import { suggestMapCorrections } from '@/app/actions';
@@ -146,7 +146,7 @@ export default function EcuTuningAssistant() {
         setIsLoading(false);
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
-        addLog('State has been reset.', 'info');
+        addLog('O estado foi reiniciado.', 'info');
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
@@ -160,25 +160,25 @@ export default function EcuTuningAssistant() {
                 if (type === 'bin') {
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
-                    addLog(`Loaded BIN file: ${file.name}`, 'success');
+                    addLog(`Ficheiro BIN carregado: ${file.name}`, 'success');
                 } else {
                     const text = new TextDecoder().decode(buffer);
                     const definitions = parseXDF(text);
                     if (definitions.length === 0) {
-                        throw new Error("No valid map definitions found in XDF.");
+                        throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     }
                     setXdfFile({ name: file.name, definitions });
-                    addLog(`Loaded XDF file: ${file.name} with ${definitions.length} maps.`, 'success');
+                    addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
                 }
             } catch (error) {
-                const msg = `Error loading ${file.name}: ${(error as Error).message}`;
+                const msg = `Erro ao carregar ${file.name}: ${(error as Error).message}`;
                 addLog(msg, 'error');
-                toast({ variant: 'destructive', title: "File Error", description: msg });
+                toast({ variant: 'destructive', title: "Erro no Ficheiro", description: msg });
             }
         };
         reader.onerror = () => {
-             addLog(`Error reading file ${file.name}`, 'error');
-             toast({ variant: 'destructive', title: "File Error", description: `Could not read file ${file.name}` });
+             addLog(`Erro ao ler o ficheiro ${file.name}`, 'error');
+             toast({ variant: 'destructive', title: "Erro no Ficheiro", description: `Não foi possível ler o ficheiro ${file.name}` });
         }
         reader.readAsArrayBuffer(file);
     };
@@ -188,7 +188,7 @@ export default function EcuTuningAssistant() {
         
         const definition = xdfFile.definitions.find(d => d.name === name);
         if (!definition) {
-            addLog(`Map definition "${name}" not found.`, 'error');
+            addLog(`Definição de mapa "${name}" não encontrada.`, 'error');
             return;
         }
 
@@ -227,22 +227,22 @@ export default function EcuTuningAssistant() {
             setCorrectedMap(null);
             setCorrectionPercentageMap(null);
 
-            addLog(`Successfully loaded map: ${name}`, 'success');
+            addLog(`Mapa carregado com sucesso: ${name}`, 'success');
         } catch (error) {
-            const msg = `Error reading map from BIN: ${(error as Error).message}`;
+            const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
             addLog(msg, 'error');
-            toast({ variant: 'destructive', title: "Map Read Error", description: msg });
+            toast({ variant: 'destructive', title: "Erro de Leitura do Mapa", description: msg });
         }
     };
     
     const handleAnalyzeClick = async () => {
         if (!originalMap || !targetAfrMap || !testData.length || !axes) {
-            addLog('Not enough data to run analysis.', 'error');
-            toast({ variant: 'destructive', title: 'Analysis Error', description: 'Please load a map and provide test data.' });
+            addLog('Não há dados suficientes para executar a análise.', 'error');
+            toast({ variant: 'destructive', title: 'Erro na Análise', description: 'Por favor, carregue um mapa e forneça dados de ensaio.' });
             return;
         }
         setIsLoading(true);
-        addLog(`Starting AI analysis with ${aggressiveness}% aggressiveness...`, 'info');
+        addLog(`A iniciar análise IA com ${aggressiveness}% de agressividade...`, 'info');
 
         const input = {
             mapData: originalMap,
@@ -258,29 +258,29 @@ export default function EcuTuningAssistant() {
         if (result.success && result.data) {
             setCorrectedMap(result.data.correctedMap);
             setCorrectionPercentageMap(result.data.correctionPercentageMap);
-            addLog('AI analysis complete. New map generated.', 'success');
-            toast({ title: "Analysis Complete", description: "AI has generated a new map suggestion." });
+            addLog('Análise IA concluída. Novo mapa gerado.', 'success');
+            toast({ title: "Análise Concluída", description: "A IA gerou uma nova sugestão de mapa." });
         } else {
-            addLog(`AI analysis failed: ${result.error}`, 'error');
-            toast({ variant: 'destructive', title: 'AI Analysis Failed', description: result.error });
+            addLog(`A análise IA falhou: ${result.error}`, 'error');
+            toast({ variant: 'destructive', title: 'Falha na Análise IA', description: result.error });
         }
         setIsLoading(false);
     };
 
     const handleSaveClick = () => {
         if (!correctedMap || !binFile || !xdfFile || !selectedMapName || !sortOrder) {
-            addLog('Cannot save: missing corrected map data or file definitions.', 'error');
+            addLog('Não é possível guardar: faltam dados do mapa corrigido ou definições de ficheiro.', 'error');
             return;
         }
         const definition = xdfFile.definitions.find(d => d.name === selectedMapName);
         if (!definition) return;
         try {
             saveBinFile(binFile.buffer, correctedMap, definition, sortOrder);
-            addLog('New BIN file saved successfully.', 'success');
-            toast({ title: 'File Saved', description: 'Your new BIN file has been downloaded.' });
+            addLog('Novo ficheiro BIN guardado com sucesso.', 'success');
+            toast({ title: 'Ficheiro Guardado', description: 'O seu novo ficheiro BIN foi descarregado.' });
         } catch (error) {
-            addLog(`Error saving file: ${(error as Error).message}`, 'error');
-            toast({ variant: 'destructive', title: 'Save Error', description: (error as Error).message });
+            addLog(`Erro ao guardar o ficheiro: ${(error as Error).message}`, 'error');
+            toast({ variant: 'destructive', title: 'Erro ao Guardar', description: (error as Error).message });
         }
     };
 
@@ -294,7 +294,7 @@ export default function EcuTuningAssistant() {
     const handleConfirmLogData = (data: TestDataEntry[]) => {
         setTestData(data);
         setIsLogModalOpen(false);
-        addLog(`Added ${data.length} test data points.`, 'success');
+        addLog(`Adicionados ${data.length} pontos de dados de ensaio.`, 'success');
     };
     
     const handleConfirmAxes = (newAxes: { y: string, x: string }) => {
@@ -303,12 +303,12 @@ export default function EcuTuningAssistant() {
         const newX = newAxes.x.split(',').map(s => parseFloat(s.trim()));
 
         if (newY.some(isNaN) || newX.some(isNaN) || newY.length !== axes.y.length || newX.length !== axes.x.length) {
-            addLog('Invalid axes values. Ensure they are comma-separated numbers and match original dimensions.', 'error');
+            addLog('Valores dos eixos inválidos. Certifique-se de que são números separados por vírgulas e que correspondem às dimensões originais.', 'error');
             return;
         }
         setAxes(prev => prev ? { ...prev, x: newX, y: newY } : null);
         setIsAxesModalOpen(false);
-        addLog('Map axes updated.', 'success');
+        addLog('Eixos do mapa atualizados.', 'success');
     };
 
     const isAnalyzeDisabled = !originalMap || testData.length === 0 || isLoading;
@@ -325,7 +325,7 @@ export default function EcuTuningAssistant() {
                     <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
                         <Sparkles className="text-primary w-8 h-8"/> TuneAssist AI
                     </h1>
-                    <p className="text-lg text-muted-foreground mt-2">AI-Powered ECU Tuning Assistant</p>
+                    <p className="text-lg text-muted-foreground mt-2">Assistente de Afinação de ECU Potenciado por IA</p>
                 </header>
 
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -517,12 +517,12 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: b
     const [yAxis, setYAxis] = useState('');
     const [xAxis, setXAxis] = useState('');
 
-    useState(() => {
+    useEffect(() => {
         if(open && currentAxes) {
             setYAxis(currentAxes.y.join(', '));
             setXAxis(currentAxes.x.join(', '));
         }
-    });
+    }, [open, currentAxes]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

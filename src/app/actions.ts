@@ -35,7 +35,7 @@ export async function suggestMapCorrections(input: SuggestMapCorrectionsInput): 
     console.error("Error in suggestMapCorrections action:", error);
     
     if (error instanceof z.ZodError) {
-        return { success: false, error: `Invalid input data: ${error.message}` };
+        return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
     }
     
     return { success: false, error: (error as Error).message };

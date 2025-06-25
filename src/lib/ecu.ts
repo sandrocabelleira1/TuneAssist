@@ -1,7 +1,7 @@
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
-import type { XDFDefinition, AxisDefinition, MapData } from './types';
+import type { XDFDefinition, AxisDefinition, MapData, OriginalSortOrder } from './types';
 
 function findNode(parent: Element, ...selectors: string[]): Element | null {
   for (const selector of selectors) {
@@ -34,18 +34,18 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
   const parserError = xmlDoc.querySelector('parsererror');
   if (parserError) {
-    throw new Error('Error parsing XDF file.');
+    throw new Error('Erro ao analisar o ficheiro XDF.');
   }
 
   const xdfTables = xmlDoc.querySelectorAll('table, XDFTABLE');
   if (xdfTables.length === 0) {
-    throw new Error('No tables found in XDF file.');
+    throw new Error('Nenhuma tabela encontrada no ficheiro XDF.');
   }
 
   const definitions: XDFDefinition[] = [];
   for (const table of xdfTables) {
-    const tableName = table.querySelector('title')?.textContent || table.getAttribute('name') || 'Unnamed Table';
-    if (tableName === 'Unnamed Table') continue;
+    const tableName = table.querySelector('title')?.textContent || table.getAttribute('name') || 'Tabela Sem Nome';
+    if (tableName === 'Tabela Sem Nome') continue;
 
     try {
       const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
@@ -91,7 +91,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       definitions.push({ name: tableName, address, rows, cols, dataSize: dataSize / 8, isBigEndian, equation, inverseEquation, xAxisDef, yAxisDef });
     } catch (e) {
-      console.error(`Error parsing table "${tableName}": ${(e as Error).message}`);
+      console.error(`Erro ao analisar a tabela "${tableName}": ${(e as Error).message}`);
     }
   }
   return definitions.filter(d => d.name && d.rows > 0 && d.cols > 0);
@@ -108,7 +108,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     const offset = axisDef.address + (i * axisDef.dataSize);
     let rawValue;
     if (offset + axisDef.dataSize > view.byteLength) {
-        console.error(`Axis read out of bounds. Offset: ${offset}`);
+        console.error(`Leitura do eixo fora dos limites. Offset: ${offset}`);
         continue;
     }
     if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
@@ -131,7 +131,7 @@ export function readMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): MapD
     for (let c = 0; c < def.cols; c++) {
       const offset = def.address + (r * def.cols + c) * def.dataSize;
       if (offset + def.dataSize > view.byteLength) {
-        console.error(`Map read out of bounds. Offset: ${offset}`);
+        console.error(`Leitura do mapa fora dos limites. Offset: ${offset}`);
         row.push(null);
         continue;
       }
@@ -158,12 +158,12 @@ export function generateChecksum(buffer: ArrayBuffer): string {
     return checksum.toString(16);
 }
 
-export function saveBinFile(binBuffer: ArrayBuffer, mapData: MapData, def: XDFDefinition, sortOrder: { x: any[], y: any[] }) {
+export function saveBinFile(binBuffer: ArrayBuffer, mapData: MapData, def: XDFDefinition, sortOrder: OriginalSortOrder) {
     if (!mapData || !binBuffer || !def) {
-        throw new Error('Missing data for saving BIN file.');
+        throw new Error('Faltam dados para guardar o ficheiro BIN.');
     }
     if (!def.inverseEquation) {
-        throw new Error('Cannot save: inverse equation is not supported or defined for this map.');
+        throw new Error('Não é possível guardar: a equação inversa não é suportada ou definida para este mapa.');
     }
 
     const newBuffer = binBuffer.slice(0);
@@ -202,7 +202,7 @@ export function saveBinFile(binBuffer: ArrayBuffer, mapData: MapData, def: XDFDe
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'TuneAssist_AI_tuned.bin';
+    a.download = 'TuneAssist_AI_afinado.bin';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

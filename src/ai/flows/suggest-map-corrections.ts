@@ -12,34 +12,34 @@ import {z} from 'genkit';
 
 const SuggestMapCorrectionsInputSchema = z.object({
   mapData: z.array(
-    z.array(z.number()).describe('The original ECU map data (2D array).')
-  ).describe('Original ECU map data.'),
+    z.array(z.number()).describe('Os dados originais do mapa da ECU (array 2D).')
+  ).describe('Dados originais do mapa da ECU.'),
   afrTarget: z.array(
-    z.array(z.number()).describe('The target AFR values for the ECU map.')
-  ).describe('Target AFR values.'),
+    z.array(z.number()).describe('Os valores AFR alvo para o mapa da ECU.')
+  ).describe('Valores AFR alvo.'),
   testData: z.array(
     z.object({
-      rpm: z.number().describe('Engine RPM during the test.'),
-      carga: z.number().describe('Engine load during the test (%).'),
-      afr: z.number().describe('Measured AFR during the test.'),
+      rpm: z.number().describe('RPM do motor durante o ensaio.'),
+      carga: z.number().describe('Carga do motor durante o ensaio (%).'),
+      afr: z.number().describe('AFR medido durante o ensaio.'),
     })
-  ).describe('Test data collected during engine operation.'),
-  aggressiveness: z.number().describe('The aggressiveness of the correction (0-1).'),
-  eixo_x: z.array(z.number()).describe('X axis values (e.g. Load)'),
-  eixo_y: z.array(z.number()).describe('Y axis values (e.g. RPM)'),
+  ).describe('Dados de ensaio recolhidos durante o funcionamento do motor.'),
+  aggressiveness: z.number().describe('A agressividade da correção (0-1).'),
+  eixo_x: z.array(z.number()).describe('Valores do eixo X (ex. Carga)'),
+  eixo_y: z.array(z.number()).describe('Valores do eixo Y (ex. RPM)'),
 });
 export type SuggestMapCorrectionsInput = z.infer<typeof SuggestMapCorrectionsInputSchema>;
 
 const SuggestMapCorrectionsOutputSchema = z.object({
   correctedMap: z.array(
-    z.array(z.number()).describe('The corrected ECU map data (2D array).')
-  ).describe('Corrected ECU map data.'),
+    z.array(z.number()).describe('Os dados corrigidos do mapa da ECU (array 2D).')
+  ).describe('Dados corrigidos do mapa da ECU.'),
   correctionPercentageMap: z.array(
-    z.array(z.number()).describe('The percentage correction applied to each cell in the ECU map.')
-  ).describe('Percentage correction map.'),
+    z.array(z.number()).describe('A percentagem de correção aplicada a cada célula no mapa da ECU.')
+  ).describe('Mapa de percentagem de correção.'),
   afrMeasuredGrid: z.array(
-    z.array(z.number()).describe('The measured AFR values interpolated to the ECU map grid.')
-  ).describe('Measured AFR grid.'),
+    z.array(z.number()).describe('Os valores de AFR medidos interpolados para a grelha do mapa da ECU.')
+  ).describe('Grelha de AFR medido.'),
 });
 export type SuggestMapCorrectionsOutput = z.infer<typeof SuggestMapCorrectionsOutputSchema>;
 

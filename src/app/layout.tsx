@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
   title: 'TuneAssist AI',
-  description: 'AI-Powered ECU Tuning Assistant',
+  description: 'Assistente de Afinação de ECU Potenciado por IA',
 };
 
 export default function RootLayout({
