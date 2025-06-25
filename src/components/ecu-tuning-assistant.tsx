@@ -6,6 +6,7 @@ import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, saveBinFil
 import { suggestMapCorrections } from '@/app/actions';
 import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
+import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Settings, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Settings, Sparkles, Trash2, XCircle, Wrench } from 'lucide-react';
 
 // MapTable Component
 function MapTable({
@@ -356,12 +357,18 @@ export default function EcuTuningAssistant() {
     return (
         <TooltipProvider>
             <div className="max-w-screen-2xl mx-auto">
-                <header className="text-center mb-8">
+                <header className="text-center mb-8 flex items-center justify-center relative">
                     <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
                         <Sparkles className="text-primary w-8 h-8"/> TuneAssist AI
                     </h1>
-                    <p className="text-lg text-muted-foreground mt-2">Assistente de Afinação de ECU Potenciado por IA</p>
+                    <p className="text-lg text-muted-foreground mt-2 absolute top-full">Assistente de Afinação de ECU Potenciado por IA</p>
+                    <Link href="/manuals" passHref className="absolute right-0">
+                        <Button variant="outline">
+                            <Wrench className="mr-2"/> Pesquisar Manuais
+                        </Button>
+                    </Link>
                 </header>
+
 
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
                     {/* Control Panel */}
