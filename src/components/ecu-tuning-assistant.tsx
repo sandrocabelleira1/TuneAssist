@@ -64,8 +64,9 @@ function MapTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
-            <th className="sticky top-0 left-0 z-20 bg-muted p-1 border border-border text-muted-foreground text-center min-w-[60px]">
-              {yAxisLabel} \ {xAxisLabel}
+            <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-muted-foreground text-left min-w-[120px]">
+              <div className="font-semibold text-xs">Eixo Y: <span className="font-normal text-foreground">{yAxisLabel}</span></div>
+              <div className="font-semibold text-xs">Eixo X: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
             </th>
             {xAxis.map((x, i) => (
               <th key={`head-x-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">{x.toFixed(1)}</th>
