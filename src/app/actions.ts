@@ -6,15 +6,11 @@ import { z } from 'zod';
 const SuggestMapCorrectionsActionInputSchema = z.object({
   mapData: z.array(z.array(z.number().nullable()))
     .transform(arr => 
-      arr
-        .filter(row => row.some(cell => cell !== null))
-        .map(row => row.map(cell => cell === null ? 0 : cell))
+      arr.map(row => row.map(cell => cell === null ? 0 : cell))
     ),
   lambdaTarget: z.array(z.array(z.number().nullable()))
     .transform(arr => 
-      arr
-        .filter(row => row.some(cell => cell !== null))
-        .map(row => row.map(cell => cell === null ? 1.0 : cell))
+      arr.map(row => row.map(cell => cell === null ? 1.0 : cell))
     ),
   testData: z.array(z.object({
     rpm: z.number(),
