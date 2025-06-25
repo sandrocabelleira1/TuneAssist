@@ -10,16 +10,16 @@ const SuggestMapCorrectionsActionInputSchema = z.object({
         .filter(row => row.some(cell => cell !== null))
         .map(row => row.map(cell => cell === null ? 0 : cell))
     ),
-  afrTarget: z.array(z.array(z.number().nullable()))
+  lambdaTarget: z.array(z.array(z.number().nullable()))
     .transform(arr => 
       arr
         .filter(row => row.some(cell => cell !== null))
-        .map(row => row.map(cell => cell === null ? 14.7 : cell))
+        .map(row => row.map(cell => cell === null ? 1.0 : cell))
     ),
   testData: z.array(z.object({
     rpm: z.number(),
     carga: z.number(),
-    afr: z.number(),
+    lambda: z.number(),
   })),
   aggressiveness: z.number().min(0).max(1),
   eixo_x: z.array(z.number()),

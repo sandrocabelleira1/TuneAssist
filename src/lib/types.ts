@@ -23,7 +23,7 @@ export type XDFDefinition = {
 export type TestDataEntry = {
   rpm: number;
   carga: number;
-  afr: number;
+  lambda: number;
 };
 
 export type LogMessage = {

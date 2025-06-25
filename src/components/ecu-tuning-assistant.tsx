@@ -81,6 +81,7 @@ function MapTable({
                   {isEditable ? (
                     <Input
                       type="number"
+                      step="0.01"
                       defaultValue={cell?.toFixed(2) || ''}
                       onBlur={(e) => handleInputChange(e, yi, xi)}
                       className="w-full h-full text-center bg-transparent border-0 rounded-none focus-visible:ring-1 focus-visible:ring-ring p-1"
@@ -117,7 +118,7 @@ export default function EcuTuningAssistant() {
 
     // AI & Correction state
     const [testData, setTestData] = useState<TestDataEntry[]>([]);
-    const [targetAfrMap, setTargetAfrMap] = useState<MapData | null>(null);
+    const [targetLambdaMap, setTargetLambdaMap] = useState<MapData | null>(null);
     const [correctedMap, setCorrectedMap] = useState<MapData | null>(null);
     const [correctionPercentageMap, setCorrectionPercentageMap] = useState<MapData | null>(null);
     const [aggressiveness, setAggressiveness] = useState(20);
@@ -143,7 +144,7 @@ export default function EcuTuningAssistant() {
     const resetState = () => {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
         setOriginalMap(null); setSortOrder({ x: [], y: [] }); setAxes(null);
-        setTestData([]); setTargetAfrMap(null); setCorrectedMap(null); setCorrectionPercentageMap(null);
+        setTestData([]); setTargetLambdaMap(null); setCorrectedMap(null); setCorrectionPercentageMap(null);
         setCustomAxes({});
         setIsLoading(false);
         if (binInputRef.current) binInputRef.current.value = '';
@@ -231,8 +232,8 @@ export default function EcuTuningAssistant() {
 
             setSortOrder({ x: sortableX, y: sortableY });
             
-            const afrMap = Array(sortedAxes.y.length).fill(0).map(() => Array(sortedAxes.x.length).fill(14.7));
-            setTargetAfrMap(afrMap);
+            const lambdaMap = Array(sortedAxes.y.length).fill(0).map(() => Array(sortedAxes.x.length).fill(1.0));
+            setTargetLambdaMap(lambdaMap);
             setCorrectedMap(null);
             setCorrectionPercentageMap(null);
 
@@ -245,7 +246,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleAnalyzeClick = async () => {
-        if (!originalMap || !targetAfrMap || !testData.length || !axes) {
+        if (!originalMap || !targetLambdaMap || !testData.length || !axes) {
             addLog('Não há dados suficientes para executar a análise.', 'error');
             toast({ variant: 'destructive', title: 'Erro na Análise', description: 'Por favor, carregue um mapa e forneça dados de ensaio.' });
             return;
@@ -255,7 +256,7 @@ export default function EcuTuningAssistant() {
 
         const input = {
             mapData: originalMap,
-            afrTarget: targetAfrMap,
+            lambdaTarget: targetLambdaMap,
             testData,
             aggressiveness: aggressiveness / 100,
             eixo_x: axes.x,
@@ -293,11 +294,11 @@ export default function EcuTuningAssistant() {
         }
     };
 
-    const handleAfrCellChange = (y: number, x: number, value: number) => {
-        if (!targetAfrMap) return;
-        const newMap = targetAfrMap.map(row => [...row]);
+    const handleLambdaCellChange = (y: number, x: number, value: number) => {
+        if (!targetLambdaMap) return;
+        const newMap = targetLambdaMap.map(row => [...row]);
         newMap[y][x] = value;
-        setTargetAfrMap(newMap);
+        setTargetLambdaMap(newMap);
     };
 
     const handleConfirmLogData = (data: TestDataEntry[]) => {
@@ -442,7 +443,7 @@ export default function EcuTuningAssistant() {
                                     <Tabs defaultValue="original">
                                         <TabsList>
                                             <TabsTrigger value="original">Original</TabsTrigger>
-                                            <TabsTrigger value="target">AFR Alvo</TabsTrigger>
+                                            <TabsTrigger value="target">Lambda Alvo</TabsTrigger>
                                             <TabsTrigger value="correction" disabled={!correctionPercentageMap}>Correção</TabsTrigger>
                                             <TabsTrigger value="corrected" disabled={!correctedMap}>Mapa Ajustado</TabsTrigger>
                                         </TabsList>
@@ -450,7 +451,7 @@ export default function EcuTuningAssistant() {
                                             {originalMap && <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
                                         </TabsContent>
                                         <TabsContent value="target" className="mt-4">
-                                            {targetAfrMap && <MapTable mapData={targetAfrMap} xAxis={axes.x} yAxis={axes.y} isEditable onCellChange={handleAfrCellChange} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
+                                            {targetLambdaMap && <MapTable mapData={targetLambdaMap} xAxis={axes.x} yAxis={axes.y} isEditable onCellChange={handleLambdaCellChange} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
                                         </TabsContent>
                                         <TabsContent value="correction" className="mt-4">
                                             {correctionPercentageMap && <MapTable mapData={correctionPercentageMap} xAxis={axes.x} yAxis={axes.y} isCorrection xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
@@ -492,7 +493,7 @@ function ManualLogModal({ open, onOpenChange, onConfirm }: { open: boolean, onOp
     };
     
     const handleConfirm = () => {
-        const validEntries = entries.filter(e => e.rpm && e.carga && e.afr) as TestDataEntry[];
+        const validEntries = entries.filter(e => e.rpm && e.carga && e.lambda) as TestDataEntry[];
         onConfirm(validEntries);
         setEntries([{}]);
     };
@@ -507,7 +508,7 @@ function ManualLogModal({ open, onOpenChange, onConfirm }: { open: boolean, onOp
                 <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center font-bold px-2 py-1">
                     <Label>RPM</Label>
                     <Label>Carga (%)</Label>
-                    <Label>AFR</Label>
+                    <Label>Fator Lambda</Label>
                 </div>
                 <ScrollArea className="max-h-64 pr-4">
                     <div className="space-y-2">
@@ -515,7 +516,7 @@ function ManualLogModal({ open, onOpenChange, onConfirm }: { open: boolean, onOp
                         <div key={index} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
                             <Input type="number" placeholder="e.g. 3000" value={entry.rpm || ''} onChange={(e) => updateEntry(index, 'rpm', e.target.value)} />
                             <Input type="number" placeholder="e.g. 80" value={entry.carga || ''} onChange={(e) => updateEntry(index, 'carga', e.target.value)} />
-                            <Input type="number" step="0.1" placeholder="e.g. 12.5" value={entry.afr || ''} onChange={(e) => updateEntry(index, 'afr', e.target.value)} />
+                            <Input type="number" step="0.01" placeholder="e.g. 1.00" value={entry.lambda || ''} onChange={(e) => updateEntry(index, 'lambda', e.target.value)} />
                             <Button variant="ghost" size="icon" onClick={() => removeEntry(index)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                         </div>
                     ))}

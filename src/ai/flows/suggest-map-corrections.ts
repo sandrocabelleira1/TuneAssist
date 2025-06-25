@@ -2,7 +2,7 @@
 /**
  * @fileOverview AI-powered ECU map correction suggestions.
  *
- * - suggestMapCorrections - A function that suggests corrections to the ECU map based on test data and target AFR.
+ * - suggestMapCorrections - A function that suggests corrections to the ECU map based on test data and target Lambda.
  * - SuggestMapCorrectionsInput - The input type for the suggestMapCorrections function.
  * - SuggestMapCorrectionsOutput - The return type for the suggestMapCorrections function.
  */
@@ -14,14 +14,14 @@ const SuggestMapCorrectionsInputSchema = z.object({
   mapData: z.array(
     z.array(z.number()).describe('Os dados originais do mapa da ECU (array 2D).')
   ).describe('Dados originais do mapa da ECU.'),
-  afrTarget: z.array(
-    z.array(z.number()).describe('Os valores AFR alvo para o mapa da ECU.')
-  ).describe('Valores AFR alvo.'),
+  lambdaTarget: z.array(
+    z.array(z.number()).describe('Os valores Lambda alvo para o mapa da ECU.')
+  ).describe('Valores Lambda alvo.'),
   testData: z.array(
     z.object({
       rpm: z.number().describe('RPM do motor durante o ensaio.'),
       carga: z.number().describe('Carga do motor durante o ensaio (%).'),
-      afr: z.number().describe('AFR medido durante o ensaio.'),
+      lambda: z.number().describe('Fator Lambda medido durante o ensaio.'),
     })
   ).describe('Dados de ensaio recolhidos durante o funcionamento do motor.'),
   aggressiveness: z.number().describe('A agressividade da correção (0-1).'),
@@ -37,9 +37,9 @@ const SuggestMapCorrectionsOutputSchema = z.object({
   correctionPercentageMap: z.array(
     z.array(z.number()).describe('A percentagem de correção aplicada a cada célula no mapa da ECU.')
   ).describe('Mapa de percentagem de correção.'),
-  afrMeasuredGrid: z.array(
-    z.array(z.number()).describe('Os valores de AFR medidos interpolados para a grelha do mapa da ECU.')
-  ).describe('Grelha de AFR medido.'),
+  lambdaMeasuredGrid: z.array(
+    z.array(z.number()).describe('Os valores de Lambda medidos interpolados para a grelha do mapa da ECU.')
+  ).describe('Grelha de Lambda medido.'),
 });
 export type SuggestMapCorrectionsOutput = z.infer<typeof SuggestMapCorrectionsOutputSchema>;
 
@@ -54,12 +54,12 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     outputSchema: SuggestMapCorrectionsOutputSchema,
   },
   async input => {
-    const { mapData, afrTarget, testData, aggressiveness, eixo_x, eixo_y } = input;
+    const { mapData, lambdaTarget, testData, aggressiveness, eixo_x, eixo_y } = input;
 
     // Initialize data structures for calculations
     let correctedMap = JSON.parse(JSON.stringify(mapData)); // Deep copy
     let correctionPercentageMap = Array(eixo_y.length).fill(0).map(() => Array(eixo_x.length).fill(0));
-    let afrMeasuredGrid = Array(eixo_y.length).fill(0).map(() => Array(eixo_x.length).fill(NaN));
+    let lambdaMeasuredGrid = Array(eixo_y.length).fill(0).map(() => Array(eixo_x.length).fill(NaN));
     let contagemPontosCelula = Array(eixo_y.length).fill(0).map(() => Array(eixo_x.length).fill(0));
 
     // Helper function to find the closest index in an array
@@ -70,32 +70,32 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
         0);
     }
 
-    // Populate the measured AFR grid by averaging AFR values for each cell
+    // Populate the measured Lambda grid by averaging Lambda values for each cell
     for (const ponto of testData) {
       const idx_rpm = encontrarIndiceMaisProximo(eixo_y, ponto.rpm);
       const idx_carga = encontrarIndiceMaisProximo(eixo_x, ponto.carga);
       if (idx_rpm === -1 || idx_carga === -1) continue;
 
-      if (isNaN(afrMeasuredGrid[idx_rpm][idx_carga])) {
-        afrMeasuredGrid[idx_rpm][idx_carga] = ponto.afr;
+      if (isNaN(lambdaMeasuredGrid[idx_rpm][idx_carga])) {
+        lambdaMeasuredGrid[idx_rpm][idx_carga] = ponto.lambda;
       } else {
-        const totalAnterior = afrMeasuredGrid[idx_rpm][idx_carga] * contagemPontosCelula[idx_rpm][idx_carga];
-        afrMeasuredGrid[idx_rpm][idx_carga] = (totalAnterior + ponto.afr) / (contagemPontosCelula[idx_rpm][idx_carga] + 1);
+        const totalAnterior = lambdaMeasuredGrid[idx_rpm][idx_carga] * contagemPontosCelula[idx_rpm][idx_carga];
+        lambdaMeasuredGrid[idx_rpm][idx_carga] = (totalAnterior + ponto.lambda) / (contagemPontosCelula[idx_rpm][idx_carga] + 1);
       }
       contagemPontosCelula[idx_rpm][idx_carga]++;
     }
 
-    // Calculate corrections based on the difference between measured and target AFR
+    // Calculate corrections based on the difference between measured and target Lambda
     for (let r_idx = 0; r_idx < eixo_y.length; r_idx++) {
       for (let c_idx = 0; c_idx < eixo_x.length; c_idx++) {
-        const afrMedido = afrMeasuredGrid[r_idx][c_idx];
-        const afrAlvo = afrTarget[r_idx][c_idx];
+        const lambdaMedido = lambdaMeasuredGrid[r_idx][c_idx];
+        const lambdaAlvo = lambdaTarget[r_idx][c_idx];
 
-        if (!isNaN(afrMedido)) {
-          const desvioAfr = afrMedido - afrAlvo;
-          if (Math.abs(desvioAfr) > 0.1) {
+        if (!isNaN(lambdaMedido)) {
+          const desvioLambda = lambdaMedido - lambdaAlvo;
+          if (Math.abs(desvioLambda) > 0.01) { // Adjusted threshold for lambda
             const valorOriginal = correctedMap[r_idx][c_idx];
-            const percentualCorrecao = (afrMedido / afrAlvo) - 1;
+            const percentualCorrecao = (lambdaMedido / lambdaAlvo) - 1;
             const ajuste = valorOriginal * percentualCorrecao * aggressiveness;
             let valorAjustado = valorOriginal + ajuste;
             correctedMap[r_idx][c_idx] = valorAjustado;
@@ -108,7 +108,7 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     return {
       correctedMap: correctedMap,
       correctionPercentageMap: correctionPercentageMap,
-      afrMeasuredGrid: afrMeasuredGrid,
+      lambdaMeasuredGrid: lambdaMeasuredGrid,
     };
   }
 );
