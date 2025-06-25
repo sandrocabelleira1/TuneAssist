@@ -5,7 +5,6 @@ import { generateManualContent as generateManualContentFlow, type GenerateManual
 import { GenerateManualContentInputSchema } from '@/ai/schemas';
 import { z } from 'zod';
 
-// We need to validate the input on the server side as well for security.
 const SuggestMapCorrectionsActionInputSchema = z.object({
   mapData: z.array(z.array(z.number().nullable())),
   lambdaTarget: z.array(z.array(z.number().nullable())),
@@ -22,10 +21,11 @@ const SuggestMapCorrectionsActionInputSchema = z.object({
   factorySpecs: z.string().optional(),
 });
 
-export async function suggestMapCorrections(input: any): Promise<{ success: boolean; data?: SuggestMapCorrectionsOutput; error?: string }> {
+
+export async function suggestMapCorrections(input: SuggestMapCorrectionsInput): Promise<{ success: boolean; data?: SuggestMapCorrectionsOutput; error?: string }> {
   try {
     const validatedInput = SuggestMapCorrectionsActionInputSchema.parse(input);
-    const result = await suggestMapCorrectionsFlow(validatedInput as SuggestMapCorrectionsInput);
+    const result = await suggestMapCorrectionsFlow(validatedInput);
     return { success: true, data: result };
   } catch (error) {
     console.error("Error in suggestMapCorrections action:", error);
