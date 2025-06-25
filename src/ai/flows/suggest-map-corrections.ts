@@ -59,14 +59,16 @@ const prompt = ai.definePrompt({
     name: 'generateLambdaMeasuredGridPrompt',
     input: {schema: SuggestMapCorrectionsInputSchema},
     output: {schema: AiOutputSchema},
-    prompt: `Você é um engenheiro de calibração de motores. Sua única tarefa é analisar os dados de um mapa de combustível de uma ECU e os dados de um teste de dinamômetro, e criar uma grelha de valores de lambda medidos.
+    prompt: `Você é um engenheiro de calibração de motores. A sua única tarefa é analisar os dados de um mapa de combustível e os dados de um teste para criar uma grelha de valores de lambda medidos.
 
 **SAÍDA OBRIGATÓRIA**:
 A sua saída DEVE ser um único objeto JSON contendo APENAS a chave \`lambdaMeasuredGrid\`.
 
-- **\`lambdaMeasuredGrid\`**: Crie uma grelha com as mesmas dimensões do \`mapData\` de entrada. Para cada célula no mapa, encontre os pontos correspondentes nos \`testData\` (usando os eixos \`eixo_x\` e \`eixo_y\` para interpolação) e preencha com o valor de lambda medido.
-  - Se vários pontos de teste corresponderem a uma única célula, use o valor MÉDIO de lambda.
-  - Para células do mapa que não tenham dados de teste correspondentes, o valor DEVE ser \`null\`.
+- **\`lambdaMeasuredGrid\`**: Crie uma grelha com as mesmas dimensões do \`mapData\` de entrada.
+  - Para cada célula na grelha nas coordenadas \`[y][x]\`, encontre o RPM correspondente em \`eixo_y[y]\` e a Carga em \`eixo_x[x]\`.
+  - Em seguida, procure nos \`testData\` os pontos onde o \`rpm\` e a \`carga\` são mais próximos dos valores da célula.
+  - Se encontrar pontos de dados de teste relevantes para uma célula, calcule o valor **MÉDIO** do \`lambda\` desses pontos e preencha a célula com esse valor.
+  - Para células do mapa que **não tenham dados de teste correspondentes** (ou próximos o suficiente), o valor da célula DEVE ser \`null\`.
   - Esta grelha DEVE ter exatamente as mesmas dimensões (linhas e colunas) que o \`mapData\` original.
 
 **NÃO FAÇA MAIS NADA.** Não calcule mapas corrigidos nem percentagens de correção. A sua única responsabilidade é gerar a \`lambdaMeasuredGrid\`. O formato deve corresponder exatamente ao schema de saída fornecido.
