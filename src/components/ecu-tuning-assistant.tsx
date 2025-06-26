@@ -141,6 +141,8 @@ export default function EcuTuningAssistant() {
     const [isLogModalOpen, setIsLogModalOpen] = useState(false);
     const [isAxesModalOpen, setIsAxesModalOpen] = useState(false);
     const [isChecksumWarningOpen, setIsChecksumWarningOpen] = useState(false);
+    const [isXdfErrorModalOpen, setIsXdfErrorModalOpen] = useState(false);
+
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
@@ -309,9 +311,13 @@ export default function EcuTuningAssistant() {
                     }
                 }
             } catch (error) {
-                const msg = `Erro ao carregar ${file.name}: ${(error as Error).message}`;
-                addLog(msg, 'error');
-                toast({ variant: 'destructive', title: "Erro no Ficheiro", description: msg });
+                addLog(`Erro ao analisar ${file.name}: ${(error as Error).message}`, 'error');
+                if (type === 'xdf') {
+                    setIsXdfErrorModalOpen(true);
+                } else {
+                    const msg = `Erro ao carregar ${file.name}: ${(error as Error).message}`;
+                    toast({ variant: 'destructive', title: "Erro no Ficheiro", description: msg });
+                }
             }
         };
         reader.onerror = () => {
@@ -337,9 +343,8 @@ export default function EcuTuningAssistant() {
             setSelectedXdfFromLibrary(name);
             addLog(`XDF "${name}" carregado da biblioteca.`, 'success');
         } catch (error) {
-            const msg = `Erro ao carregar ${name} da biblioteca: ${(error as Error).message}`;
-            addLog(msg, 'error');
-            toast({ variant: 'destructive', title: "Erro no Ficheiro XDF", description: msg });
+            addLog(`Erro ao carregar ${name} da biblioteca: ${(error as Error).message}`, 'error');
+            setIsXdfErrorModalOpen(true);
             setXdfFile(null);
         }
     }
@@ -756,6 +761,7 @@ export default function EcuTuningAssistant() {
                 {/* Modals */}
                 <ManualLogModal open={isLogModalOpen} onOpenChange={setIsLogModalOpen} onConfirm={handleConfirmLogData} existingData={testData} />
                 <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={axes} />
+                
                 <AlertDialog open={isChecksumWarningOpen} onOpenChange={setIsChecksumWarningOpen}>
                     <AlertDialogContent>
                         <AlertDialogHeader>
@@ -775,6 +781,37 @@ export default function EcuTuningAssistant() {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
+
+                <AlertDialog open={isXdfErrorModalOpen} onOpenChange={setIsXdfErrorModalOpen}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Não Foi Possível Ler o Ficheiro XDF</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                <div className="space-y-4 pt-4">
+                                    <p>
+                                        A aplicação não conseguiu processar este ficheiro. Isto acontece frequentemente por uma das seguintes razões:
+                                    </p>
+                                    <ul className="list-disc pl-5 space-y-2 text-sm">
+                                        <li>
+                                            <strong>Protegido por Senha:</strong> O ficheiro pode estar encriptado. A aplicação não consegue ler XDFs protegidos por senha.
+                                        </li>
+                                        <li>
+                                            <strong>Corrompido ou Inválido:</strong> O ficheiro pode não ser um XDF válido ou pode estar danificado.
+                                        </li>
+                                    </ul>
+                                    <p className="font-semibold pt-2">Solução Recomendada:</p>
+                                    <p>
+                                        Se o ficheiro estiver protegido, por favor, use o software original (como o TunerPro) para o abrir com a senha e, em seguida, guarde uma nova versão <strong>sem</strong> proteção. Depois, carregue o ficheiro desprotegido aqui.
+                                    </p>
+                                </div>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogAction onClick={() => setIsXdfErrorModalOpen(false)}>Entendido</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
             </div>
         </TooltipProvider>
     );
