@@ -21,6 +21,7 @@ export type { GenerateManualContentInput, GenerateManualContentOutput };
 
 const prompt = ai.definePrompt({
     name: 'generateManualContentPrompt',
+    model: 'googleai/gemini-2.0-flash',
     input: { schema: GenerateManualContentInputSchema },
     output: { schema: GenerateManualContentOutputSchema },
     prompt: `Você é um redator técnico especialista em motocicletas. Sua tarefa é gerar um capítulo de exemplo para um manual de motocicleta com base nas informações fornecidas.
