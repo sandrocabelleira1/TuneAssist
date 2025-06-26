@@ -786,7 +786,7 @@ export default function EcuTuningAssistant() {
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>Não Foi Possível Ler o Ficheiro XDF</AlertDialogTitle>
-                            <AlertDialogDescription>
+                            <AlertDialogDescription asChild>
                                 <div className="space-y-4 pt-4">
                                     <p>
                                         A aplicação não conseguiu processar este ficheiro. Isto acontece frequentemente por uma das seguintes razões:
