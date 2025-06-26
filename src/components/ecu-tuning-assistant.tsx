@@ -629,7 +629,14 @@ function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open:
     };
     
     const handleClear = () => {
-        setEntries(generateInitialEntries());
+        const rpms = Array.from({ length: (17000 - 1000) / 500 + 1 }, (_, i) => 1000 + i * 500);
+        const blankEntries: FormattedEntry[] = rpms.map(rpm => ({
+            rpm,
+            carga: '',
+            lambda: '',
+            torque: ''
+        }));
+        setEntries(blankEntries);
     }
 
     const handleConfirm = () => {
