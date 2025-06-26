@@ -170,26 +170,37 @@ export function saveBinFile(binBuffer: ArrayBuffer, mapData: MapData, def: XDFDe
     const view = new DataView(newBuffer);
     const inverseEquationFunc = new Function('X', `return ${def.inverseEquation}`);
     
-    // Unsort map data before writing
+    // Unsort map data before writing.
+    // `mapData` is sorted for display. We need to create `mapToWrite` in the original file order.
     let mapToWrite: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
-    for (let r = 0; r < sortOrder.y.length; r++) {
-        for (let c = 0; c < sortOrder.x.length; c++) {
-            const originalYIndex = sortOrder.y[r].index;
-            const originalXIndex = sortOrder.x[c].index;
-            if(mapData[r] && mapData[r][c] !== null) {
-              mapToWrite[originalYIndex][originalXIndex] = mapData[r][c];
+    for (let sortedY = 0; sortedY < sortOrder.y.length; sortedY++) {
+        for (let sortedX = 0; sortedX < sortOrder.x.length; sortedX++) {
+            const originalY = sortOrder.y[sortedY].index;
+            const originalX = sortOrder.x[sortedX].index;
+            const value = mapData[sortedY]?.[sortedX];
+            
+            // Only copy valid numbers.
+            if (typeof value === 'number' && !isNaN(value)) {
+              mapToWrite[originalY][originalX] = value;
             }
         }
     }
     
+    // Write the unsorted map back to the buffer.
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             const realValue = mapToWrite[r][c];
-            if(realValue === null || realValue === undefined) continue;
+            // If there's no value for this cell, skip it, leaving the original data in the buffer.
+            if (realValue === null || realValue === undefined) continue;
 
             const offset = def.address + (r * def.cols + c) * def.dataSize;
             const rawValue = Math.round(inverseEquationFunc(realValue));
             
+            if (offset + def.dataSize > view.byteLength) {
+                console.error(`Escrita do mapa fora dos limites. Offset: ${offset}`);
+                continue;
+            }
+
             if (def.dataSize === 1) {
                 view.setUint8(offset, rawValue);
             } else if (def.dataSize === 2) {
