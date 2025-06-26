@@ -145,7 +145,7 @@ export default function EcuTuningAssistant() {
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         if (type === 'debug' && !debugMode) return;
         setLogs(prev => [...prev, {
-            id: Date.now(),
+            id: Math.random(),
             timestamp: new Date().toLocaleTimeString(),
             message,
             type,
