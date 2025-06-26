@@ -141,7 +141,6 @@ export default function EcuTuningAssistant() {
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
-    const isInitialMount = useRef(true);
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         if (type === 'debug' && !debugMode) return;
@@ -170,10 +169,6 @@ export default function EcuTuningAssistant() {
 
     // Save custom axes to localStorage whenever they change
     useEffect(() => {
-        if (isInitialMount.current) {
-            isInitialMount.current = false;
-            return;
-        }
         try {
             localStorage.setItem('customAxesData', JSON.stringify(customAxes));
         } catch (error) {
@@ -181,6 +176,67 @@ export default function EcuTuningAssistant() {
             addLog('Não foi possível guardar os eixos personalizados no armazenamento local.', 'error');
         }
     }, [customAxes, addLog]);
+
+    // BIN/XDF Compatibility Check
+    useEffect(() => {
+        if (!binFile || !xdfFile) {
+            return;
+        }
+
+        const binSize = binFile.buffer.byteLength;
+        let outOfBoundsCount = 0;
+        const totalDefinitions = xdfFile.definitions.length;
+
+        if (totalDefinitions === 0) return;
+
+        xdfFile.definitions.forEach(def => {
+            // Check main map table
+            const mapEndAddr = def.address + (def.rows * def.cols * def.dataSize);
+            if (mapEndAddr > binSize) {
+                outOfBoundsCount++;
+                addLog(`Mapa "${def.name}" está fora dos limites. Fim do mapa: 0x${mapEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
+            }
+
+            // Check X axis
+            if (def.xAxisDef) {
+                const axisEndAddr = def.xAxisDef.address + (def.xAxisDef.count * def.xAxisDef.dataSize);
+                if (axisEndAddr > binSize) {
+                    outOfBoundsCount++;
+                    addLog(`Eixo X do mapa "${def.name}" está fora dos limites. Fim do eixo: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
+                }
+            }
+            
+            // Check Y axis
+            if (def.yAxisDef) {
+                const axisEndAddr = def.yAxisDef.address + (def.yAxisDef.count * def.yAxisDef.dataSize);
+                if (axisEndAddr > binSize) {
+                    outOfBoundsCount++;
+                    addLog(`Eixo Y do mapa "${def.name}" está fora dos limites. Fim do eixo: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
+                }
+            }
+        });
+        
+        // Consider it incompatible if more than half of the definitions are bad.
+        if (outOfBoundsCount > totalDefinitions / 2 && totalDefinitions > 1) {
+            const warningMsg = "O ficheiro XDF parece incompatível com o ficheiro BIN. Muitas definições de mapa apontam para fora do ficheiro.";
+            addLog(warningMsg, 'error');
+            toast({
+                variant: 'destructive',
+                title: "Aviso de Incompatibilidade",
+                description: warningMsg,
+                duration: 8000,
+            });
+            
+            // Reset map selection to prevent errors
+            setSelectedMapName('');
+            setOriginalMap(null);
+            setAxes(null);
+            setCorrectedMap(null);
+            setCorrectionPercentageMap(null);
+            setTargetLambdaMap(null);
+        }
+
+    }, [binFile, xdfFile, addLog, toast]);
 
 
     const resetState = () => {
@@ -192,7 +248,7 @@ export default function EcuTuningAssistant() {
         setManualSearchModel('');
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
-        addLog('O estado foi reiniciado.', 'info');
+        addLog('O estado da sessão foi reiniciado.', 'info');
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
@@ -366,7 +422,7 @@ export default function EcuTuningAssistant() {
     const handleConfirmLogData = (data: TestDataEntry[]) => {
         setTestData(data);
         setIsLogModalOpen(false);
-        addLog(`Adicionados ${data.length} pontos de dados de ensaio.`, 'success');
+        addLog(`Adicionadas ${data.length} pontos de dados de ensaio.`, 'success');
     };
     
     const handleConfirmAxes = (newAxesData: { y: string, x: string }) => {
