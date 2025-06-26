@@ -121,7 +121,7 @@ export default function EcuTuningAssistant() {
     const [originalMap, setOriginalMap] = useState<MapData | null>(null);
     const [sortOrder, setSortOrder] = useState<OriginalSortOrder>({ x: [], y: [] });
     const [axes, setAxes] = useState<{ x: number[], y: number[], xLabel: string, yLabel: string } | null>(null);
-    const [customAxes, setCustomAxes] = useState<Record<string, { x: number[], y: number[] }>>({});
+    const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: number[], y: number[] }>>>({});
 
     // AI & Correction state
     const [testData, setTestData] = useState<TestDataEntry[]>([]);
@@ -236,11 +236,16 @@ export default function EcuTuningAssistant() {
             
             setOriginalMap(sortedMap);
             
-            const userAxes = customAxes[name];
-            if (userAxes) {
-                setAxes({ ...sortedAxes, x: userAxes.x, y: userAxes.y });
+            if (binFile?.checksum) {
+              const userAxes = customAxes[binFile.checksum]?.[name];
+              if (userAxes) {
+                  setAxes({ ...sortedAxes, x: userAxes.x, y: userAxes.y });
+                  addLog(`Eixos personalizados carregados para o mapa "${name}".`, 'info');
+              } else {
+                  setAxes(sortedAxes);
+              }
             } else {
-                setAxes(sortedAxes);
+              setAxes(sortedAxes);
             }
 
             setSortOrder({ x: sortableX, y: sortableY });
@@ -348,10 +353,19 @@ export default function EcuTuningAssistant() {
         const newAxesState = { ...axes, x: newX, y: newY };
         setAxes(newAxesState);
 
-        setCustomAxes(prev => ({
-            ...prev,
-            [selectedMapName]: { x: newX, y: newY }
-        }));
+        if (binFile?.checksum) {
+          setCustomAxes(prev => ({
+              ...prev,
+              [binFile.checksum]: {
+                  ...(prev[binFile.checksum] || {}),
+                  [selectedMapName]: { x: newX, y: newY }
+              }
+          }));
+          addLog('Eixos personalizados guardados para este ficheiro BIN.', 'success');
+        } else {
+          toast({ variant: 'destructive', title: "Erro", description: "Não foi possível guardar os eixos porque nenhum ficheiro BIN está carregado." });
+          addLog('Não foi possível guardar os eixos personalizados: ficheiro BIN não carregado.', 'error');
+        }
         
         setIsAxesModalOpen(false);
         addLog('Eixos do mapa atualizados.', 'success');
