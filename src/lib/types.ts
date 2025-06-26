@@ -24,6 +24,7 @@ export type TestDataEntry = {
   rpm: number;
   carga: number;
   lambda: number;
+  torque?: number;
 };
 
 export type LogMessage = {

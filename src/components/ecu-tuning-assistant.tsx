@@ -555,7 +555,7 @@ export default function EcuTuningAssistant() {
                 </div>
                 
                 {/* Modals */}
-                <ManualLogModal open={isLogModalOpen} onOpenChange={setIsLogModalOpen} onConfirm={handleConfirmLogData} />
+                <ManualLogModal open={isLogModalOpen} onOpenChange={setIsLogModalOpen} onConfirm={handleConfirmLogData} existingData={testData} />
                 <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={axes} />
                 <AlertDialog open={isChecksumWarningOpen} onOpenChange={setIsChecksumWarningOpen}>
                     <AlertDialogContent>
@@ -581,50 +581,102 @@ export default function EcuTuningAssistant() {
     );
 }
 
+type FormattedEntry = {
+    rpm: number;
+    carga: string;
+    lambda: string;
+    torque: string;
+}
 
-function ManualLogModal({ open, onOpenChange, onConfirm }: { open: boolean, onOpenChange: (open: boolean) => void, onConfirm: (data: TestDataEntry[]) => void }) {
-    const [entries, setEntries] = useState<Partial<TestDataEntry>[]>([{}]);
+function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open: boolean, onOpenChange: (open: boolean) => void, onConfirm: (data: TestDataEntry[]) => void, existingData: TestDataEntry[] }) {
+    const [entries, setEntries] = useState<FormattedEntry[]>([]);
+    
+    const generateInitialEntries = useCallback(() => {
+        const rpms = Array.from({ length: (17000 - 1000) / 500 + 1 }, (_, i) => 1000 + i * 500);
+        let initialEntries: FormattedEntry[] = rpms.map(rpm => ({
+            rpm,
+            carga: '',
+            lambda: '',
+            torque: ''
+        }));
 
-    const addEntry = () => setEntries([...entries, {}]);
-    const removeEntry = (index: number) => setEntries(entries.filter((_, i) => i !== index));
-    const updateEntry = (index: number, field: keyof TestDataEntry, value: string) => {
+        if (existingData && existingData.length > 0) {
+            existingData.forEach(existingEntry => {
+                const index = initialEntries.findIndex(e => e.rpm === existingEntry.rpm);
+                if (index !== -1) {
+                    initialEntries[index].carga = String(existingEntry.carga);
+                    initialEntries[index].lambda = String(existingEntry.lambda);
+                    initialEntries[index].torque = String(existingEntry.torque || '');
+                }
+            });
+        }
+        return initialEntries;
+    }, [existingData]);
+    
+    useEffect(() => {
+        if (open) {
+            setEntries(generateInitialEntries());
+        }
+    }, [open, generateInitialEntries]);
+
+    const handleUpdate = (index: number, field: 'carga' | 'lambda' | 'torque', value: string) => {
         const newEntries = [...entries];
-        newEntries[index] = { ...newEntries[index], [field]: parseFloat(value) };
-        setEntries(newEntries);
+        const entry = newEntries[index];
+        if (entry) {
+            entry[field] = value;
+            setEntries(newEntries);
+        }
     };
     
+    const handleClear = () => {
+        setEntries(generateInitialEntries());
+    }
+
     const handleConfirm = () => {
-        const validEntries = entries.filter(e => e.rpm && e.carga && e.lambda) as TestDataEntry[];
-        onConfirm(validEntries);
-        setEntries([{}]);
+        const validEntries = entries
+            .map(e => ({
+                rpm: e.rpm,
+                carga: parseFloat(e.carga),
+                lambda: parseFloat(e.lambda),
+                torque: parseFloat(e.torque),
+            }))
+            .filter(e => !isNaN(e.carga) && !isNaN(e.lambda));
+        
+        onConfirm(validEntries.map(e => ({
+            ...e,
+            torque: isNaN(e.torque) ? undefined : e.torque
+        })));
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-4xl">
                 <DialogHeader>
-                    <DialogTitle>Entrada Manual de Dados de Ensaio</DialogTitle>
-                    <DialogDescription>Adicione os pontos do seu ensaio para o ajuste automático. Linhas incompletas serão ignoradas.</DialogDescription>
+                    <DialogTitle>Grelha de Entrada de Dados de Ensaio</DialogTitle>
+                    <DialogDescription>
+                        Insira os valores de carga, lambda e torque para cada RPM. Apenas as linhas com valores válidos de Carga e Lambda serão usadas na análise.
+                    </DialogDescription>
                 </DialogHeader>
-                <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center font-bold px-2 py-1">
+                <div className="grid grid-cols-4 gap-x-4 gap-y-2 items-center font-bold px-2 py-1 text-sm">
                     <Label>RPM</Label>
                     <Label>Carga (%)</Label>
                     <Label>Fator Lambda</Label>
+                    <Label>Torque (Nm)</Label>
                 </div>
-                <ScrollArea className="max-h-64 pr-4">
+                <ScrollArea className="h-[60vh] pr-4">
                     <div className="space-y-2">
                     {entries.map((entry, index) => (
-                        <div key={index} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
-                            <Input type="number" placeholder="e.g. 3000" value={entry.rpm || ''} onChange={(e) => updateEntry(index, 'rpm', e.target.value)} />
-                            <Input type="number" placeholder="e.g. 80" value={entry.carga || ''} onChange={(e) => updateEntry(index, 'carga', e.target.value)} />
-                            <Input type="number" step="0.01" placeholder="e.g. 1.00" value={entry.lambda || ''} onChange={(e) => updateEntry(index, 'lambda', e.target.value)} />
-                            <Button variant="ghost" size="icon" onClick={() => removeEntry(index)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                        <div key={entry.rpm} className="grid grid-cols-4 gap-x-4 items-center">
+                            <Input type="number" value={entry.rpm} disabled className="font-semibold text-muted-foreground" />
+                            <Input type="number" placeholder="e.g. 80" value={entry.carga} onChange={(e) => handleUpdate(index, 'carga', e.target.value)} />
+                            <Input type="number" step="0.01" placeholder="e.g. 1.00" value={entry.lambda} onChange={(e) => handleUpdate(index, 'lambda', e.target.value)} />
+                            <Input type="number" step="0.1" placeholder="e.g. 120.5" value={entry.torque} onChange={(e) => handleUpdate(index, 'torque', e.target.value)} />
                         </div>
                     ))}
                     </div>
                 </ScrollArea>
-                <Button variant="outline" onClick={addEntry}><Plus className="mr-2"/> Adicionar Ponto</Button>
                 <DialogFooter>
+                    <Button variant="outline" onClick={handleClear}>Limpar Dados</Button>
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
                     <Button onClick={handleConfirm}>Concluir e Usar Dados</Button>
                 </DialogFooter>

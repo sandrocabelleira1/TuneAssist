@@ -23,6 +23,7 @@ const SuggestMapCorrectionsInputSchema = z.object({
       rpm: z.number().describe('RPM do motor durante o ensaio.'),
       carga: z.number().describe('Carga do motor durante o ensaio (%).'),
       lambda: z.number().describe('Fator Lambda medido durante o ensaio.'),
+      torque: z.number().optional().describe('O torque medido durante o ensaio (Nm).'),
     })
   ).describe('Dados de ensaio recolhidos durante o funcionamento do motor.'),
   aggressiveness: z.number().describe('A agressividade da correção (0-1).'),
