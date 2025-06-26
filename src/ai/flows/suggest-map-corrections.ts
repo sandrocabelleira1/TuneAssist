@@ -8,6 +8,7 @@
  */
 
 import {ai} from '@/ai/genkit';
+import {googleAI} from '@genkit-ai/googleai';
 import {z} from 'zod';
 
 const SuggestMapCorrectionsInputSchema = z.object({
@@ -60,7 +61,7 @@ const AiOutputSchema = z.object({
 
 const prompt = ai.definePrompt({
     name: 'generateLambdaMeasuredGridPrompt',
-    model: 'googleai/gemini-2.0-flash',
+    model: googleAI.model('gemini-2.0-flash'),
     input: {schema: SuggestMapCorrectionsInputSchema},
     output: {schema: AiOutputSchema},
     prompt: `Você é um engenheiro de calibração de motores. A sua tarefa é analisar os dados fornecidos e mapear os dados de ensaio para uma grelha \`lambdaMeasuredGrid\`.

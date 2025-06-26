@@ -8,6 +8,7 @@
  */
 
 import { ai } from '@/ai/genkit';
+import { googleAI } from '@genkit-ai/googleai';
 import { searchMotorcycleManuals } from '@/ai/tools/yamaha-manual-search';
 import { z } from 'genkit';
 
@@ -38,7 +39,7 @@ export async function motorcycleManualFlow(input: MotorcycleManualFlowInput): Pr
   const llmResponse = await ai.generate({
     prompt: motorcycleManualFlowPrompt.replace('{{query}}', input.query),
     tools: [searchMotorcycleManuals],
-    model: 'googleai/gemini-2.0-flash',
+    model: googleAI.model('gemini-2.0-flash'),
   });
 
   const toolResponse = llmResponse.toolRequests;
