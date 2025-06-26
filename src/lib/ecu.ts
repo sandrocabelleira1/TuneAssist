@@ -158,8 +158,8 @@ export function generateChecksum(buffer: ArrayBuffer): string {
     return checksum.toString(16);
 }
 
-export function saveBinFile(binBuffer: ArrayBuffer, mapData: MapData, def: XDFDefinition, sortOrder: OriginalSortOrder) {
-    if (!mapData || !binBuffer || !def) {
+export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData, def: XDFDefinition, sortOrder: OriginalSortOrder) {
+    if (!correctedSortedMap || !binBuffer || !def) {
         throw new Error('Faltam dados para guardar o ficheiro BIN.');
     }
     if (!def.inverseEquation) {
@@ -170,36 +170,48 @@ export function saveBinFile(binBuffer: ArrayBuffer, mapData: MapData, def: XDFDe
     const view = new DataView(newBuffer);
     const inverseEquationFunc = new Function('X', `return ${def.inverseEquation}`);
     
-    // Unsort map data before writing.
-    // `mapData` is sorted for display. We need to create `mapToWrite` in the original file order.
-    let mapToWrite: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
-    for (let sortedY = 0; sortedY < sortOrder.y.length; sortedY++) {
-        for (let sortedX = 0; sortedX < sortOrder.x.length; sortedX++) {
-            const originalY = sortOrder.y[sortedY].index;
-            const originalX = sortOrder.x[sortedX].index;
-            const value = mapData[sortedY]?.[sortedX];
+    // The corrected map is sorted for display. We must create an unsorted version
+    // that matches the original file layout before writing.
+    const unsortedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
+
+    for (let sortedY = 0; sortedY < def.rows; sortedY++) {
+        for (let sortedX = 0; sortedX < def.cols; sortedX++) {
+            // Get the original index from the sorted index
+            const originalY = sortOrder.y[sortedY]?.index;
+            const originalX = sortOrder.x[sortedX]?.index;
             
-            // Only copy valid numbers.
-            if (typeof value === 'number' && !isNaN(value)) {
-              mapToWrite[originalY][originalX] = value;
+            // If the sort order is somehow invalid, skip this cell
+            if (originalY === undefined || originalX === undefined) continue;
+
+            // Get the value from the sorted map
+            const value = correctedSortedMap[sortedY]?.[sortedX];
+            
+            // Place the value in the correct position in the unsorted map
+            if (unsortedMap[originalY] !== undefined && value !== null && !isNaN(value)) {
+                 unsortedMap[originalY][originalX] = value;
             }
         }
     }
     
-    // Write the unsorted map back to the buffer.
+    // Write the entire unsorted map back to the buffer.
+    // This overwrites the old map data in the file with the new data.
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
-            const realValue = mapToWrite[r][c];
-            // If there's no value for this cell, skip it, leaving the original data in the buffer.
-            if (realValue === null || realValue === undefined) continue;
+            const valueToWrite = unsortedMap[r]?.[c];
+
+            // If a cell was null in the original and not corrected, it remains null.
+            // We don't write it, preserving the original data in the buffer for that cell.
+            if (valueToWrite === null || valueToWrite === undefined) {
+                continue;
+            }
 
             const offset = def.address + (r * def.cols + c) * def.dataSize;
-            const rawValue = Math.round(inverseEquationFunc(realValue));
-            
             if (offset + def.dataSize > view.byteLength) {
                 console.error(`Escrita do mapa fora dos limites. Offset: ${offset}`);
                 continue;
             }
+
+            const rawValue = Math.round(inverseEquationFunc(valueToWrite));
 
             if (def.dataSize === 1) {
                 view.setUint8(offset, rawValue);

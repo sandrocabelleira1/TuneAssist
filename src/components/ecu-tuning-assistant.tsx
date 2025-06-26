@@ -92,7 +92,10 @@ function MapTable({
                     />
                   ) : (
                     <div className="w-[60px] h-8 flex items-center justify-center">
-                      {cell === null || isNaN(cell) ? '-' : cell.toFixed(isCorrection ? 1 : 2)}{isCorrection ? '%' : ''}
+                      {isCorrection
+                        ? (cell === null || isNaN(cell) ? '-' : `${cell.toFixed(1)}%`)
+                        : (cell === null || isNaN(cell) ? '-' : cell.toFixed(2))
+                      }
                     </div>
                   )}
                 </td>
