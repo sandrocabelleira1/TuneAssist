@@ -127,9 +127,9 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
       throw new Error("A IA não conseguiu gerar uma grelha de lambda. Tente novamente.");
     }
     
-    // Clean the AI output just in case it returns non-numbers
+    // Clean the AI output. Lambda cannot be 0 or negative. Treat these as null (no data).
     const lambdaMeasuredGrid = aiOutput.lambdaMeasuredGrid.map(row =>
-        (row || []).map(cell => (typeof cell === 'number' && !isNaN(cell)) ? cell : null)
+        (row || []).map(cell => (typeof cell === 'number' && !isNaN(cell) && cell > 0) ? cell : null)
     );
 
     const { mapData, lambdaTarget, aggressiveness } = input;
@@ -139,7 +139,7 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
         return row.map((measuredLambda, x) => {
             const target = lambdaTarget[y]?.[x];
             if (measuredLambda === null || target === null || target === undefined || target === 0) {
-                return 0; // No data or no target, so no correction.
+                return null; // No data or no target, so no correction.
             }
             // Formula: ((measured / target) - 1) * 100
             return ((measuredLambda / target) - 1) * 100;
@@ -150,8 +150,8 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     const correctedMap = mapData.map((row, y) => {
         return row.map((originalValue, x) => {
             const correctionPercent = correctionPercentageMap[y]?.[x];
-            // If there is no correction, or the original value is invalid, return the original value.
-            if (correctionPercent === 0 || originalValue === null || originalValue === undefined) {
+            // If there is no correction (null), or the original value is invalid, return the original value.
+            if (correctionPercent === null || correctionPercent === undefined || originalValue === null || originalValue === undefined) {
                 return originalValue;
             }
             // Formula: original * (1 + (correctionPercent / 100) * aggressiveness)
