@@ -28,7 +28,7 @@ export type TestDataEntry = {
 };
 
 export type LogMessage = {
-  id: number;
+  id: string;
   timestamp: string;
   message: string;
   type: 'info' | 'success' | 'error' | 'debug';
