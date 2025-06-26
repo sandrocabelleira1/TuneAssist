@@ -54,23 +54,17 @@ export async function suggestMapCorrections(input: SuggestMapCorrectionsInput): 
 
 // Internal schema for what we ask the AI to generate. Much simpler and more reliable.
 const AiOutputSchema = z.object({
-  lambdaMeasuredGrid: z.array(
-    z.array(z.number().nullable()).describe('Os valores de Lambda medidos interpolados para a grelha do mapa da ECU. Use null para células sem dados.')
-  ).describe('Grelha de Lambda medido.'),
+    lambdaGridWithMatches: z.array(
+        z.array(z.array(z.number())).describe('Uma grelha onde cada célula contém uma lista de valores lambda dos dados de ensaio que lhe correspondem. Uma lista vazia significa que não há correspondência.')
+      ).describe('Grelha com listas de valores lambda correspondentes.'),
 });
 
 const prompt = ai.definePrompt({
-    name: 'generateLambdaMeasuredGridPrompt',
+    name: 'generateLambdaMatchesPrompt',
     model: googleAI.model('gemini-2.0-flash'),
     input: {schema: SuggestMapCorrectionsInputSchema},
     output: {schema: AiOutputSchema},
-    prompt: `Você é um engenheiro de calibração de motores. A sua tarefa é analisar os dados fornecidos e mapear os dados de ensaio para uma grelha \`lambdaMeasuredGrid\`.
-
-{{#if factorySpecs}}
-**INFORMAÇÕES DE FÁBRICA (Contexto Crucial para Análise)**:
-As seguintes especificações foram fornecidas pelo utilizador. **Confronte** os \`testData\` medidos com estas especificações de fábrica. O seu objetivo é usar este contexto para produzir uma grelha \`lambdaMeasuredGrid\` mais precisa e inteligente. Por exemplo, as especificações podem ajudar a validar se um ponto de ensaio é um valor atípico ou uma medição fiável, influenciando o valor médio que calcula para uma célula.
-{{{factorySpecs}}}
-{{/if}}
+    prompt: `Você é um engenheiro de calibração de motores. A sua tarefa é mapear os dados de ensaio fornecidos para uma grelha.
 
 **CONTEXTO DOS EIXOS**:
 - O eixo Y do mapa (\`eixo_y\`) corresponde a **{{{eixo_y_label}}}**.
@@ -78,28 +72,23 @@ As seguintes especificações foram fornecidas pelo utilizador. **Confronte** os
 - Associe \`rpm\` e \`carga\` dos \`testData\` aos eixos corretos com base nestes rótulos.
 
 **LÓGICA OBRIGATÓRIA**:
-A sua única saída deve ser um objeto JSON com a chave \`lambdaMeasuredGrid\`. Siga estes passos EXATAMENTE:
+A sua única saída deve ser um objeto JSON com a chave \`lambdaGridWithMatches\`. Siga estes passos EXATAMENTE:
 
-1.  Crie uma grelha \`lambdaMeasuredGrid\` com as mesmas dimensões do \`mapData\` de entrada (mesmo número de linhas e colunas) e inicialize TODAS as suas células com o valor \`null\`.
-2.  Crie uma estrutura de dados temporária (por exemplo, um dicionário ou mapa em memória) para armazenar correspondências. As chaves serão as coordenadas da grelha (ex: "y_x") e os valores serão listas de valores de lambda.
-3.  **Itere sobre cada ponto em \`testData\`** (cada objeto com \`rpm\`, \`carga\`, \`lambda\`).
-4.  Para cada ponto de ensaio, encontre a célula **única** na grelha que corresponde mais de perto aos valores de \`rpm\` e \`carga\` do ponto. Determine o índice \`y\` mais próximo em \`eixo_y\` e o índice \`x\` mais próximo em \`eixo_x\`.
-5.  Adicione o valor de \`lambda\` desse ponto de ensaio à lista de lambdas para a coordenada encontrada (\`[y][x]\`) na sua estrutura temporária.
-6.  Após iterar sobre TODOS os \`testData\`, percorra a sua estrutura temporária.
-7.  Para cada coordenada \`[y][x]\` que tiver uma lista de lambdas, calcule a **média** desses valores. Use as \`factorySpecs\` como referência para validar os dados e refinar a média se necessário.
-8.  Atualize a célula \`[y][x]\` na sua \`lambdaMeasuredGrid\` com o valor médio calculado. As células que não tiveram correspondência com nenhum ponto de ensaio DEVEM permanecer \`null\`.
+1.  Crie uma grelha \`lambdaGridWithMatches\` com as mesmas dimensões do \`mapData\` de entrada (mesmo número de linhas e colunas) e inicialize CADA célula com uma **lista vazia** \`[]\`.
+2.  **Itere sobre cada ponto em \`testData\`** (cada objeto com \`rpm\`, \`carga\`, \`lambda\`).
+3.  Para cada ponto de ensaio, encontre a célula **única** na grelha que corresponde mais de perto aos valores de \`rpm\` e \`carga\` do ponto. Determine o índice \`y\` mais próximo em \`eixo_y\` e o índice \`x\` mais próximo em \`eixo_x\`.
+4.  Adicione o valor de \`lambda\` desse ponto de ensaio à lista na coordenada \`[y][x]\` da sua grelha \`lambdaGridWithMatches\`. Se um ponto de ensaio anterior já correspondeu a esta célula, adicione o novo lambda à lista existente.
 
 **EXEMPLO**:
 - Se \`eixo_y\` é RPM e \`eixo_x\` é Carga.
 - Um ponto de ensaio é \`{rpm: 2050, carga: 42, lambda: 0.95}\`.
 - \`eixo_y\` tem os valores \`[..., 2000, 2200, ...]\` e \`eixo_x\` tem \`[..., 40, 50, ...]\`.
 - A célula mais próxima é a que corresponde a \`2000\` RPM (índice \`y\`) e \`40\` Carga (índice \`x\`).
-- Você adicionaria \`0.95\` à lista de lambdas para a célula \`[y][x]\`.
-- Se outro ponto de ensaio também corresponder à mesma célula \`[y][x]\`, você adicionaria o seu lambda à mesma lista.
-- No final, você calcularia a média da lista para essa célula, possivelmente ajustando-a com base nas especificações de fábrica.
+- Você adicionaria \`0.95\` à lista na célula \`[y][x]\`. A célula \`[y][x]\` seria \`[0.95]\`.
+- Se outro ponto de ensaio \`{rpm: 2040, carga: 41, lambda: 0.96}\` também corresponder à mesma célula, a lista tornar-se-ia \`[0.95, 0.96]\`.
 
 **RESULTADO FINAL**:
-A \`lambdaMeasuredGrid\` resultante conterá valores numéricos apenas para as células que corresponderam diretamente aos dados de ensaio, e \`null\` para todas as outras. Não preencha células vazias. Não faça interpolação entre células.
+A grelha \`lambdaGridWithMatches\` resultante conterá listas de números apenas para as células que corresponderam diretamente aos dados de ensaio, e **listas vazias \`[]\`** para todas as outras. Não faça interpolação. Não adicione valores que não sejam dos \`testData\`.
 
 Dados de Entrada:
 mapData: {{{json mapData}}}
@@ -121,21 +110,33 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     outputSchema: SuggestMapCorrectionsOutputSchema,
   },
   async (input) => {
-    // 1. Ask the AI to do the one thing it's good at: map test data to a grid.
+    // 1. Ask the AI to do the one thing it's good at: map test data to lists in a grid.
     const { output: aiOutput } = await prompt(input);
     
-    if (!aiOutput || !aiOutput.lambdaMeasuredGrid) {
-      throw new Error("A IA não conseguiu gerar uma grelha de lambda. Tente novamente.");
+    if (!aiOutput || !aiOutput.lambdaGridWithMatches) {
+      throw new Error("A IA não conseguiu mapear os dados de ensaio. Tente novamente.");
     }
     
-    // Clean the AI output. Lambda cannot be 0 or negative. Treat these as null (no data).
-    const lambdaMeasuredGrid = aiOutput.lambdaMeasuredGrid.map(row =>
-        (row || []).map(cell => (typeof cell === 'number' && !isNaN(cell) && cell > 0) ? cell : null)
+    // 2. Now, we deterministically build the lambdaMeasuredGrid from the AI's output.
+    const lambdaMeasuredGrid = aiOutput.lambdaGridWithMatches.map(row =>
+      (row || []).map(cellMatches => {
+        if (!cellMatches || cellMatches.length === 0) {
+          return null; // No matches for this cell.
+        }
+        // Filter out any invalid numbers the AI might have hallucinated
+        const validMatches = cellMatches.filter(lambda => typeof lambda === 'number' && !isNaN(lambda) && lambda > 0);
+        if (validMatches.length === 0) {
+            return null;
+        }
+        // Calculate the average of the valid lambda values for the cell.
+        const sum = validMatches.reduce((a, b) => a + b, 0);
+        return sum / validMatches.length;
+      })
     );
 
     const { mapData, lambdaTarget, aggressiveness } = input;
 
-    // 2. Calculate correctionPercentageMap deterministically in code.
+    // 3. Calculate correctionPercentageMap deterministically in code.
     const correctionPercentageMap = lambdaMeasuredGrid.map((row, y) => {
         return row.map((measuredLambda, x) => {
             const target = lambdaTarget[y]?.[x];
@@ -147,7 +148,7 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
         });
     });
 
-    // 3. Calculate correctedMap deterministically in code.
+    // 4. Calculate correctedMap deterministically in code.
     const correctedMap = mapData.map((row, y) => {
         return row.map((originalValue, x) => {
             const correctionPercent = correctionPercentageMap[y]?.[x];
