@@ -117,6 +117,7 @@ export default function EcuTuningAssistant() {
     // File & map state
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer; checksum: string } | null>(null);
     const [xdfFile, setXdfFile] = useState<{ name: string; definitions: XDFDefinition[] } | null>(null);
+    const [availableMaps, setAvailableMaps] = useState<XDFDefinition[]>([]);
     const [selectedMapName, setSelectedMapName] = useState<string>('');
     const [originalMap, setOriginalMap] = useState<MapData | null>(null);
     const [sortOrder, setSortOrder] = useState<OriginalSortOrder>({ x: [], y: [] });
@@ -180,60 +181,53 @@ export default function EcuTuningAssistant() {
     // BIN/XDF Compatibility Check
     useEffect(() => {
         if (!binFile || !xdfFile) {
+            setAvailableMaps([]); // Clear maps if files are missing
             return;
         }
 
         const binSize = binFile.buffer.byteLength;
-        let invalidDefinitionsCount = 0;
-        const totalDefinitions = xdfFile.definitions.length;
-
-        if (totalDefinitions === 0) return;
+        const validDefinitions: XDFDefinition[] = [];
+        let invalidCount = 0;
 
         xdfFile.definitions.forEach(def => {
             let isInvalid = false;
 
             // Check main map table
             const mapEndAddr = def.address + (def.rows * def.cols * def.dataSize);
-            if (mapEndAddr > binSize) {
+            if (mapEndAddr > binSize || def.address < 0) {
                 isInvalid = true;
-                addLog(`Definição "${def.name}": Tabela fora dos limites. Fim: 0x${mapEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
+                addLog(`Definição "${def.name}": Tabela fora dos limites. Endereço: 0x${def.address.toString(16)}, Fim: 0x${mapEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
             }
 
             // Check X axis if not already invalid
             if (!isInvalid && def.xAxisDef) {
                 const axisEndAddr = def.xAxisDef.address + (def.xAxisDef.count * def.xAxisDef.dataSize);
-                if (axisEndAddr > binSize) {
+                if (axisEndAddr > binSize || def.xAxisDef.address < 0) {
                     isInvalid = true;
-                    addLog(`Definição "${def.name}": Eixo X fora dos limites. Fim: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
+                    addLog(`Definição "${def.name}": Eixo X fora dos limites. Endereço: 0x${def.xAxisDef.address.toString(16)}, Fim: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
                 }
             }
             
             // Check Y axis if not already invalid
             if (!isInvalid && def.yAxisDef) {
                 const axisEndAddr = def.yAxisDef.address + (def.yAxisDef.count * def.yAxisDef.dataSize);
-                if (axisEndAddr > binSize) {
+                if (axisEndAddr > binSize || def.yAxisDef.address < 0) {
                     isInvalid = true;
-                    addLog(`Definição "${def.name}": Eixo Y fora dos limites. Fim: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
+                    addLog(`Definição "${def.name}": Eixo Y fora dos limites. Endereço: 0x${def.yAxisDef.address.toString(16)}, Fim: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
                 }
             }
             
             if (isInvalid) {
-                invalidDefinitionsCount++;
+                invalidCount++;
+            } else {
+                validDefinitions.push(def);
             }
         });
+
+        setAvailableMaps(validDefinitions);
         
-        // Consider it incompatible if more than half of the definitions are bad.
-        if (totalDefinitions > 1 && invalidDefinitionsCount >= totalDefinitions / 2) {
-            const warningMsg = "O ficheiro XDF parece incompatível com o ficheiro BIN. Muitas definições de mapa apontam para fora do ficheiro.";
-            addLog(warningMsg, 'error');
-            toast({
-                variant: 'destructive',
-                title: "Aviso de Incompatibilidade",
-                description: warningMsg,
-                duration: 8000,
-            });
-            
-            // Reset map selection to prevent errors
+        // Reset map selection if the current one is no longer available
+        if (selectedMapName && !validDefinitions.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
             setOriginalMap(null);
             setAxes(null);
@@ -241,8 +235,20 @@ export default function EcuTuningAssistant() {
             setCorrectionPercentageMap(null);
             setTargetLambdaMap(null);
         }
+        
+        if (invalidCount > 0) {
+            const totalCount = xdfFile.definitions.length;
+            const warningMsg = `${invalidCount} de ${totalCount} definições de mapa são incompatíveis com o ficheiro BIN e foram ocultadas.`;
+            addLog(warningMsg, 'error');
+            toast({
+                variant: 'destructive',
+                title: "Aviso de Compatibilidade",
+                description: warningMsg,
+                duration: 8000,
+            });
+        }
 
-    }, [binFile, xdfFile, addLog, toast]);
+    }, [binFile, xdfFile, addLog, toast, selectedMapName]);
 
 
     const resetState = () => {
@@ -252,6 +258,7 @@ export default function EcuTuningAssistant() {
         setFactorySpecs('');
         setIsLoading(false);
         setManualSearchModel('');
+        // Do not clear customAxes here
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
         addLog('O estado da sessão foi reiniciado.', 'info');
@@ -260,6 +267,14 @@ export default function EcuTuningAssistant() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        // Reset map selection when a new file is loaded to let the compatibility check run clean
+        setSelectedMapName('');
+        setOriginalMap(null);
+        setAxes(null);
+        setCorrectedMap(null);
+        setCorrectionPercentageMap(null);
+        setTargetLambdaMap(null);
 
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -294,9 +309,9 @@ export default function EcuTuningAssistant() {
     const handleMapSelect = (name: string) => {
         if (!binFile || !xdfFile || !name) return;
         
-        const definition = xdfFile.definitions.find(d => d.name === name);
+        const definition = availableMaps.find(d => d.name === name);
         if (!definition) {
-            addLog(`Definição de mapa "${name}" não encontrada.`, 'error');
+            addLog(`Definição de mapa compatível "${name}" não encontrada.`, 'error');
             return;
         }
 
@@ -527,10 +542,12 @@ export default function EcuTuningAssistant() {
                                 
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
-                                    <Select onValueChange={handleMapSelect} disabled={!xdfFile} value={selectedMapName}>
-                                        <SelectTrigger><SelectValue placeholder="Selecione um mapa" /></SelectTrigger>
+                                    <Select onValueChange={handleMapSelect} disabled={!xdfFile || availableMaps.length === 0} value={selectedMapName}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={!xdfFile ? "Carregue um ficheiro XDF" : "Selecione um mapa compatível"} />
+                                        </SelectTrigger>
                                         <SelectContent>
-                                            {xdfFile?.definitions.map(def => (
+                                            {availableMaps.map(def => (
                                                 <SelectItem key={def.name} value={def.name}>{def.name}</SelectItem>
                                             ))}
                                         </SelectContent>
