@@ -184,40 +184,46 @@ export default function EcuTuningAssistant() {
         }
 
         const binSize = binFile.buffer.byteLength;
-        let outOfBoundsCount = 0;
+        let invalidDefinitionsCount = 0;
         const totalDefinitions = xdfFile.definitions.length;
 
         if (totalDefinitions === 0) return;
 
         xdfFile.definitions.forEach(def => {
+            let isInvalid = false;
+
             // Check main map table
             const mapEndAddr = def.address + (def.rows * def.cols * def.dataSize);
             if (mapEndAddr > binSize) {
-                outOfBoundsCount++;
-                addLog(`Mapa "${def.name}" está fora dos limites. Fim do mapa: 0x${mapEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
+                isInvalid = true;
+                addLog(`Definição "${def.name}": Tabela fora dos limites. Fim: 0x${mapEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
             }
 
-            // Check X axis
-            if (def.xAxisDef) {
+            // Check X axis if not already invalid
+            if (!isInvalid && def.xAxisDef) {
                 const axisEndAddr = def.xAxisDef.address + (def.xAxisDef.count * def.xAxisDef.dataSize);
                 if (axisEndAddr > binSize) {
-                    outOfBoundsCount++;
-                    addLog(`Eixo X do mapa "${def.name}" está fora dos limites. Fim do eixo: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
+                    isInvalid = true;
+                    addLog(`Definição "${def.name}": Eixo X fora dos limites. Fim: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
                 }
             }
             
-            // Check Y axis
-            if (def.yAxisDef) {
+            // Check Y axis if not already invalid
+            if (!isInvalid && def.yAxisDef) {
                 const axisEndAddr = def.yAxisDef.address + (def.yAxisDef.count * def.yAxisDef.dataSize);
                 if (axisEndAddr > binSize) {
-                    outOfBoundsCount++;
-                    addLog(`Eixo Y do mapa "${def.name}" está fora dos limites. Fim do eixo: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
+                    isInvalid = true;
+                    addLog(`Definição "${def.name}": Eixo Y fora dos limites. Fim: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
                 }
+            }
+            
+            if (isInvalid) {
+                invalidDefinitionsCount++;
             }
         });
         
         // Consider it incompatible if more than half of the definitions are bad.
-        if (outOfBoundsCount > totalDefinitions / 2 && totalDefinitions > 1) {
+        if (totalDefinitions > 1 && invalidDefinitionsCount >= totalDefinitions / 2) {
             const warningMsg = "O ficheiro XDF parece incompatível com o ficheiro BIN. Muitas definições de mapa apontam para fora do ficheiro.";
             addLog(warningMsg, 'error');
             toast({

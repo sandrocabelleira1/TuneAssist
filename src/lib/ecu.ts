@@ -11,12 +11,17 @@ function findNode(parent: Element, ...selectors: string[]): Element | null {
   return null;
 }
 
+// Stricter axis parsing
 function parseAxis(axisNode: Element | null): AxisDefinition {
   if (!axisNode) return null;
   const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
   if (!embeddedData) return null;
+  
+  const addrStr = embeddedData.getAttribute('mmedaddress');
+  // If address is missing, this is not a valid data definition for an axis.
+  if (!addrStr) return null; 
+  const addr = parseInt(addrStr, 16);
 
-  const addr = parseInt(embeddedData.getAttribute('mmedaddress') || '0', 16);
   const count = parseInt(embeddedData.getAttribute('mmedcolcount') || embeddedData.getAttribute('mmedrowcount') || '0');
   const dataSizeBits = parseInt(embeddedData.getAttribute('mmedelementsizebits') || '0');
   const isBigEndian = embeddedData.getAttribute('bigendian') === '1';
@@ -24,11 +29,12 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
   const label = findNode(axisNode, 'title', 'LABEL')?.textContent || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM');
   
-  if (isNaN(addr) || isNaN(count) || isNaN(dataSizeBits) || !equation) return null;
+  if (isNaN(addr) || isNaN(count) || count === 0 || isNaN(dataSizeBits) || !equation) return null;
 
   return { address: addr, count, dataSize: dataSizeBits / 8, isBigEndian, equation, label };
 }
 
+// Stricter XDF parsing
 export function parseXDF(xmlString: string): XDFDefinition[] {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
@@ -53,8 +59,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       
       const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
       if (!embeddedData) continue;
+      
+      const addressStr = embeddedData.getAttribute('mmedaddress');
+      // Stricter check: if address is missing, it's not a valid map definition.
+      if (!addressStr) continue;
+      const address = parseInt(addressStr, 16);
 
-      const address = parseInt(embeddedData.getAttribute('mmedaddress') || '0', 16);
       const rows = parseInt(embeddedData.getAttribute('mmedrowcount') || '0');
       const cols = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
       const dataSize = parseInt(embeddedData.getAttribute('mmedelementsizebits') || '0');
@@ -63,7 +73,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
       const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
 
-      if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation) continue;
+      if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || rows === 0 || cols === 0) continue;
 
       let inverseEquation = '';
       if (equation.includes('*') && equation.includes('+')) {
@@ -94,7 +104,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       console.error(`Erro ao analisar a tabela "${tableName}": ${(e as Error).message}`);
     }
   }
-  return definitions.filter(d => d.name && d.rows > 0 && d.cols > 0);
+  return definitions;
 }
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): number[] {
