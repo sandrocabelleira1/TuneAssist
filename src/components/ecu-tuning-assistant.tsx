@@ -187,8 +187,6 @@ export default function EcuTuningAssistant() {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
         setOriginalMap(null); setSortOrder({ x: [], y: [] }); setAxes(null);
         setTestData([]); setTargetLambdaMap(null); setCorrectedMap(null); setCorrectionPercentageMap(null);
-        setCustomAxes({});
-        localStorage.removeItem('customAxesData');
         setFactorySpecs('');
         setIsLoading(false);
         setManualSearchModel('');
