@@ -123,6 +123,8 @@ export default function EcuTuningAssistant() {
     const [sortOrder, setSortOrder] = useState<OriginalSortOrder>({ x: [], y: [] });
     const [axes, setAxes] = useState<{ x: number[], y: number[], xLabel: string, yLabel: string } | null>(null);
     const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: number[], y: number[] }>>>({});
+    const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string }>>({});
+    const [selectedXdfFromLibrary, setSelectedXdfFromLibrary] = useState<string>('');
 
     // AI & Correction state
     const [testData, setTestData] = useState<TestDataEntry[]>([]);
@@ -154,7 +156,7 @@ export default function EcuTuningAssistant() {
         }]);
     }, [debugMode]);
 
-    // Load custom axes from localStorage on component mount
+    // Load custom axes & XDF library from localStorage on component mount
     useEffect(() => {
         try {
             const savedAxes = localStorage.getItem('customAxesData');
@@ -162,9 +164,14 @@ export default function EcuTuningAssistant() {
                 setCustomAxes(JSON.parse(savedAxes));
                 addLog('Eixos personalizados carregados do armazenamento local.', 'debug');
             }
+            const savedLibrary = localStorage.getItem('xdfLibrary');
+            if (savedLibrary) {
+                setXdfLibrary(JSON.parse(savedLibrary));
+                addLog('Biblioteca XDF carregada do armazenamento local.', 'debug');
+            }
         } catch (error) {
-            console.error("Failed to load custom axes from localStorage", error);
-            addLog('Não foi possível carregar eixos personalizados do armazenamento local.', 'error');
+            console.error("Failed to load from localStorage", error);
+            addLog('Não foi possível carregar dados do armazenamento local.', 'error');
         }
     }, [addLog]);
 
@@ -258,7 +265,7 @@ export default function EcuTuningAssistant() {
         setFactorySpecs('');
         setIsLoading(false);
         setManualSearchModel('');
-        // Do not clear customAxes here
+        setSelectedXdfFromLibrary('');
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
         addLog('O estado da sessão foi reiniciado.', 'info');
@@ -268,23 +275,19 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Reset map selection when a new file is loaded to let the compatibility check run clean
-        setSelectedMapName('');
-        setOriginalMap(null);
-        setAxes(null);
-        setCorrectedMap(null);
-        setCorrectionPercentageMap(null);
-        setTargetLambdaMap(null);
-
         const reader = new FileReader();
         reader.onload = (event) => {
             try {
                 const buffer = event.target?.result as ArrayBuffer;
                 if (type === 'bin') {
+                    setXdfFile(null); setSelectedMapName('');
+                    setOriginalMap(null); setAxes(null); setCorrectedMap(null);
+                    setCorrectionPercentageMap(null); setTargetLambdaMap(null);
+                    
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
                     addLog(`Ficheiro BIN carregado: ${file.name} (Checksum: ${checksum})`, 'success');
-                } else {
+                } else { // XDF
                     const text = new TextDecoder().decode(buffer);
                     const definitions = parseXDF(text);
                     if (definitions.length === 0) {
@@ -292,6 +295,18 @@ export default function EcuTuningAssistant() {
                     }
                     setXdfFile({ name: file.name, definitions });
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
+
+                    // Add to library
+                    try {
+                        const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text }};
+                        setXdfLibrary(newLibrary);
+                        localStorage.setItem('xdfLibrary', JSON.stringify(newLibrary));
+                        setSelectedXdfFromLibrary(file.name); // Also select it in the dropdown
+                        addLog(`"${file.name}" adicionado à biblioteca XDF.`, 'info');
+                    } catch (error) {
+                        addLog('Não foi possível guardar o XDF na biblioteca (pode estar cheia).', 'error');
+                        toast({ variant: 'destructive', title: "Biblioteca Cheia", description: "Não foi possível guardar o XDF na biblioteca." });
+                    }
                 }
             } catch (error) {
                 const msg = `Erro ao carregar ${file.name}: ${(error as Error).message}`;
@@ -305,6 +320,38 @@ export default function EcuTuningAssistant() {
         }
         reader.readAsArrayBuffer(file);
     };
+    
+    const handleSelectXdfFromLibrary = (name: string) => {
+        if (!name || !xdfLibrary[name]) return;
+        
+        const xdfData = xdfLibrary[name];
+        try {
+            const definitions = parseXDF(xdfData.content);
+            if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
+            
+            // Reset map-specific state
+            setSelectedMapName(''); setOriginalMap(null); setAxes(null);
+            setCorrectedMap(null); setCorrectionPercentageMap(null); setTargetLambdaMap(null);
+            
+            setXdfFile({ name, definitions });
+            setSelectedXdfFromLibrary(name);
+            addLog(`XDF "${name}" carregado da biblioteca.`, 'success');
+        } catch (error) {
+            const msg = `Erro ao carregar ${name} da biblioteca: ${(error as Error).message}`;
+            addLog(msg, 'error');
+            toast({ variant: 'destructive', title: "Erro no Ficheiro XDF", description: msg });
+            setXdfFile(null);
+        }
+    }
+    
+    const handleClearXdfLibrary = () => {
+        setXdfLibrary({});
+        localStorage.removeItem('xdfLibrary');
+        setXdfFile(null);
+        setSelectedXdfFromLibrary('');
+        addLog('Biblioteca XDF limpa.', 'info');
+        toast({ title: 'Biblioteca Limpa', description: 'A sua biblioteca de ficheiros XDF foi removida.' });
+    }
 
     const handleMapSelect = (name: string) => {
         if (!binFile || !xdfFile || !name) return;
@@ -533,11 +580,40 @@ export default function EcuTuningAssistant() {
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button variant="outline" onClick={() => binInputRef.current?.click()}><FileUp className="mr-2"/> .BIN</Button>
                                         <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
-                                        <Button variant="outline" onClick={() => xdfInputRef.current?.click()}><FileUp className="mr-2"/> .XDF</Button>
+                                        
+                                        <Button variant="outline" onClick={() => xdfInputRef.current?.click()}><Plus className="mr-2"/> Novo .XDF</Button>
                                         <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
                                     </div>
                                     {binFile && <p className="text-xs text-green-400 truncate">BIN: {binFile.name}</p>}
-                                    {xdfFile && <p className="text-xs text-green-400 truncate">XDF: {xdfFile.name}</p>}
+                                    
+                                    {Object.keys(xdfLibrary).length > 0 && (
+                                        <div className="space-y-2 pt-2">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-xs text-muted-foreground">Ou use um da biblioteca</Label>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearXdfLibrary}>
+                                                            <Trash2 className="w-3 h-3" />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Limpar Biblioteca XDF</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </div>
+                                            <Select onValueChange={handleSelectXdfFromLibrary} value={selectedXdfFromLibrary}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione um XDF..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {Object.values(xdfLibrary).map(xdf => (
+                                                        <SelectItem key={xdf.name} value={xdf.name}>{xdf.name}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
+                                    {xdfFile && <p className="text-xs text-green-400 truncate">XDF Ativo: {xdfFile.name}</p>}
                                 </div>
                                 
                                 <div className="space-y-2">
