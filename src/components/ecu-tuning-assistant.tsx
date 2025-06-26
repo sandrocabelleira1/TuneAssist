@@ -141,22 +141,54 @@ export default function EcuTuningAssistant() {
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
+    const isInitialMount = useRef(true);
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         if (type === 'debug' && !debugMode) return;
+        const id = `${Date.now()}-${Math.random()}`;
         setLogs(prev => [...prev, {
-            id: Math.random(),
+            id,
             timestamp: new Date().toLocaleTimeString(),
             message,
             type,
         }]);
     }, [debugMode]);
 
+    // Load custom axes from localStorage on component mount
+    useEffect(() => {
+        try {
+            const savedAxes = localStorage.getItem('customAxesData');
+            if (savedAxes) {
+                setCustomAxes(JSON.parse(savedAxes));
+                addLog('Eixos personalizados carregados do armazenamento local.', 'debug');
+            }
+        } catch (error) {
+            console.error("Failed to load custom axes from localStorage", error);
+            addLog('Não foi possível carregar eixos personalizados do armazenamento local.', 'error');
+        }
+    }, [addLog]);
+
+    // Save custom axes to localStorage whenever they change
+    useEffect(() => {
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
+        try {
+            localStorage.setItem('customAxesData', JSON.stringify(customAxes));
+        } catch (error) {
+            console.error("Failed to save custom axes to localStorage", error);
+            addLog('Não foi possível guardar os eixos personalizados no armazenamento local.', 'error');
+        }
+    }, [customAxes, addLog]);
+
+
     const resetState = () => {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
         setOriginalMap(null); setSortOrder({ x: [], y: [] }); setAxes(null);
         setTestData([]); setTargetLambdaMap(null); setCorrectedMap(null); setCorrectionPercentageMap(null);
         setCustomAxes({});
+        localStorage.removeItem('customAxesData');
         setFactorySpecs('');
         setIsLoading(false);
         setManualSearchModel('');
