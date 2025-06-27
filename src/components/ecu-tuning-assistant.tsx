@@ -1002,7 +1002,7 @@ function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open:
     );
 }
 
-function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: boolean, onOpenChange: (open: boolean) => void, onConfirm: (axes: { x: string, y: string }) => void, currentAxes: {x: number[], y:number[]} | null }) {
+function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: boolean, onOpenChange: (open: boolean) => void, onConfirm: (axes: { x: string, y: string }) => void, currentAxes: { x: number[], y: number[], xLabel: string, yLabel: string } | null }) {
     const [yAxis, setYAxis] = useState('');
     const [xAxis, setXAxis] = useState('');
 
@@ -1022,11 +1022,11 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: b
                 </DialogHeader>
                 <div className="space-y-4">
                     <div>
-                        <Label htmlFor="yAxisText">Eixo Y (e.g. RPM)</Label>
+                        <Label htmlFor="yAxisText">Eixo Y ({currentAxes?.yLabel || 'e.g. RPM'})</Label>
                         <Input id="yAxisText" value={yAxis} onChange={e => setYAxis(e.target.value)} placeholder="e.g. 800, 1000, 1200..." />
                     </div>
                     <div>
-                        <Label htmlFor="xAxisText">Eixo X (e.g. Carga/TPS)</Label>
+                        <Label htmlFor="xAxisText">Eixo X ({currentAxes?.xLabel || 'e.g. Carga/TPS'})</Label>
                         <Input id="xAxisText" value={xAxis} onChange={e => setXAxis(e.target.value)} placeholder="e.g. 10, 20, 30..."/>
                     </div>
                 </div>
