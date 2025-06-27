@@ -440,15 +440,21 @@ export default function EcuTuningAssistant() {
 
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
 
-            // Check for abnormally large values in the map, which might indicate a bad XDF equation
+            // Check for abnormally large values, which might indicate a bad XDF equation.
             const hasLargeValues = sortedMap.flat().some(v => v !== null && Math.abs(v) > 500);
             if (hasLargeValues) {
-                const warningMsg = "Aviso: O mapa contém valores muito grandes. Isto pode indicar que o ficheiro XDF não está a traduzir corretamente os dados 'crus' do ficheiro BIN. A análise da IA ainda funcionará com base em correções percentuais, mas os valores exibidos podem não representar unidades de engenharia reais (como VE%).";
-                addLog(warningMsg, 'error');
+                const warningMsg = "O mapa contém valores muito grandes, o que pode indicar uma equação XDF incorreta. Os valores podem não representar unidades reais.";
+                const suggestionMsg = "Use a função 'Verificar Mapa com IA' para uma análise detalhada."
+                addLog(`${warningMsg} ${suggestionMsg}`, 'error');
                 toast({
                     variant: "destructive",
-                    title: "Possível Incompatibilidade de XDF",
-                    description: warningMsg,
+                    title: "Aviso: Valores de Mapa Anormais",
+                    description: (
+                        <div>
+                            <p>{warningMsg}</p>
+                            <p className="font-semibold mt-2">{suggestionMsg}</p>
+                        </div>
+                    ),
                     duration: 12000,
                 });
             }

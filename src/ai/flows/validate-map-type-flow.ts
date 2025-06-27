@@ -56,7 +56,7 @@ A sua tarefa é realizar uma análise crítica de uma grelha de dados de um mapa
 **Formato da Saída (JSON):**
 - \`confidence\`: O seu nível de confiança. Seja crítico. Se encontrar anomalias, escolha "Baixa". Valores possíveis: "Alta", "Média", "Baixa".
 - \`suspectedType\`: O tipo de mapa que você acredita que os dados realmente representam (ex: "Mapa de Combustível (VE)", "Mapa de Ignição", "Dados Corrompidos/Misturados", "Desconhecido").
-- \`reasoning\`: Justifique a sua conclusão. **Se encontrar uma anomalia, mencione-a explicitamente.** Ex: "Confiança Baixa. O nome do mapa é 'MAP ETV', mas os valores estão na casa dos milhares, o que é inconsistente com graus ou percentagem. Isto indica fortemente que a equação de conversão no ficheiro XDF está em falta ou incorreta, mostrando os valores 'crus' em vez das unidades de engenharia." ou "Confiança Alta. Os valores aumentam consistentemente com a RPM e Carga, e não existem saltos ilógicos, um padrão clássico para um mapa de combustível (VE)."
+- \`reasoning\`: Justifique a sua conclusão. **Se encontrar uma anomalia, mencione-a explicitamente.** Ex: "Confiança Baixa. O nome do mapa é 'MAP ETV', mas os valores na casa dos milhares são inconsistentes com os graus ou a percentagem esperados (0-100). **Isto indica que a equação de conversão no ficheiro XDF está em falta ou é incorreta.** Recomenda-se encontrar um XDF diferente ou validar este mapa com extrema cautela." ou "Confiança Alta. Os valores aumentam consistentemente com a RPM e Carga, e não existem saltos ilógicos, um padrão clássico para um mapa de combustível (VE)."
 
 **Dados de Entrada:**
 mapName: {{{mapName}}}
