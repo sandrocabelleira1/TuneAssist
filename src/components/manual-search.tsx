@@ -35,8 +35,10 @@ export default function ManualSearch() {
 
     setIsLoading(true);
     setResults([]);
+    
+    const brandForSearch = brand === 'any-brand' ? '' : brand;
 
-    const result = await searchForManuals({ query, brand });
+    const result = await searchForManuals({ query, brand: brandForSearch });
     setIsLoading(false);
 
     if (result.success && result.data) {
@@ -120,7 +122,7 @@ export default function ManualSearch() {
                               <SelectValue placeholder="Qualquer Marca" />
                           </SelectTrigger>
                           <SelectContent>
-                              <SelectItem value="">Qualquer Marca</SelectItem>
+                              <SelectItem value="any-brand">Qualquer Marca</SelectItem>
                               <SelectItem value="Yamaha">Yamaha</SelectItem>
                               <SelectItem value="Honda">Honda</SelectItem>
                               <SelectItem value="Suzuki">Suzuki</SelectItem>

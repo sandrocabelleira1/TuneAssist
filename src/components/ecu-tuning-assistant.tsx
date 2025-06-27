@@ -301,16 +301,17 @@ export default function EcuTuningAssistant() {
                         throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     }
                     setXdfFile({ name: file.name, definitions });
-                    setActiveXdfBrand(selectedBrandForNewXdf);
+                    const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
+                    setActiveXdfBrand(brandValue);
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
 
                     // Add to library
                     try {
-                        const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text, brand: selectedBrandForNewXdf }};
+                        const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text, brand: brandValue }};
                         setXdfLibrary(newLibrary);
                         localStorage.setItem('xdfLibrary', JSON.stringify(newLibrary));
                         setSelectedXdfFromLibrary(file.name); // Also select it in the dropdown
-                        addLog(`"${file.name}" ${selectedBrandForNewXdf ? `(Marca: ${selectedBrandForNewXdf}) `: ''}adicionado à biblioteca XDF.`, 'info');
+                        addLog(`"${file.name}" ${brandValue ? `(Marca: ${brandValue}) `: ''}adicionado à biblioteca XDF.`, 'info');
                     } catch (error) {
                         addLog('Não foi possível guardar o XDF na biblioteca (pode estar cheia).', 'error');
                         toast({ variant: 'destructive', title: "Biblioteca Cheia", description: "Não foi possível guardar o XDF na biblioteca." });
@@ -603,7 +604,7 @@ export default function EcuTuningAssistant() {
                                                         <SelectValue placeholder="Marca..." />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        <SelectItem value="">Nenhuma</SelectItem>
+                                                        <SelectItem value="no-brand">Nenhuma</SelectItem>
                                                         <SelectItem value="Yamaha">Yamaha</SelectItem>
                                                         <SelectItem value="Honda">Honda</SelectItem>
                                                         <SelectItem value="Suzuki">Suzuki</SelectItem>
