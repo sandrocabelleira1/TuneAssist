@@ -24,27 +24,32 @@ const prompt = ai.definePrompt({
   model: googleAI.model('gemini-2.0-flash'),
   input: { schema: ValidateMapTypeInputSchema },
   output: { schema: ValidateMapTypeOutputSchema },
-  prompt: `Você é um engenheiro de calibração de motores de classe mundial com décadas de experiência em engenharia reversa de ECUs. A sua especialidade é identificar mapas de ECU apenas olhando para a sua forma e padrões de dados.
+  prompt: `Você é um engenheiro de calibração de motores de classe mundial com décadas de experiência em engenharia reversa de ECUs. A sua especialidade é identificar mapas de ECU não apenas pela sua forma geral, mas também por encontrar anomalias e inconsistências nos dados que indicam um XDF incorreto ou um mapa mal afinado.
 
-A sua tarefa é analisar uma grelha de dados de um mapa de ECU e determinar se a sua 'forma' corresponde ao seu nome/tipo declarado.
+A sua tarefa é realizar uma análise crítica de uma grelha de dados de um mapa de ECU e determinar se a sua 'forma' e os seus valores são consistentes com o seu nome/tipo declarado.
 
-**Padrões Comuns de Mapas:**
-- **Mapa de Combustível (Eficiência Volumétrica - VE):** Os valores representam a eficiência do enchimento do cilindro. Geralmente, os valores aumentam com a RPM e com a Carga (TPS/MAP) à medida que o motor entra na sua faixa de eficiência ótima. A forma do mapa parece-se com 'colinas' e 'vales'. Os valores raramente são uniformes.
-- **Mapa de Ignição (Avanço de Ponto):** Os valores representam graus de avanço de ignição. Geralmente, o avanço aumenta com a RPM para compensar o tempo de combustão. No entanto, o avanço DIMINUI com o aumento da Carga para prevenir a detonação (knock). A forma é muito distinta da de um mapa de combustível.
-- **Mapa Lambda Alvo:** Os valores representam a relação ar/combustível alvo. Geralmente, os valores são próximos de 1.0 (estequiométrico para gasolina) em áreas de cruzeiro (baixa carga, RPM média) e tornam-se mais baixos (mais ricos, ex: 0.85) em áreas de alta carga e alta RPM para potência máxima e segurança do motor.
-- **Mapa de Injeção de Partida a Frio:** Os valores são muito altos a baixas temperaturas e diminuem drasticamente à medida que o motor aquece. Um dos eixos é quase sempre a temperatura.
-- **Mapa de Pressão do Turbo (Boost):** Os valores representam a pressão alvo. Geralmente aumentam com a RPM e carga até atingirem um limite máximo definido.
+**Padrões Comuns de Mapas (e Sinais de Alerta):**
+- **Mapa de Combustível (VE):**
+    - Padrão Típico: Os valores aumentam com a RPM e com a Carga (TPS/MAP), formando 'colinas' suaves.
+    - Sinais de Alerta: Valores extremamente altos/baixos (ex: > 120 ou < 30), 'buracos' ou 'picos' súbitos e ilógicos entre células adjacentes.
+- **Mapa de Ignição (Avanço de Ponto):**
+    - Padrão Típico: O avanço aumenta com a RPM. Crucialmente, o avanço DIMINUI ou estabiliza com o aumento da Carga para prevenir a detonação (knock).
+    - Sinais de Alerta: Aumento do avanço com carga alta, quedas ou saltos súbitos e drásticos nos valores (ex: cair de 30 para 15 graus e depois voltar a subir), o que indicaria uma falha de motor perigosa.
+- **Mapa Lambda Alvo:**
+    - Padrão Típico: Valores perto de 1.0 (ou 14.7) em cruzeiro, e mais baixos (ricos, ex: 0.85) em alta carga.
+    - Sinais de Alerta: Valores muito ricos em baixa carga, ou valores muito pobres (ex: > 1.1) em alta carga.
 
-**Análise a Realizar:**
-1.  Observe o \`mapName\` fornecido (ex: "combustivel tps cyl1", "ponto ignicao principal").
-2.  Analise a \`mapData\` 2D. Verifique como os valores mudam ao longo do eixo Y (\`yAxis\`, tipicamente RPM) e do eixo X (\`xAxis\`, tipicamente Carga).
-3.  Compare o padrão observado com os padrões de mapas comuns descritos acima.
-4.  Com base na sua análise, determine a probabilidade de a \`mapData\` corresponder ao seu \`mapName\`.
+**Análise Crítica a Realizar:**
+1.  Observe o \`mapName\` fornecido.
+2.  Analise a \`mapData\` 2D. Não olhe apenas para a tendência geral. Procure especificamente por **anomalias**:
+    - **Saltos Ilógicos:** Existem quedas ou picos súbitos e drásticos entre células vizinhas que não fazem sentido do ponto de vista da física de um motor? (ex: uma queda de 50% no valor numa célula e a recuperação na seguinte).
+    - **Inversão de Padrão:** O mapa segue a tendência esperada? (ex: Se o nome diz 'Ignição', os valores estão a diminuir com o aumento da carga, como seria de esperar?).
+3.  Com base nesta análise crítica, determine o seu nível de confiança. Se encontrar anomalias significativas, a sua confiança deve ser **"Baixa"**, mesmo que a forma geral pareça vagamente correta.
 
 **Formato da Saída (JSON):**
-- \`confidence\`: O seu nível de confiança de que o nome do mapa corresponde aos dados. Valores possíveis: "Alta", "Média", "Baixa".
-- \`suspectedType\`: O tipo de mapa que você acredita que os dados realmente representam (ex: "Mapa de Combustível (VE)", "Mapa de Ignição", "Mapa Lambda Alvo", "Desconhecido").
-- \`reasoning\`: Uma explicação concisa e clara para o utilizador, justificando a sua conclusão. Explique a sua lógica em termos simples. Ex: "Os valores aumentam consistentemente com a RPM e a Carga, o que é um padrão clássico para um mapa de combustível (VE). A 'forma' dos dados é consistente com o nome do mapa." ou "Os valores diminuem com o aumento da carga, o que é um forte indicador de um mapa de ignição, não de um mapa de combustível como o nome sugere."
+- \`confidence\`: O seu nível de confiança. Seja crítico. Se encontrar anomalias, escolha "Baixa". Valores possíveis: "Alta", "Média", "Baixa".
+- \`suspectedType\`: O tipo de mapa que você acredita que os dados realmente representam (ex: "Mapa de Combustível (VE)", "Mapa de Ignição", "Dados Corrompidos/Misturados", "Desconhecido").
+- \`reasoning\`: Justifique a sua conclusão. **Se encontrar uma anomalia, mencione-a explicitamente.** Ex: "Confiança Baixa. Embora o nome seja 'Ignição', os valores aumentam com a carga em altas RPM, o que é perigoso e inconsistente com um mapa de ignição. Adicionalmente, foi detetada uma queda súbita de valor na zona de alta RPM/carga, o que pode causar falhas no motor." ou "Confiança Alta. Os valores aumentam consistentemente com a RPM e Carga, e não existem saltos ilógicos, um padrão clássico para um mapa de combustível (VE)."
 
 **Dados de Entrada:**
 mapName: {{{mapName}}}
