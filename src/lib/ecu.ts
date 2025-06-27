@@ -80,6 +80,20 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     }
 
     try {
+      // Step 1: Parse axes FIRST to determine dimensions. This is the source of truth.
+      const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
+      const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
+
+      // Step 2: If axes are invalid or don't have a dimension count, this map is not usable for us.
+      if (!xAxisDef?.count || !yAxisDef?.count) {
+          continue;
+      }
+
+      // Step 3: Use axis counts as the ONLY source for dimensions.
+      const rows = yAxisDef.count;
+      const cols = xAxisDef.count;
+
+      // Step 4: Now parse the Z-axis (map data) definition.
       const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
       if (!zAxisNode) continue;
       
@@ -87,13 +101,11 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       if (!embeddedData) continue;
       
       const addressStr = embeddedData.getAttribute('mmedaddress');
-      // Stricter check: if address is missing, it's not a valid map definition.
       if (!addressStr) continue;
       const address = parseInt(addressStr, 16);
 
+      // Use mmedcolcount for binaryWidth (stride), not for logical columns.
       const binaryWidth = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
-      let rows = parseInt(embeddedData.getAttribute('mmedrowcount') || '0');
-      let cols = binaryWidth; // Start with the binary width
       
       const dataSize = parseInt(embeddedData.getAttribute('mmedelementsizebits') || '0');
       const isBigEndian = embeddedData.getAttribute('bigendian') === '1';
@@ -101,19 +113,10 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
       const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
       
-      const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
-      const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
-
-      // **FIX:** Prioritize axis definition count over table definition count to prevent misalignment.
-      // This ensures the map dimensions always match the axis dimensions.
-      if (yAxisDef?.count) {
-          rows = yAxisDef.count;
+      // Final sanity check
+      if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || rows === 0 || cols === 0 || binaryWidth === 0) {
+          continue;
       }
-      if (xAxisDef?.count) {
-          cols = xAxisDef.count;
-      }
-
-      if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || rows === 0 || cols === 0 || binaryWidth === 0) continue;
 
       let inverseEquation = '';
       if (equation.includes('*') && equation.includes('+')) {
