@@ -1,5 +1,5 @@
 export type AxisDefinition = {
-  address: number;
+  address: number | null;
   count: number;
   dataSize: number;
   isBigEndian: boolean;

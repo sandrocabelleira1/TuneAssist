@@ -12,27 +12,42 @@ function findNode(parent: Element, ...selectors: string[]): Element | null {
   return null;
 }
 
-// Stricter axis parsing
+// More robust axis parsing to handle different XDF structures
 function parseAxis(axisNode: Element | null): AxisDefinition {
   if (!axisNode) return null;
-  const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-  if (!embeddedData) return null;
-  
-  const addrStr = embeddedData.getAttribute('mmedaddress');
-  // If address is missing, this is not a valid data definition for an axis.
-  if (!addrStr) return null; 
-  const addr = parseInt(addrStr, 16);
 
-  const count = parseInt(embeddedData.getAttribute('mmedcolcount') || embeddedData.getAttribute('mmedrowcount') || '0');
-  const dataSizeBits = parseInt(embeddedData.getAttribute('mmedelementsizebits') || '0');
-  const isBigEndian = embeddedData.getAttribute('bigendian') === '1';
+  const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+
+  // Try to find count from multiple sources, prioritizing <indexcount>
+  const indexCountNode = findNode(axisNode, 'indexcount');
+  let count = indexCountNode ? parseInt(indexCountNode.textContent || '0', 10) : 0;
+  if (count === 0 && embeddedData) {
+      count = parseInt(embeddedData.getAttribute('mmedcolcount') || embeddedData.getAttribute('mmedrowcount') || '0');
+  }
+  // If no count can be found, it's not a valid axis for our purpose.
+  if (count === 0 || isNaN(count)) return null; 
+
+  // Address can be null if it's a static/calculated axis
+  const addrStr = embeddedData?.getAttribute('mmedaddress');
+  const addr = addrStr ? parseInt(addrStr, 16) : null;
+  
+  // Data size can be in different places
+  const dataSizeBitsStr = embeddedData?.getAttribute('mmedelementsizebits') || findNode(axisNode, 'embedinfo > data_size')?.textContent;
+  const dataSizeBits = dataSizeBitsStr ? parseInt(dataSizeBitsStr) : 8; // Default to 8 bits if not found
+  
+  const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
   const mathNode = findNode(axisNode, 'math', 'MATH');
   const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
   const label = findNode(axisNode, 'title', 'LABEL')?.textContent || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM');
   
-  if (isNaN(addr) || isNaN(count) || count === 0 || isNaN(dataSizeBits) || !equation) return null;
-
-  return { address: addr, count, dataSize: dataSizeBits / 8, isBigEndian, equation, label };
+  return { 
+      address: (addr !== null && !isNaN(addr)) ? addr : null,
+      count, 
+      dataSize: dataSizeBits / 8, 
+      isBigEndian, 
+      equation, 
+      label 
+  };
 }
 
 // Stricter XDF parsing
@@ -118,7 +133,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 }
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): number[] {
-  if (!axisDef || !binBuffer) return [];
+  if (!axisDef || !binBuffer || axisDef.address === null) return [];
   
   const view = new DataView(binBuffer);
   const equationFunc = new Function('X', `return ${axisDef.equation}`);
