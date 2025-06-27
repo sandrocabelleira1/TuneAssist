@@ -1,4 +1,3 @@
-
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -24,7 +23,9 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   if (count === 0 && embeddedData) {
       // For a Y axis (id="y"), we'd expect mmedrowcount, but some XDFs are weird and use mmedcolcount for both.
       // We check both to be safe.
-      count = parseInt(embeddedData.getAttribute('mmedrowcount') || embeddedData.getAttribute('mmedcolcount') || '0');
+      const rowCount = parseInt(embeddedData.getAttribute('mmedrowcount') || '0');
+      const colCount = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
+      count = Math.max(rowCount, colCount);
   }
   // If no count can be found, it's not a valid axis for our purpose.
   if (count === 0 || isNaN(count)) return null; 
@@ -94,6 +95,11 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       // If either axis is not defined properly, we cannot process this table reliably.
       if (!xAxisDef || !yAxisDef) {
           continue;
+      }
+      
+      // Specific fix for common TPS scaling issues based on user feedback
+      if (xAxisDef.label.toUpperCase().includes('TPS') && xAxisDef.equation.toUpperCase() === 'X/8') {
+          xAxisDef.equation = 'X / 10.23';
       }
 
       const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
@@ -290,5 +296,6 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
 
 
     
+
 
 
