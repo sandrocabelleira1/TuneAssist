@@ -38,7 +38,14 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
   const mathNode = findNode(axisNode, 'math', 'MATH');
   const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
-  const label = findNode(axisNode, 'title', 'LABEL', 'units')?.textContent || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM');
+  
+  // Prioritize <units>, then <title>, then <LABEL>. Fallback to default if all are missing/empty.
+  const label = (
+      findNode(axisNode, 'units')?.textContent ||
+      findNode(axisNode, 'title')?.textContent ||
+      findNode(axisNode, 'LABEL')?.textContent ||
+      (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM')
+  ).trim();
   
   return { 
       address: (addr !== null && !isNaN(addr)) ? addr : null,
@@ -46,7 +53,7 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
       dataSize: dataSizeBits / 8, 
       isBigEndian, 
       equation, 
-      label 
+      label: label || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM') // Final fallback to prevent empty string
   };
 }
 
