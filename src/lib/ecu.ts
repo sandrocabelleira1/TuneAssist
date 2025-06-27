@@ -57,6 +57,19 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   };
 }
 
+function createDummyAxis(count: number, id: 'x' | 'y'): AxisDefinition {
+    if (!count) return null;
+    return {
+        address: null,
+        count,
+        dataSize: 1,
+        isBigEndian: false,
+        equation: 'X',
+        label: id === 'x' ? 'Eixo X' : 'Eixo Y'
+    }
+}
+
+
 // Stricter XDF parsing
 export function parseXDF(xmlString: string): XDFDefinition[] {
   const parser = new DOMParser();
@@ -87,48 +100,55 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     }
 
     try {
-      // Step 1: Parse axes FIRST to determine dimensions. This is the source of truth.
-      const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
-      const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
+      let xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
+      let yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
 
-      // Step 2: If axes are invalid or don't have a dimension count, this map is not usable for us.
-      if (!xAxisDef?.count || !yAxisDef?.count) {
-          continue;
-      }
-
-      // Step 3: Use axis counts as the ONLY source for dimensions.
-      const rows = yAxisDef.count;
-      const cols = xAxisDef.count;
-
-      // Step 4: Now parse the Z-axis (map data) definition.
       const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
       if (!zAxisNode) continue;
       
-      const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
-      if (!embeddedData) continue;
+      const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
+      if (!zEmbeddedData) continue;
       
-      const addressStr = embeddedData.getAttribute('mmedaddress');
+      let rows = yAxisDef?.count;
+      let cols = xAxisDef?.count;
+
+      // Fallback to z-axis dimensions if axis defs are incomplete.
+      if (!rows || rows === 0) {
+          rows = parseInt(zEmbeddedData.getAttribute('mmedrowcount') || '0');
+          if (rows > 0 && !yAxisDef) {
+              yAxisDef = createDummyAxis(rows, 'y');
+          }
+      }
+      if (!cols || cols === 0) {
+          cols = parseInt(zEmbeddedData.getAttribute('mmedcolcount') || '0');
+           if (cols > 0 && !xAxisDef) {
+              xAxisDef = createDummyAxis(cols, 'x');
+          }
+      }
+      
+      // If we still don't have valid dimensions or axis definitions, skip the table.
+      if (!rows || rows === 0 || !cols || cols === 0 || !xAxisDef || !yAxisDef) {
+          continue;
+      }
+      
+      const addressStr = zEmbeddedData.getAttribute('mmedaddress');
       if (!addressStr) continue;
       const address = parseInt(addressStr, 16);
 
-      // Use mmedcolcount for binaryWidth (stride), not for logical columns.
-      const binaryWidth = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
+      const binaryWidth = parseInt(zEmbeddedData.getAttribute('mmedcolcount') || '0');
       
-      const dataSize = parseInt(embeddedData.getAttribute('mmedelementsizebits') || '0');
-      const isBigEndian = embeddedData.getAttribute('bigendian') === '1';
+      const dataSize = parseInt(zEmbeddedData.getAttribute('mmedelementsizebits') || '0');
+      const isBigEndian = zEmbeddedData.getAttribute('bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
       let equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
 
-      // Heuristic Patch: If this looks like a typical Yamaha ETV map with a known incorrect divisor,
-      // apply a more common conversion to get values into a 0-100 range.
-      // This is a specific fix for a common issue in community XDFs for this type of ECU.
       if (tableName.includes('ETV') && equation === 'X/6.96') {
         equation = 'X / 655.35';
       }
       
       // Final sanity check
-      if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || rows === 0 || cols === 0 || binaryWidth === 0) {
+      if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || binaryWidth === 0) {
           continue;
       }
 
@@ -291,3 +311,4 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
 
 
     
+
