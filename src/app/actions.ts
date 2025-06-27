@@ -2,7 +2,8 @@
 import { suggestMapCorrections as suggestMapCorrectionsFlow, type SuggestMapCorrectionsInput, type SuggestMapCorrectionsOutput } from '@/ai/flows/suggest-map-corrections';
 import { motorcycleManualFlow, type MotorcycleManualFlowInput, type MotorcycleManualFlowOutput } from '@/ai/flows/motorcycle-manual-flow';
 import { generateManualContent as generateManualContentFlow, type GenerateManualContentInput, type GenerateManualContentOutput } from '@/ai/flows/generate-manual-content-flow';
-import { GenerateManualContentInputSchema } from '@/ai/schemas';
+import { validateMapType as validateMapTypeFlow, type ValidateMapTypeInput, type ValidateMapTypeOutput } from '@/ai/flows/validate-map-type-flow';
+import { GenerateManualContentInputSchema, ValidateMapTypeInputSchema } from '@/ai/schemas';
 import { z } from 'zod';
 
 const SuggestMapCorrectionsActionInputSchema = z.object({
@@ -97,6 +98,20 @@ export async function generateManualContent(input: GenerateManualContentInput): 
     return { success: true, data: result };
   } catch (error) {
     console.error("Error in generateManualContent action:", error);
+    if (error instanceof z.ZodError) {
+      return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
+    }
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function validateMapType(input: ValidateMapTypeInput): Promise<{ success: boolean; data?: ValidateMapTypeOutput; error?: string }> {
+  try {
+    const validatedInput = ValidateMapTypeInputSchema.parse(input);
+    const result = await validateMapTypeFlow(validatedInput);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error("Error in validateMapType action:", error);
     if (error instanceof z.ZodError) {
       return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
     }

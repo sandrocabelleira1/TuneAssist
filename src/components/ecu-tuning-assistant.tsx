@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, TestDataEntry, OriginalSortOrder } from '@/lib/types';
 import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, saveBinFile } from '@/lib/ecu';
-import { suggestMapCorrections, fetchManualInformation } from '@/app/actions';
+import { suggestMapCorrections, fetchManualInformation, validateMapType } from '@/app/actions';
 import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import Link from 'next/link';
@@ -20,7 +20,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Search, Settings, Sparkles, Trash2, XCircle, Wrench } from 'lucide-react';
+import { Badge } from "@/components/ui/badge";
+import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, XCircle, Wrench } from 'lucide-react';
 
 // MapTable Component
 function MapTable({
@@ -141,12 +142,16 @@ export default function EcuTuningAssistant() {
     const [factorySpecs, setFactorySpecs] = useState('');
     const [manualSearchModel, setManualSearchModel] = useState('');
     const [isFetchingManual, setIsFetchingManual] = useState(false);
+    const [isValidatingMap, setIsValidatingMap] = useState(false);
+    const [analysisResult, setAnalysisResult] = useState<{ confidence: string; suspectedType: string; reasoning: string; } | null>(null);
+
 
     // Modal state
     const [isLogModalOpen, setIsLogModalOpen] = useState(false);
     const [isAxesModalOpen, setIsAxesModalOpen] = useState(false);
     const [isChecksumWarningOpen, setIsChecksumWarningOpen] = useState(false);
     const [isXdfErrorModalOpen, setIsXdfErrorModalOpen] = useState(false);
+    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -584,6 +589,31 @@ export default function EcuTuningAssistant() {
         setIsFetchingManual(false);
     };
 
+    const handleValidateMap = async () => {
+        if (!originalMap || !axes || !selectedMapName) return;
+
+        setIsValidatingMap(true);
+        addLog(`A iniciar a análise do tipo de mapa para "${selectedMapName}"...`, 'info');
+
+        const result = await validateMapType({
+            mapName: selectedMapName,
+            mapData: originalMap,
+            xAxis: axes.x,
+            yAxis: axes.y,
+        });
+
+        setIsValidatingMap(false);
+
+        if (result.success && result.data) {
+            setAnalysisResult(result.data);
+            setIsAnalysisModalOpen(true);
+            addLog(`Análise de tipo de mapa concluída. Confiança: ${result.data.confidence}.`, 'success');
+        } else {
+            addLog(`A análise do tipo de mapa falhou: ${result.error}`, 'error');
+            toast({ variant: 'destructive', title: 'Falha na Análise do Mapa', description: result.error });
+        }
+    };
+
     const isAnalyzeDisabled = !originalMap || testData.length === 0 || isLoading;
     const isSaveDisabled = !correctedMap || isLoading;
     
@@ -691,6 +721,10 @@ export default function EcuTuningAssistant() {
                                             ))}
                                         </SelectContent>
                                     </Select>
+                                     <Button variant="outline" size="sm" className="w-full" onClick={handleValidateMap} disabled={!originalMap || isValidatingMap}>
+                                        {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                                        Verificar Mapa com IA
+                                    </Button>
                                 </div>
 
                                 <div className="space-y-2">
@@ -827,6 +861,7 @@ export default function EcuTuningAssistant() {
                 {/* Modals */}
                 <ManualLogModal open={isLogModalOpen} onOpenChange={setIsLogModalOpen} onConfirm={handleConfirmLogData} existingData={testData} />
                 <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={axes} />
+                <MapAnalysisResultModal open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen} result={analysisResult} />
                 
                 <AlertDialog open={isChecksumWarningOpen} onOpenChange={setIsChecksumWarningOpen}>
                     <AlertDialogContent>
@@ -1033,6 +1068,52 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: b
                 <DialogFooter>
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
                     <Button onClick={() => onConfirm({ y: yAxis, x: xAxis })}>Salvar Eixos</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function MapAnalysisResultModal({ open, onOpenChange, result }: { open: boolean, onOpenChange: (open: boolean) => void, result: { confidence: string; suspectedType: string; reasoning: string; } | null }) {
+    const getConfidenceBadgeVariant = (confidence: string | undefined) => {
+        switch (confidence) {
+            case 'Alta': return 'default';
+            case 'Média': return 'secondary';
+            case 'Baixa': return 'destructive';
+            default: return 'outline';
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <ShieldCheck className="text-primary"/>
+                        Resultado da Análise do Mapa pela IA
+                    </DialogTitle>
+                    <DialogDescription>
+                        A IA analisou a forma e os padrões dos dados do mapa para fornecer uma segunda opinião.
+                    </DialogDescription>
+                </DialogHeader>
+                {result && (
+                    <div className="space-y-4 pt-4">
+                        <div className="flex items-center gap-4">
+                             <h3 className="text-sm font-semibold text-muted-foreground">Confiança:</h3>
+                             <Badge variant={getConfidenceBadgeVariant(result.confidence)} className="text-base">{result.confidence}</Badge>
+                        </div>
+                         <div className="flex items-center gap-4">
+                             <h3 className="text-sm font-semibold text-muted-foreground">Tipo Suspeito:</h3>
+                             <p className="font-semibold">{result.suspectedType}</p>
+                        </div>
+                        <div>
+                             <h3 className="text-sm font-semibold text-muted-foreground mb-2">Justificação da IA:</h3>
+                             <p className="text-sm p-3 bg-muted rounded-md border">{result.reasoning}</p>
+                        </div>
+                    </div>
+                )}
+                <DialogFooter>
+                    <Button onClick={() => onOpenChange(false)}>Fechar</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
