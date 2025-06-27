@@ -1132,3 +1132,5 @@ function MapAnalysisResultModal({ open, onOpenChange, result }: { open: boolean,
         </Dialog>
     );
 }
+
+    
