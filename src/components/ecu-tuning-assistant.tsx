@@ -434,6 +434,20 @@ export default function EcuTuningAssistant() {
             setPotenciaMeasuredGrid(null);
 
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
+
+            // Check for abnormally large values in the map, which might indicate a bad XDF equation
+            const hasLargeValues = sortedMap.flat().some(v => v !== null && Math.abs(v) > 500);
+            if (hasLargeValues) {
+                const warningMsg = "Aviso: O mapa contém valores muito grandes. Isto pode indicar que o ficheiro XDF não está a traduzir corretamente os dados 'crus' do ficheiro BIN. A análise da IA ainda funcionará com base em correções percentuais, mas os valores exibidos podem não representar unidades de engenharia reais (como VE%).";
+                addLog(warningMsg, 'error');
+                toast({
+                    variant: "destructive",
+                    title: "Possível Incompatibilidade de XDF",
+                    description: warningMsg,
+                    duration: 12000,
+                });
+            }
+
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
             addLog(msg, 'error');
