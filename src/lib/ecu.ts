@@ -65,9 +65,19 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   }
 
   const definitions: XDFDefinition[] = [];
+  const nameCounts: Record<string, number> = {}; // To track duplicate names
+
   for (const table of xdfTables) {
-    const tableName = table.querySelector('title')?.textContent || table.getAttribute('name') || 'Tabela Sem Nome';
-    if (tableName === 'Tabela Sem Nome') continue;
+    const originalName = table.querySelector('title')?.textContent || table.getAttribute('name') || 'Tabela Sem Nome';
+    if (originalName === 'Tabela Sem Nome') continue;
+    
+    let tableName = originalName;
+    if (nameCounts[originalName]) {
+        nameCounts[originalName]++;
+        tableName = `${originalName} (${nameCounts[originalName]})`;
+    } else {
+        nameCounts[originalName] = 1;
+    }
 
     try {
       const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
