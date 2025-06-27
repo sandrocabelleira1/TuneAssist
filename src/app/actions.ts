@@ -60,9 +60,10 @@ export async function searchForManuals(input: MotorcycleManualFlowInput): Promis
 
 const FetchManualInfoActionInputSchema = z.object({
   query: z.string().min(1, 'A consulta é obrigatória.'),
+  brand: z.string().optional(),
 });
 
-export async function fetchManualInformation(input: { query: string }): Promise<{ success: boolean; data?: string; error?: string }> {
+export async function fetchManualInformation(input: { query: string; brand?: string }): Promise<{ success: boolean; data?: string; error?: string }> {
   try {
     const validatedInput = FetchManualInfoActionInputSchema.parse(input);
     const manuals = await motorcycleManualFlow(validatedInput);
