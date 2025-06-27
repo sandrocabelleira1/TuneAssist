@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -65,13 +66,25 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       if (!addressStr) continue;
       const address = parseInt(addressStr, 16);
 
-      const rows = parseInt(embeddedData.getAttribute('mmedrowcount') || '0');
-      const cols = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
+      let rows = parseInt(embeddedData.getAttribute('mmedrowcount') || '0');
+      let cols = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
       const dataSize = parseInt(embeddedData.getAttribute('mmedelementsizebits') || '0');
       const isBigEndian = embeddedData.getAttribute('bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
       const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+      
+      const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
+      const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
+
+      // **FIX:** Prioritize axis definition count over table definition count to prevent misalignment.
+      // This ensures the map dimensions always match the axis dimensions.
+      if (yAxisDef?.count) {
+          rows = yAxisDef.count;
+      }
+      if (xAxisDef?.count) {
+          cols = xAxisDef.count;
+      }
 
       if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || rows === 0 || cols === 0) continue;
 
@@ -95,9 +108,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       } else if (equation.trim().toUpperCase() === 'X') {
         inverseEquation = 'X';
       }
-
-      const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
-      const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
 
       definitions.push({ name: tableName, address, rows, cols, dataSize: dataSize / 8, isBigEndian, equation, inverseEquation, xAxisDef, yAxisDef });
     } catch (e) {
@@ -234,3 +244,6 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
+
+
+    
