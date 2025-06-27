@@ -111,7 +111,14 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const isBigEndian = embeddedData.getAttribute('bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
-      const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+      let equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+
+      // Heuristic Patch: If this looks like a typical Yamaha ETV map with a known incorrect divisor,
+      // apply a more common conversion to get values into a 0-100 range.
+      // This is a specific fix for a common issue in community XDFs for this type of ECU.
+      if (tableName.includes('ETV') && equation === 'X/6.96') {
+        equation = 'X / 655.35';
+      }
       
       // Final sanity check
       if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || rows === 0 || cols === 0 || binaryWidth === 0) {
