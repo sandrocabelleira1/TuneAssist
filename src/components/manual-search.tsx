@@ -7,6 +7,8 @@ import type { MotorcycleManualFlowOutput } from '@/ai/flows/motorcycle-manual-fl
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, Search, Wrench, Sparkles, BookUser } from 'lucide-react';
@@ -19,6 +21,7 @@ type Manual = MotorcycleManualFlowOutput[0];
 export default function ManualSearch() {
   const { toast } = useToast();
   const [query, setQuery] = useState('');
+  const [brand, setBrand] = useState('');
   const [results, setResults] = useState<Manual[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -33,7 +36,7 @@ export default function ManualSearch() {
     setIsLoading(true);
     setResults([]);
 
-    const result = await searchForManuals({ query });
+    const result = await searchForManuals({ query, brand });
     setIsLoading(false);
 
     if (result.success && result.data) {
@@ -90,35 +93,56 @@ export default function ManualSearch() {
         </p>
       </header>
 
-      <Card className="mb-8">
-        <form onSubmit={handleSearch}>
-          <CardHeader>
-            <CardTitle>Procurar Manual</CardTitle>
-            <CardDescription>Insira a marca e modelo da moto (ex: Honda CB 500F, Yamaha MT-07 2022)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-4">
-              <Input
-                id="query"
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ex: Kawasaki Ninja ZX-10R 2024"
-                className="flex-grow"
-                disabled={isLoading}
-              />
+      <form onSubmit={handleSearch}>
+        <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>Procurar Manual</CardTitle>
+              <CardDescription>Insira detalhes do modelo e, opcionalmente, filtre por marca para refinar a sua pesquisa.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                  <div className="sm:col-span-2 space-y-2">
+                      <Label htmlFor="query">Pesquisa (Modelo, Ano, etc.)</Label>
+                      <Input
+                          id="query"
+                          type="text"
+                          value={query}
+                          onChange={(e) => setQuery(e.target.value)}
+                          placeholder="Ex: Ninja ZX-10R 2024"
+                          className="w-full"
+                          disabled={isLoading}
+                      />
+                  </div>
+                  <div className="space-y-2">
+                      <Label htmlFor="brand-select">Marca</Label>
+                      <Select value={brand} onValueChange={setBrand} disabled={isLoading}>
+                          <SelectTrigger id="brand-select">
+                              <SelectValue placeholder="Qualquer Marca" />
+                          </SelectTrigger>
+                          <SelectContent>
+                              <SelectItem value="">Qualquer Marca</SelectItem>
+                              <SelectItem value="Yamaha">Yamaha</SelectItem>
+                              <SelectItem value="Honda">Honda</SelectItem>
+                              <SelectItem value="Suzuki">Suzuki</SelectItem>
+                              <SelectItem value="Kawasaki">Kawasaki</SelectItem>
+                              <SelectItem value="BMW">BMW</SelectItem>
+                          </SelectContent>
+                      </Select>
+                  </div>
+              </div>
+            </CardContent>
+            <CardFooter className="border-t pt-6 justify-end">
               <Button type="submit" disabled={isLoading || !query}>
-                {isLoading ? (
-                  <Loader2 className="mr-2 animate-spin" />
-                ) : (
-                  <Search className="mr-2" />
-                )}
-                Pesquisar
+                  {isLoading ? (
+                      <Loader2 className="mr-2 animate-spin" />
+                  ) : (
+                      <Search className="mr-2" />
+                  )}
+                  Pesquisar
               </Button>
-            </div>
-          </CardContent>
-        </form>
-      </Card>
+            </CardFooter>
+        </Card>
+      </form>
       
       <div className="space-y-4">
         {isLoading && (

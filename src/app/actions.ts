@@ -41,6 +41,7 @@ export async function suggestMapCorrections(input: SuggestMapCorrectionsInput): 
 
 const SearchForManualsActionInputSchema = z.object({
   query: z.string(),
+  brand: z.string().optional(),
 });
 
 export async function searchForManuals(input: MotorcycleManualFlowInput): Promise<{ success: boolean; data?: MotorcycleManualFlowOutput; error?: string }> {
