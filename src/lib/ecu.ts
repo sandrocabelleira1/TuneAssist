@@ -81,8 +81,10 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       if (!addressStr) continue;
       const address = parseInt(addressStr, 16);
 
+      const binaryWidth = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
       let rows = parseInt(embeddedData.getAttribute('mmedrowcount') || '0');
-      let cols = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
+      let cols = binaryWidth; // Start with the binary width
+      
       const dataSize = parseInt(embeddedData.getAttribute('mmedelementsizebits') || '0');
       const isBigEndian = embeddedData.getAttribute('bigendian') === '1';
 
@@ -101,7 +103,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           cols = xAxisDef.count;
       }
 
-      if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || rows === 0 || cols === 0) continue;
+      if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || rows === 0 || cols === 0 || binaryWidth === 0) continue;
 
       let inverseEquation = '';
       if (equation.includes('*') && equation.includes('+')) {
@@ -124,7 +126,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         inverseEquation = 'X';
       }
 
-      definitions.push({ name: tableName, address, rows, cols, dataSize: dataSize / 8, isBigEndian, equation, inverseEquation, xAxisDef, yAxisDef });
+      definitions.push({ name: tableName, address, rows, cols, binaryWidth, dataSize: dataSize / 8, isBigEndian, equation, inverseEquation, xAxisDef, yAxisDef });
     } catch (e) {
       console.error(`Erro ao analisar a tabela "${tableName}": ${(e as Error).message}`);
     }
@@ -164,7 +166,7 @@ export function readMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): MapD
   for (let r = 0; r < def.rows; r++) {
     const row: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
-      const offset = def.address + (r * def.cols + c) * def.dataSize;
+      const offset = def.address + (r * def.binaryWidth + c) * def.dataSize;
       if (offset + def.dataSize > view.byteLength) {
         console.error(`Leitura do mapa fora dos limites. Offset: ${offset}`);
         row.push(null);
@@ -226,7 +228,7 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
             }
 
             // Calculate the flat address in the BIN file based on original row/col order
-            const offset = def.address + (originalRowIndex * def.cols + originalColIndex) * def.dataSize;
+            const offset = def.address + (originalRowIndex * def.binaryWidth + originalColIndex) * def.dataSize;
             
             if (offset + def.dataSize > view.byteLength) {
                 console.error(`Escrita do mapa fora dos limites. Offset: ${offset}`);
