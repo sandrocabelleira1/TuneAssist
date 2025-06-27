@@ -24,7 +24,7 @@ const prompt = ai.definePrompt({
   model: googleAI.model('gemini-2.0-flash'),
   input: { schema: ValidateMapTypeInputSchema },
   output: { schema: ValidateMapTypeOutputSchema },
-  prompt: `Você é um engenheiro de calibração de motores de classe mundial com décadas de experiência em engenharia reversa de ECUs. A sua especialidade é identificar mapas de ECU não apenas pela sua forma geral, mas também por encontrar anomalias e inconsistências nos dados que indicam um XDF incorreto ou um mapa mal afinado.
+  prompt: `Você é um engenheiro de calibração de motores de classe mundial com décadas de experiência em engenharia reversa de ECUs. A sua especialidade é identificar mapas de ECU não apenas pela sua forma geral, mas também por encontrar anomalias e inconsistências nos dados que indicam um XDF incorreto ou um mapa mal afinado. Responda SEMPRE em Português do Brasil.
 
 A sua tarefa é realizar uma análise crítica de uma grelha de dados de um mapa de ECU e determinar se a sua 'forma' e os seus valores são consistentes com o seu nome/tipo declarado.
 
