@@ -179,43 +179,30 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     const inverseEquationFunc = new Function('X', `return ${def.inverseEquation}`);
-    
-    // The corrected map is sorted for display. We must create an unsorted version
-    // that matches the original file layout before writing.
-    const unsortedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
 
+    // Iterate through the corrected (and sorted) map
     for (let sortedY = 0; sortedY < def.rows; sortedY++) {
         for (let sortedX = 0; sortedX < def.cols; sortedX++) {
-            // Get the original index from the sorted index
-            const originalY = sortOrder.y[sortedY]?.index;
-            const originalX = sortOrder.x[sortedX]?.index;
             
-            // If the sort order is somehow invalid, skip this cell
-            if (originalY === undefined || originalX === undefined) continue;
+            // Find the original position in the BIN file for this sorted cell
+            const originalRowIndex = sortOrder.y[sortedY]?.index;
+            const originalColIndex = sortOrder.x[sortedX]?.index;
 
-            // Get the value from the sorted map
-            const value = correctedSortedMap[sortedY]?.[sortedX];
-            
-            // Place the value in the correct position in the unsorted map
-            if (unsortedMap[originalY] !== undefined && value !== null && !isNaN(value)) {
-                 unsortedMap[originalY][originalX] = value;
-            }
-        }
-    }
-    
-    // Write the entire unsorted map back to the buffer.
-    // This overwrites the old map data in the file with the new data.
-    for (let r = 0; r < def.rows; r++) {
-        for (let c = 0; c < def.cols; c++) {
-            const valueToWrite = unsortedMap[r]?.[c];
-
-            // If a cell was null in the original and not corrected, it remains null.
-            // We don't write it, preserving the original data in the buffer for that cell.
-            if (valueToWrite === null || valueToWrite === undefined) {
+            if (originalRowIndex === undefined || originalColIndex === undefined) {
+                console.warn(`Could not find original index for sorted cell [${sortedY}, ${sortedX}]. Skipping.`);
                 continue;
             }
 
-            const offset = def.address + (r * def.cols + c) * def.dataSize;
+            const valueToWrite = correctedSortedMap[sortedY]?.[sortedX];
+
+            // If the cell has no value (e.g., it was null in the original and not corrected), skip it.
+            if (valueToWrite === null || valueToWrite === undefined || isNaN(valueToWrite)) {
+                continue;
+            }
+
+            // Calculate the flat address in the BIN file based on original row/col order
+            const offset = def.address + (originalRowIndex * def.cols + originalColIndex) * def.dataSize;
+            
             if (offset + def.dataSize > view.byteLength) {
                 console.error(`Escrita do mapa fora dos limites. Offset: ${offset}`);
                 continue;
@@ -223,6 +210,12 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
 
             const rawValue = Math.round(inverseEquationFunc(valueToWrite));
 
+            if (isNaN(rawValue)) {
+                console.warn(`Calculated raw value is NaN for value ${valueToWrite}. Skipping cell.`);
+                continue;
+            }
+
+            // Write the new raw value to the buffer
             if (def.dataSize === 1) {
                 view.setUint8(offset, rawValue);
             } else if (def.dataSize === 2) {
