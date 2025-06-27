@@ -22,7 +22,9 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   const indexCountNode = findNode(axisNode, 'indexcount');
   let count = indexCountNode ? parseInt(indexCountNode.textContent || '0', 10) : 0;
   if (count === 0 && embeddedData) {
-      count = parseInt(embeddedData.getAttribute('mmedcolcount') || embeddedData.getAttribute('mmedrowcount') || '0');
+      // For a Y axis (id="y"), we'd expect mmedrowcount, but some XDFs are weird and use mmedcolcount for both.
+      // We check both to be safe.
+      count = parseInt(embeddedData.getAttribute('mmedrowcount') || embeddedData.getAttribute('mmedcolcount') || '0');
   }
   // If no count can be found, it's not a valid axis for our purpose.
   if (count === 0 || isNaN(count)) return null; 
@@ -39,11 +41,10 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   const mathNode = findNode(axisNode, 'math', 'MATH');
   const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
   
-  // Prioritize <units>, then <title>, then <LABEL>. Fallback to default if all are missing/empty.
+  // Prioritize <units>, then <title>. Fallback to default if all are missing/empty.
   const label = (
       findNode(axisNode, 'units')?.textContent ||
       findNode(axisNode, 'title')?.textContent ||
-      findNode(axisNode, 'LABEL')?.textContent ||
       (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM')
   ).trim();
   
@@ -56,19 +57,6 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
       label: label || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM') // Final fallback to prevent empty string
   };
 }
-
-function createDummyAxis(count: number, id: 'x' | 'y'): AxisDefinition {
-    if (!count) return null;
-    return {
-        address: null,
-        count,
-        dataSize: 1,
-        isBigEndian: false,
-        equation: 'X',
-        label: id === 'x' ? 'Eixo X' : 'Eixo Y'
-    }
-}
-
 
 // Stricter XDF parsing
 export function parseXDF(xmlString: string): XDFDefinition[] {
@@ -100,8 +88,13 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     }
 
     try {
-      let xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
-      let yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
+      const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
+      const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
+
+      // If either axis is not defined properly, we cannot process this table reliably.
+      if (!xAxisDef || !yAxisDef) {
+          continue;
+      }
 
       const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
       if (!zAxisNode) continue;
@@ -109,25 +102,11 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
       if (!zEmbeddedData) continue;
       
-      let rows = yAxisDef?.count;
-      let cols = xAxisDef?.count;
-
-      // Fallback to z-axis dimensions if axis defs are incomplete.
-      if (!rows || rows === 0) {
-          rows = parseInt(zEmbeddedData.getAttribute('mmedrowcount') || '0');
-          if (rows > 0 && !yAxisDef) {
-              yAxisDef = createDummyAxis(rows, 'y');
-          }
-      }
-      if (!cols || cols === 0) {
-          cols = parseInt(zEmbeddedData.getAttribute('mmedcolcount') || '0');
-           if (cols > 0 && !xAxisDef) {
-              xAxisDef = createDummyAxis(cols, 'x');
-          }
-      }
+      const rows = yAxisDef.count;
+      const cols = xAxisDef.count;
       
-      // If we still don't have valid dimensions or axis definitions, skip the table.
-      if (!rows || rows === 0 || !cols || cols === 0 || !xAxisDef || !yAxisDef) {
+      // Final sanity check for dimensions
+      if (!rows || !cols) {
           continue;
       }
       
@@ -143,12 +122,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
       let equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
 
-      if (tableName.includes('ETV') && equation === 'X/6.96') {
+      // Specific fix for known incorrect ETV equations
+      if (tableName.toUpperCase().includes('ETV') && equation.toUpperCase() === 'X/6.96') {
         equation = 'X / 655.35';
       }
       
-      // Final sanity check
-      if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSize) || !equation || binaryWidth === 0) {
+      if (isNaN(address) || isNaN(dataSize) || !equation || binaryWidth === 0) {
           continue;
       }
 
@@ -311,4 +290,5 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
 
 
     
+
 

@@ -219,7 +219,7 @@ export default function EcuTuningAssistant() {
             }
 
             // Check X axis if not already invalid
-            if (!isInvalid && def.xAxisDef) {
+            if (!isInvalid && def.xAxisDef?.address !== null) {
                 const axisEndAddr = def.xAxisDef.address + (def.xAxisDef.count * def.xAxisDef.dataSize);
                 if (axisEndAddr > binSize || def.xAxisDef.address < 0) {
                     isInvalid = true;
@@ -228,7 +228,7 @@ export default function EcuTuningAssistant() {
             }
             
             // Check Y axis if not already invalid
-            if (!isInvalid && def.yAxisDef) {
+            if (!isInvalid && def.yAxisDef?.address !== null) {
                 const axisEndAddr = def.yAxisDef.address + (def.yAxisDef.count * def.yAxisDef.dataSize);
                 if (axisEndAddr > binSize || def.yAxisDef.address < 0) {
                     isInvalid = true;
@@ -393,8 +393,15 @@ export default function EcuTuningAssistant() {
         try {
             const map = readMapFromBin(binFile.buffer, definition);
 
-            let tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef) || Array.from({ length: definition.cols }, (_, i) => i + 1);
-            let tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef) || Array.from({ length: definition.rows }, (_, i) => i + 1);
+            let tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef);
+            if (tempEixoX.length === 0) {
+              tempEixoX = Array.from({ length: definition.cols }, (_, i) => i + 1);
+            }
+            
+            let tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef);
+            if (tempEixoY.length === 0) {
+              tempEixoY = Array.from({ length: definition.rows }, (_, i) => i + 1);
+            }
 
             const sortableX = tempEixoX.map((value, index) => ({ value: Number(value), index }));
             sortableX.sort((a, b) => a.value - b.value);
