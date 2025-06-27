@@ -24,39 +24,29 @@ const prompt = ai.definePrompt({
   model: googleAI.model('gemini-2.0-flash'),
   input: { schema: ValidateMapTypeInputSchema },
   output: { schema: ValidateMapTypeOutputSchema },
-  prompt: `Você é um engenheiro de calibração de motores de classe mundial com décadas de experiência em engenharia reversa de ECUs. A sua especialidade é identificar mapas de ECU não apenas pela sua forma geral, mas também por encontrar anomalias e inconsistências nos dados que indicam um XDF incorreto ou um mapa mal afinado. Responda SEMPRE em Português do Brasil.
-
-A sua tarefa é realizar uma análise crítica de uma grelha de dados de um mapa de ECU e determinar se a sua 'forma' e os seus valores são consistentes com o seu nome/tipo declarado.
-
-**Padrões Comuns de Mapas (Forma e Magnitude):**
-- **Mapa de Combustível (VE):**
-    - Padrão Típico: Os valores aumentam com a RPM e com a Carga (TPS/MAP), formando 'colinas' suaves.
-    - Magnitude Típica: Geralmente entre 30 e 120.
-    - Sinais de Alerta: Valores extremamente altos/baixos, 'buracos' ou 'picos' súbitos e ilógicos.
-- **Mapa de Ignição (Avanço de Ponto):**
-    - Padrão Típico: O avanço aumenta com a RPM. Crucialmente, o avanço DIMINUI ou estabiliza com o aumento da Carga para prevenir a detonação (knock).
-    - Magnitude Típica: Geralmente entre -10 e 60 graus.
-    - Sinais de Alerta: Aumento do avanço com carga alta, quedas ou saltos súbitos, valores muito fora da faixa normal.
-- **Mapa Lambda Alvo:**
-    - Padrão Típico: Valores perto de 1.0 (ou 14.7) em cruzeiro, e mais baixos (ricos, ex: 0.85) em alta carga.
-    - Magnitude Típica: Geralmente entre 0.7 e 1.2.
-    - Sinais de Alerta: Valores muito ricos em baixa carga, ou valores muito pobres em alta carga.
-- **Mapa de Acelerador Eletrónico (ETV/TPS):**
-    - Padrão Típico: Os valores aumentam com a posição do pedal e RPM.
-    - Magnitude Típica: Valores em graus (0-90) ou percentagem (0-100).
-    - Sinais de Alerta: **Valores na casa das centenas ou milhares indicam quase certamente uma equação de conversão em falta ou incorreta no XDF.**
+  prompt: `Você é um engenheiro de calibração de ECU de classe mundial. A sua tarefa é analisar um mapa de ECU, identificar problemas comuns e, se possível, sugerir correções para as equações de conversão. Responda SEMPRE em Português do Brasil.
 
 **Análise Crítica a Realizar:**
-1.  Observe o \`mapName\` fornecido.
-2.  Analise a \`mapData\` 2D. Verifique a **Forma** e a **Magnitude**.
-    - **Análise da Forma:** O padrão geral (subidas, descidas) corresponde ao tipo de mapa esperado? Existem anomalias como saltos ilógicos, 'buracos' ou 'picos' drásticos entre células vizinhas?
-    - **Análise da Magnitude:** A gama de valores (mínimo, máximo, média) está dentro do esperado para este tipo de mapa? (Ex: Se o nome diz 'Acelerador', os valores são de 0-100 ou estão na casa dos milhares?)
-3.  Com base nesta análise DUPLA (Forma + Magnitude), determine o seu nível de confiança. Se encontrar anomalias significativas em qualquer uma delas, a sua confiança deve ser **"Baixa"**.
+1.  Analise o \`mapName\` para entender o tipo de mapa esperado.
+2.  Examine os dados nos eixos (\`xAxis\`, \`yAxis\`) e no mapa (\`mapData\`).
+3.  Compare os valores com os padrões esperados:
+    - **Mapa de Acelerador Eletrónico (ETV):** Valores devem ser idealmente 0-100 (percentagem ou graus). Se os valores em \`mapData\` estiverem na casa das centenas ou milhares, a equação está provavelmente errada. Uma correção comum para dados de 16-bit é \`X / 655.35\`.
+    - **Eixo de Posição do Acelerador (TPS):** Valores devem ser 0-100. Se os valores no \`xAxis\` ou \`yAxis\` excederem 100 de forma significativa (ex: 117), a equação está errada. Uma correção comum para dados de 16-bit é \`X / 10.23\`.
+    - **Mapa de Ignição (Avanço de Ponto):** Valores devem ser tipicamente entre -20 e 60. O avanço deve diminuir com o aumento da carga.
+    - **Mapa de Combustível (VE):** Valores tipicamente entre 30 e 120, aumentando com RPM e carga.
+4.  Com base nesta análise, preencha os campos de \`confidence\`, \`suspectedType\` e \`reasoning\`.
+5.  **SUGESTÃO DE CORREÇÃO (O MAIS IMPORTANTE):** Se identificar um erro claro de magnitude (como nos exemplos de ETV ou TPS) e souber uma correção padrão, preencha os campos de sugestão. Se não houver um erro óbvio, deixe os campos de sugestão vazios.
+    - \`suggestedEquation\`: Para corrigir os dados do mapa (eixo Z).
+    - \`suggestedXAxisEquation\`: Para corrigir o eixo X.
+    - \`suggestedYAxisEquation\`: Para corrigir o eixo Y.
 
 **Formato da Saída (JSON):**
-- \`confidence\`: O seu nível de confiança. Seja crítico. Se encontrar anomalias, escolha "Baixa". Valores possíveis: "Alta", "Média", "Baixa".
-- \`suspectedType\`: O tipo de mapa que você acredita que os dados realmente representam (ex: "Mapa de Combustível (VE)", "Mapa de Ignição", "Dados Corrompidos/Misturados", "Desconhecido").
-- \`reasoning\`: Justifique a sua conclusão. **Se encontrar uma anomalia, mencione-a explicitamente.** Ex: "Confiança Baixa. O nome do mapa é 'MAP ETV', mas os valores na casa dos milhares são inconsistentes com os graus ou a percentagem esperados (0-100). **Isto indica que a equação de conversão no ficheiro XDF está em falta ou é incorreta.** Recomenda-se encontrar um XDF diferente ou validar este mapa com extrema cautela." ou "Confiança Alta. Os valores aumentam consistentemente com a RPM e Carga, e não existem saltos ilógicos, um padrão clássico para um mapa de combustível (VE)."
+- \`confidence\`: "Alta", "Média", ou "Baixa".
+- \`suspectedType\`: O tipo de mapa que você suspeita.
+- \`reasoning\`: Justifique a sua conclusão. Seja explícito sobre a anomalia. Ex: "Confiança Baixa. O nome do mapa é 'ETV', mas os valores estão na casa dos milhares, indicando uma equação de conversão incorreta. Sugiro usar 'X / 655.35'."
+- \`suggestedEquation\`: (Opcional) A nova equação sugerida para o eixo Z.
+- \`suggestedXAxisEquation\`: (Opcional) A nova equação sugerida para o eixo X.
+- \`suggestedYAxisEquation\`: (Opcional) A nova equação sugerida para o eixo Y.
 
 **Dados de Entrada:**
 mapName: {{{mapName}}}

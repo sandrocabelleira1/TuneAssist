@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { LogMessage, XDFDefinition, MapData, TestDataEntry, OriginalSortOrder } from '@/lib/types';
+import type { LogMessage, XDFDefinition, MapData, TestDataEntry, OriginalSortOrder, AxisDefinition } from '@/lib/types';
 import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, saveBinFile } from '@/lib/ecu';
 import { suggestMapCorrections, fetchManualInformation, validateMapType } from '@/app/actions';
 import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
@@ -21,7 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, XCircle, Wrench } from 'lucide-react';
+import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, XCircle, Wrench, GitCompareArrows } from 'lucide-react';
 
 // MapTable Component
 function MapTable({
@@ -113,6 +113,15 @@ function MapTable({
   );
 }
 
+type AISuggestion = {
+    reasoning: string;
+    originalMap: MapData;
+    correctedMap: MapData;
+    originalAxes: { x: (string | number)[]; y: (string | number)[], xLabel: string; yLabel: string; };
+    correctedAxes: { x: (string | number)[]; y: (string | number)[], xLabel: string; yLabel: string; };
+    newDefinition: XDFDefinition;
+}
+
 // Main Component
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
@@ -148,6 +157,7 @@ export default function EcuTuningAssistant() {
     const [isFetchingManual, setIsFetchingManual] = useState(false);
     const [isValidatingMap, setIsValidatingMap] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<{ confidence: string; suspectedType: string; reasoning: string; } | null>(null);
+    const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
 
 
     // Modal state
@@ -156,6 +166,7 @@ export default function EcuTuningAssistant() {
     const [isChecksumWarningOpen, setIsChecksumWarningOpen] = useState(false);
     const [isXdfErrorModalOpen, setIsXdfErrorModalOpen] = useState(false);
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+    const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -460,24 +471,6 @@ export default function EcuTuningAssistant() {
 
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
 
-            const hasLargeValues = sortedMap.flat().some(v => v !== null && Math.abs(v) > 500);
-            if (hasLargeValues) {
-                const warningMsg = "O mapa contém valores muito grandes, o que pode indicar uma equação XDF incorreta. Os valores podem não representar unidades reais.";
-                const suggestionMsg = "Use a função 'Verificar Mapa com IA' para uma análise detalhada."
-                addLog(`${warningMsg} ${suggestionMsg}`, 'error');
-                toast({
-                    variant: "destructive",
-                    title: "Aviso: Valores de Mapa Anormais",
-                    description: (
-                        <div>
-                            <p>{warningMsg}</p>
-                            <p className="font-semibold mt-2">{suggestionMsg}</p>
-                        </div>
-                    ),
-                    duration: 12000,
-                });
-            }
-
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
             addLog(msg, 'error');
@@ -633,7 +626,7 @@ export default function EcuTuningAssistant() {
     };
 
     const handleValidateMap = async () => {
-        if (!originalMap || !axes || !selectedMapName) return;
+        if (!originalMap || !axes || !selectedMapName || !binFile || !xdfFile) return;
 
         setIsValidatingMap(true);
         addLog(`A iniciar a análise do tipo de mapa para "${selectedMapName}"...`, 'info');
@@ -658,14 +651,85 @@ export default function EcuTuningAssistant() {
         setIsValidatingMap(false);
 
         if (result.success && result.data) {
+            // Always show the text-based analysis
             setAnalysisResult(result.data);
             setIsAnalysisModalOpen(true);
             addLog(`Análise de tipo de mapa concluída. Confiança: ${result.data.confidence}.`, 'success');
+
+            // If the AI suggested a correction, create a preview and show the suggestion modal
+            const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation } = result.data;
+            const hasSuggestion = suggestedEquation || suggestedXAxisEquation || suggestedYAxisEquation;
+
+            if (hasSuggestion) {
+                const currentDef = xdfFile.definitions.find(d => d.name === selectedMapName);
+                if (!currentDef) return;
+
+                // Create a temporary, corrected definition in memory
+                const newDefinition = JSON.parse(JSON.stringify(currentDef)) as XDFDefinition;
+                if (suggestedEquation && newDefinition) newDefinition.equation = suggestedEquation;
+                if (suggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = suggestedXAxisEquation;
+                if (suggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = suggestedYAxisEquation;
+                
+                try {
+                    // Use client-side parsers with the new definition to generate a preview
+                    const correctedMapPreview = readMapFromBin(binFile.buffer, newDefinition);
+                    const correctedXAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
+                    const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+
+                    const correctedAxesPreview = {
+                        x: correctedXAxisPreview,
+                        y: correctedYAxisPreview,
+                        xLabel: newDefinition.xAxisDef?.label || 'Eixo X',
+                        yLabel: newDefinition.yAxisDef?.label || 'Eixo Y'
+                    };
+
+                    setAiSuggestion({
+                        reasoning: result.data.reasoning,
+                        originalMap,
+                        originalAxes: axes,
+                        correctedMap: correctedMapPreview,
+                        correctedAxes: correctedAxesPreview,
+                        newDefinition,
+                    });
+                    setIsSuggestionModalOpen(true);
+                    addLog('A IA propôs uma correção para as equações do mapa.', 'info');
+
+                } catch (error) {
+                    addLog(`Erro ao gerar a pré-visualização da IA: ${(error as Error).message}`, 'error');
+                    toast({ variant: 'destructive', title: 'Erro na Pré-visualização', description: 'Não foi possível gerar a pré-visualização da sugestão da IA.' });
+                }
+            }
         } else {
             addLog(`A análise do tipo de mapa falhou: ${result.error}`, 'error');
             toast({ variant: 'destructive', title: 'Falha na Análise do Mapa', description: result.error });
         }
     };
+    
+    const handleAcceptSuggestion = () => {
+        if (!aiSuggestion || !xdfFile) return;
+
+        // 1. Update the map view with the corrected data
+        setOriginalMap(aiSuggestion.correctedMap);
+        setAxes(aiSuggestion.correctedAxes);
+        
+        // 2. Update the XDF definition in the component's state
+        const newDefinitions = xdfFile.definitions.map(def => 
+            def.name === selectedMapName ? aiSuggestion.newDefinition : def
+        );
+        setXdfFile({ ...xdfFile, definitions: newDefinitions });
+        
+        addLog(`Correção da IA aplicada ao mapa "${selectedMapName}".`, 'success');
+        toast({ title: 'Correção Aplicada', description: 'O mapa foi atualizado com a sugestão da IA.' });
+
+        // 3. Reset dependent state
+        setCorrectedMap(null);
+        setCorrectionPercentageMap(null);
+        setTargetLambdaMap(Array(aiSuggestion.correctedAxes.y.length).fill(0).map(() => Array(aiSuggestion.correctedAxes.x.length).fill(1.0)));
+
+        setIsSuggestionModalOpen(false);
+        setAiSuggestion(null);
+    };
+
 
     const isAnalyzeDisabled = !originalMap || testData.length === 0 || isLoading;
     const isSaveDisabled = !correctedMap || isLoading;
@@ -776,7 +840,7 @@ export default function EcuTuningAssistant() {
                                     </Select>
                                      <Button variant="outline" size="sm" className="w-full" onClick={handleValidateMap} disabled={!originalMap || isValidatingMap}>
                                         {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                                        Verificar Mapa com IA
+                                        Analisar / Corrigir Mapa com IA
                                     </Button>
                                 </div>
 
@@ -915,7 +979,8 @@ export default function EcuTuningAssistant() {
                 <ManualLogModal open={isLogModalOpen} onOpenChange={setIsLogModalOpen} onConfirm={handleConfirmLogData} existingData={testData} />
                 <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={axes} />
                 <MapAnalysisResultModal open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen} result={analysisResult} />
-                
+                <MapCorrectionSuggestionModal open={isSuggestionModalOpen} onOpenChange={setIsSuggestionModalOpen} suggestion={aiSuggestion} onAccept={handleAcceptSuggestion} />
+
                 <AlertDialog open={isChecksumWarningOpen} onOpenChange={setIsChecksumWarningOpen}>
                     <AlertDialogContent>
                         <AlertDialogHeader>
@@ -1167,6 +1232,51 @@ function MapAnalysisResultModal({ open, onOpenChange, result }: { open: boolean,
                 )}
                 <DialogFooter>
                     <Button onClick={() => onOpenChange(false)}>Fechar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept }: { open: boolean, onOpenChange: (open: boolean) => void, suggestion: AISuggestion | null, onAccept: () => void }) {
+    if (!suggestion) return null;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-7xl h-[90vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <GitCompareArrows className="text-primary"/>
+                        Sugestão de Correção da IA
+                    </DialogTitle>
+                    <DialogDescription>
+                        A IA detetou um problema e sugere a seguinte correção. Compare os mapas e aceite se a correção parecer adequada.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2 mt-2">
+                     <h3 className="text-sm font-semibold text-muted-foreground">Justificação da IA:</h3>
+                     <p className="text-sm p-3 bg-muted rounded-md border">{suggestion.reasoning}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4 flex-1 min-h-0 mt-4">
+                    <div className="flex flex-col gap-2">
+                        <h3 className="font-semibold text-center">Mapa Original</h3>
+                        <Card className="flex-1 overflow-hidden">
+                           <MapTable mapData={suggestion.originalMap} xAxis={suggestion.originalAxes.x} yAxis={suggestion.originalAxes.y} xAxisLabel={suggestion.originalAxes.xLabel} yAxisLabel={suggestion.originalAxes.yLabel} />
+                        </Card>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <h3 className="font-semibold text-center">Mapa Corrigido (Sugestão)</h3>
+                        <Card className="flex-1 overflow-hidden border-primary">
+                           <MapTable mapData={suggestion.correctedMap} xAxis={suggestion.correctedAxes.x} yAxis={suggestion.correctedAxes.y} xAxisLabel={suggestion.correctedAxes.xLabel} yAxisLabel={suggestion.correctedAxes.yLabel} />
+                        </Card>
+                    </div>
+                </div>
+                <DialogFooter className="mt-4">
+                    <Button variant="ghost" onClick={() => onOpenChange(false)}>Rejeitar</Button>
+                    <Button onClick={onAccept}>
+                        <CheckCircle className="mr-2"/>
+                        Aceitar Sugestão
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
