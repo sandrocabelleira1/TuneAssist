@@ -13,6 +13,7 @@ const SuggestMapCorrectionsActionInputSchema = z.object({
     carga: z.number(),
     lambda: z.number(),
     torque: z.number().optional(),
+    potencia: z.number().optional(),
   })),
   aggressiveness: z.number().min(0).max(1),
   eixo_x: z.array(z.number()),

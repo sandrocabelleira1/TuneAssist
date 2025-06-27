@@ -125,7 +125,7 @@ export default function EcuTuningAssistant() {
     const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: number[], y: number[] }>>>({});
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [selectedXdfFromLibrary, setSelectedXdfFromLibrary] = useState<string>('');
-    const [selectedBrandForNewXdf, setSelectedBrandForNewXdf] = useState<string>('');
+    const [selectedBrandForNewXdf, setSelectedBrandForNewXdf] = useState<string>('no-brand');
     const [activeXdfBrand, setActiveXdfBrand] = useState<string>('');
 
 
@@ -134,6 +134,8 @@ export default function EcuTuningAssistant() {
     const [targetLambdaMap, setTargetLambdaMap] = useState<MapData | null>(null);
     const [correctedMap, setCorrectedMap] = useState<MapData | null>(null);
     const [correctionPercentageMap, setCorrectionPercentageMap] = useState<MapData | null>(null);
+    const [torqueMeasuredGrid, setTorqueMeasuredGrid] = useState<MapData | null>(null);
+    const [potenciaMeasuredGrid, setPotenciaMeasuredGrid] = useState<MapData | null>(null);
     const [aggressiveness, setAggressiveness] = useState(20);
     const [isLoading, setIsLoading] = useState(false);
     const [factorySpecs, setFactorySpecs] = useState('');
@@ -246,6 +248,8 @@ export default function EcuTuningAssistant() {
             setCorrectedMap(null);
             setCorrectionPercentageMap(null);
             setTargetLambdaMap(null);
+            setTorqueMeasuredGrid(null);
+            setPotenciaMeasuredGrid(null);
         }
         
         if (invalidCount > 0) {
@@ -267,12 +271,13 @@ export default function EcuTuningAssistant() {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
         setOriginalMap(null); setSortOrder({ x: [], y: [] }); setAxes(null);
         setTestData([]); setTargetLambdaMap(null); setCorrectedMap(null); setCorrectionPercentageMap(null);
+        setTorqueMeasuredGrid(null); setPotenciaMeasuredGrid(null);
         setFactorySpecs('');
         setIsLoading(false);
         setManualSearchModel('');
         setSelectedXdfFromLibrary('');
         setActiveXdfBrand('');
-        setSelectedBrandForNewXdf('');
+        setSelectedBrandForNewXdf('no-brand');
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
         addLog('O estado da sessão foi reiniciado.', 'info');
@@ -290,6 +295,7 @@ export default function EcuTuningAssistant() {
                     setXdfFile(null); setSelectedMapName('');
                     setOriginalMap(null); setAxes(null); setCorrectedMap(null);
                     setCorrectionPercentageMap(null); setTargetLambdaMap(null);
+                    setTorqueMeasuredGrid(null); setPotenciaMeasuredGrid(null);
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
@@ -346,7 +352,8 @@ export default function EcuTuningAssistant() {
             // Reset map-specific state
             setSelectedMapName(''); setOriginalMap(null); setAxes(null);
             setCorrectedMap(null); setCorrectionPercentageMap(null); setTargetLambdaMap(null);
-            
+            setTorqueMeasuredGrid(null); setPotenciaMeasuredGrid(null);
+
             setXdfFile({ name, definitions });
             setSelectedXdfFromLibrary(name);
             setActiveXdfBrand(xdfData.brand || '');
@@ -423,6 +430,8 @@ export default function EcuTuningAssistant() {
             setTargetLambdaMap(lambdaMap);
             setCorrectedMap(null);
             setCorrectionPercentageMap(null);
+            setTorqueMeasuredGrid(null);
+            setPotenciaMeasuredGrid(null);
 
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
         } catch (error) {
@@ -458,6 +467,8 @@ export default function EcuTuningAssistant() {
         if (result.success && result.data) {
             setCorrectedMap(result.data.correctedMap);
             setCorrectionPercentageMap(result.data.correctionPercentageMap);
+            setTorqueMeasuredGrid(result.data.torqueMeasuredGrid);
+            setPotenciaMeasuredGrid(result.data.potenciaMeasuredGrid);
             addLog('Análise IA concluída. Novo mapa gerado.', 'success');
             toast({ title: "Análise Concluída", description: "A IA gerou uma nova sugestão de mapa." });
         } else {
@@ -765,6 +776,8 @@ export default function EcuTuningAssistant() {
                                             <TabsTrigger value="target">Lambda Alvo</TabsTrigger>
                                             <TabsTrigger value="correction" disabled={!correctionPercentageMap}>Correção</TabsTrigger>
                                             <TabsTrigger value="corrected" disabled={!correctedMap}>Mapa Ajustado</TabsTrigger>
+                                            <TabsTrigger value="torque" disabled={!torqueMeasuredGrid}>Torque Medido</TabsTrigger>
+                                            <TabsTrigger value="potencia" disabled={!potenciaMeasuredGrid}>Potência Medida</TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="original" className="mt-4">
                                             {originalMap && <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
@@ -777,6 +790,12 @@ export default function EcuTuningAssistant() {
                                         </TabsContent>
                                         <TabsContent value="corrected" className="mt-4">
                                             {correctedMap && <MapTable mapData={correctedMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
+                                        </TabsContent>
+                                        <TabsContent value="torque" className="mt-4">
+                                            {torqueMeasuredGrid && <MapTable mapData={torqueMeasuredGrid} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel} />}
+                                        </TabsContent>
+                                        <TabsContent value="potencia" className="mt-4">
+                                            {potenciaMeasuredGrid && <MapTable mapData={potenciaMeasuredGrid} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel} />}
                                         </TabsContent>
                                     </Tabs>
                                 ) : (
@@ -821,9 +840,9 @@ export default function EcuTuningAssistant() {
                             <AlertDialogTitle>Não Foi Possível Ler o Ficheiro XDF</AlertDialogTitle>
                             <AlertDialogDescription asChild>
                                 <div className="space-y-4 pt-4">
-                                    <p>
+                                    <div>
                                         A aplicação não conseguiu processar este ficheiro. Isto acontece frequentemente por uma das seguintes razões:
-                                    </p>
+                                    </div>
                                     <ul className="list-disc pl-5 space-y-2 text-sm">
                                         <li>
                                             <strong>Protegido por Senha:</strong> O ficheiro pode estar encriptado. A aplicação não consegue ler XDFs protegidos por senha.
@@ -832,10 +851,10 @@ export default function EcuTuningAssistant() {
                                             <strong>Corrompido ou Inválido:</strong> O ficheiro pode não ser um XDF válido ou pode estar danificado.
                                         </li>
                                     </ul>
-                                    <p className="font-semibold pt-2">Solução Recomendada:</p>
-                                    <p>
+                                    <div className="font-semibold pt-2">Solução Recomendada:</div>
+                                    <div>
                                         Se o ficheiro estiver protegido, por favor, use o software original (como o TunerPro) para o abrir com a senha e, em seguida, guarde uma nova versão <strong>sem</strong> proteção. Depois, carregue o ficheiro desprotegido aqui.
-                                    </p>
+                                    </div>
                                 </div>
                             </AlertDialogDescription>
                         </AlertDialogHeader>
@@ -855,6 +874,7 @@ type FormattedEntry = {
     carga: string;
     lambda: string;
     torque: string;
+    potencia: string;
 }
 
 function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open: boolean, onOpenChange: (open: boolean) => void, onConfirm: (data: TestDataEntry[]) => void, existingData: TestDataEntry[] }) {
@@ -866,7 +886,8 @@ function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open:
             rpm,
             carga: '',
             lambda: '',
-            torque: ''
+            torque: '',
+            potencia: ''
         }));
 
         if (existingData && existingData.length > 0) {
@@ -876,6 +897,7 @@ function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open:
                     initialEntries[index].carga = String(existingEntry.carga);
                     initialEntries[index].lambda = String(existingEntry.lambda);
                     initialEntries[index].torque = String(existingEntry.torque || '');
+                    initialEntries[index].potencia = String(existingEntry.potencia || '');
                 }
             });
         }
@@ -888,7 +910,7 @@ function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open:
         }
     }, [open, generateInitialEntries]);
 
-    const handleUpdate = (index: number, field: 'carga' | 'lambda' | 'torque', value: string) => {
+    const handleUpdate = (index: number, field: 'carga' | 'lambda' | 'torque' | 'potencia', value: string) => {
         const newEntries = [...entries];
         const entry = newEntries[index];
         if (entry) {
@@ -903,7 +925,8 @@ function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open:
             rpm,
             carga: '',
             lambda: '',
-            torque: ''
+            torque: '',
+            potencia: ''
         }));
         setEntries(blankEntries);
     }
@@ -915,38 +938,42 @@ function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open:
                 carga: parseFloat(e.carga),
                 lambda: parseFloat(e.lambda),
                 torque: parseFloat(e.torque),
+                potencia: parseFloat(e.potencia),
             }))
             .filter(e => !isNaN(e.carga) && !isNaN(e.lambda));
         
         onConfirm(validEntries.map(e => ({
             ...e,
-            torque: isNaN(e.torque) ? undefined : e.torque
+            torque: isNaN(e.torque) ? undefined : e.torque,
+            potencia: isNaN(e.potencia) ? undefined : e.potencia
         })));
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl">
+            <DialogContent className="max-w-5xl">
                 <DialogHeader>
                     <DialogTitle>Grelha de Entrada de Dados de Ensaio</DialogTitle>
                     <DialogDescription>
-                        Insira os valores de carga, lambda e torque para cada RPM. Apenas as linhas com valores válidos de Carga e Lambda serão usadas na análise.
+                        Insira os valores medidos para cada RPM. Apenas as linhas com valores válidos de Carga e Lambda serão usadas na análise de correção.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="grid grid-cols-4 gap-x-4 gap-y-2 items-center font-bold px-2 py-1 text-sm">
+                <div className="grid grid-cols-5 gap-x-4 gap-y-2 items-center font-bold px-2 py-1 text-sm">
                     <Label>RPM</Label>
                     <Label>Carga (%)</Label>
                     <Label>Fator Lambda</Label>
                     <Label>Torque (Nm)</Label>
+                    <Label>Potência (CV)</Label>
                 </div>
                 <ScrollArea className="h-[60vh] pr-4">
                     <div className="space-y-2">
                     {entries.map((entry, index) => (
-                        <div key={entry.rpm} className="grid grid-cols-4 gap-x-4 items-center">
+                        <div key={entry.rpm} className="grid grid-cols-5 gap-x-4 items-center">
                             <Input type="number" value={entry.rpm} disabled className="font-semibold text-muted-foreground" />
                             <Input type="number" placeholder="e.g. 80" value={entry.carga} onChange={(e) => handleUpdate(index, 'carga', e.target.value)} />
                             <Input type="number" step="0.01" placeholder="e.g. 1.00" value={entry.lambda} onChange={(e) => handleUpdate(index, 'lambda', e.target.value)} />
                             <Input type="number" step="0.1" placeholder="e.g. 120.5" value={entry.torque} onChange={(e) => handleUpdate(index, 'torque', e.target.value)} />
+                            <Input type="number" step="0.1" placeholder="e.g. 150.0" value={entry.potencia} onChange={(e) => handleUpdate(index, 'potencia', e.target.value)} />
                         </div>
                     ))}
                     </div>
