@@ -38,7 +38,7 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
   const mathNode = findNode(axisNode, 'math', 'MATH');
   const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
-  const label = findNode(axisNode, 'title', 'LABEL')?.textContent || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM');
+  const label = findNode(axisNode, 'title', 'LABEL', 'units')?.textContent || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM');
   
   return { 
       address: (addr !== null && !isNaN(addr)) ? addr : null,
