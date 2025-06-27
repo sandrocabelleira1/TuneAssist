@@ -35,8 +35,8 @@ function MapTable({
   onCellChange,
 }: {
   mapData: MapData;
-  xAxis: number[];
-  yAxis: number[];
+  xAxis: (string | number)[];
+  yAxis: (string | number)[];
   xAxisLabel: string;
   yAxisLabel: string;
   isEditable?: boolean;
@@ -73,14 +73,18 @@ function MapTable({
               <div className="font-semibold text-xs">Eixo X: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
             </th>
             {xAxis.map((x, i) => (
-              <th key={`head-x-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">{x.toFixed(1)}</th>
+              <th key={`head-x-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
+                {typeof x === 'number' ? x.toFixed(1) : x}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {yAxis.map((y, yi) => (
             <tr key={`row-${yi}`}>
-              <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">{Math.round(y)}</td>
+              <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">
+                {typeof y === 'number' ? Math.round(y) : y}
+              </td>
               {(mapData[yi] || []).map((cell, xi) => (
                 <td key={`cell-${yi}-${xi}`} className="p-0 border border-border text-center" style={{ backgroundColor: isCorrection ? getCorrectionColor(cell) : getHeatmapColor(cell, min, max) }}>
                   {isEditable ? (
@@ -121,9 +125,9 @@ export default function EcuTuningAssistant() {
     const [availableMaps, setAvailableMaps] = useState<XDFDefinition[]>([]);
     const [selectedMapName, setSelectedMapName] = useState<string>('');
     const [originalMap, setOriginalMap] = useState<MapData | null>(null);
-    const [sortOrder, setSortOrder] = useState<OriginalSortOrder>({ x: [], y: [] });
-    const [axes, setAxes] = useState<{ x: number[], y: number[], xLabel: string, yLabel: string } | null>(null);
-    const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: number[], y: number[] }>>>({});
+    const [sortOrder, setSortOrder] = useState<OriginalSortOrder | null>(null);
+    const [axes, setAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
+    const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: (string|number)[], y: (string|number)[] }>>>({});
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [selectedXdfFromLibrary, setSelectedXdfFromLibrary] = useState<string>('');
     const [selectedBrandForNewXdf, setSelectedBrandForNewXdf] = useState<string>('no-brand');
@@ -274,7 +278,7 @@ export default function EcuTuningAssistant() {
 
     const resetState = () => {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
-        setOriginalMap(null); setSortOrder({ x: [], y: [] }); setAxes(null);
+        setOriginalMap(null); setSortOrder(null); setAxes(null);
         setTestData([]); setTargetLambdaMap(null); setCorrectedMap(null); setCorrectionPercentageMap(null);
         setTorqueMeasuredGrid(null); setPotenciaMeasuredGrid(null);
         setFactorySpecs('');
@@ -384,8 +388,8 @@ export default function EcuTuningAssistant() {
         if (!binFile || !xdfFile || !name) return;
         
         const definition = availableMaps.find(d => d.name === name);
-        if (!definition) {
-            addLog(`Definição de mapa compatível "${name}" não encontrada.`, 'error');
+        if (!definition || !definition.xAxisDef || !definition.yAxisDef) {
+            addLog(`Definição de mapa compatível "${name}" não encontrada ou está incompleta.`, 'error');
             return;
         }
 
@@ -394,20 +398,29 @@ export default function EcuTuningAssistant() {
             const map = readMapFromBin(binFile.buffer, definition);
 
             let tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef);
-            if (tempEixoX.length === 0) {
-              tempEixoX = Array.from({ length: definition.cols }, (_, i) => i + 1);
+            if (tempEixoX.length !== definition.cols) {
+                addLog(`Eixo X para "${name}" lido incorretamente (comprimento ${tempEixoX.length}, esperado ${definition.cols}). A usar eixos de substituição.`, 'error');
+                tempEixoX = Array.from({ length: definition.cols }, (_, i) => i + 1);
             }
             
             let tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef);
-            if (tempEixoY.length === 0) {
-              tempEixoY = Array.from({ length: definition.rows }, (_, i) => i + 1);
+             if (tempEixoY.length !== definition.rows) {
+                addLog(`Eixo Y para "${name}" lido incorretamente (comprimento ${tempEixoY.length}, esperado ${definition.rows}). A usar eixos de substituição.`, 'error');
+                tempEixoY = Array.from({ length: definition.rows }, (_, i) => i + 1);
             }
 
-            const sortableX = tempEixoX.map((value, index) => ({ value: Number(value), index }));
-            sortableX.sort((a, b) => a.value - b.value);
+            const canSortX = tempEixoX.every(v => typeof v === 'number');
+            const canSortY = tempEixoY.every(v => typeof v === 'number');
+
+            const sortableX = tempEixoX.map((value, index) => ({ value, index }));
+            if (canSortX) {
+              sortableX.sort((a, b) => (a.value as number) - (b.value as number));
+            }
             
-            const sortableY = tempEixoY.map((value, index) => ({ value: Number(value), index }));
-            sortableY.sort((a, b) => a.value - b.value);
+            const sortableY = tempEixoY.map((value, index) => ({ value, index }));
+            if (canSortY) {
+              sortableY.sort((a, b) => (a.value as number) - (b.value as number));
+            }
             
             const sortedMap = sortableY.map(yItem => {
                 const originalRow = map[yItem.index];
@@ -416,8 +429,8 @@ export default function EcuTuningAssistant() {
             });
 
             const sortedAxes = {
-              x: sortableX.map(item => parseFloat(item.value.toFixed(1))),
-              y: sortableY.map(item => Math.round(Number(item.value))),
+              x: sortableX.map(item => item.value),
+              y: sortableY.map(item => item.value),
               xLabel: definition.xAxisDef.label,
               yLabel: definition.yAxisDef.label,
             };
@@ -435,7 +448,7 @@ export default function EcuTuningAssistant() {
             } else {
               setAxes(sortedAxes);
             }
-
+            
             setSortOrder({ x: sortableX, y: sortableY });
             
             const lambdaMap = Array(sortedAxes.y.length).fill(0).map(() => Array(sortedAxes.x.length).fill(1.0));
@@ -447,7 +460,6 @@ export default function EcuTuningAssistant() {
 
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
 
-            // Check for abnormally large values, which might indicate a bad XDF equation.
             const hasLargeValues = sortedMap.flat().some(v => v !== null && Math.abs(v) > 500);
             if (hasLargeValues) {
                 const warningMsg = "O mapa contém valores muito grandes, o que pode indicar uma equação XDF incorreta. Os valores podem não representar unidades reais.";
@@ -479,6 +491,16 @@ export default function EcuTuningAssistant() {
             toast({ variant: 'destructive', title: 'Erro na Análise', description: 'Por favor, carregue um mapa e forneça dados de ensaio.' });
             return;
         }
+        
+        const numericXAxis = axes.x.filter(v => typeof v === 'number') as number[];
+        const numericYAxis = axes.y.filter(v => typeof v === 'number') as number[];
+
+        if(numericXAxis.length !== axes.x.length || numericYAxis.length !== axes.y.length) {
+            addLog('A análise de IA requer eixos puramente numéricos.', 'error');
+            toast({ variant: 'destructive', title: 'Erro de Análise', description: 'Os eixos devem ser numéricos para a análise de IA.' });
+            return;
+        }
+
         setIsLoading(true);
         addLog(`A iniciar análise IA com ${aggressiveness}% de agressividade...`, 'info');
 
@@ -487,8 +509,8 @@ export default function EcuTuningAssistant() {
             lambdaTarget: targetLambdaMap,
             testData,
             aggressiveness: aggressiveness / 100,
-            eixo_x: axes.x,
-            eixo_y: axes.y,
+            eixo_x: numericXAxis,
+            eixo_y: numericYAxis,
             eixo_x_label: axes.xLabel,
             eixo_y_label: axes.yLabel,
             factorySpecs,
@@ -553,12 +575,20 @@ export default function EcuTuningAssistant() {
     
     const handleConfirmAxes = (newAxesData: { y: string, x: string }) => {
         if (!axes || !selectedMapName) return;
-        const newY = newAxesData.y.split(',').map(s => parseFloat(s.trim()));
-        const newX = newAxesData.x.split(',').map(s => parseFloat(s.trim()));
+        
+        const newY = newAxesData.y.split(',').map(s => {
+            const n = parseFloat(s.trim());
+            return isNaN(n) ? s.trim() : n;
+        });
 
-        if (newY.some(isNaN) || newX.some(isNaN) || newY.length !== axes.y.length || newX.length !== axes.x.length) {
-            addLog('Valores dos eixos inválidos. Certifique-se de que são números separados por vírgulas e que correspondem às dimensões originais.', 'error');
-            toast({ variant: 'destructive', title: "Erro nos Eixos", description: "Valores inválidos. Verifique os números e as dimensões." });
+        const newX = newAxesData.x.split(',').map(s => {
+            const n = parseFloat(s.trim());
+            return isNaN(n) ? s.trim() : n;
+        });
+
+        if (newY.length !== axes.y.length || newX.length !== axes.x.length) {
+            addLog('O número de valores dos eixos não corresponde às dimensões originais.', 'error');
+            toast({ variant: 'destructive', title: "Erro nos Eixos", description: "O número de valores deve corresponder às dimensões originais." });
             return;
         }
         
@@ -608,11 +638,21 @@ export default function EcuTuningAssistant() {
         setIsValidatingMap(true);
         addLog(`A iniciar a análise do tipo de mapa para "${selectedMapName}"...`, 'info');
 
+        const numericXAxis = axes.x.filter(v => typeof v === 'number') as number[];
+        const numericYAxis = axes.y.filter(v => typeof v === 'number') as number[];
+
+        if(numericXAxis.length !== axes.x.length || numericYAxis.length !== axes.y.length) {
+            addLog('A validação de mapa requer eixos puramente numéricos.', 'error');
+            toast({ variant: 'destructive', title: 'Falha na Validação', description: 'Os eixos devem ser numéricos para a validação do tipo de mapa.' });
+            setIsValidatingMap(false);
+            return;
+        }
+
         const result = await validateMapType({
             mapName: selectedMapName,
             mapData: originalMap,
-            xAxis: axes.x,
-            yAxis: axes.y,
+            xAxis: numericXAxis,
+            yAxis: numericYAxis,
         });
 
         setIsValidatingMap(false);
@@ -1050,7 +1090,7 @@ function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open:
     );
 }
 
-function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: boolean, onOpenChange: (open: boolean) => void, onConfirm: (axes: { x: string, y: string }) => void, currentAxes: { x: number[], y: number[], xLabel: string, yLabel: string } | null }) {
+function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: boolean, onOpenChange: (open: boolean) => void, onConfirm: (axes: { x: string, y: string }) => void, currentAxes: { x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null }) {
     const [yAxis, setYAxis] = useState('');
     const [xAxis, setXAxis] = useState('');
 
@@ -1132,5 +1172,3 @@ function MapAnalysisResultModal({ open, onOpenChange, result }: { open: boolean,
         </Dialog>
     );
 }
-
-    

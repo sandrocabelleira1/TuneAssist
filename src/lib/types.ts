@@ -5,6 +5,7 @@ export type AxisDefinition = {
   isBigEndian: boolean;
   equation: string;
   label: string;
+  staticLabels?: (string | number)[];
 } | null;
 
 export type XDFDefinition = {
@@ -39,6 +40,6 @@ export type LogMessage = {
 export type MapData = (number | null)[][];
 
 export type OriginalSortOrder = {
-  x: { value: number; index: number }[];
-  y: { value: number; index: number }[];
+  x: { value: string | number; index: number }[];
+  y: { value: string | number; index: number }[];
 };

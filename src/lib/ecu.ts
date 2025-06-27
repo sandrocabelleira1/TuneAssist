@@ -11,45 +11,54 @@ function findNode(parent: Element, ...selectors: string[]): Element | null {
   return null;
 }
 
-// More robust axis parsing to handle different XDF structures
 function parseAxis(axisNode: Element | null): AxisDefinition {
   if (!axisNode) return null;
 
   const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
 
-  // Try to find count from multiple sources, prioritizing <indexcount>
   const indexCountNode = findNode(axisNode, 'indexcount');
   let count = indexCountNode ? parseInt(indexCountNode.textContent || '0', 10) : 0;
   
+  const labelNodes = axisNode.querySelectorAll('label, LABEL');
+  let staticLabels: (string | number)[] | undefined = undefined;
+  if (labelNodes.length > 0) {
+    const labels = Array.from(labelNodes).map(l => l.getAttribute('value') || '');
+    if (labels.length > 0) {
+      if (count === 0) {
+        count = labels.length;
+      }
+      staticLabels = labels.map(l => {
+        const num = parseFloat(l);
+        return isNaN(num) ? l.trim() : num;
+      });
+    }
+  }
+
   if (count === 0 && embeddedData) {
       const rowCount = parseInt(embeddedData.getAttribute('mmedrowcount') || '0');
       const colCount = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
       count = axisNode.id.toLowerCase() === 'y' ? rowCount : colCount;
-       if (count === 0) { // Some XDFs use colcount for Y axis too
+       if (count === 0) {
            count = Math.max(rowCount, colCount);
        }
   }
 
-  // Address can be null if it's a static/calculated axis
   const addrStr = embeddedData?.getAttribute('mmedaddress');
   const addr = addrStr ? parseInt(addrStr, 16) : null;
   
-  // Data size can be in different places
   const dataSizeBitsStr = embeddedData?.getAttribute('mmedelementsizebits') || findNode(axisNode, 'embedinfo > data_size')?.textContent;
-  const dataSizeBits = dataSizeBitsStr ? parseInt(dataSizeBitsStr) : 8; // Default to 8 bits if not found
+  const dataSizeBits = dataSizeBitsStr ? parseInt(dataSizeBitsStr) : 8;
   
   const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
   const mathNode = findNode(axisNode, 'math', 'MATH');
   const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
   
-  // Prioritize <units>, then <title>. Fallback to default if all are missing/empty.
   const label = (
       findNode(axisNode, 'units')?.textContent ||
       findNode(axisNode, 'title')?.textContent ||
       ''
   ).trim();
   
-  // If count still can't be found, it's not a valid axis for our purpose.
   if (count === 0 || isNaN(count)) return null; 
 
   return { 
@@ -58,11 +67,11 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
       dataSize: dataSizeBits / 8, 
       isBigEndian, 
       equation, 
-      label: label || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM') // Final fallback to prevent empty string
+      label: label || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM'),
+      staticLabels
   };
 }
 
-// Stricter XDF parsing
 export function parseXDF(xmlString: string): XDFDefinition[] {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
@@ -77,7 +86,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   }
 
   const definitions: XDFDefinition[] = [];
-  const nameCounts: Record<string, number> = {}; // To track duplicate names
+  const nameCounts: Record<string, number> = {};
 
   for (const table of xdfTables) {
     const originalName = table.querySelector('title')?.textContent || table.getAttribute('name') || 'Tabela Sem Nome';
@@ -113,7 +122,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       if (!xAxisDef || !yAxisDef) continue;
       
-      // Specific fix for common TPS scaling issues based on user feedback
       if (xAxisDef.label.toUpperCase().includes('TPS') && xAxisDef.equation.toUpperCase() === 'X/8') {
           xAxisDef.equation = 'X / 10.23';
       }
@@ -135,7 +143,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
       let equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
 
-      // Specific fix for known incorrect ETV equations
       if (tableName.toUpperCase().includes('ETV') && equation.toUpperCase() === 'X/6.96') {
         equation = 'X / 655.35';
       }
@@ -183,7 +190,11 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   return definitions;
 }
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): number[] {
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): (number | string)[] {
+  if (axisDef?.staticLabels && axisDef.staticLabels.length > 0) {
+      return axisDef.staticLabels;
+  }
+
   if (!axisDef || !binBuffer || axisDef.address === null) {
       if(axisDef) {
         return Array.from({ length: axisDef.count }, (_, i) => i + 1);
@@ -193,18 +204,22 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   
   const view = new DataView(binBuffer);
   const equationFunc = new Function('X', `return ${axisDef.equation}`);
-  const axisData = [];
+  const axisData: number[] = [];
   
   for (let i = 0; i < axisDef.count; i++) {
     const offset = axisDef.address + (i * axisDef.dataSize);
-    let rawValue;
     if (offset + axisDef.dataSize > view.byteLength) {
-        console.error(`Leitura do eixo fora dos limites. Offset: ${offset}`);
+        console.error(`Leitura do eixo fora dos limites. Offset: ${offset}. O eixo pode estar incompleto.`);
+        axisData.push(NaN); 
         continue;
     }
+    let rawValue;
     if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
     else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, !axisDef.isBigEndian);
-    else continue;
+    else {
+        axisData.push(NaN);
+        continue;
+    }
     axisData.push(equationFunc(rawValue));
   }
   return axisData;
@@ -261,11 +276,9 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
     const view = new DataView(newBuffer);
     const inverseEquationFunc = new Function('X', `return ${def.inverseEquation}`);
 
-    // Iterate through the corrected (and sorted) map
     for (let sortedY = 0; sortedY < def.rows; sortedY++) {
         for (let sortedX = 0; sortedX < def.cols; sortedX++) {
             
-            // Find the original position in the BIN file for this sorted cell
             const originalRowIndex = sortOrder.y[sortedY]?.index;
             const originalColIndex = sortOrder.x[sortedX]?.index;
 
@@ -276,12 +289,10 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
 
             const valueToWrite = correctedSortedMap[sortedY]?.[sortedX];
 
-            // If the cell has no value (e.g., it was null in the original and not corrected), skip it.
             if (valueToWrite === null || valueToWrite === undefined || isNaN(valueToWrite)) {
                 continue;
             }
 
-            // Calculate the flat address in the BIN file based on original row/col order
             const offset = def.address + (originalRowIndex * def.binaryWidth + originalColIndex) * def.dataSize;
             
             if (offset + def.dataSize > view.byteLength) {
@@ -296,7 +307,6 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
                 continue;
             }
 
-            // Write the new raw value to the buffer
             if (def.dataSize === 1) {
                 view.setUint8(offset, rawValue);
             } else if (def.dataSize === 2) {
@@ -315,10 +325,3 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
-
-
-    
-
-
-
-
