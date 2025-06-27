@@ -20,15 +20,15 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   // Try to find count from multiple sources, prioritizing <indexcount>
   const indexCountNode = findNode(axisNode, 'indexcount');
   let count = indexCountNode ? parseInt(indexCountNode.textContent || '0', 10) : 0;
+  
   if (count === 0 && embeddedData) {
-      // For a Y axis (id="y"), we'd expect mmedrowcount, but some XDFs are weird and use mmedcolcount for both.
-      // We check both to be safe.
       const rowCount = parseInt(embeddedData.getAttribute('mmedrowcount') || '0');
       const colCount = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
-      count = Math.max(rowCount, colCount);
+      count = axisNode.id.toLowerCase() === 'y' ? rowCount : colCount;
+       if (count === 0) { // Some XDFs use colcount for Y axis too
+           count = Math.max(rowCount, colCount);
+       }
   }
-  // If no count can be found, it's not a valid axis for our purpose.
-  if (count === 0 || isNaN(count)) return null; 
 
   // Address can be null if it's a static/calculated axis
   const addrStr = embeddedData?.getAttribute('mmedaddress');
@@ -46,9 +46,12 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   const label = (
       findNode(axisNode, 'units')?.textContent ||
       findNode(axisNode, 'title')?.textContent ||
-      (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM')
+      ''
   ).trim();
   
+  // If count still can't be found, it's not a valid axis for our purpose.
+  if (count === 0 || isNaN(count)) return null; 
+
   return { 
       address: (addr !== null && !isNaN(addr)) ? addr : null,
       count, 
@@ -89,18 +92,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     }
 
     try {
-      const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
-      const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
-
-      // If either axis is not defined properly, we cannot process this table reliably.
-      if (!xAxisDef || !yAxisDef) {
-          continue;
-      }
-      
-      // Specific fix for common TPS scaling issues based on user feedback
-      if (xAxisDef.label.toUpperCase().includes('TPS') && xAxisDef.equation.toUpperCase() === 'X/8') {
-          xAxisDef.equation = 'X / 10.23';
-      }
+      let xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
+      let yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
 
       const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
       if (!zAxisNode) continue;
@@ -108,13 +101,27 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
       if (!zEmbeddedData) continue;
       
+      const rowsFromZ = parseInt(zEmbeddedData.getAttribute('mmedrowcount') || '0');
+      const colsFromZ = parseInt(zEmbeddedData.getAttribute('mmedcolcount') || '0');
+
+      if (!xAxisDef && colsFromZ > 0) {
+        xAxisDef = { address: null, count: colsFromZ, dataSize: 2, isBigEndian: false, equation: 'X', label: 'Carga' };
+      }
+      if (!yAxisDef && rowsFromZ > 0) {
+        yAxisDef = { address: null, count: rowsFromZ, dataSize: 2, isBigEndian: false, equation: 'X', label: 'RPM' };
+      }
+
+      if (!xAxisDef || !yAxisDef) continue;
+      
+      // Specific fix for common TPS scaling issues based on user feedback
+      if (xAxisDef.label.toUpperCase().includes('TPS') && xAxisDef.equation.toUpperCase() === 'X/8') {
+          xAxisDef.equation = 'X / 10.23';
+      }
+
       const rows = yAxisDef.count;
       const cols = xAxisDef.count;
       
-      // Final sanity check for dimensions
-      if (!rows || !cols) {
-          continue;
-      }
+      if (!rows || !cols) continue;
       
       const addressStr = zEmbeddedData.getAttribute('mmedaddress');
       if (!addressStr) continue;
@@ -138,16 +145,26 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       }
 
       let inverseEquation = '';
-      if (equation.includes('*') && equation.includes('+')) {
-        const parts = equation.replace(/ /g, '').split('+');
-        const factor = parseFloat(parts[0].replace('X*', ''));
-        const offset = parseFloat(parts[1]);
-        inverseEquation = `(X - ${offset}) / ${factor}`;
-      } else if (equation.includes('*') && equation.includes('-')) {
-        const parts = equation.replace(/ /g, '').split('-');
+      if (equation.includes('*') && equation.includes('-')) {
+        const parts = equation.replace(/[()]/g, '').replace(/ /g, '').split('-');
         const factor = parseFloat(parts[0].replace('X*', ''));
         const offset = parseFloat(parts[1]);
         inverseEquation = `(X + ${offset}) / ${factor}`;
+      } else if (equation.includes('*') && equation.includes('+')) {
+        const parts = equation.replace(/[()]/g, '').replace(/ /g, '').split('+');
+        const factor = parseFloat(parts[0].replace('X*', ''));
+        const offset = parseFloat(parts[1]);
+        inverseEquation = `(X - ${offset}) / ${factor}`;
+      } else if (equation.includes('/') && equation.includes('-')) {
+        const parts = equation.replace(/[()]/g, '').replace(/ /g, '').split('-');
+        const factor = parseFloat(parts[0].replace('X/', ''));
+        const offset = parseFloat(parts[1]);
+        inverseEquation = `(X + ${offset}) * ${factor}`;
+      } else if (equation.includes('/') && equation.includes('+')) {
+        const parts = equation.replace(/[()]/g, '').replace(/ /g, '').split('+');
+        const factor = parseFloat(parts[0].replace('X/', ''));
+        const offset = parseFloat(parts[1]);
+        inverseEquation = `(X - ${offset}) * ${factor}`;
       } else if (equation.includes('*')) {
         const factor = parseFloat(equation.replace('X*', ''));
         inverseEquation = `X / ${factor}`;
@@ -167,7 +184,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 }
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): number[] {
-  if (!axisDef || !binBuffer || axisDef.address === null) return [];
+  if (!axisDef || !binBuffer || axisDef.address === null) {
+      if(axisDef) {
+        return Array.from({ length: axisDef.count }, (_, i) => i + 1);
+      }
+      return [];
+  }
   
   const view = new DataView(binBuffer);
   const equationFunc = new Function('X', `return ${axisDef.equation}`);
@@ -296,6 +318,7 @@ export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData,
 
 
     
+
 
 
 
