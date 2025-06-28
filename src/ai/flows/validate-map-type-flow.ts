@@ -27,25 +27,28 @@ const prompt = ai.definePrompt({
   prompt: `Você é um engenheiro de calibração de ECU de classe mundial. A sua tarefa é analisar um mapa de ECU, identificar problemas comuns e, se possível, sugerir correções para as equações de conversão. Responda SEMPRE em Português do Brasil.
 
 **Análise Crítica a Realizar:**
-1.  Analise o \`mapName\` para entender o tipo de mapa esperado.
-2.  Examine os dados nos eixos (\`xAxis\`, \`yAxis\`) e no mapa (\`mapData\`).
-3.  Compare os valores com os padrões esperados:
-    - **Mapa de Acelerador Eletrónico (ETV):** Valores devem ser idealmente 0-100 (percentagem ou graus). Se os valores em \`mapData\` estiverem na casa das centenas ou milhares, a equação está provavelmente errada. Uma correção comum para dados de 16-bit é \`X / 655.35\`.
-    - **Eixo de Posição do Acelerador (TPS):** Valores devem ser 0-100. Se os valores no \`xAxis\` ou \`yAxis\` excederem 100 de forma significativa (ex: 117), a equação está errada. Uma correção comum para dados de 16-bit é \`X / 10.23\`.
-    - **Mapa de Ignição (Avanço de Ponto):** Valores devem ser tipicamente entre -20 e 60. O avanço deve diminuir com o aumento da carga.
-    - **Mapa de Combustível (VE):** Valores tipicamente entre 30 e 120, aumentando com RPM e carga.
-4.  Com base nesta análise, preencha os campos de \`confidence\`, \`suspectedType\` e \`reasoning\`.
-5.  **SUGESTÃO DE CORREÇÃO (O MAIS IMPORTANTE):** Se identificar um erro claro de magnitude (como nos exemplos de ETV ou TPS) e souber uma correção padrão, preencha os campos de sugestão. Se não houver um erro óbvio, deixe os campos de sugestão vazios.
+1.  **Use Pontos de Referência:** Esta é a sua regra mais importante. Um mapa de motor segue um padrão lógico.
+    - A primeira célula (canto superior esquerdo) corresponde a **baixa carga e baixa rotação** (ex: TPS/Carga ~1-10%, RPM ~800-1200).
+    - A última célula (canto inferior direito) corresponde a **alta carga e alta rotação** (ex: TPS/Carga ~100%, RPM máxima do motor).
+    - Use estes pontos de referência para validar se os valores dos eixos (\`xAxis\`, \`yAxis\`) fazem sentido. Se o primeiro valor de RPM for 15000, a equação está errada. Se o primeiro valor de TPS for 50, a equação está errada.
+2.  **Analise o Nome do Mapa:** Use o \`mapName\` para entender o tipo de mapa esperado (Ignição, Combustível, ETV, etc.).
+3.  **Examine os Dados:** Compare os valores em \`mapData\` com os padrões esperados para o tipo de mapa identificado.
+    - **Mapa de Acelerador Eletrónico (ETV):** Valores de dados devem ser 0-100. Se estiverem na casa dos milhares, a equação de dados está errada. Correção comum: \`X / 655.35\`.
+    - **Eixo de Posição do Acelerador (TPS):** Valores de eixo devem ser 0-100. Se excederem 100, a equação do eixo está errada. Correção comum: \`X / 10.23\`.
+    - **Mapa de Ignição (Avanço de Ponto):** Valores de dados devem ser tipicamente entre -20 e 60.
+    - **Mapa de Combustível (VE):** Valores de dados tipicamente entre 30 e 120.
+4.  **Seja Proativo nas Sugestões:** Com base nos pontos de referência e na análise dos dados, preencha os campos de sugestão. Se os eixos estiverem claramente incorretos, **sugira equações para os corrigir**, mesmo que o XDF não tenha nenhuma. Se os dados do mapa estiverem na escala errada, sugira a correção.
     - \`suggestedEquation\`: Para corrigir os dados do mapa (eixo Z).
     - \`suggestedXAxisEquation\`: Para corrigir o eixo X.
     - \`suggestedYAxisEquation\`: Para corrigir o eixo Y.
+5.  **Justifique a sua Conclusão:** No campo \`reasoning\`, explique o seu raciocínio de forma clara, referindo-se aos pontos de referência. Ex: "Confiança Baixa. O nome indica 'ETV', mas os valores estão na casa dos milhares. O primeiro valor do eixo Y é 12000, o que é um valor de RPM irrealista para a marcha lenta. Sugiro correções para os eixos e para os dados."
 
-**Formato da Saída (JSON):**
+**Formato da Saída (JSON OBRIGATÓRIO):**
 - \`confidence\`: "Alta", "Média", ou "Baixa".
 - \`suspectedType\`: O tipo de mapa que você suspeita.
-- \`reasoning\`: Justifique a sua conclusão. Seja explícito sobre a anomalia. Ex: "Confiança Baixa. O nome do mapa é 'ETV', mas os valores estão na casa dos milhares, indicando uma equação de conversão incorreta. Sugiro usar 'X / 655.35'."
-- \`suggestedEquation\`: (Opcional) A nova equação sugerida para o eixo Z.
-- \`suggestedXAxisEquation\`: (Opcional) A nova equação sugerida para o eixo X.
+- \`reasoning\`: Justifique a sua conclusão.
+- \`suggestedEquation\`: (Opcional) A nova equação sugerida para o eixo Z. Ex: "X / 655.35"
+- \`suggestedXAxisEquation\`: (Opcional) A nova equação sugerida para o eixo X. Ex: "X / 10.23"
 - \`suggestedYAxisEquation\`: (Opcional) A nova equação sugerida para o eixo Y.
 
 **Dados de Entrada:**
