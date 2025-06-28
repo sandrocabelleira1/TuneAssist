@@ -530,8 +530,8 @@ export default function EcuTuningAssistant() {
     };
 
     const handleScanForMaps = async () => {
-        if (!binFile) {
-            toast({ variant: 'destructive', title: "Erro", description: "Carregue um ficheiro BIN primeiro." });
+        if (!binFile || !xdfFile) {
+            toast({ variant: 'destructive', title: "Erro", description: "Carregue um ficheiro BIN e XDF primeiro." });
             return;
         }
 
@@ -540,8 +540,9 @@ export default function EcuTuningAssistant() {
 
         const scanBuffer = binFile.buffer.slice(0, 8192);
         const hexData = bufferToHex(scanBuffer);
+        const existingMapNames = xdfFile.definitions.map(d => d.name);
 
-        const result = await findPotentialMaps({ binHexData: hexData });
+        const result = await findPotentialMaps({ binHexData: hexData, existingMapNames });
 
         setIsScanning(false);
 
@@ -661,7 +662,7 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
                                     <Select onValueChange={handleMapSelect} disabled={availableMaps.length === 0} value={selectedMapName}>
-                                        <SelectTrigger><SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : "Selecione um mapa"} /></SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : !xdfFile ? "Carregue ou selecione um XDF" : "Selecione um mapa"} /></SelectTrigger>
                                         <SelectContent>
                                             {availableMaps.map(def => (
                                               <SelectItem key={def.name} value={def.name} className="flex items-center">
@@ -675,7 +676,7 @@ export default function EcuTuningAssistant() {
 
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">3. Ferramentas</h3>
-                                    <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || isScanning}>
+                                    <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || !xdfFile || isScanning}>
                                         {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                                         Procurar Mapas (IA)
                                     </Button>

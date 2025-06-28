@@ -30,10 +30,17 @@ Based on your analysis, generate a list of potential maps. For each map, provide
 
 The provided hex data is from the start of the file. The address of each map should be its offset from the beginning of this data.
 
+If a list of existing map names is provided, do not suggest maps that are already present in that list. Focus on finding new, unidentified maps.
+
 Respond ONLY with a JSON object containing a 'maps' key, which holds an array of map objects matching the specified output schema. Be critical and only identify maps you are confident about.
 
 Hex Data:
 {{{binHexData}}}
+
+{{#if existingMapNames}}
+List of existing maps to ignore:
+{{{json existingMapNames}}}
+{{/if}}
 `,
 });
 

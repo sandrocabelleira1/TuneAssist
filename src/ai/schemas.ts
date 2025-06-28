@@ -42,6 +42,7 @@ export const PotentialMapSchema = z.object({
 
 export const FindMapsInputSchema = z.object({
   binHexData: z.string().describe('A hexadecimal string representing the first 8192 bytes of the BIN file.'),
+  existingMapNames: z.array(z.string()).optional().describe('An optional list of map names that have already been defined in an XDF, to avoid duplication.'),
 });
 
 export const FindMapsOutputSchema = z.object({
