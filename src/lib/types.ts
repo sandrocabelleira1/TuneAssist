@@ -18,6 +18,7 @@ export type XDFDefinition = {
   equation: string;
   xAxisDef: AxisDefinition;
   yAxisDef: AxisDefinition;
+  isPotential?: boolean;
 };
 
 export type LogMessage = {

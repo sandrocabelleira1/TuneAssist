@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDefinition } from '@/lib/types';
 import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum } from '@/lib/ecu';
-import { validateMapType } from '@/app/actions';
+import { validateMapType, findPotentialMaps } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Settings, ShieldCheck, Sparkles, Trash2, Wrench } from 'lucide-react';
+import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Wrench } from 'lucide-react';
 
 // Simplified MapTable to only display data
 function MapTable({
@@ -97,6 +97,12 @@ type AISuggestion = {
     newDefinition: XDFDefinition;
 }
 
+function bufferToHex(buffer: ArrayBuffer) {
+  return [...new Uint8Array(buffer)]
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 // Main Component
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
@@ -118,6 +124,7 @@ export default function EcuTuningAssistant() {
 
 
     // AI state
+    const [isScanning, setIsScanning] = useState(false);
     const [isValidatingMap, setIsValidatingMap] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<{ confidence: string; suspectedType: string; reasoning: string; } | null>(null);
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
@@ -248,6 +255,7 @@ export default function EcuTuningAssistant() {
         setSelectedXdfFromLibrary('');
         setActiveXdfBrand('');
         setSelectedBrandForNewXdf('no-brand');
+        setAvailableMaps([]);
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
         addLog('O estado da sessão foi reiniciado.', 'info');
@@ -264,6 +272,7 @@ export default function EcuTuningAssistant() {
                 if (type === 'bin') {
                     setXdfFile(null); setSelectedMapName('');
                     setOriginalMap(null); setAxes(null);
+                    setAvailableMaps([]);
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
@@ -334,6 +343,7 @@ export default function EcuTuningAssistant() {
         setXdfLibrary({});
         localStorage.removeItem('xdfLibrary');
         setXdfFile(null);
+        setAvailableMaps([]);
         setSelectedXdfFromLibrary('');
         setActiveXdfBrand('');
         addLog('Biblioteca XDF limpa.', 'info');
@@ -341,11 +351,11 @@ export default function EcuTuningAssistant() {
     }
 
     const handleMapSelect = (name: string) => {
-        if (!binFile || !xdfFile || !name) return;
+        if (!binFile || !name) return;
         
         const definition = availableMaps.find(d => d.name === name);
-        if (!definition || !definition.xAxisDef || !definition.yAxisDef) {
-            addLog(`Definição de mapa compatível "${name}" não encontrada ou está incompleta.`, 'error');
+        if (!definition) {
+            addLog(`Definição de mapa "${name}" não encontrada.`, 'error');
             return;
         }
 
@@ -354,14 +364,12 @@ export default function EcuTuningAssistant() {
             const map = readMapFromBin(binFile.buffer, definition);
             const tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef);
             const tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef);
-
-            // The data is read as map[row][col], where row is Y-axis and col is X-axis.
-            // This structure is preserved. The display component will handle the visual transposition.
+            
             const mapAxes = {
               x: tempEixoX,
               y: tempEixoY,
-              xLabel: definition.xAxisDef.label,
-              yLabel: definition.yAxisDef.label,
+              xLabel: definition.xAxisDef?.label || 'Eixo X',
+              yLabel: definition.yAxisDef?.label || 'Eixo Y',
             };
             
             setOriginalMap(map);
@@ -511,6 +519,54 @@ export default function EcuTuningAssistant() {
         setAiSuggestion(null);
     };
 
+    const handleScanForMaps = async () => {
+        if (!binFile) {
+            toast({ variant: 'destructive', title: "Erro", description: "Carregue um ficheiro BIN primeiro." });
+            return;
+        }
+
+        setIsScanning(true);
+        addLog('A iniciar a procura de mapas com IA...', 'info');
+
+        const scanBuffer = binFile.buffer.slice(0, 8192);
+        const hexData = bufferToHex(scanBuffer);
+
+        const result = await findPotentialMaps({ binHexData: hexData });
+
+        setIsScanning(false);
+
+        if (result.success && result.data && result.data.maps.length > 0) {
+            addLog(`IA encontrou ${result.data.maps.length} mapas potenciais.`, 'success');
+
+            const newPotentialMaps: XDFDefinition[] = result.data.maps.map(pMap => ({
+                name: `${pMap.name} (IA)`,
+                address: pMap.address,
+                rows: pMap.rows,
+                cols: pMap.cols,
+                dataSize: pMap.dataSize,
+                isBigEndian: false, // Assume little-endian as a common default
+                equation: 'X',
+                xAxisDef: { address: null, count: pMap.cols, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Coluna' },
+                yAxisDef: { address: null, count: pMap.rows, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Linha' },
+                isPotential: true,
+            }));
+
+            setAvailableMaps(prev => {
+                const existingAddresses = new Set(prev.map(m => m.address));
+                const filteredNewMaps = newPotentialMaps.filter(m => !existingAddresses.has(m.address));
+                return [...prev, ...filteredNewMaps];
+            });
+
+        } else if (result.error) {
+            addLog(`Erro ao procurar mapas: ${result.error}`, 'error');
+            toast({ variant: 'destructive', title: "Falha na Procura", description: result.error });
+        } else {
+            addLog('A IA não encontrou novos mapas potenciais.', 'info');
+            toast({ title: "Procura Concluída", description: "Nenhum novo mapa potencial foi encontrado." });
+        }
+    };
+
+
     return (
         <TooltipProvider>
             <div className="max-w-screen-2xl mx-auto">
@@ -594,18 +650,27 @@ export default function EcuTuningAssistant() {
                                 
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
-                                    <Select onValueChange={handleMapSelect} disabled={!xdfFile || availableMaps.length === 0} value={selectedMapName}>
-                                        <SelectTrigger><SelectValue placeholder={!xdfFile ? "Carregue um ficheiro XDF" : "Selecione um mapa compatível"} /></SelectTrigger>
+                                    <Select onValueChange={handleMapSelect} disabled={availableMaps.length === 0} value={selectedMapName}>
+                                        <SelectTrigger><SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : "Selecione um mapa"} /></SelectTrigger>
                                         <SelectContent>
-                                            {availableMaps.map(def => (<SelectItem key={def.name} value={def.name}>{def.name}</SelectItem>))}
+                                            {availableMaps.map(def => (
+                                              <SelectItem key={def.name} value={def.name} className="flex items-center">
+                                                  {def.isPotential && <Sparkles className="mr-2 h-4 w-4 text-primary shrink-0" />}
+                                                  <span>{def.name}</span>
+                                              </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 </div>
 
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">3. Ferramentas</h3>
+                                    <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || isScanning}>
+                                        {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                                        Procurar Mapas (IA)
+                                    </Button>
                                     <Button variant="outline" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!originalMap}>Editar Eixos</Button>
-                                     <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!originalMap || isValidatingMap}>
+                                     <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!originalMap || isValidatingMap || selectedMapName.includes('(IA)')}>
                                         {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                                         Analisar e Corrigir Mapa
                                     </Button>
@@ -653,7 +718,7 @@ export default function EcuTuningAssistant() {
                                     <div className="h-96 flex flex-col items-center justify-center text-center text-muted-foreground">
                                         <FileUp className="w-16 h-16 mb-4"/>
                                         <p className="font-semibold">Nenhum mapa carregado</p>
-                                        <p className="text-sm">Por favor carregue os ficheiros .BIN e .XDF e selecione um mapa.</p>
+                                        <p className="text-sm">Por favor carregue um ficheiro .BIN e procure por mapas ou carregue um .XDF.</p>
                                     </div>
                                 )}
                             </CardContent>
