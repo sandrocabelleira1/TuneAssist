@@ -4,6 +4,7 @@ export type AxisDefinition = {
   dataSize: number;
   isBigEndian: boolean;
   equation: string;
+  equationVar: string;
   label: string;
   staticLabels?: (string | number)[];
 } | null;
@@ -16,6 +17,7 @@ export type XDFDefinition = {
   dataSize: number;
   isBigEndian: boolean;
   equation: string;
+  equationVar: string;
   xAxisDef: AxisDefinition;
   yAxisDef: AxisDefinition;
   isPotential?: boolean;

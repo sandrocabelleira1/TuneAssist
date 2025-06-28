@@ -16,7 +16,7 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
 
   const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
 
-  const indexCountNode = findNode(axisNode, 'indexcount');
+  const indexCountNode = findNode(axisNode, 'indexcount', 'INDEXCOUNT');
   let count = indexCountNode ? parseInt(indexCountNode.textContent || '0', 10) : 0;
   
   const labelNodes = axisNode.querySelectorAll('label, LABEL');
@@ -44,16 +44,21 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   const addrStr = embeddedData?.getAttribute('mmedaddress');
   const addr = addrStr ? parseInt(addrStr, 16) : null;
   
-  const dataSizeBitsStr = embeddedData?.getAttribute('mmedelementsizebits') || findNode(axisNode, 'embedinfo > data_size')?.textContent;
+  const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
+  const dataSizeNode = embedInfoNode ? findNode(embedInfoNode, 'data_size', 'DATA_SIZE') : null;
+  const dataSizeBitsStr = embeddedData?.getAttribute('mmedelementsizebits') || dataSizeNode?.textContent;
   const dataSizeBits = dataSizeBitsStr ? parseInt(dataSizeBitsStr) : 8;
   
   const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
+  
   const mathNode = findNode(axisNode, 'math', 'MATH');
-  const equation = mathNode?.getAttribute('equation')?.toUpperCase() || 'X';
+  const equation = mathNode?.getAttribute('equation') || 'X';
+  const varNode = findNode(mathNode || axisNode, 'VAR', 'var');
+  const equationVar = varNode?.getAttribute('id') || 'X';
   
   const label = (
-      findNode(axisNode, 'units')?.textContent ||
-      findNode(axisNode, 'title')?.textContent ||
+      findNode(axisNode, 'units', 'UNITS')?.textContent ||
+      findNode(axisNode, 'title', 'TITLE')?.textContent ||
       ''
   ).trim();
   
@@ -65,6 +70,7 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
       dataSize: dataSizeBits / 8, 
       isBigEndian, 
       equation, 
+      equationVar,
       label: label || (axisNode.id.toLowerCase().includes('x') ? 'Carga' : 'RPM'),
       staticLabels
   };
@@ -85,7 +91,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
   const xdfTables = xmlDoc.querySelectorAll('XDFTABLE, table');
   if (xdfTables.length === 0) {
-    throw new Error('Nenhuma definição de <XDFTABLE> ou <table> foi encontrada no ficheiro.');
+    throw new Error('Nenhuma definição de &lt;XDFTABLE&gt; ou &lt;table&gt; foi encontrada no ficheiro.');
   }
 
   const definitions: XDFDefinition[] = [];
@@ -112,7 +118,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       
       const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
       if (!zEmbeddedData) {
-          console.warn(`A tabela "${tableName}" foi ignorada: o eixo Z não tem <embeddeddata>.`);
+          console.warn(`A tabela "${tableName}" foi ignorada: o eixo Z não tem &lt;embeddeddata&gt;.`);
           continue;
       }
       
@@ -128,7 +134,10 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const isBigEndian = zEmbeddedData.getAttribute('bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
-      const equation = mathNode?.getAttribute('equation')?.toUpperCase() || 'X';
+      const equation = mathNode?.getAttribute('equation') || 'X';
+      const varNode = findNode(mathNode || zAxisNode, 'VAR', 'var');
+      const equationVar = varNode?.getAttribute('id') || 'X';
+
 
       if (isNaN(address) || rows === 0 || cols === 0) {
         console.warn(`A tabela "${tableName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
@@ -141,12 +150,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       // Sanity check and inference for axes, as requested.
       if (!xAxisDef || xAxisDef.count !== cols) {
           if (xAxisDef) console.warn(`Contagem do eixo X para "${tableName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${cols}). A inferir o eixo.`);
-          xAxisDef = { address: null, count: cols, dataSize: 2, isBigEndian: false, equation: 'X', label: 'Carga (Inferido)' };
+          xAxisDef = { address: null, count: cols, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'Carga (Inferido)' };
       }
       
       if (!yAxisDef || yAxisDef.count !== rows) {
           if (yAxisDef) console.warn(`Contagem do eixo Y para "${tableName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rows}). A inferir o eixo.`);
-          yAxisDef = { address: null, count: rows, dataSize: 2, isBigEndian: false, equation: 'X', label: 'RPM (Inferido)' };
+          yAxisDef = { address: null, count: rows, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'RPM (Inferido)' };
       }
 
       definitions.push({ 
@@ -157,6 +166,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         dataSize, 
         isBigEndian, 
         equation, 
+        equationVar,
         xAxisDef, 
         yAxisDef 
       });
@@ -184,8 +194,9 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   }
   
   const view = new DataView(binBuffer);
-  // The equation for an axis can reference X, Y, and Z. Provide them all to prevent reference errors.
-  const equationFunc = new Function('X', 'Y', 'Z', `return ${axisDef.equation || 'X'}`);
+  const varId = axisDef.equationVar || 'X';
+  const sanitizedEquation = axisDef.equation.replace(new RegExp('\\b' + varId + '\\b', 'ig'), 'X');
+  const equationFunc = new Function('X', `return ${sanitizedEquation || 'X'}`);
   const axisData: (number | string)[] = [];
   
   for (let i = 0; i < axisDef.count; i++) {
@@ -204,13 +215,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
             axisData.push(NaN);
             continue;
         }
-        // Pass 0 for Y,Z as they are not applicable for axis calculation, but prevent ReferenceError.
-        axisData.push(equationFunc(rawValue, 0, 0));
+        axisData.push(equationFunc(rawValue));
     } catch (e) {
       if (e instanceof ReferenceError) {
         // This is a special case. It's likely the "equation" is actually a text label.
-        // For example, equation="OPEN" or equation="CLOSED" or "Desconhecido".
-        // In this case, we use the equation string itself as the value.
         console.warn(`A equação do eixo "${axisDef.equation}" parece ser uma etiqueta de texto devido a um erro de referência. A usá-la diretamente.`);
         axisData.push(axisDef.equation);
       } else {
@@ -233,16 +241,14 @@ export function readMapFromBin(
 
   const view = new DataView(binBuffer);
   const map: MapData = [];
-  // The map's Z-value equation can depend on:
-  // X: the raw value from the binary for the Z data point.
-  // x: the final calculated value for the X-axis (column).
-  // y: the final calculated value for the Y-axis (row).
-  const equationFunc = new Function('X', 'x', 'y', `return ${def.equation || 'X'}`);
+
+  const zVarId = def.equationVar || 'X';
+  const sanitizedEquation = def.equation.replace(new RegExp('\\b' + zVarId + '\\b', 'ig'), 'Z_RAW');
+  const equationFunc = new Function('Z_RAW', 'x', 'y', `return ${sanitizedEquation || 'Z_RAW'}`);
 
   for (let r = 0; r < def.rows; r++) {
     const row: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
-      // Assuming row-major order. The offset calculation depends on how the data is laid out in the binary.
       const offset = def.address + (r * def.cols + c) * def.dataSize;
       if (offset + def.dataSize > view.byteLength) {
         console.error(`Leitura do mapa fora dos limites. Offset: ${offset}`);
