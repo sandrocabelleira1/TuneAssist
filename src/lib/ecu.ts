@@ -49,7 +49,8 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   
   const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
   const mathNode = findNode(axisNode, 'math', 'MATH');
-  const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+  let equation = mathNode?.getAttribute('equation') || 'X';
+  equation = equation.replace(/x/ig, 'X').replace(/y/ig, 'Y').replace(/z/ig, 'Z');
   
   const label = (
       findNode(axisNode, 'units')?.textContent ||
@@ -128,7 +129,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const isBigEndian = zEmbeddedData.getAttribute('bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
-      const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+      let equation = mathNode?.getAttribute('equation') || 'X';
+      equation = equation.replace(/x/ig, 'X').replace(/y/ig, 'Y').replace(/z/ig, 'Z');
 
       if (isNaN(address) || rows === 0 || cols === 0) {
         console.warn(`A tabela "${tableName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
