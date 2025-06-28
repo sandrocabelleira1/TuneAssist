@@ -49,8 +49,7 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   
   const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
   const mathNode = findNode(axisNode, 'math', 'MATH');
-  let equation = mathNode?.getAttribute('equation') || 'X';
-  equation = equation.replace(/x/ig, 'X').replace(/y/ig, 'Y').replace(/z/ig, 'Z');
+  const equation = mathNode?.getAttribute('equation') || 'X';
   
   const label = (
       findNode(axisNode, 'units')?.textContent ||
@@ -129,8 +128,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const isBigEndian = zEmbeddedData.getAttribute('bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
-      let equation = mathNode?.getAttribute('equation') || 'X';
-      equation = equation.replace(/x/ig, 'X').replace(/y/ig, 'Y').replace(/z/ig, 'Z');
+      const equation = mathNode?.getAttribute('equation') || 'X';
 
       if (isNaN(address) || rows === 0 || cols === 0) {
         console.warn(`A tabela "${tableName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
@@ -186,7 +184,9 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   }
   
   const view = new DataView(binBuffer);
-  const equationFunc = new Function('X', `return ${axisDef.equation || 'X'}`);
+  // The equation for an axis should only use 'X' for the raw value.
+  // We provide x, y, z as dummies to prevent reference errors from malformed equations.
+  const equationFunc = new Function('X', 'x', 'y', 'z', `return ${axisDef.equation || 'X'}`);
   const axisData: number[] = [];
   
   for (let i = 0; i < axisDef.count; i++) {
@@ -205,7 +205,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
             axisData.push(NaN);
             continue;
         }
-        axisData.push(equationFunc(rawValue));
+        // Pass 0 for x,y,z as they are not applicable for axis calculation, but prevent ReferenceError.
+        axisData.push(equationFunc(rawValue, 0, 0, 0));
     } catch (e) {
         console.error(`Erro ao aplicar equação do eixo: ${e}`);
         axisData.push(NaN);
@@ -215,12 +216,21 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
 }
 
 
-export function readMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): MapData {
+export function readMapFromBin(
+    binBuffer: ArrayBuffer,
+    def: XDFDefinition,
+    xAxis: (number | string)[],
+    yAxis: (number | string)[]
+): MapData {
   if (!def || !binBuffer) return [];
 
   const view = new DataView(binBuffer);
   const map: MapData = [];
-  const equationFunc = new Function('X', `return ${def.equation || 'X'}`);
+  // The map's Z-value equation can depend on:
+  // X: the raw value from the binary for the Z data point.
+  // x: the final calculated value for the X-axis (column).
+  // y: the final calculated value for the Y-axis (row).
+  const equationFunc = new Function('X', 'x', 'y', `return ${def.equation || 'X'}`);
 
   for (let r = 0; r < def.rows; r++) {
     const row: (number|null)[] = [];
@@ -240,7 +250,11 @@ export function readMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): MapD
             row.push(null);
             continue;
         }
-        row.push(equationFunc(rawValue));
+
+        const xVal = typeof xAxis[c] === 'number' ? xAxis[c] : 0;
+        const yVal = typeof yAxis[r] === 'number' ? yAxis[r] : 0;
+
+        row.push(equationFunc(rawValue, xVal, yVal));
       } catch(e) {
         console.error(`Erro ao aplicar equação do mapa: ${e}`);
         row.push(null);

@@ -47,32 +47,38 @@ function MapTable({
     return { min: minVal, max: maxVal };
   }, [mapData]);
 
+  // Transpose data for display if needed (Y-axis on top, X-axis on left)
+  const transposedData = yAxis[0] !== undefined ? mapData[0]?.map((_, colIndex) => mapData.map(row => row[colIndex])) : [];
+
+  const displayYAxis = xAxis; // Now displayed horizontally on top
+  const displayXAxis = yAxis; // Now displayed vertically on the left
+
   return (
     <div className="overflow-auto relative h-full">
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
             <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-muted-foreground text-left min-w-[120px]">
-              <div className="font-semibold text-xs">Vertical: <span className="font-normal text-foreground">{yAxisLabel}</span></div>
-              <div className="font-semibold text-xs">Horizontal: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
+              <div className="font-semibold text-xs">Vertical: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
+              <div className="font-semibold text-xs">Horizontal: <span className="font-normal text-foreground">{yAxisLabel}</span></div>
             </th>
-            {xAxis.map((x, i) => (
-              <th key={`head-x-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
-                {typeof x === 'number' ? Math.round(x) : x}
+            {displayYAxis.map((y, i) => (
+              <th key={`head-y-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
+                {typeof y === 'number' ? Math.round(y) : y}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {yAxis.map((y, yi) => (
-            <tr key={`row-${yi}`}>
+          {displayXAxis.map((x, xi) => (
+            <tr key={`row-${xi}`}>
               <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">
-                {typeof y === 'number' ? y.toFixed(1) : y}
+                {typeof x === 'number' ? x.toFixed(1) : x}
               </td>
-              {xAxis.map((_x, xi) => {
-                const cell = mapData[yi]?.[xi];
+              {displayYAxis.map((_y, yi) => {
+                const cell = transposedData[yi]?.[xi];
                 return (
-                  <td key={`cell-${yi}-${xi}`} className="p-0 border border-border text-center" style={{ backgroundColor: getHeatmapColor(cell, min, max) }}>
+                  <td key={`cell-${xi}-${yi}`} className="p-0 border border-border text-center" style={{ backgroundColor: getHeatmapColor(cell, min, max) }}>
                     <div className="w-[60px] h-8 flex items-center justify-center">
                         {(cell === null || isNaN(cell) ? '-' : cell.toFixed(2))}
                     </div>
@@ -86,6 +92,7 @@ function MapTable({
     </div>
   );
 }
+
 
 // Type for AI Correction Suggestion
 type AISuggestion = {
@@ -361,10 +368,12 @@ export default function EcuTuningAssistant() {
 
         setSelectedMapName(name);
         try {
-            const map = readMapFromBin(binFile.buffer, definition);
             const tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef);
             const tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef);
-            
+
+            // The map data MUST be read AFTER the axes are calculated, in case the map equation uses axis values (x, y).
+            const map = readMapFromBin(binFile.buffer, definition, tempEixoX, tempEixoY);
+
             const mapAxes = {
               x: tempEixoX,
               y: tempEixoY,
@@ -468,9 +477,10 @@ export default function EcuTuningAssistant() {
                 if (suggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = suggestedYAxisEquation;
                 
                 try {
-                    const correctedMapPreview = readMapFromBin(binFile.buffer, newDefinition);
                     const correctedXAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
                     const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+
+                    const correctedMapPreview = readMapFromBin(binFile.buffer, newDefinition, correctedXAxisPreview, correctedYAxisPreview);
 
                     const correctedAxesPreview = {
                         x: correctedXAxisPreview,
