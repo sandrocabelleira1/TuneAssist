@@ -424,6 +424,7 @@ export default function EcuTuningAssistant() {
               [binFile.checksum]: { ...(prev[binFile.checksum] || {}), [selectedMapName]: { x: newX, y: newY } }
           }));
           addLog('Eixos personalizados guardados para este ficheiro BIN.', 'success');
+          toast({ title: 'Eixos Personalizados Guardados', description: 'As suas correções foram guardadas e serão aplicadas automaticamente a este mapa.' });
         } else {
           toast({ variant: 'destructive', title: "Erro", description: "Não foi possível guardar os eixos porque nenhum ficheiro BIN está carregado." });
           addLog('Não foi possível guardar os eixos personalizados: ficheiro BIN não carregado.', 'error');
@@ -675,7 +676,7 @@ export default function EcuTuningAssistant() {
                                     </p>
                                     <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!originalMap}>
                                         <GitCompareArrows className="mr-2 h-4 w-4" />
-                                        Editar Eixos Manuais
+                                        Corrigir Eixos do Mapa
                                     </Button>
                                 </div>
 
@@ -785,8 +786,10 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: b
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Editar Eixos da Tabela</DialogTitle>
-                    <DialogDescription>Insira os valores corretos para os eixos, separados por vírgulas.</DialogDescription>
+                    <DialogTitle>Corrigir e Salvar Eixos do Mapa</DialogTitle>
+                    <DialogDescription>
+                        Os eixos corrigidos serão guardados e carregados automaticamente para este mapa neste ficheiro BIN.
+                    </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                     <div>
@@ -800,7 +803,7 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: b
                 </div>
                 <DialogFooter>
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button onClick={() => onConfirm({ y: yAxis, x: xAxis })}>Salvar Eixos</Button>
+                    <Button onClick={() => onConfirm({ y: yAxis, x: xAxis })}>Confirmar e Salvar</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
