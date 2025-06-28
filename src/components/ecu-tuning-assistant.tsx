@@ -669,16 +669,28 @@ export default function EcuTuningAssistant() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <h3 className="font-semibold text-primary">3. Ferramentas</h3>
-                                    <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || !xdfFile || isScanning}>
-                                        {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                                        Procurar Mapas (IA)
+                                    <h3 className="font-semibold text-primary">3. Corrigir Eixos (Opcional)</h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Se os eixos (RPM, Carga, etc.) parecerem incorretos, corrija-os manualmente. A precisão da IA depende de eixos corretos.
+                                    </p>
+                                    <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!originalMap}>
+                                        <GitCompareArrows className="mr-2 h-4 w-4" />
+                                        Editar Eixos Manuais
                                     </Button>
-                                    <Button variant="outline" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!originalMap}>Editar Eixos</Button>
-                                     <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!originalMap || isValidatingMap || selectedMapName.includes('(IA)')}>
-                                        {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                                        Analisar e Corrigir Mapa
-                                    </Button>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h3 className="font-semibold text-primary">4. Análise com IA</h3>
+                                    <div className="space-y-2">
+                                        <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || !xdfFile || isScanning}>
+                                            {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                                            Procurar Mapas Novos
+                                        </Button>
+                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!originalMap || isValidatingMap}>
+                                            {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                                            Analisar e Corrigir Mapa
+                                        </Button>
+                                    </div>
                                 </div>
                                 
                                 <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
