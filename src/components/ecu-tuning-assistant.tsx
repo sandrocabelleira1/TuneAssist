@@ -7,7 +7,6 @@ import { validateMapType, findPotentialMaps } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,7 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Wrench } from 'lucide-react';
+import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 
 // Simplified MapTable to only display data
 function MapTable({
@@ -586,11 +585,6 @@ export default function EcuTuningAssistant() {
                         <Sparkles className="text-primary w-8 h-8"/> TuneAssist AI
                     </h1>
                     <p className="text-lg text-muted-foreground mt-2 absolute top-full">Assistente de Afinação de ECU Potenciado por IA</p>
-                    <Link href="/manuals" passHref className="absolute right-0">
-                        <Button variant="outline">
-                            <Wrench className="mr-2"/> Pesquisar Manuais
-                        </Button>
-                    </Link>
                 </header>
 
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
