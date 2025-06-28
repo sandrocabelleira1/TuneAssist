@@ -60,19 +60,25 @@ export async function suggestMapCorrections(input: SuggestMapCorrectionsInput): 
   return suggestMapCorrectionsFlow(input);
 }
 
-// Internal schema for what we ask the AI to generate. Much simpler and more reliable.
+// The AI now generates the fully interpolated grids directly.
 const AiOutputSchema = z.object({
-    lambdaGridWithMatches: z.array(z.array(z.array(z.number()))).describe('Grelha com listas de valores lambda correspondentes dos dados de ensaio.'),
-    torqueGridWithMatches: z.array(z.array(z.array(z.number()))).describe('Grelha com listas de valores de torque correspondentes dos dados de ensaio.'),
-    potenciaGridWithMatches: z.array(z.array(z.array(z.number()))).describe('Grelha com listas de valores de potência correspondentes dos dados de ensaio.'),
+  lambdaMeasuredGrid: z.array(
+    z.array(z.number().nullable()).describe('A grelha completa de valores Lambda medidos, interpolada para preencher todas as células.')
+  ).describe('Grelha de Lambda medido interpolada.'),
+  torqueMeasuredGrid: z.array(
+    z.array(z.number().nullable()).describe('A grelha completa de valores de Torque medidos, interpolada. Use null se não houver dados de torque.')
+  ).describe('Grelha de Torque medido interpolada.'),
+  potenciaMeasuredGrid: z.array(
+    z.array(z.number().nullable()).describe('A grelha completa de valores de Potência medidos, interpolada. Use null se não houver dados de potência.')
+  ).describe('Grelha de Potência medida interpolada.'),
 });
 
 const prompt = ai.definePrompt({
-    name: 'generateMatchesPrompt',
+    name: 'generateInterpolatedGridPrompt',
     model: googleAI.model('gemini-2.0-flash'),
     input: {schema: SuggestMapCorrectionsInputSchema},
     output: {schema: AiOutputSchema},
-    prompt: `Você é um engenheiro de calibração de motores. A sua tarefa é mapear os dados de ensaio fornecidos para grelhas.
+    prompt: `Você é um engenheiro de calibração de motores de classe mundial. A sua tarefa é pegar em dados de ensaio esparsos e gerar grelhas de dados medidas completas e interpoladas.
 
 **CONTEXTO DOS EIXOS**:
 - O eixo Y do mapa (\`eixo_y\`) corresponde a **{{{eixo_y_label}}}**.
@@ -80,17 +86,11 @@ const prompt = ai.definePrompt({
 - Associe \`rpm\` e \`carga\` dos \`testData\` aos eixos corretos com base nestes rótulos.
 
 **LÓGICA OBRIGATÓRIA**:
-A sua única saída deve ser um objeto JSON contendo \`lambdaGridWithMatches\`, \`torqueGridWithMatches\`, e \`potenciaGridWithMatches\`. Siga estes passos EXATAMENTE:
+A sua única saída deve ser um objeto JSON contendo \`lambdaMeasuredGrid\`, \`torqueMeasuredGrid\`, e \`potenciaMeasuredGrid\`. Siga estes passos EXATAMENTE:
 
-1.  Crie três grelhas: \`lambdaGridWithMatches\`, \`torqueGridWithMatches\`, e \`potenciaGridWithMatches\`. Todas devem ter as mesmas dimensões do \`mapData\` de entrada e cada célula deve ser inicializada com uma **lista vazia** \`[]\`.
-2.  **Itere sobre cada ponto em \`testData\`** (cada objeto com \`rpm\`, \`carga\`, etc.).
-3.  Para cada ponto de ensaio, encontre a célula **única** na grelha que corresponde mais de perto aos valores de \`rpm\` e \`carga\` do ponto. Determine o índice \`y\` mais próximo em \`eixo_y\` e o índice \`x\` mais próximo em \`eixo_x\`.
-4.  Adicione o valor de \`lambda\` desse ponto à lista na coordenada \`[y][x]\` da grelha \`lambdaGridWithMatches\`.
-5.  Se o ponto de ensaio tiver um valor de \`torque\`, adicione-o à lista na mesma coordenada \`[y][x]\` da grelha \`torqueGridWithMatches\`.
-6.  Se o ponto de ensaio tiver um valor de \`potencia\`, adicione-o à lista na mesma coordenada \`[y][x]\` da grelha \`potenciaGridWithMatches\`.
-
-**RESULTADO FINAL**:
-As grelhas resultantes conterão listas de números apenas para as células que corresponderam diretamente aos dados de ensaio, e **listas vazias \`[]\`** para todas as outras. Não faça interpolação. Não adicione valores que não sejam dos \`testData\`.
+1.  **Mapeamento Inicial:** Primeiro, mapeie cada ponto de dados em \`testData\` para a sua célula correspondente mais próxima na grelha (usando \`eixo_x\` e \`eixo_y\`). Para células que recebem múltiplos pontos de dados, **calcule a média** dos valores (lambda, torque, potência). Isto cria grelhas esparsas com valores apenas onde existem dados de ensaio.
+2.  **Interpolação Inteligente:** Agora, o passo mais importante. Preencha TODAS as células vazias nas grelhas de lambda, torque e potência. A interpolação deve ser **inteligente e suave**, como um engenheiro faria. Considere os valores vizinhos e a posição nos eixos RPM e Carga. Os valores devem mudar de forma lógica e gradual, evitando saltos bruscos. O objetivo é criar uma representação completa e realista do comportamento do motor em toda a faixa de operação.
+3.  **Resultado Final:** As grelhas resultantes devem ter as mesmas dimensões do \`mapData\` de entrada e estar totalmente preenchidas com valores numéricos. Use \`null\` apenas se for absolutamente impossível determinar um valor para uma célula (por exemplo, para torque e potência se não forem fornecidos dados de ensaio).
 
 Dados de Entrada:
 mapData: {{{json mapData}}}
@@ -112,37 +112,16 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     outputSchema: SuggestMapCorrectionsOutputSchema,
   },
   async (input) => {
-    // 1. Ask the AI to map test data to lists in grids.
+    // 1. Ask the AI to map AND interpolate test data into full grids.
     const { output: aiOutput } = await prompt(input);
     
-    if (!aiOutput) {
-      throw new Error("A IA não conseguiu mapear os dados de ensaio. Tente novamente.");
+    if (!aiOutput || !aiOutput.lambdaMeasuredGrid) {
+      throw new Error("A IA não conseguiu gerar as grelhas de dados interpoladas. Tente novamente.");
     }
+
+    // 2. The AI's output is now the data we need. No more processing needed.
+    const { lambdaMeasuredGrid, torqueMeasuredGrid, potenciaMeasuredGrid } = aiOutput;
     
-    // Helper function to process match grids from AI output into averaged value grids.
-    const processMatchesGrid = (matchesGrid: (number[] | null)[][]): (number | null)[][] => {
-        return (matchesGrid || []).map(row =>
-            (row || []).map(cellMatches => {
-                if (!cellMatches || cellMatches.length === 0) {
-                    return null; // No matches for this cell.
-                }
-                // Filter out any invalid numbers the AI might have hallucinated
-                const validMatches = cellMatches.filter(val => typeof val === 'number' && !isNaN(val));
-                if (validMatches.length === 0) {
-                    return null;
-                }
-                // Calculate the average of the valid values for the cell.
-                const sum = validMatches.reduce((a, b) => a + b, 0);
-                return sum / validMatches.length;
-            })
-        );
-    };
-
-    // 2. Deterministically build the measured data grids from the AI's output.
-    const lambdaMeasuredGrid = processMatchesGrid(aiOutput.lambdaGridWithMatches || []);
-    const torqueMeasuredGrid = processMatchesGrid(aiOutput.torqueGridWithMatches || []);
-    const potenciaMeasuredGrid = processMatchesGrid(aiOutput.potenciaGridWithMatches || []);
-
     const { mapData, lambdaTarget, aggressiveness } = input;
 
     // 3. Calculate correctionPercentageMap deterministically in code.
@@ -176,8 +155,8 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
       correctedMap,
       correctionPercentageMap,
       lambdaMeasuredGrid,
-      torqueMeasuredGrid,
-      potenciaMeasuredGrid,
+      torqueMeasuredGrid: torqueMeasuredGrid || [], // Ensure it's an array
+      potenciaMeasuredGrid: potenciaMeasuredGrid || [], // Ensure it's an array
     };
   }
 );
