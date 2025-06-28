@@ -6,6 +6,7 @@ import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, saveBinFil
 import { suggestMapCorrections, fetchManualInformation, validateMapType } from '@/app/actions';
 import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -171,6 +172,7 @@ export default function EcuTuningAssistant() {
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
+    const logEndRef = useRef<HTMLDivElement>(null);
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         if (type === 'debug' && !debugMode) return;
@@ -182,6 +184,17 @@ export default function EcuTuningAssistant() {
             type,
         }]);
     }, [debugMode]);
+    
+    const visibleLogs = useMemo(() => {
+        return debugMode ? logs : logs.filter(log => log.type !== 'debug');
+    }, [logs, debugMode]);
+
+    useEffect(() => {
+        setTimeout(() => {
+            logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+    }, [visibleLogs]);
+
 
     // Load custom axes & XDF library from localStorage on component mount
     useEffect(() => {
@@ -733,10 +746,6 @@ export default function EcuTuningAssistant() {
 
     const isAnalyzeDisabled = !originalMap || testData.length === 0 || isLoading;
     const isSaveDisabled = !correctedMap || isLoading;
-    
-    const visibleLogs = useMemo(() => {
-        return debugMode ? logs : logs.filter(log => log.type !== 'debug');
-    }, [logs, debugMode]);
 
     return (
         <TooltipProvider>
@@ -910,15 +919,18 @@ export default function EcuTuningAssistant() {
                                     </div>
                                     <ScrollArea className="h-40 w-full rounded-md border p-2 font-mono text-xs">
                                         {visibleLogs.map(log => (
-                                            <p key={log.id} className="flex gap-2">
-                                                <span className="text-muted-foreground">{log.timestamp}</span>
-                                                <span className={
-                                                    log.type === 'success' ? 'text-green-400' :
-                                                    log.type === 'error' ? 'text-red-400' :
-                                                    log.type === 'debug' ? 'text-yellow-400' : ''
-                                                }>{log.message}</span>
-                                            </p>
+                                            <div key={log.id} className="flex items-start gap-2">
+                                                <span className="text-muted-foreground shrink-0">{log.timestamp}</span>
+                                                <span className={cn('min-w-0 break-words', {
+                                                    'text-green-400': log.type === 'success',
+                                                    'text-red-400': log.type === 'error',
+                                                    'text-yellow-400': log.type === 'debug',
+                                                })}>
+                                                    {log.message}
+                                                </span>
+                                            </div>
                                         ))}
+                                        <div ref={logEndRef} />
                                     </ScrollArea>
                                 </div>
 
