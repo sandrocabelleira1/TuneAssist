@@ -70,42 +70,49 @@ function MapTable({
         <thead>
           <tr className="bg-card">
             <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-muted-foreground text-left min-w-[120px]">
-              <div className="font-semibold text-xs">Eixo Y: <span className="font-normal text-foreground">{yAxisLabel}</span></div>
-              <div className="font-semibold text-xs">Eixo X: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
+              <div className="font-semibold text-xs">Vertical: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
+              <div className="font-semibold text-xs">Horizontal: <span className="font-normal text-foreground">{yAxisLabel}</span></div>
             </th>
-            {xAxis.map((x, i) => (
-              <th key={`head-x-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
-                {typeof x === 'number' ? x.toFixed(1) : x}
+            {/* Top header is now yAxis */}
+            {yAxis.map((y, i) => (
+              <th key={`head-y-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
+                {typeof y === 'number' ? Math.round(y) : y}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {yAxis.map((y, yi) => (
-            <tr key={`row-${yi}`}>
+          {/* Rows are now iterated by xAxis */}
+          {xAxis.map((x, xi) => (
+            <tr key={`row-${xi}`}>
+              {/* Left header is now xAxis values */}
               <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">
-                {typeof y === 'number' ? Math.round(y) : y}
+                {typeof x === 'number' ? x.toFixed(1) : x}
               </td>
-              {(mapData[yi] || []).map((cell, xi) => (
-                <td key={`cell-${yi}-${xi}`} className="p-0 border border-border text-center" style={{ backgroundColor: isCorrection ? getCorrectionColor(cell) : getHeatmapColor(cell, min, max) }}>
-                  {isEditable ? (
-                    <Input
-                      type="number"
-                      step="0.01"
-                      defaultValue={cell?.toFixed(2) || ''}
-                      onBlur={(e) => handleInputChange(e, yi, xi)}
-                      className="w-full h-full text-center bg-transparent border-0 rounded-none focus-visible:ring-1 focus-visible:ring-ring p-1"
-                    />
-                  ) : (
-                    <div className="w-[60px] h-8 flex items-center justify-center">
-                      {isCorrection
-                        ? (cell === null || isNaN(cell) ? '-' : `${cell.toFixed(1)}%`)
-                        : (cell === null || isNaN(cell) ? '-' : cell.toFixed(2))
-                      }
-                    </div>
-                  )}
-                </td>
-              ))}
+              {/* Columns are iterated by yAxis to fill the row */}
+              {yAxis.map((_y, yi) => {
+                const cell = mapData[yi]?.[xi]; // Access data with [y][x] indices
+                return (
+                  <td key={`cell-${xi}-${yi}`} className="p-0 border border-border text-center" style={{ backgroundColor: isCorrection ? getCorrectionColor(cell) : getHeatmapColor(cell, min, max) }}>
+                    {isEditable ? (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        defaultValue={cell?.toFixed(2) || ''}
+                        onBlur={(e) => handleInputChange(e, yi, xi)} // Pass (y, x) indices
+                        className="w-full h-full text-center bg-transparent border-0 rounded-none focus-visible:ring-1 focus-visible:ring-ring p-1"
+                      />
+                    ) : (
+                      <div className="w-[60px] h-8 flex items-center justify-center">
+                        {isCorrection
+                          ? (cell === null || isNaN(cell) ? '-' : `${cell.toFixed(1)}%`)
+                          : (cell === null || isNaN(cell) ? '-' : cell.toFixed(2))
+                        }
+                      </div>
+                    )}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
@@ -1265,25 +1272,29 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                         A IA detetou um problema e sugere a seguinte correção. Compare os mapas e aceite se a correção parecer adequada.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-2 mt-2">
-                     <h3 className="text-sm font-semibold text-muted-foreground">Justificação da IA:</h3>
-                     <p className="text-sm p-3 bg-muted rounded-md border">{suggestion.reasoning}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4 flex-1 min-h-0 mt-4">
-                    <div className="flex flex-col gap-2">
-                        <h3 className="font-semibold text-center">Mapa Original</h3>
-                        <Card className="flex-1 flex flex-col">
-                           <MapTable mapData={suggestion.originalMap} xAxis={suggestion.originalAxes.x} yAxis={suggestion.originalAxes.y} xAxisLabel={suggestion.originalAxes.xLabel} yAxisLabel={suggestion.originalAxes.yLabel} />
-                        </Card>
+                <ScrollArea className="flex-1 -mx-6">
+                    <div className="px-6">
+                        <div className="space-y-2 mt-2">
+                            <h3 className="text-sm font-semibold text-muted-foreground">Justificação da IA:</h3>
+                            <p className="text-sm p-3 bg-muted rounded-md border">{suggestion.reasoning}</p>
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0 mt-4">
+                            <div className="flex flex-col gap-2">
+                                <h3 className="font-semibold text-center">Mapa Original</h3>
+                                <Card className="flex-1 flex flex-col min-h-[40vh]">
+                                <MapTable mapData={suggestion.originalMap} xAxis={suggestion.originalAxes.x} yAxis={suggestion.originalAxes.y} xAxisLabel={suggestion.originalAxes.xLabel} yAxisLabel={suggestion.originalAxes.yLabel} />
+                                </Card>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <h3 className="font-semibold text-center">Mapa Corrigido (Sugestão)</h3>
+                                <Card className="flex-1 flex flex-col border-primary min-h-[40vh]">
+                                <MapTable mapData={suggestion.correctedMap} xAxis={suggestion.correctedAxes.x} yAxis={suggestion.correctedAxes.y} xAxisLabel={suggestion.correctedAxes.xLabel} yAxisLabel={suggestion.correctedAxes.yLabel} />
+                                </Card>
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex flex-col gap-2">
-                        <h3 className="font-semibold text-center">Mapa Corrigido (Sugestão)</h3>
-                        <Card className="flex-1 flex flex-col border-primary">
-                           <MapTable mapData={suggestion.correctedMap} xAxis={suggestion.correctedAxes.x} yAxis={suggestion.correctedAxes.y} xAxisLabel={suggestion.correctedAxes.xLabel} yAxisLabel={suggestion.correctedAxes.yLabel} />
-                        </Card>
-                    </div>
-                </div>
-                <DialogFooter className="mt-4">
+                </ScrollArea>
+                <DialogFooter className="mt-4 pt-4 border-t">
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Rejeitar</Button>
                     <Button onClick={onAccept}>
                         <CheckCircle className="mr-2"/>
