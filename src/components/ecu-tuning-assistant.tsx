@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { LogMessage, XDFDefinition, MapData, TestDataEntry, OriginalSortOrder, AxisDefinition } from '@/lib/types';
-import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, saveBinFile } from '@/lib/ecu';
-import { suggestMapCorrections, fetchManualInformation, validateMapType } from '@/app/actions';
-import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
+import type { LogMessage, XDFDefinition, MapData, AxisDefinition } from '@/lib/types';
+import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum } from '@/lib/ecu';
+import { validateMapType } from '@/app/actions';
+import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import Link from 'next/link';
@@ -13,39 +13,29 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, BrainCircuit, CheckCircle, FileUp, HardDriveDownload, List, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, XCircle, Wrench, GitCompareArrows } from 'lucide-react';
+import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Settings, ShieldCheck, Sparkles, Trash2, Wrench } from 'lucide-react';
 
-// MapTable Component
+// Simplified MapTable to only display data
 function MapTable({
   mapData,
   xAxis,
   yAxis,
   xAxisLabel,
   yAxisLabel,
-  isEditable = false,
-  isCorrection = false,
-  onCellChange,
 }: {
   mapData: MapData;
   xAxis: (string | number)[];
   yAxis: (string | number)[];
   xAxisLabel: string;
   yAxisLabel: string;
-  isEditable?: boolean;
-  isCorrection?: boolean;
-  onCellChange?: (y: number, x: number, value: number) => void;
 }) {
   const { min, max } = useMemo(() => {
-    if (isCorrection) return { min: 0, max: 0 };
     let minVal = Infinity;
     let maxVal = -Infinity;
     mapData.forEach(row => row.forEach(cell => {
@@ -55,14 +45,7 @@ function MapTable({
       }
     }));
     return { min: minVal, max: maxVal };
-  }, [mapData, isCorrection]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, y: number, x: number) => {
-    const value = parseFloat(e.target.value);
-    if (!isNaN(value) && onCellChange) {
-      onCellChange(y, x, value);
-    }
-  };
+  }, [mapData]);
 
   return (
     <div className="overflow-auto relative h-full">
@@ -73,7 +56,6 @@ function MapTable({
               <div className="font-semibold text-xs">Vertical: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
               <div className="font-semibold text-xs">Horizontal: <span className="font-normal text-foreground">{yAxisLabel}</span></div>
             </th>
-            {/* Top header is now yAxis */}
             {yAxis.map((y, i) => (
               <th key={`head-y-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
                 {typeof y === 'number' ? Math.round(y) : y}
@@ -82,34 +64,18 @@ function MapTable({
           </tr>
         </thead>
         <tbody>
-          {/* Rows are now iterated by xAxis */}
           {xAxis.map((x, xi) => (
             <tr key={`row-${xi}`}>
-              {/* Left header is now xAxis values */}
               <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">
                 {typeof x === 'number' ? x.toFixed(1) : x}
               </td>
-              {/* Columns are iterated by yAxis to fill the row */}
               {yAxis.map((_y, yi) => {
-                const cell = mapData[yi]?.[xi]; // Access data with [y][x] indices
+                const cell = mapData[yi]?.[xi];
                 return (
-                  <td key={`cell-${xi}-${yi}`} className="p-0 border border-border text-center" style={{ backgroundColor: isCorrection ? getCorrectionColor(cell) : getHeatmapColor(cell, min, max) }}>
-                    {isEditable ? (
-                      <Input
-                        type="number"
-                        step="0.01"
-                        defaultValue={cell?.toFixed(2) || ''}
-                        onBlur={(e) => handleInputChange(e, yi, xi)} // Pass (y, x) indices
-                        className="w-full h-full text-center bg-transparent border-0 rounded-none focus-visible:ring-1 focus-visible:ring-ring p-1"
-                      />
-                    ) : (
-                      <div className="w-[60px] h-8 flex items-center justify-center">
-                        {isCorrection
-                          ? (cell === null || isNaN(cell) ? '-' : `${cell.toFixed(1)}%`)
-                          : (cell === null || isNaN(cell) ? '-' : cell.toFixed(2))
-                        }
-                      </div>
-                    )}
+                  <td key={`cell-${xi}-${yi}`} className="p-0 border border-border text-center" style={{ backgroundColor: getHeatmapColor(cell, min, max) }}>
+                    <div className="w-[60px] h-8 flex items-center justify-center">
+                        {(cell === null || isNaN(cell) ? '-' : cell.toFixed(2))}
+                    </div>
                   </td>
                 );
               })}
@@ -121,6 +87,7 @@ function MapTable({
   );
 }
 
+// Type for AI Correction Suggestion
 type AISuggestion = {
     reasoning: string;
     originalMap: MapData;
@@ -142,7 +109,6 @@ export default function EcuTuningAssistant() {
     const [availableMaps, setAvailableMaps] = useState<XDFDefinition[]>([]);
     const [selectedMapName, setSelectedMapName] = useState<string>('');
     const [originalMap, setOriginalMap] = useState<MapData | null>(null);
-    const [sortOrder, setSortOrder] = useState<OriginalSortOrder | null>(null);
     const [axes, setAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: (string|number)[], y: (string|number)[] }>>>({});
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
@@ -151,27 +117,14 @@ export default function EcuTuningAssistant() {
     const [activeXdfBrand, setActiveXdfBrand] = useState<string>('');
 
 
-    // AI & Correction state
-    const [testData, setTestData] = useState<TestDataEntry[]>([]);
-    const [targetLambdaMap, setTargetLambdaMap] = useState<MapData | null>(null);
-    const [correctedMap, setCorrectedMap] = useState<MapData | null>(null);
-    const [correctionPercentageMap, setCorrectionPercentageMap] = useState<MapData | null>(null);
-    const [torqueMeasuredGrid, setTorqueMeasuredGrid] = useState<MapData | null>(null);
-    const [potenciaMeasuredGrid, setPotenciaMeasuredGrid] = useState<MapData | null>(null);
-    const [aggressiveness, setAggressiveness] = useState(20);
-    const [isLoading, setIsLoading] = useState(false);
-    const [factorySpecs, setFactorySpecs] = useState('');
-    const [manualSearchModel, setManualSearchModel] = useState('');
-    const [isFetchingManual, setIsFetchingManual] = useState(false);
+    // AI state
     const [isValidatingMap, setIsValidatingMap] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<{ confidence: string; suspectedType: string; reasoning: string; } | null>(null);
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
 
 
     // Modal state
-    const [isLogModalOpen, setIsLogModalOpen] = useState(false);
     const [isAxesModalOpen, setIsAxesModalOpen] = useState(false);
-    const [isChecksumWarningOpen, setIsChecksumWarningOpen] = useState(false);
     const [isXdfErrorModalOpen, setIsXdfErrorModalOpen] = useState(false);
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
@@ -235,7 +188,7 @@ export default function EcuTuningAssistant() {
     // BIN/XDF Compatibility Check
     useEffect(() => {
         if (!binFile || !xdfFile) {
-            setAvailableMaps([]); // Clear maps if files are missing
+            setAvailableMaps([]);
             return;
         }
 
@@ -245,30 +198,15 @@ export default function EcuTuningAssistant() {
 
         xdfFile.definitions.forEach(def => {
             let isInvalid = false;
-
-            // Check main map table
             const mapEndAddr = def.address + (def.rows * def.cols * def.dataSize);
-            if (mapEndAddr > binSize || def.address < 0) {
-                isInvalid = true;
-                addLog(`Definição "${def.name}": Tabela fora dos limites. Endereço: 0x${def.address.toString(16)}, Fim: 0x${mapEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
-            }
-
-            // Check X axis if not already invalid
+            if (mapEndAddr > binSize || def.address < 0) { isInvalid = true; }
             if (!isInvalid && def.xAxisDef?.address !== null) {
                 const axisEndAddr = def.xAxisDef.address + (def.xAxisDef.count * def.xAxisDef.dataSize);
-                if (axisEndAddr > binSize || def.xAxisDef.address < 0) {
-                    isInvalid = true;
-                    addLog(`Definição "${def.name}": Eixo X fora dos limites. Endereço: 0x${def.xAxisDef.address.toString(16)}, Fim: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
-                }
+                if (axisEndAddr > binSize || def.xAxisDef.address < 0) { isInvalid = true; }
             }
-            
-            // Check Y axis if not already invalid
             if (!isInvalid && def.yAxisDef?.address !== null) {
                 const axisEndAddr = def.yAxisDef.address + (def.yAxisDef.count * def.yAxisDef.dataSize);
-                if (axisEndAddr > binSize || def.yAxisDef.address < 0) {
-                    isInvalid = true;
-                    addLog(`Definição "${def.name}": Eixo Y fora dos limites. Endereço: 0x${def.yAxisDef.address.toString(16)}, Fim: 0x${axisEndAddr.toString(16)}, Tamanho do ficheiro: 0x${binSize.toString(16)}`, 'debug');
-                }
+                if (axisEndAddr > binSize || def.yAxisDef.address < 0) { isInvalid = true; }
             }
             
             if (isInvalid) {
@@ -280,16 +218,10 @@ export default function EcuTuningAssistant() {
 
         setAvailableMaps(validDefinitions);
         
-        // Reset map selection if the current one is no longer available
         if (selectedMapName && !validDefinitions.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
             setOriginalMap(null);
             setAxes(null);
-            setCorrectedMap(null);
-            setCorrectionPercentageMap(null);
-            setTargetLambdaMap(null);
-            setTorqueMeasuredGrid(null);
-            setPotenciaMeasuredGrid(null);
         }
         
         if (invalidCount > 0) {
@@ -309,12 +241,10 @@ export default function EcuTuningAssistant() {
 
     const resetState = () => {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
-        setOriginalMap(null); setSortOrder(null); setAxes(null);
-        setTestData([]); setTargetLambdaMap(null); setCorrectedMap(null); setCorrectionPercentageMap(null);
-        setTorqueMeasuredGrid(null); setPotenciaMeasuredGrid(null);
-        setFactorySpecs('');
-        setIsLoading(false);
-        setManualSearchModel('');
+        setOriginalMap(null); setAxes(null);
+        setIsValidatingMap(false);
+        setAiSuggestion(null);
+        setAnalysisResult(null);
         setSelectedXdfFromLibrary('');
         setActiveXdfBrand('');
         setSelectedBrandForNewXdf('no-brand');
@@ -333,9 +263,7 @@ export default function EcuTuningAssistant() {
                 const buffer = event.target?.result as ArrayBuffer;
                 if (type === 'bin') {
                     setXdfFile(null); setSelectedMapName('');
-                    setOriginalMap(null); setAxes(null); setCorrectedMap(null);
-                    setCorrectionPercentageMap(null); setTargetLambdaMap(null);
-                    setTorqueMeasuredGrid(null); setPotenciaMeasuredGrid(null);
+                    setOriginalMap(null); setAxes(null);
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
@@ -356,7 +284,7 @@ export default function EcuTuningAssistant() {
                         const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text, brand: brandValue }};
                         setXdfLibrary(newLibrary);
                         localStorage.setItem('xdfLibrary', JSON.stringify(newLibrary));
-                        setSelectedXdfFromLibrary(file.name); // Also select it in the dropdown
+                        setSelectedXdfFromLibrary(file.name);
                         addLog(`"${file.name}" ${brandValue ? `(Marca: ${brandValue}) `: ''}adicionado à biblioteca XDF.`, 'info');
                     } catch (error) {
                         addLog('Não foi possível guardar o XDF na biblioteca (pode estar cheia).', 'error');
@@ -389,10 +317,7 @@ export default function EcuTuningAssistant() {
             const definitions = parseXDF(xdfData.content);
             if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
             
-            // Reset map-specific state
             setSelectedMapName(''); setOriginalMap(null); setAxes(null);
-            setCorrectedMap(null); setCorrectionPercentageMap(null); setTargetLambdaMap(null);
-            setTorqueMeasuredGrid(null); setPotenciaMeasuredGrid(null);
 
             setXdfFile({ name, definitions });
             setSelectedXdfFromLibrary(name);
@@ -444,14 +369,10 @@ export default function EcuTuningAssistant() {
             const canSortY = tempEixoY.every(v => typeof v === 'number');
 
             const sortableX = tempEixoX.map((value, index) => ({ value, index }));
-            if (canSortX) {
-              sortableX.sort((a, b) => (a.value as number) - (b.value as number));
-            }
+            if (canSortX) { sortableX.sort((a, b) => (a.value as number) - (b.value as number)); }
             
             const sortableY = tempEixoY.map((value, index) => ({ value, index }));
-            if (canSortY) {
-              sortableY.sort((a, b) => (a.value as number) - (b.value as number));
-            }
+            if (canSortY) { sortableY.sort((a, b) => (a.value as number) - (b.value as number)); }
             
             const sortedMap = sortableY.map(yItem => {
                 const originalRow = map[yItem.index];
@@ -480,15 +401,6 @@ export default function EcuTuningAssistant() {
               setAxes(sortedAxes);
             }
             
-            setSortOrder({ x: sortableX, y: sortableY });
-            
-            const lambdaMap = Array(sortedAxes.y.length).fill(0).map(() => Array(sortedAxes.x.length).fill(1.0));
-            setTargetLambdaMap(lambdaMap);
-            setCorrectedMap(null);
-            setCorrectionPercentageMap(null);
-            setTorqueMeasuredGrid(null);
-            setPotenciaMeasuredGrid(null);
-
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
 
         } catch (error) {
@@ -498,106 +410,11 @@ export default function EcuTuningAssistant() {
         }
     };
     
-    const handleAnalyzeClick = async () => {
-        if (!originalMap || !targetLambdaMap || !testData.length || !axes) {
-            addLog('Não há dados suficientes para executar a análise.', 'error');
-            toast({ variant: 'destructive', title: 'Erro na Análise', description: 'Por favor, carregue um mapa e forneça dados de ensaio.' });
-            return;
-        }
-        
-        const numericXAxis = axes.x.filter(v => typeof v === 'number') as number[];
-        const numericYAxis = axes.y.filter(v => typeof v === 'number') as number[];
-
-        if(numericXAxis.length !== axes.x.length || numericYAxis.length !== axes.y.length) {
-            addLog('A análise de IA requer eixos puramente numéricos.', 'error');
-            toast({ variant: 'destructive', title: 'Erro de Análise', description: 'Os eixos devem ser numéricos para a análise de IA.' });
-            return;
-        }
-
-        setIsLoading(true);
-        addLog(`A iniciar análise IA com ${aggressiveness}% de agressividade...`, 'info');
-
-        const input = {
-            mapData: originalMap,
-            lambdaTarget: targetLambdaMap,
-            testData,
-            aggressiveness: aggressiveness / 100,
-            eixo_x: numericXAxis,
-            eixo_y: numericYAxis,
-            eixo_x_label: axes.xLabel,
-            eixo_y_label: axes.yLabel,
-            factorySpecs,
-        };
-
-        const result = await suggestMapCorrections(input);
-        
-        if (result.success && result.data) {
-            setCorrectedMap(result.data.correctedMap);
-            setCorrectionPercentageMap(result.data.correctionPercentageMap);
-            setTorqueMeasuredGrid(result.data.torqueMeasuredGrid);
-            setPotenciaMeasuredGrid(result.data.potenciaMeasuredGrid);
-            addLog('Análise IA concluída. Novo mapa gerado.', 'success');
-            toast({ title: "Análise Concluída", description: "A IA gerou uma nova sugestão de mapa." });
-        } else {
-            addLog(`A análise IA falhou: ${result.error}`, 'error');
-            toast({ variant: 'destructive', title: 'Falha na Análise IA', description: result.error });
-        }
-        setIsLoading(false);
-    };
-
-    const handleSaveClick = () => {
-        if (!correctedMap || !binFile || !xdfFile || !selectedMapName || !sortOrder) {
-            addLog('Não é possível guardar: faltam dados do mapa corrigido ou definições de ficheiro.', 'error');
-            toast({ variant: 'destructive', title: "Erro ao Guardar", description: 'Faltam dados para guardar.' });
-            return;
-        }
-        setIsChecksumWarningOpen(true);
-    };
-
-    const handleConfirmSave = () => {
-        if (!correctedMap || !binFile || !xdfFile || !selectedMapName || !sortOrder) {
-            return;
-        }
-        const definition = xdfFile.definitions.find(d => d.name === selectedMapName);
-        if (!definition) return;
-
-        try {
-            saveBinFile(binFile.buffer, correctedMap, definition, sortOrder);
-            addLog('Novo ficheiro BIN guardado com sucesso.', 'success');
-            toast({ title: 'Ficheiro Guardado', description: 'O seu novo ficheiro BIN foi descarregado.' });
-        } catch (error) {
-            addLog(`Erro ao guardar o ficheiro: ${(error as Error).message}`, 'error');
-            toast({ variant: 'destructive', title: 'Erro ao Guardar', description: (error as Error).message });
-        }
-        setIsChecksumWarningOpen(false);
-    };
-
-
-    const handleLambdaCellChange = (y: number, x: number, value: number) => {
-        if (!targetLambdaMap) return;
-        const newMap = targetLambdaMap.map(row => [...row]);
-        newMap[y][x] = value;
-        setTargetLambdaMap(newMap);
-    };
-
-    const handleConfirmLogData = (data: TestDataEntry[]) => {
-        setTestData(data);
-        setIsLogModalOpen(false);
-        addLog(`Adicionadas ${data.length} pontos de dados de ensaio.`, 'success');
-    };
-    
     const handleConfirmAxes = (newAxesData: { y: string, x: string }) => {
         if (!axes || !selectedMapName) return;
         
-        const newY = newAxesData.y.split(',').map(s => {
-            const n = parseFloat(s.trim());
-            return isNaN(n) ? s.trim() : n;
-        });
-
-        const newX = newAxesData.x.split(',').map(s => {
-            const n = parseFloat(s.trim());
-            return isNaN(n) ? s.trim() : n;
-        });
+        const newY = newAxesData.y.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
+        const newX = newAxesData.x.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
 
         if (newY.length !== axes.y.length || newX.length !== axes.x.length) {
             addLog('O número de valores dos eixos não corresponde às dimensões originais.', 'error');
@@ -611,10 +428,7 @@ export default function EcuTuningAssistant() {
         if (binFile?.checksum) {
           setCustomAxes(prev => ({
               ...prev,
-              [binFile.checksum]: {
-                  ...(prev[binFile.checksum] || {}),
-                  [selectedMapName]: { x: newX, y: newY }
-              }
+              [binFile.checksum]: { ...(prev[binFile.checksum] || {}), [selectedMapName]: { x: newX, y: newY } }
           }));
           addLog('Eixos personalizados guardados para este ficheiro BIN.', 'success');
         } else {
@@ -624,25 +438,6 @@ export default function EcuTuningAssistant() {
         
         setIsAxesModalOpen(false);
         addLog('Eixos do mapa atualizados.', 'success');
-    };
-
-    const handleFetchManualInfo = async () => {
-        if (!manualSearchModel) return;
-        setIsFetchingManual(true);
-        addLog(`A procurar informações do manual para "${manualSearchModel}"...`, 'info');
-
-        const result = await fetchManualInformation({ query: manualSearchModel, brand: activeXdfBrand });
-        
-        if (result.success && result.data) {
-            setFactorySpecs(result.data);
-            addLog('Informações do manual preenchidas automaticamente.', 'success');
-            toast({ title: 'Informações Preenchidas', description: 'O contexto foi preenchido com base nos manuais encontrados.' });
-        } else {
-            addLog(`Falha ao buscar informações do manual: ${result.error}`, 'error');
-            toast({ variant: 'destructive', title: 'Erro na Busca', description: result.error });
-        }
-
-        setIsFetchingManual(false);
     };
 
     const handleValidateMap = async () => {
@@ -671,12 +466,10 @@ export default function EcuTuningAssistant() {
         setIsValidatingMap(false);
 
         if (result.success && result.data) {
-            // Always show the text-based analysis
             setAnalysisResult(result.data);
             setIsAnalysisModalOpen(true);
             addLog(`Análise de tipo de mapa concluída. Confiança: ${result.data.confidence}.`, 'success');
 
-            // If the AI suggested a correction, create a preview and show the suggestion modal
             const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation } = result.data;
             const hasSuggestion = suggestedEquation || suggestedXAxisEquation || suggestedYAxisEquation;
 
@@ -684,14 +477,12 @@ export default function EcuTuningAssistant() {
                 const currentDef = xdfFile.definitions.find(d => d.name === selectedMapName);
                 if (!currentDef) return;
 
-                // Create a temporary, corrected definition in memory
                 const newDefinition = JSON.parse(JSON.stringify(currentDef)) as XDFDefinition;
                 if (suggestedEquation && newDefinition) newDefinition.equation = suggestedEquation;
                 if (suggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = suggestedXAxisEquation;
                 if (suggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = suggestedYAxisEquation;
                 
                 try {
-                    // Use client-side parsers with the new definition to generate a preview
                     const correctedMapPreview = readMapFromBin(binFile.buffer, newDefinition);
                     const correctedXAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
                     const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
@@ -728,11 +519,9 @@ export default function EcuTuningAssistant() {
     const handleAcceptSuggestion = () => {
         if (!aiSuggestion || !xdfFile) return;
 
-        // 1. Update the map view with the corrected data
         setOriginalMap(aiSuggestion.correctedMap);
         setAxes(aiSuggestion.correctedAxes);
         
-        // 2. Update the XDF definition in the component's state
         const newDefinitions = xdfFile.definitions.map(def => 
             def.name === selectedMapName ? aiSuggestion.newDefinition : def
         );
@@ -741,23 +530,9 @@ export default function EcuTuningAssistant() {
         addLog(`Correção da IA aplicada ao mapa "${selectedMapName}".`, 'success');
         toast({ title: 'Correção Aplicada', description: 'O mapa foi atualizado com a sugestão da IA.' });
 
-        // 3. Reset dependent state
-        setCorrectedMap(null);
-        setCorrectionPercentageMap(null);
-        setTargetLambdaMap(Array(aiSuggestion.correctedAxes.y.length).fill(0).map(() => Array(aiSuggestion.correctedAxes.x.length).fill(1.0)));
-
         setIsSuggestionModalOpen(false);
         setAiSuggestion(null);
     };
-
-
-    const isAnalyzeDisabled = !originalMap || testData.length === 0 || isLoading;
-    const isSaveDisabled = !correctedMap || isLoading;
-
-    const isCorrectionDataAvailable = correctionPercentageMap && correctionPercentageMap.length > 0;
-    const isCorrectedDataAvailable = correctedMap && correctedMap.length > 0;
-    const isTorqueDataAvailable = torqueMeasuredGrid && torqueMeasuredGrid.length > 0;
-    const isPotenciaDataAvailable = potenciaMeasuredGrid && potenciaMeasuredGrid.length > 0;
 
     return (
         <TooltipProvider>
@@ -773,7 +548,6 @@ export default function EcuTuningAssistant() {
                         </Button>
                     </Link>
                 </header>
-
 
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
                     {/* Control Panel */}
@@ -793,9 +567,7 @@ export default function EcuTuningAssistant() {
                                             <div className="space-y-1">
                                                 <Label className="text-xs text-muted-foreground">Marca para novo XDF</Label>
                                                 <Select value={selectedBrandForNewXdf} onValueChange={setSelectedBrandForNewXdf}>
-                                                    <SelectTrigger className="h-10">
-                                                        <SelectValue placeholder="Marca..." />
-                                                    </SelectTrigger>
+                                                    <SelectTrigger className="h-10"><SelectValue placeholder="Marca..." /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="no-brand">Nenhuma</SelectItem>
                                                         <SelectItem value="Yamaha">Yamaha</SelectItem>
@@ -824,15 +596,11 @@ export default function EcuTuningAssistant() {
                                                             <Trash2 className="w-3 h-3" />
                                                         </Button>
                                                     </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>Limpar Biblioteca XDF</p>
-                                                    </TooltipContent>
+                                                    <TooltipContent><p>Limpar Biblioteca XDF</p></TooltipContent>
                                                 </Tooltip>
                                             </div>
                                             <Select onValueChange={handleSelectXdfFromLibrary} value={selectedXdfFromLibrary}>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione um XDF..." />
-                                                </SelectTrigger>
+                                                <SelectTrigger><SelectValue placeholder="Selecione um XDF..." /></SelectTrigger>
                                                 <SelectContent>
                                                     {Object.values(xdfLibrary).map(xdf => (
                                                         <SelectItem key={xdf.name} value={xdf.name}>
@@ -850,75 +618,22 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
                                     <Select onValueChange={handleMapSelect} disabled={!xdfFile || availableMaps.length === 0} value={selectedMapName}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={!xdfFile ? "Carregue um ficheiro XDF" : "Selecione um mapa compatível"} />
-                                        </SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder={!xdfFile ? "Carregue um ficheiro XDF" : "Selecione um mapa compatível"} /></SelectTrigger>
                                         <SelectContent>
-                                            {availableMaps.map(def => (
-                                                <SelectItem key={def.name} value={def.name}>{def.name}</SelectItem>
-                                            ))}
+                                            {availableMaps.map(def => (<SelectItem key={def.name} value={def.name}>{def.name}</SelectItem>))}
                                         </SelectContent>
                                     </Select>
-                                     <Button variant="outline" size="sm" className="w-full" onClick={handleValidateMap} disabled={!originalMap || isValidatingMap}>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h3 className="font-semibold text-primary">3. Ferramentas</h3>
+                                    <Button variant="outline" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!originalMap}>Editar Eixos</Button>
+                                     <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!originalMap || isValidatingMap}>
                                         {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                                        Analisar / Corrigir Mapa com IA
+                                        Analisar e Corrigir Mapa
                                     </Button>
                                 </div>
-
-                                <div className="space-y-2">
-                                    <h3 className="font-semibold text-primary">3. Dados & Ações</h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Button variant="outline" onClick={() => setIsAxesModalOpen(true)} disabled={!originalMap}>Editar Eixos</Button>
-                                        <Button variant="outline" onClick={() => setIsLogModalOpen(true)} disabled={!originalMap}><List className="mr-2"/>Dados Ensaio</Button>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <h3 className="font-semibold text-primary">4. Informações de Fábrica (Opcional)</h3>
-                                     <CardDescription className="text-xs pb-2">
-                                        A IA pode buscar o manual do seu veículo para obter contexto, ou pode inserir as informações manualmente.
-                                    </CardDescription>
-                                     <div className="flex items-center gap-2">
-                                        <Input
-                                            placeholder="Marca e modelo, ex: Honda CB 500F"
-                                            value={manualSearchModel}
-                                            onChange={(e) => setManualSearchModel(e.target.value)}
-                                            disabled={!originalMap || isFetchingManual}
-                                            className="flex-grow"
-                                        />
-                                        <Button 
-                                            onClick={handleFetchManualInfo} 
-                                            disabled={!originalMap || !manualSearchModel || isFetchingManual}
-                                            size="icon"
-                                        >
-                                            {isFetchingManual ? <Loader2 className="animate-spin" /> : <Search />}
-                                        </Button>
-                                    </div>
-                                    <Textarea
-                                        placeholder="Informações do manual aparecerão aqui... Ex: Lambda alvo em WOT: 0.88. Limite de RPM: 9000."
-                                        value={factorySpecs}
-                                        onChange={(e) => setFactorySpecs(e.target.value)}
-                                        className="h-24"
-                                        disabled={!originalMap}
-                                    />
-                                </div>
-
-                                <div className="space-y-4">
-                                     <h3 className="font-semibold text-primary">5. Análise IA</h3>
-                                    <div>
-                                        <Label htmlFor="aggressiveness" className="flex justify-between">
-                                            Agressividade <span>{aggressiveness}%</span>
-                                        </Label>
-                                        <Slider id="aggressiveness" value={[aggressiveness]} onValueChange={(val) => setAggressiveness(val[0])} min={1} max={100} step={1} />
-                                    </div>
-                                    <Button onClick={handleAnalyzeClick} disabled={isAnalyzeDisabled} className="w-full">
-                                        {isLoading ? <Loader2 className="mr-2 animate-spin" /> : <BrainCircuit className="mr-2" />}
-                                        Analisar e Gerar Mapa
-                                    </Button>
-                                    <Button onClick={handleSaveClick} disabled={isSaveDisabled} className="w-full" variant="secondary">
-                                        <HardDriveDownload className="mr-2" /> Salvar Novo .BIN
-                                    </Button>
-                                </div>
+                                
                                 <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
 
                                 <div>
@@ -937,15 +652,12 @@ export default function EcuTuningAssistant() {
                                                     'text-green-400': log.type === 'success',
                                                     'text-red-400': log.type === 'error',
                                                     'text-yellow-400': log.type === 'debug',
-                                                })}>
-                                                    {log.message}
-                                                </span>
+                                                })}>{log.message}</span>
                                             </div>
                                         ))}
                                         <div ref={logEndRef} />
                                     </ScrollArea>
                                 </div>
-
                             </CardContent>
                         </Card>
                     </aside>
@@ -959,34 +671,7 @@ export default function EcuTuningAssistant() {
                             </CardHeader>
                             <CardContent>
                                 {originalMap && axes ? (
-                                    <Tabs defaultValue="original">
-                                        <TabsList>
-                                            <TabsTrigger value="original">Original</TabsTrigger>
-                                            <TabsTrigger value="target">Lambda Alvo</TabsTrigger>
-                                            <TabsTrigger value="correction" disabled={!isCorrectionDataAvailable}>Correção</TabsTrigger>
-                                            <TabsTrigger value="corrected" disabled={!isCorrectedDataAvailable}>Mapa Ajustado</TabsTrigger>
-                                            <TabsTrigger value="torque" disabled={!isTorqueDataAvailable}>Torque Medido</TabsTrigger>
-                                            <TabsTrigger value="potencia" disabled={!isPotenciaDataAvailable}>Potência Medida</TabsTrigger>
-                                        </TabsList>
-                                        <TabsContent value="original" className="mt-4">
-                                            {originalMap && <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
-                                        </TabsContent>
-                                        <TabsContent value="target" className="mt-4">
-                                            {targetLambdaMap && <MapTable mapData={targetLambdaMap} xAxis={axes.x} yAxis={axes.y} isEditable onCellChange={handleLambdaCellChange} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
-                                        </TabsContent>
-                                        <TabsContent value="correction" className="mt-4">
-                                            {isCorrectionDataAvailable && <MapTable mapData={correctionPercentageMap} xAxis={axes.x} yAxis={axes.y} isCorrection xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
-                                        </TabsContent>
-                                        <TabsContent value="corrected" className="mt-4">
-                                            {isCorrectedDataAvailable && <MapTable mapData={correctedMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
-                                        </TabsContent>
-                                        <TabsContent value="torque" className="mt-4">
-                                            {isTorqueDataAvailable && <MapTable mapData={torqueMeasuredGrid} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel} />}
-                                        </TabsContent>
-                                        <TabsContent value="potencia" className="mt-4">
-                                            {isPotenciaDataAvailable && <MapTable mapData={potenciaMeasuredGrid} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel} />}
-                                        </TabsContent>
-                                    </Tabs>
+                                    <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>
                                 ) : (
                                     <div className="h-96 flex flex-col items-center justify-center text-center text-muted-foreground">
                                         <FileUp className="w-16 h-16 mb-4"/>
@@ -1000,182 +685,29 @@ export default function EcuTuningAssistant() {
                 </div>
                 
                 {/* Modals */}
-                <ManualLogModal open={isLogModalOpen} onOpenChange={setIsLogModalOpen} onConfirm={handleConfirmLogData} existingData={testData} />
                 <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={axes} />
                 <MapAnalysisResultModal open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen} result={analysisResult} />
                 <MapCorrectionSuggestionModal open={isSuggestionModalOpen} onOpenChange={setIsSuggestionModalOpen} suggestion={aiSuggestion} onAccept={handleAcceptSuggestion} />
-
-                <AlertDialog open={isChecksumWarningOpen} onOpenChange={setIsChecksumWarningOpen}>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Aviso Importante Sobre o Checksum</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                A aplicação vai guardar o ficheiro .BIN com as suas modificações.
-                                <br /><br />
-                                <strong>Atenção:</strong> O <strong>checksum</strong> do ficheiro (a soma de verificação) <strong>não foi corrigido automaticamente</strong>.
-                                Dependendo da sua ECU, pode ser necessário usar uma ferramenta externa para corrigir o checksum antes de programar o ficheiro no veículo.
-                                <br /><br />
-                                Programar um ficheiro com um checksum incorreto pode fazer com que a ECU não o aceite. Deseja continuar?
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleConfirmSave}>Confirmar e Guardar</AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-
                 <AlertDialog open={isXdfErrorModalOpen} onOpenChange={setIsXdfErrorModalOpen}>
                     <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Não Foi Possível Ler o Ficheiro XDF</AlertDialogTitle>
-                            <AlertDialogDescription asChild>
-                                <div className="space-y-4 pt-4">
-                                    <div>
-                                        A aplicação não conseguiu processar este ficheiro. Isto acontece frequentemente por uma das seguintes razões:
-                                    </div>
-                                    <ul className="list-disc pl-5 space-y-2 text-sm">
-                                        <li>
-                                            <strong>Protegido por Senha:</strong> O ficheiro pode estar encriptado. A aplicação não consegue ler XDFs protegidos por senha.
-                                        </li>
-                                        <li>
-                                            <strong>Corrompido ou Inválido:</strong> O ficheiro pode não ser um XDF válido ou pode estar danificado.
-                                        </li>
-                                    </ul>
-                                    <div className="font-semibold pt-2">Solução Recomendada:</div>
-                                    <div>
-                                        Se o ficheiro estiver protegido, por favor, use o software original (como o TunerPro) para o abrir com a senha e, em seguida, guarde uma nova versão <strong>sem</strong> proteção. Depois, carregue o ficheiro desprotegido aqui.
-                                    </div>
-                                </div>
-                            </AlertDialogDescription>
+                        <AlertDialogHeader><AlertDialogTitle>Não Foi Possível Ler o Ficheiro XDF</AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-4 pt-4">
+                                <div>A aplicação não conseguiu processar este ficheiro. Isto acontece frequentemente por uma das seguintes razões:</div>
+                                <ul className="list-disc pl-5 space-y-2 text-sm">
+                                    <li><strong>Protegido por Senha:</strong> O ficheiro pode estar encriptado. A aplicação não consegue ler XDFs protegidos por senha.</li>
+                                    <li><strong>Corrompido ou Inválido:</strong> O ficheiro pode não ser um XDF válido ou pode estar danificado.</li>
+                                </ul>
+                                <div className="font-semibold pt-2">Solução Recomendada:</div>
+                                <div>Se o ficheiro estiver protegido, por favor, use o software original (como o TunerPro) para o abrir com a senha e, em seguida, guarde uma nova versão <strong>sem</strong> proteção. Depois, carregue o ficheiro desprotegido aqui.</div>
+                            </div>
+                        </AlertDialogDescription>
                         </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogAction onClick={() => setIsXdfErrorModalOpen(false)}>Entendido</AlertDialogAction>
-                        </AlertDialogFooter>
+                        <AlertDialogFooter><AlertDialogAction onClick={() => setIsXdfErrorModalOpen(false)}>Entendido</AlertDialogAction></AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
-
             </div>
         </TooltipProvider>
-    );
-}
-
-type FormattedEntry = {
-    rpm: number;
-    carga: string;
-    lambda: string;
-    torque: string;
-    potencia: string;
-}
-
-function ManualLogModal({ open, onOpenChange, onConfirm, existingData }: { open: boolean, onOpenChange: (open: boolean) => void, onConfirm: (data: TestDataEntry[]) => void, existingData: TestDataEntry[] }) {
-    const [entries, setEntries] = useState<FormattedEntry[]>([]);
-    
-    const generateInitialEntries = useCallback(() => {
-        const rpms = Array.from({ length: (17000 - 1000) / 500 + 1 }, (_, i) => 1000 + i * 500);
-        let initialEntries: FormattedEntry[] = rpms.map(rpm => ({
-            rpm,
-            carga: '',
-            lambda: '',
-            torque: '',
-            potencia: ''
-        }));
-
-        if (existingData && existingData.length > 0) {
-            existingData.forEach(existingEntry => {
-                const index = initialEntries.findIndex(e => e.rpm === existingEntry.rpm);
-                if (index !== -1) {
-                    initialEntries[index].carga = String(existingEntry.carga);
-                    initialEntries[index].lambda = String(existingEntry.lambda);
-                    initialEntries[index].torque = String(existingEntry.torque || '');
-                    initialEntries[index].potencia = String(existingEntry.potencia || '');
-                }
-            });
-        }
-        return initialEntries;
-    }, [existingData]);
-    
-    useEffect(() => {
-        if (open) {
-            setEntries(generateInitialEntries());
-        }
-    }, [open, generateInitialEntries]);
-
-    const handleUpdate = (index: number, field: 'carga' | 'lambda' | 'torque' | 'potencia', value: string) => {
-        const newEntries = [...entries];
-        const entry = newEntries[index];
-        if (entry) {
-            entry[field] = value;
-            setEntries(newEntries);
-        }
-    };
-    
-    const handleClear = () => {
-        const rpms = Array.from({ length: (17000 - 1000) / 500 + 1 }, (_, i) => 1000 + i * 500);
-        const blankEntries: FormattedEntry[] = rpms.map(rpm => ({
-            rpm,
-            carga: '',
-            lambda: '',
-            torque: '',
-            potencia: ''
-        }));
-        setEntries(blankEntries);
-    }
-
-    const handleConfirm = () => {
-        const validEntries = entries
-            .map(e => ({
-                rpm: e.rpm,
-                carga: parseFloat(e.carga),
-                lambda: parseFloat(e.lambda),
-                torque: parseFloat(e.torque),
-                potencia: parseFloat(e.potencia),
-            }))
-            .filter(e => !isNaN(e.carga) && !isNaN(e.lambda));
-        
-        onConfirm(validEntries.map(e => ({
-            ...e,
-            torque: isNaN(e.torque) ? undefined : e.torque,
-            potencia: isNaN(e.potencia) ? undefined : e.potencia
-        })));
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-5xl">
-                <DialogHeader>
-                    <DialogTitle>Grelha de Entrada de Dados de Ensaio</DialogTitle>
-                    <DialogDescription>
-                        Insira os valores medidos para cada RPM. Apenas as linhas com valores válidos de Carga e Lambda serão usadas na análise de correção.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="grid grid-cols-5 gap-x-4 gap-y-2 items-center font-bold px-2 py-1 text-sm">
-                    <Label>RPM</Label>
-                    <Label>Carga (%)</Label>
-                    <Label>Fator Lambda</Label>
-                    <Label>Torque (Nm)</Label>
-                    <Label>Potência (CV)</Label>
-                </div>
-                <ScrollArea className="h-[60vh] pr-4">
-                    <div className="space-y-2">
-                    {entries.map((entry, index) => (
-                        <div key={entry.rpm} className="grid grid-cols-5 gap-x-4 items-center">
-                            <Input type="number" value={entry.rpm} disabled className="font-semibold text-muted-foreground" />
-                            <Input type="number" placeholder="e.g. 80" value={entry.carga} onChange={(e) => handleUpdate(index, 'carga', e.target.value)} />
-                            <Input type="number" step="0.01" placeholder="e.g. 1.00" value={entry.lambda} onChange={(e) => handleUpdate(index, 'lambda', e.target.value)} />
-                            <Input type="number" step="0.1" placeholder="e.g. 120.5" value={entry.torque} onChange={(e) => handleUpdate(index, 'torque', e.target.value)} />
-                            <Input type="number" step="0.1" placeholder="e.g. 150.0" value={entry.potencia} onChange={(e) => handleUpdate(index, 'potencia', e.target.value)} />
-                        </div>
-                    ))}
-                    </div>
-                </ScrollArea>
-                <DialogFooter>
-                    <Button variant="outline" onClick={handleClear}>Limpar Dados</Button>
-                    <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button onClick={handleConfirm}>Concluir e Usar Dados</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     );
 }
 

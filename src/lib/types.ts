@@ -17,17 +17,8 @@ export type XDFDefinition = {
   dataSize: number;
   isBigEndian: boolean;
   equation: string;
-  inverseEquation: string;
   xAxisDef: AxisDefinition;
   yAxisDef: AxisDefinition;
-};
-
-export type TestDataEntry = {
-  rpm: number;
-  carga: number;
-  lambda: number;
-  torque?: number;
-  potencia?: number;
 };
 
 export type LogMessage = {

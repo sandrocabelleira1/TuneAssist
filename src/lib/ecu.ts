@@ -1,7 +1,7 @@
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
-import type { XDFDefinition, AxisDefinition, MapData, OriginalSortOrder } from './types';
+import type { XDFDefinition, AxisDefinition, MapData } from './types';
 
 function findNode(parent: Element, ...selectors: string[]): Element | null {
   for (const selector of selectors) {
@@ -151,38 +151,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           continue;
       }
 
-      let inverseEquation = '';
-      if (equation.includes('*') && equation.includes('-')) {
-        const parts = equation.replace(/[()]/g, '').replace(/ /g, '').split('-');
-        const factor = parseFloat(parts[0].replace('X*', ''));
-        const offset = parseFloat(parts[1]);
-        inverseEquation = `(X + ${offset}) / ${factor}`;
-      } else if (equation.includes('*') && equation.includes('+')) {
-        const parts = equation.replace(/[()]/g, '').replace(/ /g, '').split('+');
-        const factor = parseFloat(parts[0].replace('X*', ''));
-        const offset = parseFloat(parts[1]);
-        inverseEquation = `(X - ${offset}) / ${factor}`;
-      } else if (equation.includes('/') && equation.includes('-')) {
-        const parts = equation.replace(/[()]/g, '').replace(/ /g, '').split('-');
-        const factor = parseFloat(parts[0].replace('X/', ''));
-        const offset = parseFloat(parts[1]);
-        inverseEquation = `(X + ${offset}) * ${factor}`;
-      } else if (equation.includes('/') && equation.includes('+')) {
-        const parts = equation.replace(/[()]/g, '').replace(/ /g, '').split('+');
-        const factor = parseFloat(parts[0].replace('X/', ''));
-        const offset = parseFloat(parts[1]);
-        inverseEquation = `(X - ${offset}) * ${factor}`;
-      } else if (equation.includes('*')) {
-        const factor = parseFloat(equation.replace('X*', ''));
-        inverseEquation = `X / ${factor}`;
-      } else if (equation.includes('/')) {
-        const factor = parseFloat(equation.replace('X/', ''));
-        inverseEquation = `X * ${factor}`;
-      } else if (equation.trim().toUpperCase() === 'X') {
-        inverseEquation = 'X';
-      }
-
-      definitions.push({ name: tableName, address, rows, cols, binaryWidth, dataSize: dataSize / 8, isBigEndian, equation, inverseEquation, xAxisDef, yAxisDef });
+      definitions.push({ name: tableName, address, rows, cols, binaryWidth, dataSize: dataSize / 8, isBigEndian, equation, xAxisDef, yAxisDef });
     } catch (e) {
       console.error(`Erro ao analisar a tabela "${tableName}": ${(e as Error).message}`);
     }
@@ -262,66 +231,4 @@ export function generateChecksum(buffer: ArrayBuffer): string {
         checksum = (checksum + dataView.getUint8(i)) % 65536;
     }
     return checksum.toString(16);
-}
-
-export function saveBinFile(binBuffer: ArrayBuffer, correctedSortedMap: MapData, def: XDFDefinition, sortOrder: OriginalSortOrder) {
-    if (!correctedSortedMap || !binBuffer || !def) {
-        throw new Error('Faltam dados para guardar o ficheiro BIN.');
-    }
-    if (!def.inverseEquation) {
-        throw new Error('Não é possível guardar: a equação inversa não é suportada ou definida para este mapa.');
-    }
-
-    const newBuffer = binBuffer.slice(0);
-    const view = new DataView(newBuffer);
-    const inverseEquationFunc = new Function('X', `return ${def.inverseEquation}`);
-
-    for (let sortedY = 0; sortedY < def.rows; sortedY++) {
-        for (let sortedX = 0; sortedX < def.cols; sortedX++) {
-            
-            const originalRowIndex = sortOrder.y[sortedY]?.index;
-            const originalColIndex = sortOrder.x[sortedX]?.index;
-
-            if (originalRowIndex === undefined || originalColIndex === undefined) {
-                console.warn(`Could not find original index for sorted cell [${sortedY}, ${sortedX}]. Skipping.`);
-                continue;
-            }
-
-            const valueToWrite = correctedSortedMap[sortedY]?.[sortedX];
-
-            if (valueToWrite === null || valueToWrite === undefined || isNaN(valueToWrite)) {
-                continue;
-            }
-
-            const offset = def.address + (originalRowIndex * def.binaryWidth + originalColIndex) * def.dataSize;
-            
-            if (offset + def.dataSize > view.byteLength) {
-                console.error(`Escrita do mapa fora dos limites. Offset: ${offset}`);
-                continue;
-            }
-
-            const rawValue = Math.round(inverseEquationFunc(valueToWrite));
-
-            if (isNaN(rawValue)) {
-                console.warn(`Calculated raw value is NaN for value ${valueToWrite}. Skipping cell.`);
-                continue;
-            }
-
-            if (def.dataSize === 1) {
-                view.setUint8(offset, rawValue);
-            } else if (def.dataSize === 2) {
-                view.setUint16(offset, rawValue, !def.isBigEndian);
-            }
-        }
-    }
-    
-    const blob = new Blob([newBuffer], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'TuneAssist_AI_afinado.bin';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
 }
