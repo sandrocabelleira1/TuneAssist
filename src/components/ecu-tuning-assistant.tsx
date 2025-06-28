@@ -754,6 +754,11 @@ export default function EcuTuningAssistant() {
     const isAnalyzeDisabled = !originalMap || testData.length === 0 || isLoading;
     const isSaveDisabled = !correctedMap || isLoading;
 
+    const isCorrectionDataAvailable = correctionPercentageMap && correctionPercentageMap.length > 0;
+    const isCorrectedDataAvailable = correctedMap && correctedMap.length > 0;
+    const isTorqueDataAvailable = torqueMeasuredGrid && torqueMeasuredGrid.length > 0;
+    const isPotenciaDataAvailable = potenciaMeasuredGrid && potenciaMeasuredGrid.length > 0;
+
     return (
         <TooltipProvider>
             <div className="max-w-screen-2xl mx-auto">
@@ -958,10 +963,10 @@ export default function EcuTuningAssistant() {
                                         <TabsList>
                                             <TabsTrigger value="original">Original</TabsTrigger>
                                             <TabsTrigger value="target">Lambda Alvo</TabsTrigger>
-                                            <TabsTrigger value="correction" disabled={!correctionPercentageMap}>Correção</TabsTrigger>
-                                            <TabsTrigger value="corrected" disabled={!correctedMap}>Mapa Ajustado</TabsTrigger>
-                                            <TabsTrigger value="torque" disabled={!torqueMeasuredGrid}>Torque Medido</TabsTrigger>
-                                            <TabsTrigger value="potencia" disabled={!potenciaMeasuredGrid}>Potência Medida</TabsTrigger>
+                                            <TabsTrigger value="correction" disabled={!isCorrectionDataAvailable}>Correção</TabsTrigger>
+                                            <TabsTrigger value="corrected" disabled={!isCorrectedDataAvailable}>Mapa Ajustado</TabsTrigger>
+                                            <TabsTrigger value="torque" disabled={!isTorqueDataAvailable}>Torque Medido</TabsTrigger>
+                                            <TabsTrigger value="potencia" disabled={!isPotenciaDataAvailable}>Potência Medida</TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="original" className="mt-4">
                                             {originalMap && <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
@@ -970,16 +975,16 @@ export default function EcuTuningAssistant() {
                                             {targetLambdaMap && <MapTable mapData={targetLambdaMap} xAxis={axes.x} yAxis={axes.y} isEditable onCellChange={handleLambdaCellChange} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
                                         </TabsContent>
                                         <TabsContent value="correction" className="mt-4">
-                                            {correctionPercentageMap && <MapTable mapData={correctionPercentageMap} xAxis={axes.x} yAxis={axes.y} isCorrection xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
+                                            {isCorrectionDataAvailable && <MapTable mapData={correctionPercentageMap} xAxis={axes.x} yAxis={axes.y} isCorrection xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
                                         </TabsContent>
                                         <TabsContent value="corrected" className="mt-4">
-                                            {correctedMap && <MapTable mapData={correctedMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
+                                            {isCorrectedDataAvailable && <MapTable mapData={correctedMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>}
                                         </TabsContent>
                                         <TabsContent value="torque" className="mt-4">
-                                            {torqueMeasuredGrid && <MapTable mapData={torqueMeasuredGrid} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel} />}
+                                            {isTorqueDataAvailable && <MapTable mapData={torqueMeasuredGrid} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel} />}
                                         </TabsContent>
                                         <TabsContent value="potencia" className="mt-4">
-                                            {potenciaMeasuredGrid && <MapTable mapData={potenciaMeasuredGrid} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel} />}
+                                            {isPotenciaDataAvailable && <MapTable mapData={potenciaMeasuredGrid} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel} />}
                                         </TabsContent>
                                     </Tabs>
                                 ) : (
