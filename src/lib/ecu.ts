@@ -57,8 +57,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
                         count: count > 0 ? count : sourceCount, // Prefer local count, fallback to linked table's count
                         dataSize: sourceDataSize,
                         isBigEndian: sourceIsBigEndian,
-                        equation: sourceEquation,
-                        equationVar: sourceEquationVar,
+                        equation: sourceEquation.replace(new RegExp(`\\b${sourceEquationVar}\\b`, 'ig'), 'X'),
+                        equationVar: 'X',
                         label: localLabel || (axisNode.id.toLowerCase().includes('x') ? 'Carga' : 'RPM'),
                     };
                 }
@@ -101,8 +101,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         count, 
         dataSize: dataSizeBits / 8, 
         isBigEndian, 
-        equation, 
-        equationVar,
+        equation: equation.replace(new RegExp(`\\b${equationVar}\\b`, 'ig'), 'X'),
+        equationVar: 'X',
         label: localLabel || (axisNode.id.toLowerCase().includes('x') ? 'Carga' : 'RPM'),
     };
 }
@@ -124,11 +124,18 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     throw new Error('Nenhuma definição de <XDFTABLE> ou <table> foi encontrada no ficheiro.');
   }
   
-  // First pass: create a lookup map of all tables by their uniqueid
+  // First pass: create a lookup map of all tables by their uniqueid for linked axis resolution.
   const tableMap = new Map<string, Element>();
   for (const table of xdfTables) {
       const uniqueid = table.getAttribute('uniqueid');
-      if (uniqueid) {
+      // Only add tables with a valid, non-default ID to the map.
+      // Ignore "0x0" or "0" as they are likely default/null values and not unique.
+      if (uniqueid && uniqueid !== '0x0' && uniqueid !== '0') {
+          if (tableMap.has(uniqueid)) {
+            // Warn about duplicates but still add, allowing the last one to be used.
+            // This mirrors some tools' behavior but is not ideal.
+            console.warn(`ID único de tabela duplicado encontrado: ${uniqueid}. A ligação a esta tabela pode ser ambígua.`);
+          }
           tableMap.set(uniqueid, table);
       }
   }
@@ -139,32 +146,28 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   // Second pass: parse each table definition
   for (const table of xdfTables) {
     const originalName = table.querySelector('title')?.textContent || table.getAttribute('name') || 'Tabela Sem Nome';
-    if (originalName === 'Tabela Sem Nome') continue;
     
-    let tableName = originalName;
-    if (nameCounts[originalName]) {
-        nameCounts[originalName]++;
-        tableName = `${originalName} (${nameCounts[originalName]})`;
-    } else {
-        nameCounts[originalName] = 1;
-    }
-
+    // Add a try-catch block to make parsing robust. One bad table shouldn't stop the whole process.
     try {
+      if (originalName === 'Tabela Sem Nome') {
+          continue;
+      }
+
       const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'zaxis');
       if (!zAxisNode) {
-          console.warn(`A tabela "${tableName}" foi ignorada: não foi possível encontrar a definição do eixo Z.`);
+          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar a definição do eixo Z.`);
           continue;
       }
       
       const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
       if (!zEmbeddedData) {
-          console.warn(`A tabela "${tableName}" foi ignorada: o eixo Z não tem <embeddeddata>.`);
+          console.warn(`A tabela "${originalName}" foi ignorada: o eixo Z não tem <embeddeddata>.`);
           continue;
       }
       
       const zAddressStr = zEmbeddedData.getAttribute('mmedaddress');
       if (!zAddressStr) {
-          console.warn(`A tabela "${tableName}" foi ignorada: o eixo Z não tem endereço (mmedaddress).`);
+          console.warn(`A tabela "${originalName}" foi ignorada: o eixo Z não tem endereço (mmedaddress).`);
           continue;
       }
       const address = parseInt(zAddressStr, 16);
@@ -179,7 +182,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const equationVar = varNode?.getAttribute('id') || 'X';
 
       if (isNaN(address) || rows === 0 || cols === 0) {
-        console.warn(`A tabela "${tableName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
+        console.warn(`A tabela "${originalName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
         continue;
       }
 
@@ -187,13 +190,22 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       let yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'), tableMap);
 
       if (!xAxisDef || xAxisDef.count !== cols) {
-          if (xAxisDef) console.warn(`Contagem do eixo X para "${tableName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${cols}). A inferir o eixo.`);
+          if (xAxisDef) console.warn(`Contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${cols}). A inferir o eixo.`);
           xAxisDef = { address: null, count: cols, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'Carga (Inferido)' };
       }
       
       if (!yAxisDef || yAxisDef.count !== rows) {
-          if (yAxisDef) console.warn(`Contagem do eixo Y para "${tableName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rows}). A inferir o eixo.`);
+          if (yAxisDef) console.warn(`Contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rows}). A inferir o eixo.`);
           yAxisDef = { address: null, count: rows, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'RPM (Inferido)' };
+      }
+
+      // Generate a unique name for the map before pushing.
+      let tableName = originalName;
+      if (nameCounts[originalName]) {
+          nameCounts[originalName]++;
+          tableName = `${originalName} (${nameCounts[originalName]})`;
+      } else {
+          nameCounts[originalName] = 1;
       }
 
       definitions.push({ 
@@ -203,13 +215,13 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         cols, 
         dataSize, 
         isBigEndian, 
-        equation, 
-        equationVar,
+        equation: equation.replace(new RegExp(`\\b${equationVar}\\b`, 'ig'), 'X'),
+        equationVar: 'X',
         xAxisDef, 
         yAxisDef 
       });
     } catch (e) {
-      console.error(`Erro ao analisar a tabela "${tableName}": ${(e as Error).message}`);
+      console.error(`Erro ao analisar a tabela "${originalName}": ${(e as Error).message}`);
     }
   }
   return definitions;
@@ -230,12 +242,12 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   }
   
   const view = new DataView(binBuffer);
-  const varId = axisDef.equationVar?.toUpperCase() || 'X';
-  const sanitizedEquation = axisDef.equation.replace(new RegExp(`\\b${varId}\\b`, 'ig'), 'X_VAL');
+  // The equation is already sanitized to use 'X' during parsing.
+  const sanitizedEquation = axisDef.equation;
 
   let equationFunc;
   try {
-      equationFunc = new Function('X_VAL', `return ${sanitizedEquation || 'X_VAL'}`);
+      equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
       console.error(`Equação do eixo inválida "${axisDef.equation}": ${e}`);
       return Array.from({ length: axisDef.count }, () => NaN);
@@ -258,7 +270,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
             axisData.push(NaN);
             continue;
         }
-        axisData.push(equationFunc(rawValue));
+        axisData.push(equationFunc(rawValue, 0, 0, 0));
     } catch (e) {
       if (e instanceof ReferenceError) {
         console.warn(`A equação do eixo "${axisDef.equation}" parece ser uma etiqueta de texto. A usá-la diretamente.`);
@@ -283,13 +295,13 @@ export function readMapFromBin(
 
   const view = new DataView(binBuffer);
   const map: MapData = [];
-
-  const zVarId = def.equationVar?.toUpperCase() || 'X';
-  const sanitizedEquation = def.equation.replace(new RegExp(`\\b${zVarId}\\b`, 'ig'), 'Z_RAW');
+  
+  // The equation is already sanitized to use 'X' during parsing.
+  const sanitizedEquation = def.equation;
   
   let equationFunc;
   try {
-    equationFunc = new Function('Z_RAW', 'x', 'y', `return ${sanitizedEquation || 'Z_RAW'}`);
+    equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
     console.error(`Equação do mapa inválida "${def.equation}": ${e}`);
     // Create a function that always returns NaN if the equation is invalid
@@ -317,7 +329,7 @@ export function readMapFromBin(
         const xVal = (c < xAxis.length && typeof xAxis[c] === 'number') ? xAxis[c] : 0;
         const yVal = (r < yAxis.length && typeof yAxis[r] === 'number') ? yAxis[r] : 0;
 
-        row.push(equationFunc(rawValue, xVal, yVal));
+        row.push(equationFunc(rawValue, xVal, yVal, 0));
       } catch(e) {
         if (e instanceof ReferenceError) {
           console.warn(`A equação do mapa "${def.equation}" parece ser uma etiqueta de texto. A usá-la diretamente.`);
