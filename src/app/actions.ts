@@ -14,7 +14,7 @@ export async function validateMapType(input: ValidateMapTypeInput): Promise<{ su
     if (error instanceof z.ZodError) {
       return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
     }
-    return { success: false, error: (error as Error).message };
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -28,6 +28,6 @@ export async function findPotentialMaps(input: FindMapsInput): Promise<{ success
      if (error instanceof z.ZodError) {
       return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
     }
-    return { success: false, error: (error as Error).message };
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
