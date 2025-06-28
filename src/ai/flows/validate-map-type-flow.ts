@@ -24,30 +24,29 @@ const prompt = ai.definePrompt({
   model: googleAI.model('gemini-2.0-flash'),
   input: { schema: ValidateMapTypeInputSchema },
   output: { schema: ValidateMapTypeOutputSchema },
-  prompt: `Você é um engenheiro de calibração de ECU de classe mundial. A sua tarefa é analisar um mapa de ECU, identificar problemas comuns e, se possível, sugerir correções para as equações de conversão. Responda SEMPRE em Português do Brasil.
+  prompt: `Você é um engenheiro de calibração de ECU de classe mundial, especializado em motocicletas de alto desempenho. A sua tarefa é analisar um mapa de ECU, identificar problemas comuns e, se possível, sugerir correções para as equações de conversão. Responda SEMPRE em Português do Brasil.
 
 **Análise Crítica a Realizar:**
-1.  **Use Pontos de Referência:** Esta é a sua regra mais importante. Um mapa de motor segue um padrão lógico.
-    - A primeira célula (canto superior esquerdo) corresponde a **baixa carga e baixa rotação** (ex: TPS/Carga ~1-10%, RPM ~800-1200).
-    - A última célula (canto inferior direito) corresponde a **alta carga e alta rotação** (ex: TPS/Carga ~100%, RPM máxima do motor).
-    - Use estes pontos de referência para validar se os valores dos eixos (\`xAxis\`, \`yAxis\`) fazem sentido. Se o primeiro valor de RPM for 15000, a equação está errada. Se o primeiro valor de TPS for 50, a equação está errada.
+1.  **Use Pontos de Referência Lógicos para Motores de Motocicleta:** A sua regra mais importante é validar se os eixos seguem um padrão lógico para um motor de motocicleta.
+    - **Eixo de RPM (Rotações por Minuto):** O eixo deve ser monotónico (valores aumentam ou diminuem de forma consistente). A marcha lenta (idle) fica geralmente entre **800 e 1500 RPM**. O primeiro valor do eixo de RPM deve estar próximo desta faixa. Um primeiro valor de 5000 RPM, por exemplo, indica que a equação provavelmente está incorreta. A rotação máxima pode chegar até **18.000 RPM** em motos desportivas, portanto, valores altos no final do eixo são normais.
+    - **Eixo de Carga (TPS ou MAP):** Geralmente varia de 0% a 100%. O primeiro valor deve estar próximo de 0-10%, e o último próximo de 100%.
+    - Use estes pontos de referência para validar se os valores dos eixos (\`xAxis\`, \`yAxis\`) fazem sentido.
 2.  **Analise o Nome do Mapa:** Use o \`mapName\` para entender o tipo de mapa esperado (Ignição, Combustível, ETV, etc.).
-3.  **Examine os Dados:** Compare os valores em \`mapData\` com os padrões esperados para o tipo de mapa identificado.
+3.  **Examine os Dados (Eixo Z):** Compare os valores em \`mapData\` com os padrões esperados para o tipo de mapa identificado.
     - **Mapa de Acelerador Eletrónico (ETV):** Valores de dados devem ser 0-100. Se estiverem na casa dos milhares, a equação de dados está errada. Correção comum: \`X / 655.35\`.
-    - **Eixo de Posição do Acelerador (TPS):** Valores de eixo devem ser 0-100. Se excederem 100, a equação do eixo está errada. Correção comum: \`X / 10.23\`.
-    - **Mapa de Ignição (Avanço de Ponto):** Valores de dados devem ser tipicamente entre -20 e 60.
-    - **Mapa de Combustível (VE):** Valores de dados tipicamente entre 30 e 120.
-4.  **Seja Proativo nas Sugestões:** Com base nos pontos de referência e na análise dos dados, preencha os campos de sugestão. Se os eixos estiverem claramente incorretos, **sugira equações para os corrigir**, mesmo que o XDF não tenha nenhuma. Se os dados do mapa estiverem na escala errada, sugira a correção.
+    - **Mapa de Ignição (Avanço de Ponto):** Valores de dados devem ser tipicamente entre -20 e 60 graus.
+    - **Mapa de Combustível (Eficiência Volumétrica - VE):** Valores de dados tipicamente entre 30 e 120.
+4.  **Seja Proativo nas Sugestões:** Com base nos pontos de referência e na análise dos dados, preencha os campos de sugestão. Se um eixo está claramente fora da escala esperada (ex: eixo de RPM começa em 8000), **sugira uma equação para o corrigir**, mesmo que o XDF não tenha nenhuma. Se os dados do mapa estiverem na escala errada, sugira a correção.
     - \`suggestedEquation\`: Para corrigir os dados do mapa (eixo Z).
     - \`suggestedXAxisEquation\`: Para corrigir o eixo X.
     - \`suggestedYAxisEquation\`: Para corrigir o eixo Y.
-5.  **Justifique a sua Conclusão:** No campo \`reasoning\`, explique o seu raciocínio de forma clara, referindo-se aos pontos de referência. Ex: "Confiança Baixa. O nome indica 'ETV', mas os valores estão na casa dos milhares. O primeiro valor do eixo Y é 12000, o que é um valor de RPM irrealista para a marcha lenta. Sugiro correções para os eixos e para os dados."
+5.  **Justifique a sua Conclusão:** No campo \`reasoning\`, explique o seu raciocínio de forma clara, referindo-se aos pontos de referência. Ex: "Confiança Baixa. O eixo de RPM começa em 8000, o que é um valor irrealista para a marcha lenta. O nome indica 'Ignição', mas os valores dos dados estão acima de 200, sugerindo que a escala está incorreta. Sugiro correções para os eixos e para os dados."
 
 **Formato da Saída (JSON OBRIGATÓRIO):**
 - \`confidence\`: "Alta", "Média", ou "Baixa".
 - \`suspectedType\`: O tipo de mapa que você suspeita.
 - \`reasoning\`: Justifique a sua conclusão.
-- \`suggestedEquation\`: (Opcional) A nova equação sugerida para o eixo Z. Ex: "X / 655.35"
+- \`suggestedEquation\`: (Opcional) A nova equação sugerida para os dados do mapa (eixo Z). Ex: "X / 655.35"
 - \`suggestedXAxisEquation\`: (Opcional) A nova equação sugerida para o eixo X. Ex: "X / 10.23"
 - \`suggestedYAxisEquation\`: (Opcional) A nova equação sugerida para o eixo Y.
 
