@@ -53,26 +53,26 @@ function MapTable({
         <thead>
           <tr className="bg-card">
             <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-muted-foreground text-left min-w-[120px]">
-              <div className="font-semibold text-xs">Vertical: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
-              <div className="font-semibold text-xs">Horizontal: <span className="font-normal text-foreground">{yAxisLabel}</span></div>
+              <div className="font-semibold text-xs">Vertical: <span className="font-normal text-foreground">{yAxisLabel}</span></div>
+              <div className="font-semibold text-xs">Horizontal: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
             </th>
-            {yAxis.map((y, i) => (
-              <th key={`head-y-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
-                {typeof y === 'number' ? Math.round(y) : y}
+            {xAxis.map((x, i) => (
+              <th key={`head-x-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
+                {typeof x === 'number' ? Math.round(x) : x}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {xAxis.map((x, xi) => (
-            <tr key={`row-${xi}`}>
+          {yAxis.map((y, yi) => (
+            <tr key={`row-${yi}`}>
               <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">
-                {typeof x === 'number' ? x.toFixed(1) : x}
+                {typeof y === 'number' ? y.toFixed(1) : y}
               </td>
-              {yAxis.map((_y, yi) => {
+              {xAxis.map((_x, xi) => {
                 const cell = mapData[yi]?.[xi];
                 return (
-                  <td key={`cell-${xi}-${yi}`} className="p-0 border border-border text-center" style={{ backgroundColor: getHeatmapColor(cell, min, max) }}>
+                  <td key={`cell-${yi}-${xi}`} className="p-0 border border-border text-center" style={{ backgroundColor: getHeatmapColor(cell, min, max) }}>
                     <div className="w-[60px] h-8 flex items-center justify-center">
                         {(cell === null || isNaN(cell) ? '-' : cell.toFixed(2))}
                     </div>
@@ -352,53 +352,30 @@ export default function EcuTuningAssistant() {
         setSelectedMapName(name);
         try {
             const map = readMapFromBin(binFile.buffer, definition);
+            const tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef);
+            const tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef);
 
-            let tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef);
-            if (tempEixoX.length !== definition.cols) {
-                addLog(`Eixo X para "${name}" lido incorretamente (comprimento ${tempEixoX.length}, esperado ${definition.cols}). A usar eixos de substituição.`, 'error');
-                tempEixoX = Array.from({ length: definition.cols }, (_, i) => i + 1);
-            }
-            
-            let tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef);
-             if (tempEixoY.length !== definition.rows) {
-                addLog(`Eixo Y para "${name}" lido incorretamente (comprimento ${tempEixoY.length}, esperado ${definition.rows}). A usar eixos de substituição.`, 'error');
-                tempEixoY = Array.from({ length: definition.rows }, (_, i) => i + 1);
-            }
-
-            const canSortX = tempEixoX.every(v => typeof v === 'number');
-            const canSortY = tempEixoY.every(v => typeof v === 'number');
-
-            const sortableX = tempEixoX.map((value, index) => ({ value, index }));
-            if (canSortX) { sortableX.sort((a, b) => (a.value as number) - (b.value as number)); }
-            
-            const sortableY = tempEixoY.map((value, index) => ({ value, index }));
-            if (canSortY) { sortableY.sort((a, b) => (a.value as number) - (b.value as number)); }
-            
-            const sortedMap = sortableY.map(yItem => {
-                const originalRow = map[yItem.index];
-                if (!originalRow) return Array(sortableX.length).fill(null);
-                return sortableX.map(xItem => originalRow[xItem.index]);
-            });
-
-            const sortedAxes = {
-              x: sortableX.map(item => item.value),
-              y: sortableY.map(item => item.value),
+            // The data is read as map[row][col], where row is Y-axis and col is X-axis.
+            // This structure is preserved. The display component will handle the visual transposition.
+            const mapAxes = {
+              x: tempEixoX,
+              y: tempEixoY,
               xLabel: definition.xAxisDef.label,
               yLabel: definition.yAxisDef.label,
             };
             
-            setOriginalMap(sortedMap);
+            setOriginalMap(map);
             
             if (binFile?.checksum) {
               const userAxes = customAxes[binFile.checksum]?.[name];
               if (userAxes) {
-                  setAxes({ ...sortedAxes, x: userAxes.x, y: userAxes.y });
+                  setAxes({ ...mapAxes, x: userAxes.x, y: userAxes.y });
                   addLog(`Eixos personalizados carregados para o mapa "${name}".`, 'info');
               } else {
-                  setAxes(sortedAxes);
+                  setAxes(mapAxes);
               }
             } else {
-              setAxes(sortedAxes);
+              setAxes(mapAxes);
             }
             
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');

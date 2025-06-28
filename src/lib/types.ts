@@ -13,7 +13,6 @@ export type XDFDefinition = {
   address: number;
   rows: number;
   cols: number;
-  binaryWidth: number; // The number of columns for offset calculation in the binary file.
   dataSize: number;
   isBigEndian: boolean;
   equation: string;

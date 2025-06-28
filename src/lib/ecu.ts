@@ -37,10 +37,8 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   if (count === 0 && embeddedData) {
       const rowCount = parseInt(embeddedData.getAttribute('mmedrowcount') || '0');
       const colCount = parseInt(embeddedData.getAttribute('mmedcolcount') || '0');
-      count = axisNode.id.toLowerCase() === 'y' ? rowCount : colCount;
-       if (count === 0) {
-           count = Math.max(rowCount, colCount);
-       }
+      // Infer count from a 1D embedded data structure
+      count = Math.max(rowCount, colCount);
   }
 
   const addrStr = embeddedData?.getAttribute('mmedaddress');
@@ -67,22 +65,27 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
       dataSize: dataSizeBits / 8, 
       isBigEndian, 
       equation, 
-      label: label || (axisNode.id.toLowerCase() === 'x' ? 'Carga' : 'RPM'),
+      label: label || (axisNode.id.toLowerCase().includes('x') ? 'Carga' : 'RPM'),
       staticLabels
   };
 }
 
+
 export function parseXDF(xmlString: string): XDFDefinition[] {
+  if (typeof DOMParser === 'undefined') {
+    // Avoid running on the server
+    return [];
+  }
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
   const parserError = xmlDoc.querySelector('parsererror');
   if (parserError) {
-    throw new Error('Erro ao analisar o ficheiro XDF.');
+    throw new Error('Erro de análise XML: O ficheiro XDF parece estar corrompido ou mal formatado.');
   }
 
-  const xdfTables = xmlDoc.querySelectorAll('table, XDFTABLE');
+  const xdfTables = xmlDoc.querySelectorAll('XDFTABLE, table');
   if (xdfTables.length === 0) {
-    throw new Error('Nenhuma tabela encontrada no ficheiro XDF.');
+    throw new Error('Nenhuma definição de <XDFTABLE> ou <table> foi encontrada no ficheiro.');
   }
 
   const definitions: XDFDefinition[] = [];
@@ -101,57 +104,62 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     }
 
     try {
-      let xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
-      let yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
-
-      const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-      if (!zAxisNode) continue;
+      const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
+      if (!zAxisNode) {
+          console.warn(`A tabela "${tableName}" foi ignorada: não foi possível encontrar a definição do eixo Z.`);
+          continue;
+      }
       
       const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
-      if (!zEmbeddedData) continue;
-      
-      const rowsFromZ = parseInt(zEmbeddedData.getAttribute('mmedrowcount') || '0');
-      const colsFromZ = parseInt(zEmbeddedData.getAttribute('mmedcolcount') || '0');
-
-      if (!xAxisDef && colsFromZ > 0) {
-        xAxisDef = { address: null, count: colsFromZ, dataSize: 2, isBigEndian: false, equation: 'X', label: 'Carga' };
+      if (!zEmbeddedData) {
+          console.warn(`A tabela "${tableName}" foi ignorada: o eixo Z não tem <embeddeddata>.`);
+          continue;
       }
-      if (!yAxisDef && rowsFromZ > 0) {
-        yAxisDef = { address: null, count: rowsFromZ, dataSize: 2, isBigEndian: false, equation: 'X', label: 'RPM' };
+      
+      const zAddressStr = zEmbeddedData.getAttribute('mmedaddress');
+      if (!zAddressStr) {
+          console.warn(`A tabela "${tableName}" foi ignorada: o eixo Z não tem endereço (mmedaddress).`);
+          continue;
       }
-
-      if (!xAxisDef || !yAxisDef) continue;
-      
-      if (xAxisDef.label.toUpperCase().includes('TPS') && xAxisDef.equation.toUpperCase() === 'X/8') {
-          xAxisDef.equation = 'X / 10.23';
-      }
-
-      const rows = yAxisDef.count;
-      const cols = xAxisDef.count;
-      
-      if (!rows || !cols) continue;
-      
-      const addressStr = zEmbeddedData.getAttribute('mmedaddress');
-      if (!addressStr) continue;
-      const address = parseInt(addressStr, 16);
-
-      const binaryWidth = parseInt(zEmbeddedData.getAttribute('mmedcolcount') || '0');
-      
-      const dataSize = parseInt(zEmbeddedData.getAttribute('mmedelementsizebits') || '0');
+      const address = parseInt(zAddressStr, 16);
+      const rows = parseInt(zEmbeddedData.getAttribute('mmedrowcount') || '0');
+      const cols = parseInt(zEmbeddedData.getAttribute('mmedcolcount') || '0');
+      const dataSize = parseInt(zEmbeddedData.getAttribute('mmedelementsizebits') || '8') / 8;
       const isBigEndian = zEmbeddedData.getAttribute('bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
-      let equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+      const equation = mathNode?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
 
-      if (tableName.toUpperCase().includes('ETV') && equation.toUpperCase() === 'X/6.96') {
-        equation = 'X / 655.35';
+      if (isNaN(address) || rows === 0 || cols === 0) {
+        console.warn(`A tabela "${tableName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
+        continue;
+      }
+
+      let xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
+      let yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
+
+      // Sanity check and inference for axes, as requested.
+      if (!xAxisDef || xAxisDef.count !== cols) {
+          if (xAxisDef) console.warn(`Contagem do eixo X para "${tableName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${cols}). A inferir o eixo.`);
+          xAxisDef = { address: null, count: cols, dataSize: 2, isBigEndian: false, equation: 'X', label: 'Carga (Inferido)' };
       }
       
-      if (isNaN(address) || isNaN(dataSize) || !equation || binaryWidth === 0) {
-          continue;
+      if (!yAxisDef || yAxisDef.count !== rows) {
+          if (yAxisDef) console.warn(`Contagem do eixo Y para "${tableName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rows}). A inferir o eixo.`);
+          yAxisDef = { address: null, count: rows, dataSize: 2, isBigEndian: false, equation: 'X', label: 'RPM (Inferido)' };
       }
 
-      definitions.push({ name: tableName, address, rows, cols, binaryWidth, dataSize: dataSize / 8, isBigEndian, equation, xAxisDef, yAxisDef });
+      definitions.push({ 
+        name: tableName, 
+        address, 
+        rows, 
+        cols, 
+        dataSize, 
+        isBigEndian, 
+        equation, 
+        xAxisDef, 
+        yAxisDef 
+      });
     } catch (e) {
       console.error(`Erro ao analisar a tabela "${tableName}": ${(e as Error).message}`);
     }
@@ -159,65 +167,82 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   return definitions;
 }
 
+
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): (number | string)[] {
+  // If axis is defined by static labels, just return them.
   if (axisDef?.staticLabels && axisDef.staticLabels.length > 0) {
+      if (axisDef.staticLabels.length !== axisDef.count) {
+          console.warn(`O número de etiquetas estáticas (${axisDef.staticLabels.length}) não corresponde à contagem do eixo (${axisDef.count}).`);
+      }
       return axisDef.staticLabels;
   }
 
-  if (!axisDef || !binBuffer || axisDef.address === null) {
-      if(axisDef) {
-        return Array.from({ length: axisDef.count }, (_, i) => i + 1);
-      }
-      return [];
+  // If axis is inferred (no address), return a simple sequence.
+  if (!axisDef || axisDef.address === null) {
+      const count = axisDef?.count || 0;
+      return Array.from({ length: count }, (_, i) => i + 1);
   }
   
   const view = new DataView(binBuffer);
-  const equationFunc = new Function('X', `return ${axisDef.equation}`);
+  const equationFunc = new Function('X', `return ${axisDef.equation || 'X'}`);
   const axisData: number[] = [];
   
   for (let i = 0; i < axisDef.count; i++) {
     const offset = axisDef.address + (i * axisDef.dataSize);
     if (offset + axisDef.dataSize > view.byteLength) {
-        console.error(`Leitura do eixo fora dos limites. Offset: ${offset}. O eixo pode estar incompleto.`);
-        axisData.push(NaN); 
-        continue;
+        console.error(`Leitura do eixo fora dos limites. Endereço: ${axisDef.address}, Offset: ${offset}. O eixo pode estar incompleto.`);
+        // Fill remaining with NaNs to avoid crashing.
+        while(axisData.length < axisDef.count) axisData.push(NaN);
+        break;
     }
     let rawValue;
-    if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
-    else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, !axisDef.isBigEndian);
-    else {
+    try {
+        if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
+        else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, !axisDef.isBigEndian);
+        else {
+            axisData.push(NaN);
+            continue;
+        }
+        axisData.push(equationFunc(rawValue));
+    } catch (e) {
+        console.error(`Erro ao aplicar equação do eixo: ${e}`);
         axisData.push(NaN);
-        continue;
     }
-    axisData.push(equationFunc(rawValue));
   }
   return axisData;
 }
+
 
 export function readMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): MapData {
   if (!def || !binBuffer) return [];
 
   const view = new DataView(binBuffer);
   const map: MapData = [];
-  const equationFunc = new Function('X', `return ${def.equation}`);
+  const equationFunc = new Function('X', `return ${def.equation || 'X'}`);
 
   for (let r = 0; r < def.rows; r++) {
     const row: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
-      const offset = def.address + (r * def.binaryWidth + c) * def.dataSize;
+      // Assuming row-major order. The offset calculation depends on how the data is laid out in the binary.
+      const offset = def.address + (r * def.cols + c) * def.dataSize;
       if (offset + def.dataSize > view.byteLength) {
         console.error(`Leitura do mapa fora dos limites. Offset: ${offset}`);
         row.push(null);
         continue;
       }
       let rawValue;
-      if (def.dataSize === 1) rawValue = view.getUint8(offset);
-      else if (def.dataSize === 2) rawValue = view.getUint16(offset, !def.isBigEndian);
-      else {
-          row.push(null);
-          continue;
+      try {
+        if (def.dataSize === 1) rawValue = view.getUint8(offset);
+        else if (def.dataSize === 2) rawValue = view.getUint16(offset, !def.isBigEndian);
+        else {
+            row.push(null);
+            continue;
+        }
+        row.push(equationFunc(rawValue));
+      } catch(e) {
+        console.error(`Erro ao aplicar equação do mapa: ${e}`);
+        row.push(null);
       }
-      row.push(equationFunc(rawValue));
     }
     map.push(row);
   }
@@ -230,5 +255,5 @@ export function generateChecksum(buffer: ArrayBuffer): string {
     for (let i = 0; i < buffer.byteLength; i++) {
         checksum = (checksum + dataView.getUint8(i)) % 65536;
     }
-    return checksum.toString(16);
+    return checksum.toString(16).toUpperCase().padStart(4, '0');
 }
