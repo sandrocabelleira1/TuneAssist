@@ -49,7 +49,7 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
   
   const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
   const mathNode = findNode(axisNode, 'math', 'MATH');
-  const equation = mathNode?.getAttribute('equation') || 'X';
+  const equation = mathNode?.getAttribute('equation')?.toUpperCase() || 'X';
   
   const label = (
       findNode(axisNode, 'units')?.textContent ||
@@ -128,7 +128,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const isBigEndian = zEmbeddedData.getAttribute('bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
-      const equation = mathNode?.getAttribute('equation') || 'X';
+      const equation = mathNode?.getAttribute('equation')?.toUpperCase() || 'X';
 
       if (isNaN(address) || rows === 0 || cols === 0) {
         console.warn(`A tabela "${tableName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
@@ -184,10 +184,9 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   }
   
   const view = new DataView(binBuffer);
-  // The equation for an axis should only use 'X' for the raw value.
-  // We provide x, y, z as dummies to prevent reference errors from malformed equations.
-  const equationFunc = new Function('X', 'x', 'y', 'z', `return ${axisDef.equation || 'X'}`);
-  const axisData: number[] = [];
+  // The equation for an axis can reference X, Y, and Z. Provide them all to prevent reference errors.
+  const equationFunc = new Function('X', 'Y', 'Z', `return ${axisDef.equation || 'X'}`);
+  const axisData: (number | string)[] = [];
   
   for (let i = 0; i < axisDef.count; i++) {
     const offset = axisDef.address + (i * axisDef.dataSize);
@@ -205,11 +204,19 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
             axisData.push(NaN);
             continue;
         }
-        // Pass 0 for x,y,z as they are not applicable for axis calculation, but prevent ReferenceError.
-        axisData.push(equationFunc(rawValue, 0, 0, 0));
+        // Pass 0 for Y,Z as they are not applicable for axis calculation, but prevent ReferenceError.
+        axisData.push(equationFunc(rawValue, 0, 0));
     } catch (e) {
+      if (e instanceof ReferenceError) {
+        // This is a special case. It's likely the "equation" is actually a text label.
+        // For example, equation="OPEN" or equation="CLOSED" or "Desconhecido".
+        // In this case, we use the equation string itself as the value.
+        console.warn(`A equação do eixo "${axisDef.equation}" parece ser uma etiqueta de texto devido a um erro de referência. A usá-la diretamente.`);
+        axisData.push(axisDef.equation);
+      } else {
         console.error(`Erro ao aplicar equação do eixo: ${e}`);
         axisData.push(NaN);
+      }
     }
   }
   return axisData;
