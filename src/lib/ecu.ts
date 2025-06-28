@@ -186,7 +186,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   }
   
   const view = new DataView(binBuffer);
-  const equationFunc = new Function('X', 'Y', 'Z', `return ${axisDef.equation || 'X'}`);
+  const equationFunc = new Function('X', `return ${axisDef.equation || 'X'}`);
   const axisData: number[] = [];
   
   for (let i = 0; i < axisDef.count; i++) {
@@ -205,7 +205,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
             axisData.push(NaN);
             continue;
         }
-        axisData.push(equationFunc(rawValue, 1, 1));
+        axisData.push(equationFunc(rawValue));
     } catch (e) {
         console.error(`Erro ao aplicar equação do eixo: ${e}`);
         axisData.push(NaN);
@@ -220,7 +220,7 @@ export function readMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): MapD
 
   const view = new DataView(binBuffer);
   const map: MapData = [];
-  const equationFunc = new Function('X', 'Y', 'Z', `return ${def.equation || 'X'}`);
+  const equationFunc = new Function('X', `return ${def.equation || 'X'}`);
 
   for (let r = 0; r < def.rows; r++) {
     const row: (number|null)[] = [];
@@ -240,7 +240,7 @@ export function readMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): MapD
             row.push(null);
             continue;
         }
-        row.push(equationFunc(rawValue, 1, 1));
+        row.push(equationFunc(rawValue));
       } catch(e) {
         console.error(`Erro ao aplicar equação do mapa: ${e}`);
         row.push(null);
