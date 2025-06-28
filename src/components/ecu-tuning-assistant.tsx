@@ -65,7 +65,7 @@ function MapTable({
   };
 
   return (
-    <div className="overflow-auto relative max-h-[70vh]">
+    <div className="overflow-auto relative h-full">
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
@@ -1272,13 +1272,13 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                 <div className="grid grid-cols-2 gap-4 flex-1 min-h-0 mt-4">
                     <div className="flex flex-col gap-2">
                         <h3 className="font-semibold text-center">Mapa Original</h3>
-                        <Card className="flex-1 overflow-hidden">
+                        <Card className="flex-1 flex">
                            <MapTable mapData={suggestion.originalMap} xAxis={suggestion.originalAxes.x} yAxis={suggestion.originalAxes.y} xAxisLabel={suggestion.originalAxes.xLabel} yAxisLabel={suggestion.originalAxes.yLabel} />
                         </Card>
                     </div>
                     <div className="flex flex-col gap-2">
                         <h3 className="font-semibold text-center">Mapa Corrigido (Sugestão)</h3>
-                        <Card className="flex-1 overflow-hidden border-primary">
+                        <Card className="flex-1 flex border-primary">
                            <MapTable mapData={suggestion.correctedMap} xAxis={suggestion.correctedAxes.x} yAxis={suggestion.correctedAxes.y} xAxisLabel={suggestion.correctedAxes.xLabel} yAxisLabel={suggestion.correctedAxes.yLabel} />
                         </Card>
                     </div>
