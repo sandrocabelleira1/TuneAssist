@@ -37,7 +37,7 @@ export const PotentialMapSchema = z.object({
   address: z.number().describe('The starting memory address of the map in decimal.'),
   rows: z.number().describe('The number of rows in the map grid.'),
   cols: z.number().describe('The number of columns in the map grid.'),
-  dataSize: z.enum([1, 2]).describe('The size of each data point in bytes (1 for 8-bit, 2 for 16-bit).'),
+  dataSize: z.union([z.literal(1), z.literal(2)]).describe('The size of each data point in bytes (1 for 8-bit, 2 for 16-bit).'),
 });
 
 export const FindMapsInputSchema = z.object({
