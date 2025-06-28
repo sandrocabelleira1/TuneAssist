@@ -21,7 +21,7 @@ export type { FindMapsOutput };
 
 const prompt = ai.definePrompt({
   name: 'findMapsPrompt',
-  model: googleAI.model('gemini-2.0-flash'),
+  model: googleAI.model('gemini-1.5-flash-latest'),
   input: { schema: FindMapsInputSchema },
   output: { schema: FindMapsOutputSchema },
   prompt: `You are an expert ECU reverse engineer, acting like the software WinOLS. Your task is to analyze a hexadecimal string from a vehicle's ECU binary (.bin) file and identify potential data maps. These maps are typically 2D grids of 8-bit or 16-bit values. Look for structured blocks of data with patterns, such as smooth increments/decrements, that are characteristic of tuning maps (e.g., ignition timing, fuel injection, throttle position).
@@ -30,16 +30,16 @@ Based on your analysis, generate a list of potential maps. For each map, provide
 
 The provided hex data is from the start of the file. The address of each map should be its offset from the beginning of this data.
 
-If a list of existing map names is provided, do not suggest maps that are already present in that list. Focus on finding new, unidentified maps.
+A list of existing maps is provided below. Do not suggest maps that are already defined. Your main goal is to find new, unidentified maps by looking for structured data that is NOT part of the existing maps. Pay close attention to the addresses to avoid any overlaps.
 
 Respond ONLY with a JSON object containing a 'maps' key, which holds an array of map objects matching the specified output schema. Be critical and only identify maps you are confident about.
 
 Hex Data:
 {{{binHexData}}}
 
-{{#if existingMapNames}}
-List of existing maps to ignore:
-{{{json existingMapNames}}}
+{{#if existingMaps}}
+Existing maps (ignore these addresses and areas):
+{{{json existingMaps}}}
 {{/if}}
 `,
 });

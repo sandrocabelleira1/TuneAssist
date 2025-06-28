@@ -40,9 +40,14 @@ export const PotentialMapSchema = z.object({
   dataSize: z.union([z.literal(1), z.literal(2)]).describe('The size of each data point in bytes (1 for 8-bit, 2 for 16-bit).'),
 });
 
+export const ExistingMapSchema = z.object({
+  name: z.string(),
+  address: z.number(),
+});
+
 export const FindMapsInputSchema = z.object({
   binHexData: z.string().describe('A hexadecimal string representing the first 8192 bytes of the BIN file.'),
-  existingMapNames: z.array(z.string()).optional().describe('An optional list of map names that have already been defined in an XDF, to avoid duplication.'),
+  existingMaps: z.array(ExistingMapSchema).optional().describe('An optional list of maps that have already been defined in an XDF, to avoid duplication.'),
 });
 
 export const FindMapsOutputSchema = z.object({

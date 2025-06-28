@@ -540,9 +540,9 @@ export default function EcuTuningAssistant() {
 
         const scanBuffer = binFile.buffer.slice(0, 8192);
         const hexData = bufferToHex(scanBuffer);
-        const existingMapNames = xdfFile.definitions.map(d => d.name);
+        const existingMaps = xdfFile.definitions.map(d => ({ name: d.name, address: d.address }));
 
-        const result = await findPotentialMaps({ binHexData: hexData, existingMapNames });
+        const result = await findPotentialMaps({ binHexData: hexData, existingMaps });
 
         setIsScanning(false);
 
