@@ -67,10 +67,10 @@ const AiOutputSchema = z.object({
   ).describe('Grelha de Lambda medido interpolada.'),
   torqueMeasuredGrid: z.array(
     z.array(z.number().nullable()).describe('A grelha completa de valores de Torque medidos, interpolada. Use null se não houver dados de torque.')
-  ).describe('Grelha de Torque medido interpolada.'),
+  ).describe('Grelha de Torque medido interpolada.').optional(),
   potenciaMeasuredGrid: z.array(
     z.array(z.number().nullable()).describe('A grelha completa de valores de Potência medidos, interpolada. Use null se não houver dados de potência.')
-  ).describe('Grelha de Potência medida interpolada.'),
+  ).describe('Grelha de Potência medida interpolada.').optional(),
 });
 
 const prompt = ai.definePrompt({
@@ -115,8 +115,9 @@ const suggestMapCorrectionsFlow = ai.defineFlow(
     // 1. Ask the AI to map AND interpolate test data into full grids.
     const { output: aiOutput } = await prompt(input);
     
-    if (!aiOutput || !aiOutput.lambdaMeasuredGrid) {
-      throw new Error("A IA não conseguiu gerar as grelhas de dados interpoladas. Tente novamente.");
+    // Stricter validation: Ensure the AI returned a valid, non-empty grid.
+    if (!aiOutput || !aiOutput.lambdaMeasuredGrid || aiOutput.lambdaMeasuredGrid.length === 0) {
+      throw new Error("A IA não conseguiu gerar as grelhas de dados interpoladas. Verifique os dados de entrada ou tente novamente.");
     }
 
     // 2. The AI's output is now the data we need. No more processing needed.
