@@ -18,8 +18,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('test@example.com');
+  const [password, setPassword] = useState('password');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -47,7 +47,17 @@ export default function LoginPage() {
       }
       router.push('/');
     } catch (e: any) {
-      setError(e.message);
+      if (isLogin && e.code === 'auth/user-not-found') {
+        // If login fails because the user doesn't exist, try creating them automatically.
+        try {
+          await createUserWithEmailAndPassword(auth, email, password);
+          router.push('/');
+        } catch (createError: any) {
+           setError(createError.message);
+        }
+      } else {
+        setError(e.message);
+      }
     } finally {
       setIsLoading(false);
     }
