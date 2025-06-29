@@ -1,30 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { PlusCircle } from 'lucide-react';
 
-// This is a placeholder for the projects page.
-// In a real implementation, this would fetch and display projects from Firestore.
-
 export default function ProjectsPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
-
-  if (loading || !user) {
-    return null; // Or a loading spinner
-  }
-
   // A mock project ID for demonstration
   const mockProjectId = "demo-project-123";
 
