@@ -14,7 +14,11 @@ export async function validateMapType(input: ValidateMapTypeInput): Promise<{ su
     if (error instanceof z.ZodError) {
       return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
     }
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Y is not defined')) {
+        return { success: false, error: 'A equação para um dos eixos é inválida. Apenas a variável "X" pode ser usada em equações de eixo. Por favor, corrija a definição XDF.' };
+    }
+    return { success: false, error: errorMessage };
   }
 }
 
