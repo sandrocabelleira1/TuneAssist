@@ -19,7 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Cube } from 'lucide-react';
+import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import type { PlotlyProps } from 'react-plotly.js';
 
@@ -791,7 +791,7 @@ export default function EcuTuningAssistant() {
                                     <Tabs defaultValue="2d" className="flex-1 flex flex-col">
                                         <TabsList className="mb-2">
                                             <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Visualização 2D</TabsTrigger>
-                                            <TabsTrigger value="3d"><Cube className="mr-2 h-4 w-4" />Visualização 3D</TabsTrigger>
+                                            <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Visualização 3D</TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="2d" className="flex-1 relative">
                                             <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>
