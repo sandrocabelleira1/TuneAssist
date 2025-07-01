@@ -1201,7 +1201,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-7xl">
+            <DialogContent className="max-w-7xl flex flex-col max-h-[90vh]">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <GitCompareArrows className="text-primary"/>
@@ -1212,104 +1212,106 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4">
-                     <div>
-                        <h3 className="font-semibold mb-2 text-center">Original</h3>
-                        <div className="h-[400px] overflow-auto border rounded-md">
-                          <MapTable
-                            mapData={suggestion.originalMap}
-                            xAxis={suggestion.originalAxes.x}
-                            yAxis={suggestion.originalAxes.y}
-                            xAxisLabel={suggestion.originalAxes.xLabel}
-                            yAxisLabel={suggestion.originalAxes.yLabel}
-                            isEditable={false}
-                            onSortAxis={() => {}}
-                            onResetSort={() => {}}
-                            onCellChange={() => {}}
-                          />
-                        </div>
-                    </div>
-                    <div>
-                        <h3 className="font-semibold mb-2 text-center">Pré-visualização (com correções selecionadas)</h3>
-                        <div className="h-[400px] overflow-auto border rounded-md">
-                           {preview ? (
-                             <MapTable
-                                mapData={preview.map}
-                                xAxis={preview.axes.x}
-                                yAxis={preview.axes.y}
-                                xAxisLabel={preview.axes.xLabel}
-                                yAxisLabel={preview.axes.yLabel}
+                <div className="flex-1 overflow-y-auto -mx-6 px-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4">
+                         <div>
+                            <h3 className="font-semibold mb-2 text-center">Original</h3>
+                            <div className="h-[400px] overflow-auto border rounded-md">
+                              <MapTable
+                                mapData={suggestion.originalMap}
+                                xAxis={suggestion.originalAxes.x}
+                                yAxis={suggestion.originalAxes.y}
+                                xAxisLabel={suggestion.originalAxes.xLabel}
+                                yAxisLabel={suggestion.originalAxes.yLabel}
                                 isEditable={false}
                                 onSortAxis={() => {}}
                                 onResetSort={() => {}}
                                 onCellChange={() => {}}
-                             />
-                           ) : (
-                             <div className="flex items-center justify-center h-full text-muted-foreground">
-                                A gerar pré-visualização...
-                             </div>
-                           )}
+                              />
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="font-semibold mb-2 text-center">Pré-visualização (com correções selecionadas)</h3>
+                            <div className="h-[400px] overflow-auto border rounded-md">
+                               {preview ? (
+                                 <MapTable
+                                    mapData={preview.map}
+                                    xAxis={preview.axes.x}
+                                    yAxis={preview.axes.y}
+                                    xAxisLabel={preview.axes.xLabel}
+                                    yAxisLabel={preview.axes.yLabel}
+                                    isEditable={false}
+                                    onSortAxis={() => {}}
+                                    onResetSort={() => {}}
+                                    onCellChange={() => {}}
+                                 />
+                               ) : (
+                                 <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    A gerar pré-visualização...
+                                 </div>
+                               )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4 pt-4">
+                        <div className="space-y-2">
+                            <h3 className="text-sm font-semibold text-muted-foreground">Justificação da IA:</h3>
+                            <p className="text-sm p-3 bg-muted rounded-md border">{reasoning}</p>
+                        </div>
+
+                        <Separator />
+
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-semibold">Comandos (Selecione para pré-visualizar e aplicar)</h3>
+                            
+                            {hasXCorrection && newDefinition.xAxisDef && originalDefinition.xAxisDef && (
+                                <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
+                                    <Checkbox id="corr_x" className="mt-1" checked={correctionsToApply.x} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, x: !!checked}))} />
+                                    <div className="grid gap-1.5 leading-none">
+                                        <label htmlFor="corr_x" className="text-sm font-medium">Corrigir Eixo X ({originalDefinition.xAxisDef.label})</label>
+                                        <div className="text-xs space-y-1">
+                                            <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.xAxisDef.equation}</code></p>
+                                            <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.xAxisDef.equation}</code></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {hasYCorrection && newDefinition.yAxisDef && originalDefinition.yAxisDef && (
+                                <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
+                                    <Checkbox id="corr_y" className="mt-1" checked={correctionsToApply.y} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, y: !!checked}))} />
+                                    <div className="grid gap-1.5 leading-none">
+                                        <label htmlFor="corr_y" className="text-sm font-medium">Corrigir Eixo Y ({originalDefinition.yAxisDef.label})</label>
+                                        <div className="text-xs space-y-1">
+                                            <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.yAxisDef.equation}</code></p>
+                                            <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.yAxisDef.equation}</code></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {hasZCorrection && (
+                                 <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
+                                    <Checkbox id="corr_z" className="mt-1" checked={correctionsToApply.z} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, z: !!checked}))} />
+                                    <div className="grid gap-1.5 leading-none">
+                                        <label htmlFor="corr_z" className="text-sm font-medium">Corrigir Dados do Mapa (Eixo Z)</label>
+                                        <div className="text-xs space-y-1">
+                                            <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.equation}</code></p>
+                                            <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!(hasXCorrection || hasYCorrection || hasZCorrection) && (
+                                <p className="text-sm text-center text-muted-foreground p-4">Nenhuma nova equação foi sugerida, mas a IA forneceu a sua análise.</p>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                <div className="space-y-4 pt-4">
-                    <div className="space-y-2">
-                        <h3 className="text-sm font-semibold text-muted-foreground">Justificação da IA:</h3>
-                        <p className="text-sm p-3 bg-muted rounded-md border">{reasoning}</p>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                        <h3 className="text-lg font-semibold">Comandos (Selecione para pré-visualizar e aplicar)</h3>
-                        
-                        {hasXCorrection && newDefinition.xAxisDef && originalDefinition.xAxisDef && (
-                            <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
-                                <Checkbox id="corr_x" className="mt-1" checked={correctionsToApply.x} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, x: !!checked}))} />
-                                <div className="grid gap-1.5 leading-none">
-                                    <label htmlFor="corr_x" className="text-sm font-medium">Corrigir Eixo X ({originalDefinition.xAxisDef.label})</label>
-                                    <div className="text-xs space-y-1">
-                                        <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.xAxisDef.equation}</code></p>
-                                        <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.xAxisDef.equation}</code></p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {hasYCorrection && newDefinition.yAxisDef && originalDefinition.yAxisDef && (
-                            <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
-                                <Checkbox id="corr_y" className="mt-1" checked={correctionsToApply.y} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, y: !!checked}))} />
-                                <div className="grid gap-1.5 leading-none">
-                                    <label htmlFor="corr_y" className="text-sm font-medium">Corrigir Eixo Y ({originalDefinition.yAxisDef.label})</label>
-                                    <div className="text-xs space-y-1">
-                                        <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.yAxisDef.equation}</code></p>
-                                        <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.yAxisDef.equation}</code></p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        
-                        {hasZCorrection && (
-                             <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
-                                <Checkbox id="corr_z" className="mt-1" checked={correctionsToApply.z} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, z: !!checked}))} />
-                                <div className="grid gap-1.5 leading-none">
-                                    <label htmlFor="corr_z" className="text-sm font-medium">Corrigir Dados do Mapa (Eixo Z)</label>
-                                    <div className="text-xs space-y-1">
-                                        <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.equation}</code></p>
-                                        <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {!(hasXCorrection || hasYCorrection || hasZCorrection) && (
-                            <p className="text-sm text-center text-muted-foreground p-4">Nenhuma nova equação foi sugerida, mas a IA forneceu a sua análise.</p>
-                        )}
-                    </div>
-                </div>
-
-                <DialogFooter className="mt-4 pt-4 border-t">
+                <DialogFooter className="mt-auto pt-4 border-t shrink-0">
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Rejeitar</Button>
                     <Button onClick={() => onAccept(correctionsToApply)} disabled={!correctionsToApply.x && !correctionsToApply.y && !correctionsToApply.z}>
                         <CheckCircle className="mr-2"/>
