@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { LogMessage, XDFDefinition, MapData, AxisDefinition } from '@/lib/types';
+import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder } from '@/lib/types';
 import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
@@ -19,7 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box } from 'lucide-react';
+import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import type { PlotlyProps } from 'react-plotly.js';
 
@@ -37,12 +37,16 @@ function MapTable({
   yAxis,
   xAxisLabel,
   yAxisLabel,
+  onSortAxis,
+  onResetSort,
 }: {
   mapData: MapData;
   xAxis: (string | number)[];
   yAxis: (string | number)[];
   xAxisLabel: string;
   yAxisLabel: string;
+  onSortAxis: (axis: 'x' | 'y') => void;
+  onResetSort: () => void;
 }) {
   const { min, max } = useMemo(() => {
     let minVal = Infinity;
@@ -68,8 +72,32 @@ function MapTable({
         <thead>
           <tr className="bg-card">
             <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-muted-foreground text-left min-w-[120px]">
-              <div className="font-semibold text-xs">Vertical: <span className="font-normal text-foreground">{xAxisLabel}</span></div>
-              <div className="font-semibold text-xs">Horizontal: <span className="font-normal text-foreground">{yAxisLabel}</span></div>
+              <div className="flex justify-between items-start">
+                  <div>
+                      <div className="font-semibold text-xs">Vertical (Y): <span className="font-normal text-foreground">{yAxisLabel}</span></div>
+                      <div className="font-semibold text-xs">Horizontal (X): <span className="font-normal text-foreground">{xAxisLabel}</span></div>
+                  </div>
+                   <div className="flex items-center gap-1">
+                       <Tooltip>
+                           <TooltipTrigger asChild>
+                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
+                           </TooltipTrigger>
+                           <TooltipContent><p>Ordenar eixo Y (Linhas)</p></TooltipContent>
+                       </Tooltip>
+                       <Tooltip>
+                           <TooltipTrigger asChild>
+                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('x')}><ArrowUpNarrowWide className="h-4 w-4 rotate-90" /></Button>
+                           </TooltipTrigger>
+                           <TooltipContent><p>Ordenar eixo X (Colunas)</p></TooltipContent>
+                       </Tooltip>
+                       <Tooltip>
+                           <TooltipTrigger asChild>
+                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onResetSort}><Undo2 className="h-4 w-4" /></Button>
+                           </TooltipTrigger>
+                           <TooltipContent><p>Restaurar ordem original</p></TooltipContent>
+                       </Tooltip>
+                  </div>
+              </div>
             </th>
             {displayYAxis.map((y, i) => (
               <th key={`head-y-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
@@ -177,8 +205,14 @@ export default function EcuTuningAssistant() {
     const [xdfFile, setXdfFile] = useState<{ name: string; definitions: XDFDefinition[] } | null>(null);
     const [availableMaps, setAvailableMaps] = useState<XDFDefinition[]>([]);
     const [selectedMapName, setSelectedMapName] = useState<string>('');
-    const [originalMap, setOriginalMap] = useState<MapData | null>(null);
-    const [axes, setAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
+
+    // State for map data. "Source" is the original, "Display" is what's shown (can be sorted)
+    const [sourceMap, setSourceMap] = useState<MapData | null>(null);
+    const [sourceAxes, setSourceAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
+    const [displayMap, setDisplayMap] = useState<MapData | null>(null);
+    const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
+    const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
+
     const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: (string|number)[], y: (string|number)[] }>>>({});
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [selectedXdfFromLibrary, setSelectedXdfFromLibrary] = useState<string>('');
@@ -290,8 +324,8 @@ export default function EcuTuningAssistant() {
         
         if (selectedMapName && !validDefinitions.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
-            setOriginalMap(null);
-            setAxes(null);
+            setDisplayMap(null);
+            setDisplayAxes(null);
         }
         
         if (invalidCount > 0) {
@@ -311,7 +345,9 @@ export default function EcuTuningAssistant() {
 
     const resetState = () => {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
-        setOriginalMap(null); setAxes(null);
+        setSourceMap(null); setSourceAxes(null);
+        setDisplayMap(null); setDisplayAxes(null);
+        setOriginalSortOrder(null);
         setIsValidatingMap(false);
         setAiSuggestion(null);
         setAnalysisResult(null);
@@ -334,7 +370,7 @@ export default function EcuTuningAssistant() {
                 const buffer = event.target?.result as ArrayBuffer;
                 if (type === 'bin') {
                     setXdfFile(null); setSelectedMapName('');
-                    setOriginalMap(null); setAxes(null);
+                    setDisplayMap(null); setDisplayAxes(null);
                     setAvailableMaps([]);
                     
                     const checksum = generateChecksum(buffer);
@@ -389,7 +425,7 @@ export default function EcuTuningAssistant() {
             const definitions = parseXDF(xdfData.content);
             if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
             
-            setSelectedMapName(''); setOriginalMap(null); setAxes(null);
+            setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null);
 
             setXdfFile({ name, definitions });
             setSelectedXdfFromLibrary(name);
@@ -437,18 +473,27 @@ export default function EcuTuningAssistant() {
               yLabel: definition.yAxisDef?.label || 'Eixo Y',
             };
             
-            setOriginalMap(map);
+            setSourceMap(map);
+            setDisplayMap(map);
+            setOriginalSortOrder({
+              x: mapAxes.x.map((value, index) => ({ value, index })),
+              y: mapAxes.y.map((value, index) => ({ value, index })),
+            });
             
             if (binFile?.checksum) {
               const userAxes = customAxes[binFile.checksum]?.[name];
               if (userAxes) {
-                  setAxes({ ...mapAxes, x: userAxes.x, y: userAxes.y });
+                  const newAxes = { ...mapAxes, x: userAxes.x, y: userAxes.y };
+                  setSourceAxes(newAxes);
+                  setDisplayAxes(newAxes);
                   addLog(`Eixos personalizados carregados para o mapa "${name}".`, 'info');
               } else {
-                  setAxes(mapAxes);
+                  setSourceAxes(mapAxes);
+                  setDisplayAxes(mapAxes);
               }
             } else {
-              setAxes(mapAxes);
+              setSourceAxes(mapAxes);
+              setDisplayAxes(mapAxes);
             }
             
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
@@ -461,19 +506,25 @@ export default function EcuTuningAssistant() {
     };
     
     const handleConfirmAxes = (newAxesData: { y: string, x: string }) => {
-        if (!axes || !selectedMapName) return;
+        if (!displayAxes || !selectedMapName) return;
         
         const newY = newAxesData.y.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
         const newX = newAxesData.x.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
 
-        if (newY.length !== axes.y.length || newX.length !== axes.x.length) {
+        if (newY.length !== displayAxes.y.length || newX.length !== displayAxes.x.length) {
             addLog('O número de valores dos eixos não corresponde às dimensões originais.', 'error');
             toast({ variant: 'destructive', title: "Erro nos Eixos", description: "O número de valores deve corresponder às dimensões originais." });
             return;
         }
         
-        const newAxesState = { ...axes, x: newX, y: newY };
-        setAxes(newAxesState);
+        const newAxesState = { ...displayAxes, x: newX, y: newY };
+        setSourceAxes(newAxesState);
+        setDisplayAxes(newAxesState);
+        setOriginalSortOrder({
+          x: newX.map((value, index) => ({ value, index })),
+          y: newY.map((value, index) => ({ value, index })),
+        });
+
 
         if (binFile?.checksum) {
           setCustomAxes(prev => ({
@@ -491,16 +542,56 @@ export default function EcuTuningAssistant() {
         addLog('Eixos do mapa atualizados.', 'success');
     };
 
+    const handleSortAxis = (axis: 'x' | 'y') => {
+        if (!sourceMap || !sourceAxes || !originalSortOrder || !displayAxes) return;
+
+        const sortedAxisWithIndices = [...originalSortOrder[axis]].sort((a, b) => {
+            const valA = a.value;
+            const valB = b.value;
+            if (typeof valA === 'number' && typeof valB === 'number') {
+                return valA - valB;
+            }
+            return String(valA).localeCompare(String(valB));
+        });
+
+        const newSortedAxisValues = sortedAxisWithIndices.map(item => item.value);
+        const newIndexMap = sortedAxisWithIndices.map(item => item.index);
+
+        let newSortedMap: MapData;
+
+        if (axis === 'y') { // Sorting rows
+            newSortedMap = newIndexMap.map(originalRowIndex => sourceMap[originalRowIndex]);
+        } else { // Sorting columns
+            newSortedMap = sourceMap.map(row => newIndexMap.map(originalColIndex => row[originalColIndex]));
+        }
+
+        setDisplayAxes(prev => ({
+            ...(prev!),
+            [axis]: newSortedAxisValues,
+        }));
+        setDisplayMap(newSortedMap);
+        addLog(`Eixo ${axis === 'x' ? displayAxes.xLabel : displayAxes.yLabel} ordenado.`, 'info');
+    };
+    
+    const handleResetSort = () => {
+        if (sourceMap && sourceAxes) {
+            setDisplayMap(sourceMap);
+            setDisplayAxes(sourceAxes);
+            addLog('Ordenação do mapa revertida para o original.', 'info');
+        }
+    };
+
+
     const handleValidateMap = async () => {
-        if (!originalMap || !axes || !selectedMapName || !binFile || !xdfFile) return;
+        if (!displayMap || !displayAxes || !selectedMapName || !binFile || !xdfFile) return;
 
         setIsValidatingMap(true);
         addLog(`A iniciar a análise do tipo de mapa para "${selectedMapName}"...`, 'info');
 
-        const numericXAxis = axes.x.filter(v => typeof v === 'number') as number[];
-        const numericYAxis = axes.y.filter(v => typeof v === 'number') as number[];
+        const numericXAxis = displayAxes.x.filter(v => typeof v === 'number') as number[];
+        const numericYAxis = displayAxes.y.filter(v => typeof v === 'number') as number[];
 
-        if(numericXAxis.length !== axes.x.length || numericYAxis.length !== axes.y.length) {
+        if(numericXAxis.length !== displayAxes.x.length || numericYAxis.length !== displayAxes.y.length) {
             addLog('A validação de mapa requer eixos puramente numéricos.', 'error');
             toast({ variant: 'destructive', title: 'Falha na Validação', description: 'Os eixos devem ser numéricos para a validação do tipo de mapa.' });
             setIsValidatingMap(false);
@@ -509,7 +600,7 @@ export default function EcuTuningAssistant() {
 
         const result = await validateMapType({
             mapName: selectedMapName,
-            mapData: originalMap,
+            mapData: displayMap,
             xAxis: numericXAxis,
             yAxis: numericYAxis,
         });
@@ -548,8 +639,8 @@ export default function EcuTuningAssistant() {
 
                     setAiSuggestion({
                         reasoning: result.data.reasoning,
-                        originalMap,
-                        originalAxes: axes,
+                        originalMap: displayMap,
+                        originalAxes: displayAxes,
                         correctedMap: correctedMapPreview,
                         correctedAxes: correctedAxesPreview,
                         newDefinition,
@@ -571,8 +662,14 @@ export default function EcuTuningAssistant() {
     const handleAcceptSuggestion = () => {
         if (!aiSuggestion || !xdfFile) return;
 
-        setOriginalMap(aiSuggestion.correctedMap);
-        setAxes(aiSuggestion.correctedAxes);
+        setSourceMap(aiSuggestion.correctedMap);
+        setSourceAxes(aiSuggestion.correctedAxes);
+        setDisplayMap(aiSuggestion.correctedMap);
+        setDisplayAxes(aiSuggestion.correctedAxes);
+        setOriginalSortOrder({
+          x: aiSuggestion.correctedAxes.x.map((value, index) => ({ value, index })),
+          y: aiSuggestion.correctedAxes.y.map((value, index) => ({ value, index })),
+        });
         
         const newDefinitions = xdfFile.definitions.map(def => 
             def.name === selectedMapName ? aiSuggestion.newDefinition : def
@@ -731,7 +828,7 @@ export default function EcuTuningAssistant() {
                                     <p className="text-xs text-muted-foreground">
                                         Se os eixos (RPM, Carga, etc.) parecerem incorretos, corrija-os manualmente. A precisão da IA depende de eixos corretos.
                                     </p>
-                                    <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!originalMap}>
+                                    <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!displayMap}>
                                         <GitCompareArrows className="mr-2 h-4 w-4" />
                                         Corrigir Eixos do Mapa
                                     </Button>
@@ -744,7 +841,7 @@ export default function EcuTuningAssistant() {
                                             {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                                             Procurar Mapas Novos
                                         </Button>
-                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!originalMap || isValidatingMap}>
+                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || isValidatingMap}>
                                             {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                                             Analisar e Corrigir Mapa
                                         </Button>
@@ -787,17 +884,25 @@ export default function EcuTuningAssistant() {
                                 <CardDescription>{selectedMapName || "Carregue os ficheiros e selecione um mapa para começar"}</CardDescription>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0">
-                                {originalMap && axes ? (
+                                {displayMap && displayAxes ? (
                                     <Tabs defaultValue="2d" className="flex-1 flex flex-col">
                                         <TabsList className="mb-2">
                                             <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Visualização 2D</TabsTrigger>
                                             <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Visualização 3D</TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="2d" forceMount className="flex-1 relative">
-                                            <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>
+                                            <MapTable 
+                                                mapData={displayMap} 
+                                                xAxis={displayAxes.x} 
+                                                yAxis={displayAxes.y} 
+                                                xAxisLabel={displayAxes.xLabel} 
+                                                yAxisLabel={displayAxes.yLabel}
+                                                onSortAxis={handleSortAxis}
+                                                onResetSort={handleResetSort}
+                                            />
                                         </TabsContent>
                                         <TabsContent value="3d" forceMount className="flex-1">
-                                            <SurfacePlot3D mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>
+                                            <SurfacePlot3D mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
                                         </TabsContent>
                                     </Tabs>
                                 ) : (
@@ -813,7 +918,7 @@ export default function EcuTuningAssistant() {
                 </div>
                 
                 {/* Modals */}
-                <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={axes} />
+                <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={displayAxes} />
                 <MapAnalysisResultModal open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen} result={analysisResult} />
                 <MapCorrectionSuggestionModal open={isSuggestionModalOpen} onOpenChange={setIsSuggestionModalOpen} suggestion={aiSuggestion} onAccept={handleAcceptSuggestion} />
                 <AlertDialog open={isXdfErrorModalOpen} onOpenChange={setIsXdfErrorModalOpen}>
@@ -949,13 +1054,13 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                             <div className="flex flex-col gap-2">
                                 <h3 className="font-semibold text-center">Mapa Original</h3>
                                 <Card className="flex-1 flex flex-col min-h-[40vh]">
-                                <MapTable mapData={suggestion.originalMap} xAxis={suggestion.originalAxes.x} yAxis={suggestion.originalAxes.y} xAxisLabel={suggestion.originalAxes.xLabel} yAxisLabel={suggestion.originalAxes.yLabel} />
+                                <MapTable mapData={suggestion.originalMap} xAxis={suggestion.originalAxes.x} yAxis={suggestion.originalAxes.y} xAxisLabel={suggestion.originalAxes.xLabel} yAxisLabel={suggestion.originalAxes.yLabel} onSortAxis={() => {}} onResetSort={() => {}} />
                                 </Card>
                             </div>
                             <div className="flex flex-col gap-2">
                                 <h3 className="font-semibold text-center">Mapa Corrigido (Sugestão)</h3>
                                 <Card className="flex-1 flex flex-col border-primary min-h-[40vh]">
-                                <MapTable mapData={suggestion.correctedMap} xAxis={suggestion.correctedAxes.x} yAxis={suggestion.correctedAxes.y} xAxisLabel={suggestion.correctedAxes.xLabel} yAxisLabel={suggestion.correctedAxes.yLabel} />
+                                <MapTable mapData={suggestion.correctedMap} xAxis={suggestion.correctedAxes.x} yAxis={suggestion.correctedAxes.y} xAxisLabel={suggestion.correctedAxes.xLabel} yAxisLabel={suggestion.correctedAxes.yLabel} onSortAxis={() => {}} onResetSort={() => {}} />
                                 </Card>
                             </div>
                         </div>
