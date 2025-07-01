@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -30,7 +31,7 @@ const Plot = dynamic(() => import('react-plotly.js'), {
 });
 
 
-// Simplified MapTable to only display data
+// Simplified MapTable with editable cells
 function MapTable({
   mapData,
   xAxis,
@@ -39,6 +40,7 @@ function MapTable({
   yAxisLabel,
   onSortAxis,
   onResetSort,
+  onCellChange,
 }: {
   mapData: MapData;
   xAxis: (string | number)[];
@@ -47,6 +49,7 @@ function MapTable({
   yAxisLabel: string;
   onSortAxis: (axis: 'x' | 'y') => void;
   onResetSort: () => void;
+  onCellChange: (rowIndex: number, colIndex: number, value: string) => void;
 }) {
   const { min, max } = useMemo(() => {
     let minVal = Infinity;
@@ -116,9 +119,13 @@ function MapTable({
                 const cell = transposedData[yi]?.[xi];
                 return (
                   <td key={`cell-${xi}-${yi}`} className="p-0 border border-border text-center" style={{ backgroundColor: getHeatmapColor(cell, min, max) }}>
-                    <div className="w-[60px] h-8 flex items-center justify-center">
-                        {(cell === null || isNaN(cell) ? '-' : cell.toFixed(2))}
-                    </div>
+                     <Input
+                        type="text"
+                        inputMode="decimal"
+                        defaultValue={cell === null || isNaN(cell) ? '' : cell.toFixed(2)}
+                        onBlur={(e) => onCellChange(xi, yi, e.target.value)}
+                        className="w-[60px] h-8 p-0 text-center bg-transparent border-none rounded-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-background/80"
+                      />
                   </td>
                 );
               })}
@@ -206,8 +213,8 @@ export default function EcuTuningAssistant() {
     const [availableMaps, setAvailableMaps] = useState<XDFDefinition[]>([]);
     const [selectedMapName, setSelectedMapName] = useState<string>('');
 
-    // State for map data. "Source" is the original, "Display" is what's shown (can be sorted)
-    const [sourceMap, setSourceMap] = useState<MapData | null>(null);
+    // State for map data. "working" is the editable source of truth, "display" is for rendering (can be sorted)
+    const [workingMap, setWorkingMap] = useState<MapData | null>(null);
     const [sourceAxes, setSourceAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
     const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
@@ -345,7 +352,7 @@ export default function EcuTuningAssistant() {
 
     const resetState = () => {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
-        setSourceMap(null); setSourceAxes(null);
+        setWorkingMap(null); setSourceAxes(null);
         setDisplayMap(null); setDisplayAxes(null);
         setOriginalSortOrder(null);
         setIsValidatingMap(false);
@@ -473,8 +480,8 @@ export default function EcuTuningAssistant() {
               yLabel: definition.yAxisDef?.label || 'Eixo Y',
             };
             
-            setSourceMap(map);
-            setDisplayMap(map);
+            setWorkingMap(map);
+            setDisplayMap(JSON.parse(JSON.stringify(map)));
             setOriginalSortOrder({
               x: mapAxes.x.map((value, index) => ({ value, index })),
               y: mapAxes.y.map((value, index) => ({ value, index })),
@@ -543,7 +550,7 @@ export default function EcuTuningAssistant() {
     };
 
     const handleSortAxis = (axis: 'x' | 'y') => {
-        if (!sourceMap || !sourceAxes || !originalSortOrder || !displayAxes) return;
+        if (!workingMap || !sourceAxes || !originalSortOrder || !displayAxes) return;
 
         const sortedAxisWithIndices = [...originalSortOrder[axis]].sort((a, b) => {
             const valA = a.value;
@@ -560,9 +567,9 @@ export default function EcuTuningAssistant() {
         let newSortedMap: MapData;
 
         if (axis === 'y') { // Sorting rows
-            newSortedMap = newIndexMap.map(originalRowIndex => sourceMap[originalRowIndex]);
+            newSortedMap = newIndexMap.map(originalRowIndex => workingMap[originalRowIndex]);
         } else { // Sorting columns
-            newSortedMap = sourceMap.map(row => newIndexMap.map(originalColIndex => row[originalColIndex]));
+            newSortedMap = workingMap.map(row => newIndexMap.map(originalColIndex => row[originalColIndex]));
         }
 
         setDisplayAxes(prev => ({
@@ -574,11 +581,47 @@ export default function EcuTuningAssistant() {
     };
     
     const handleResetSort = () => {
-        if (sourceMap && sourceAxes) {
-            setDisplayMap(sourceMap);
-            setDisplayAxes(sourceAxes);
+        if (workingMap && sourceAxes) {
+            setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
+            setDisplayAxes(JSON.parse(JSON.stringify(sourceAxes)));
             addLog('Ordenação do mapa revertida para o original.', 'info');
         }
+    };
+    
+    // Handles changes from the editable cells in MapTable
+    const handleCellChange = (rowIndex: number, colIndex: number, value: string) => {
+      if (!workingMap || !displayMap) return;
+
+      const newValue = parseFloat(value);
+      if (isNaN(newValue)) {
+        addLog(`Valor inválido introduzido: "${value}". Apenas números são permitidos.`, 'error');
+        // Re-render display map to revert the input field
+        setDisplayMap(JSON.parse(JSON.stringify(displayMap)));
+        return;
+      }
+      
+      // Since sorting is complex, we'll find the corresponding cell in the workingMap
+      // by matching axis values. This is more robust than index mapping if axes have unique values.
+      if (!displayAxes || !sourceAxes) return;
+
+      const displayRowValue = displayAxes.y[rowIndex];
+      const displayColValue = displayAxes.x[colIndex];
+      
+      const workingRowIndex = sourceAxes.y.findIndex(v => v === displayRowValue);
+      const workingColIndex = sourceAxes.x.findIndex(v => v === displayColValue);
+
+      if (workingRowIndex !== -1 && workingColIndex !== -1) {
+        const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
+        newWorkingMap[workingRowIndex][workingColIndex] = newValue;
+        setWorkingMap(newWorkingMap);
+
+        // Also update the display map to reflect the change immediately
+        const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
+        newDisplayMap[rowIndex][colIndex] = newValue;
+        setDisplayMap(newDisplayMap);
+      } else {
+        addLog('Não foi possível atualizar o valor: célula correspondente não encontrada após a ordenação.', 'error');
+      }
     };
 
 
@@ -660,15 +703,17 @@ export default function EcuTuningAssistant() {
     };
     
     const handleAcceptSuggestion = () => {
-        if (!aiSuggestion || !xdfFile) return;
+        if (!aiSuggestion || !xdfFile || !sourceAxes) return;
 
-        setSourceMap(aiSuggestion.correctedMap);
-        setSourceAxes(aiSuggestion.correctedAxes);
+        setWorkingMap(aiSuggestion.correctedMap);
         setDisplayMap(aiSuggestion.correctedMap);
-        setDisplayAxes(aiSuggestion.correctedAxes);
+        
+        const newSourceAxes = aiSuggestion.correctedAxes;
+        setSourceAxes(newSourceAxes);
+        setDisplayAxes(newSourceAxes);
         setOriginalSortOrder({
-          x: aiSuggestion.correctedAxes.x.map((value, index) => ({ value, index })),
-          y: aiSuggestion.correctedAxes.y.map((value, index) => ({ value, index })),
+          x: newSourceAxes.x.map((value, index) => ({ value, index })),
+          y: newSourceAxes.y.map((value, index) => ({ value, index })),
         });
         
         const newDefinitions = xdfFile.definitions.map(def => 
@@ -890,7 +935,7 @@ export default function EcuTuningAssistant() {
                                             <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Visualização 2D</TabsTrigger>
                                             <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Visualização 3D</TabsTrigger>
                                         </TabsList>
-                                        <TabsContent value="2d" forceMount className="flex-1 relative">
+                                        <TabsContent value="2d" forceMount className="flex-1 relative data-[state=inactive]:hidden">
                                             <MapTable 
                                                 mapData={displayMap} 
                                                 xAxis={displayAxes.x} 
@@ -899,9 +944,10 @@ export default function EcuTuningAssistant() {
                                                 yAxisLabel={displayAxes.yLabel}
                                                 onSortAxis={handleSortAxis}
                                                 onResetSort={handleResetSort}
+                                                onCellChange={handleCellChange}
                                             />
                                         </TabsContent>
-                                        <TabsContent value="3d" forceMount className="flex-1">
+                                        <TabsContent value="3d" forceMount className="flex-1 data-[state=inactive]:hidden">
                                             <SurfacePlot3D mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
                                         </TabsContent>
                                     </Tabs>
@@ -1054,13 +1100,13 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                             <div className="flex flex-col gap-2">
                                 <h3 className="font-semibold text-center">Mapa Original</h3>
                                 <Card className="flex-1 flex flex-col min-h-[40vh]">
-                                <MapTable mapData={suggestion.originalMap} xAxis={suggestion.originalAxes.x} yAxis={suggestion.originalAxes.y} xAxisLabel={suggestion.originalAxes.xLabel} yAxisLabel={suggestion.originalAxes.yLabel} onSortAxis={() => {}} onResetSort={() => {}} />
+                                <MapTable mapData={suggestion.originalMap} xAxis={suggestion.originalAxes.x} yAxis={suggestion.originalAxes.y} xAxisLabel={suggestion.originalAxes.xLabel} yAxisLabel={suggestion.originalAxes.yLabel} onSortAxis={() => {}} onResetSort={() => {}} onCellChange={() => {}} />
                                 </Card>
                             </div>
                             <div className="flex flex-col gap-2">
                                 <h3 className="font-semibold text-center">Mapa Corrigido (Sugestão)</h3>
                                 <Card className="flex-1 flex flex-col border-primary min-h-[40vh]">
-                                <MapTable mapData={suggestion.correctedMap} xAxis={suggestion.correctedAxes.x} yAxis={suggestion.correctedAxes.y} xAxisLabel={suggestion.correctedAxes.xLabel} yAxisLabel={suggestion.correctedAxes.yLabel} onSortAxis={() => {}} onResetSort={() => {}} />
+                                <MapTable mapData={suggestion.correctedMap} xAxis={suggestion.correctedAxes.x} yAxis={suggestion.correctedAxes.y} xAxisLabel={suggestion.correctedAxes.xLabel} yAxisLabel={suggestion.correctedAxes.yLabel} onSortAxis={() => {}} onResetSort={() => {}} onCellChange={() => {}} />
                                 </Card>
                             </div>
                         </div>
