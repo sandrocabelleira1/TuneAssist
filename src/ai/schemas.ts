@@ -12,9 +12,9 @@ export const ValidateMapTypeOutputSchema = z.object({
     confidence: z.enum(['Alta', 'Média', 'Baixa']).describe('O nível de confiança de que o nome do mapa corresponde aos dados.'),
     suspectedType: z.string().describe('O tipo de mapa que a IA suspeita que os dados representam.'),
     reasoning: z.string().describe('Uma explicação que justifica a conclusão da IA.'),
-    suggestedEquation: z.string().optional().describe('(Opcional) A nova equação sugerida para os dados do mapa (eixo Z). Ex: "X / 655.35"'),
-    suggestedXAxisEquation: z.string().optional().describe('(Opcional) A nova equação sugerida para o eixo X. Ex: "X / 10.23"'),
-    suggestedYAxisEquation: z.string().optional().describe('(Opcional) A nova equação sugerida para o eixo Y.'),
+    suggestedEquation: z.string().optional().describe('Opcional. Uma equação matemática válida para os dados do mapa (eixo Z), usando "X" como variável. Ex: "X / 655.35". Omitir se não houver sugestão.'),
+    suggestedXAxisEquation: z.string().optional().describe('Opcional. Uma equação matemática válida para o eixo X, usando "X" como variável. Ex: "X / 10.23". Omitir se não houver sugestão.'),
+    suggestedYAxisEquation: z.string().optional().describe('Opcional. Uma equação matemática válida para o eixo Y, usando "X" como variável. Omitir se não houver sugestão.'),
 });
 export type ValidateMapTypeOutput = z.infer<typeof ValidateMapTypeOutputSchema>;
 

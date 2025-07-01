@@ -40,15 +40,11 @@ const prompt = ai.definePrompt({
     - \`suggestedEquation\`: Para corrigir os dados do mapa (eixo Z).
     - \`suggestedXAxisEquation\`: Para corrigir o eixo X.
     - \`suggestedYAxisEquation\`: Para corrigir o eixo Y.
+    **Importante:** Os campos de equação DEVEM conter apenas expressões matemáticas válidas (ex: "X * 0.1") ou ser omitidos do JSON de saída. NÃO preencha estes campos com texto como "análise necessária".
 5.  **Justifique a sua Conclusão:** No campo \`reasoning\`, explique o seu raciocínio de forma clara, referindo-se aos pontos de referência. Ex: "Confiança Baixa. O eixo de RPM começa em 8000, o que é um valor irrealista para a marcha lenta. O nome indica 'Ignição', mas os valores dos dados estão acima de 200, sugerindo que a escala está incorreta. Sugiro correções para os eixos e para os dados."
 
 **Formato da Saída (JSON OBRIGATÓRIO):**
-- \`confidence\`: "Alta", "Média", ou "Baixa".
-- \`suspectedType\`: O tipo de mapa que você suspeita.
-- \`reasoning\`: Justifique a sua conclusão.
-- \`suggestedEquation\`: (Opcional) A nova equação sugerida para os dados do mapa (eixo Z). Ex: "X / 655.35"
-- \`suggestedXAxisEquation\`: (Opcional) A nova equação sugerida para o eixo X. Ex: "X / 10.23"
-- \`suggestedYAxisEquation\`: (Opcional) A nova equação sugerida para o eixo Y.
+A sua resposta deve ser um objeto JSON que corresponda ao schema de saída, contendo apenas os campos definidos. Se não tiver uma sugestão de equação, OMITE o campo correspondente (suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation).
 
 **Dados de Entrada:**
 mapName: {{{mapName}}}
