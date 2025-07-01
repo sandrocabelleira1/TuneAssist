@@ -249,6 +249,11 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   try {
       equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
+      if (e instanceof SyntaxError) {
+          // If it's a syntax error, it's not a valid JS equation. Treat it as a text label.
+          console.warn(`A equação do eixo "${axisDef.equation}" foi tratada como uma etiqueta de texto devido a um erro de sintaxe.`);
+          return Array.from({ length: axisDef.count }, () => axisDef.equation);
+      }
       console.error(`Equação do eixo inválida "${axisDef.equation}": ${e}`);
       return Array.from({ length: axisDef.count }, () => NaN);
   }
@@ -303,9 +308,14 @@ export function readMapFromBin(
   try {
     equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
-    console.error(`Equação do mapa inválida "${def.equation}": ${e}`);
-    // Create a function that always returns NaN if the equation is invalid
-    equationFunc = () => NaN;
+    if (e instanceof SyntaxError) {
+        console.warn(`A equação do mapa "${def.equation}" foi tratada como inválida devido a um erro de sintaxe. Os valores do mapa serão nulos.`);
+        equationFunc = () => null;
+    } else {
+        console.error(`Equação do mapa inválida "${def.equation}": ${e}`);
+        // Create a function that always returns null if the equation is invalid
+        equationFunc = () => null;
+    }
   }
 
   for (let r = 0; r < def.rows; r++) {
