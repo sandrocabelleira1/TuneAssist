@@ -793,10 +793,10 @@ export default function EcuTuningAssistant() {
                                             <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Visualização 2D</TabsTrigger>
                                             <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Visualização 3D</TabsTrigger>
                                         </TabsList>
-                                        <TabsContent value="2d" className="flex-1 relative">
+                                        <TabsContent value="2d" forceMount className="flex-1 relative">
                                             <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>
                                         </TabsContent>
-                                        <TabsContent value="3d" className="flex-1">
+                                        <TabsContent value="3d" forceMount className="flex-1">
                                             <SurfacePlot3D mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>
                                         </TabsContent>
                                     </Tabs>
