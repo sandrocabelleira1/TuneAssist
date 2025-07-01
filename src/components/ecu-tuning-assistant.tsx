@@ -20,7 +20,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2 } from 'lucide-react';
+import { AlertCircle, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2 } from 'lucide-react';
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
 import type { PlotlyProps } from 'react-plotly.js';
 
@@ -41,6 +43,7 @@ function MapTable({
   onSortAxis,
   onResetSort,
   onCellChange,
+  isEditable = true,
 }: {
   mapData: MapData;
   xAxis: (string | number)[];
@@ -50,6 +53,7 @@ function MapTable({
   onSortAxis: (axis: 'x' | 'y') => void;
   onResetSort: () => void;
   onCellChange: (rowIndex: number, colIndex: number, value: string) => void;
+  isEditable?: boolean;
 }) {
   const { min, max } = useMemo(() => {
     let minVal = Infinity;
@@ -80,7 +84,8 @@ function MapTable({
                       <div className="font-semibold text-xs">Vertical (Y): <span className="font-normal text-foreground">{yAxisLabel}</span></div>
                       <div className="font-semibold text-xs">Horizontal (X): <span className="font-normal text-foreground">{xAxisLabel}</span></div>
                   </div>
-                   <div className="flex items-center gap-1">
+                  {isEditable && (
+                     <div className="flex items-center gap-1">
                        <Tooltip>
                            <TooltipTrigger asChild>
                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
@@ -99,7 +104,8 @@ function MapTable({
                            </TooltipTrigger>
                            <TooltipContent><p>Restaurar ordem original</p></TooltipContent>
                        </Tooltip>
-                  </div>
+                    </div>
+                  )}
               </div>
             </th>
             {displayYAxis.map((y, i) => (
@@ -123,8 +129,12 @@ function MapTable({
                         type="text"
                         inputMode="decimal"
                         defaultValue={cell === null || isNaN(cell) ? '' : cell.toFixed(2)}
-                        onBlur={(e) => onCellChange(xi, yi, e.target.value)}
-                        className="w-[60px] h-8 p-0 text-center bg-transparent border-none rounded-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-background/80"
+                        onBlur={(e) => isEditable && onCellChange(xi, yi, e.target.value)}
+                        readOnly={!isEditable}
+                        className={cn(
+                            "w-[60px] h-8 p-0 text-center bg-transparent border-none rounded-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-background/80",
+                            !isEditable && "cursor-default focus-visible:ring-0"
+                        )}
                       />
                   </td>
                 );
@@ -193,6 +203,7 @@ type AISuggestion = {
     originalAxes: { x: (string | number)[]; y: (string | number)[], xLabel: string; yLabel: string; };
     correctedAxes: { x: (string | number)[]; y: (string | number)[], xLabel: string; yLabel: string; };
     newDefinition: XDFDefinition;
+    originalDefinition: XDFDefinition;
 }
 
 function bufferToHex(buffer: ArrayBuffer) {
@@ -670,9 +681,7 @@ export default function EcuTuningAssistant() {
                 try {
                     const correctedXAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
                     const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-
                     const correctedMapPreview = readMapFromBin(binFile.buffer, newDefinition, correctedXAxisPreview, correctedYAxisPreview);
-
                     const correctedAxesPreview = {
                         x: correctedXAxisPreview,
                         y: correctedYAxisPreview,
@@ -687,6 +696,7 @@ export default function EcuTuningAssistant() {
                         correctedMap: correctedMapPreview,
                         correctedAxes: correctedAxesPreview,
                         newDefinition,
+                        originalDefinition: JSON.parse(JSON.stringify(currentDef)),
                     });
                     setIsSuggestionModalOpen(true);
                     addLog('A IA propôs uma correção para as equações do mapa.', 'info');
@@ -702,30 +712,73 @@ export default function EcuTuningAssistant() {
         }
     };
     
-    const handleAcceptSuggestion = () => {
-        if (!aiSuggestion || !xdfFile || !sourceAxes) return;
+    const handleAcceptSuggestion = (correctionsToApply: { x: boolean; y: boolean; z: boolean; }) => {
+        if (!aiSuggestion || !xdfFile || !binFile || !selectedMapName) return;
 
-        setWorkingMap(aiSuggestion.correctedMap);
-        setDisplayMap(aiSuggestion.correctedMap);
-        
-        const newSourceAxes = aiSuggestion.correctedAxes;
-        setSourceAxes(newSourceAxes);
-        setDisplayAxes(newSourceAxes);
-        setOriginalSortOrder({
-          x: newSourceAxes.x.map((value, index) => ({ value, index })),
-          y: newSourceAxes.y.map((value, index) => ({ value, index })),
-        });
-        
-        const newDefinitions = xdfFile.definitions.map(def => 
-            def.name === selectedMapName ? aiSuggestion.newDefinition : def
-        );
-        setXdfFile({ ...xdfFile, definitions: newDefinitions });
-        
-        addLog(`Correção da IA aplicada ao mapa "${selectedMapName}".`, 'success');
-        toast({ title: 'Correção Aplicada', description: 'O mapa foi atualizado com a sugestão da IA.' });
+        // Start with the original definition from before this suggestion
+        const newDefinition = JSON.parse(JSON.stringify(aiSuggestion.originalDefinition)) as XDFDefinition;
+        const suggestedDefinition = aiSuggestion.newDefinition;
+        let appliedCorrectionsLog = [];
 
-        setIsSuggestionModalOpen(false);
-        setAiSuggestion(null);
+        // Conditionally apply corrections
+        if (correctionsToApply.x && newDefinition.xAxisDef && suggestedDefinition.xAxisDef?.equation && newDefinition.xAxisDef.equation !== suggestedDefinition.xAxisDef.equation) {
+            newDefinition.xAxisDef.equation = suggestedDefinition.xAxisDef.equation;
+            appliedCorrectionsLog.push("Eixo X");
+        }
+        if (correctionsToApply.y && newDefinition.yAxisDef && suggestedDefinition.yAxisDef?.equation && newDefinition.yAxisDef.equation !== suggestedDefinition.yAxisDef.equation) {
+            newDefinition.yAxisDef.equation = suggestedDefinition.yAxisDef.equation;
+            appliedCorrectionsLog.push("Eixo Y");
+        }
+        if (correctionsToApply.z && newDefinition.equation !== suggestedDefinition.equation) {
+            newDefinition.equation = suggestedDefinition.equation;
+            appliedCorrectionsLog.push("Dados do Mapa (Z)");
+        }
+
+        if (appliedCorrectionsLog.length === 0) {
+            addLog("Nenhuma correção foi selecionada para ser aplicada.", "info");
+            setIsSuggestionModalOpen(false);
+            setAiSuggestion(null);
+            return;
+        }
+
+        try {
+            // Recalculate map and axes based on the new, partially or fully updated definition
+            const correctedXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
+            const correctedYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+            const correctedMap = readMapFromBin(binFile.buffer, newDefinition, correctedXAxis, correctedYAxis);
+            const newSourceAxes = {
+                x: correctedXAxis,
+                y: correctedYAxis,
+                xLabel: newDefinition.xAxisDef?.label || 'Eixo X',
+                yLabel: newDefinition.yAxisDef?.label || 'Eixo Y'
+            };
+
+            // Update all the component's state
+            setWorkingMap(correctedMap);
+            setDisplayMap(correctedMap);
+            setSourceAxes(newSourceAxes);
+            setDisplayAxes(newSourceAxes);
+            setOriginalSortOrder({
+              x: newSourceAxes.x.map((value, index) => ({ value, index })),
+              y: newSourceAxes.y.map((value, index) => ({ value, index })),
+            });
+            
+            // Update the main XDF definition state
+            const newDefinitions = xdfFile.definitions.map(def => 
+                def.name === selectedMapName ? newDefinition : def
+            );
+            setXdfFile({ ...xdfFile, definitions: newDefinitions });
+            
+            addLog(`Correções da IA aplicadas para: ${appliedCorrectionsLog.join(', ')} no mapa "${selectedMapName}".`, 'success');
+            toast({ title: 'Correções Aplicadas', description: `O mapa foi atualizado com as sugestões selecionadas.` });
+
+        } catch (error) {
+            addLog(`Erro ao aplicar a sugestão da IA: ${(error as Error).message}`, 'error');
+            toast({ variant: 'destructive', title: 'Erro ao Aplicar Correção', description: 'Não foi possível recalcular o mapa com a nova equação.' });
+        } finally {
+            setIsSuggestionModalOpen(false);
+            setAiSuggestion(null);
+        }
     };
 
     const handleScanForMaps = async () => {
@@ -1075,48 +1128,100 @@ function MapAnalysisResultModal({ open, onOpenChange, result }: { open: boolean,
     );
 }
 
-function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept }: { open: boolean, onOpenChange: (open: boolean) => void, suggestion: AISuggestion | null, onAccept: () => void }) {
+function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept }: { open: boolean, onOpenChange: (open: boolean) => void, suggestion: AISuggestion | null, onAccept: (corrections: { x: boolean; y: boolean; z: boolean; }) => void }) {
+    const [correctionsToApply, setCorrectionsToApply] = useState({ x: false, y: false, z: false });
+
+    useEffect(() => {
+        if (suggestion) {
+            const { originalDefinition, newDefinition } = suggestion;
+            setCorrectionsToApply({
+                x: newDefinition.xAxisDef?.equation !== originalDefinition.xAxisDef?.equation,
+                y: newDefinition.yAxisDef?.equation !== originalDefinition.yAxisDef?.equation,
+                z: newDefinition.equation !== originalDefinition.equation,
+            });
+        }
+    }, [suggestion]);
+    
     if (!suggestion) return null;
+
+    const { originalDefinition, newDefinition, reasoning } = suggestion;
+    const hasXCorrection = newDefinition.xAxisDef?.equation !== originalDefinition.xAxisDef?.equation;
+    const hasYCorrection = newDefinition.yAxisDef?.equation !== originalDefinition.yAxisDef?.equation;
+    const hasZCorrection = newDefinition.equation !== originalDefinition.equation;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-7xl h-[90vh] flex flex-col">
+            <DialogContent className="max-w-4xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <GitCompareArrows className="text-primary"/>
                         Sugestão de Correção da IA
                     </DialogTitle>
                     <DialogDescription>
-                        A IA detetou um problema e sugere a seguinte correção. Compare os mapas e aceite se a correção parecer adequada.
+                        A IA detetou um problema e sugere as seguintes correções. Selecione quais deseja aplicar.
                     </DialogDescription>
                 </DialogHeader>
-                <ScrollArea className="flex-1 -mx-6">
-                    <div className="px-6">
-                        <div className="space-y-2 mt-2">
-                            <h3 className="text-sm font-semibold text-muted-foreground">Justificação da IA:</h3>
-                            <p className="text-sm p-3 bg-muted rounded-md border">{suggestion.reasoning}</p>
-                        </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0 mt-4">
-                            <div className="flex flex-col gap-2">
-                                <h3 className="font-semibold text-center">Mapa Original</h3>
-                                <Card className="flex-1 flex flex-col min-h-[40vh]">
-                                <MapTable mapData={suggestion.originalMap} xAxis={suggestion.originalAxes.x} yAxis={suggestion.originalAxes.y} xAxisLabel={suggestion.originalAxes.xLabel} yAxisLabel={suggestion.originalAxes.yLabel} onSortAxis={() => {}} onResetSort={() => {}} onCellChange={() => {}} />
-                                </Card>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                                <h3 className="font-semibold text-center">Mapa Corrigido (Sugestão)</h3>
-                                <Card className="flex-1 flex flex-col border-primary min-h-[40vh]">
-                                <MapTable mapData={suggestion.correctedMap} xAxis={suggestion.correctedAxes.x} yAxis={suggestion.correctedAxes.y} xAxisLabel={suggestion.correctedAxes.xLabel} yAxisLabel={suggestion.correctedAxes.yLabel} onSortAxis={() => {}} onResetSort={() => {}} onCellChange={() => {}} />
-                                </Card>
-                            </div>
-                        </div>
+                <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                        <h3 className="text-sm font-semibold text-muted-foreground">Justificação da IA:</h3>
+                        <p className="text-sm p-3 bg-muted rounded-md border">{reasoning}</p>
                     </div>
-                </ScrollArea>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold">Correções Propostas</h3>
+                        
+                        {hasXCorrection && newDefinition.xAxisDef && originalDefinition.xAxisDef && (
+                            <div className="flex items-start space-x-4 p-3 rounded-lg border">
+                                <Checkbox id="corr_x" className="mt-1" checked={correctionsToApply.x} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, x: !!checked}))} />
+                                <div className="grid gap-1.5 leading-none">
+                                    <label htmlFor="corr_x" className="text-sm font-medium">Correção do Eixo X ({originalDefinition.xAxisDef.label})</label>
+                                    <div className="text-xs space-y-1">
+                                        <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.xAxisDef.equation}</code></p>
+                                        <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.xAxisDef.equation}</code></p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {hasYCorrection && newDefinition.yAxisDef && originalDefinition.yAxisDef && (
+                            <div className="flex items-start space-x-4 p-3 rounded-lg border">
+                                <Checkbox id="corr_y" className="mt-1" checked={correctionsToApply.y} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, y: !!checked}))} />
+                                <div className="grid gap-1.5 leading-none">
+                                    <label htmlFor="corr_y" className="text-sm font-medium">Correção do Eixo Y ({originalDefinition.yAxisDef.label})</label>
+                                    <div className="text-xs space-y-1">
+                                        <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.yAxisDef.equation}</code></p>
+                                        <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.yAxisDef.equation}</code></p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {hasZCorrection && (
+                             <div className="flex items-start space-x-4 p-3 rounded-lg border">
+                                <Checkbox id="corr_z" className="mt-1" checked={correctionsToApply.z} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, z: !!checked}))} />
+                                <div className="grid gap-1.5 leading-none">
+                                    <label htmlFor="corr_z" className="text-sm font-medium">Correção dos Dados do Mapa (Eixo Z)</label>
+                                    <div className="text-xs space-y-1">
+                                        <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.equation}</code></p>
+                                        <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {!(hasXCorrection || hasYCorrection || hasZCorrection) && (
+                            <p className="text-sm text-center text-muted-foreground p-4">Nenhuma nova equação foi sugerida, mas a IA forneceu a sua análise.</p>
+                        )}
+                    </div>
+                </div>
+
                 <DialogFooter className="mt-4 pt-4 border-t">
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Rejeitar</Button>
-                    <Button onClick={onAccept}>
+                    <Button onClick={() => onAccept(correctionsToApply)} disabled={!correctionsToApply.x && !correctionsToApply.y && !correctionsToApply.z}>
                         <CheckCircle className="mr-2"/>
-                        Aceitar Sugestão
+                        Aplicar Correções Selecionadas
                     </Button>
                 </DialogFooter>
             </DialogContent>
