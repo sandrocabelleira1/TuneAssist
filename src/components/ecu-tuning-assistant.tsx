@@ -1019,7 +1019,13 @@ export default function EcuTuningAssistant() {
                 {/* Modals */}
                 <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={displayAxes} />
                 <MapAnalysisResultModal open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen} result={analysisResult} />
-                <MapCorrectionSuggestionModal open={isSuggestionModalOpen} onOpenChange={setIsSuggestionModalOpen} suggestion={aiSuggestion} onAccept={handleAcceptSuggestion} />
+                <MapCorrectionSuggestionModal 
+                    open={isSuggestionModalOpen} 
+                    onOpenChange={setIsSuggestionModalOpen} 
+                    suggestion={aiSuggestion} 
+                    onAccept={handleAcceptSuggestion}
+                    binBuffer={binFile?.buffer || null}
+                />
                 <AlertDialog open={isXdfErrorModalOpen} onOpenChange={setIsXdfErrorModalOpen}>
                     <AlertDialogContent>
                         <AlertDialogHeader><AlertDialogTitle>Não Foi Possível Ler o Ficheiro XDF</AlertDialogTitle>
@@ -1128,20 +1134,64 @@ function MapAnalysisResultModal({ open, onOpenChange, result }: { open: boolean,
     );
 }
 
-function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept }: { open: boolean, onOpenChange: (open: boolean) => void, suggestion: AISuggestion | null, onAccept: (corrections: { x: boolean; y: boolean; z: boolean; }) => void }) {
-    const [correctionsToApply, setCorrectionsToApply] = useState({ x: false, y: false, z: false });
+function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept, binBuffer }: { open: boolean, onOpenChange: (open: boolean) => void, suggestion: AISuggestion | null, onAccept: (corrections: { x: boolean; y: boolean; z: boolean; }) => void, binBuffer: ArrayBuffer | null }) {
+    const [correctionsToApply, setCorrectionsToApply] = useState({ x: true, y: true, z: true });
+    const [preview, setPreview] = useState<{ map: MapData; axes: { x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } } | null>(null);
 
+    // Effect to initialize state when modal opens
     useEffect(() => {
-        if (suggestion) {
-            const { originalDefinition, newDefinition } = suggestion;
-            setCorrectionsToApply({
-                x: newDefinition.xAxisDef?.equation !== originalDefinition.xAxisDef?.equation,
-                y: newDefinition.yAxisDef?.equation !== originalDefinition.yAxisDef?.equation,
-                z: newDefinition.equation !== originalDefinition.equation,
-            });
+        if (open && suggestion) {
+            const initialCorrections = {
+                x: suggestion.newDefinition.xAxisDef?.equation !== suggestion.originalDefinition.xAxisDef?.equation,
+                y: suggestion.newDefinition.yAxisDef?.equation !== suggestion.originalDefinition.yAxisDef?.equation,
+                z: suggestion.newDefinition.equation !== suggestion.originalDefinition.equation,
+            };
+            setCorrectionsToApply(initialCorrections);
+        } else {
+          setPreview(null);
         }
-    }, [suggestion]);
-    
+    }, [open, suggestion]);
+
+    // Effect to update the preview whenever `correctionsToApply` changes
+    useEffect(() => {
+        if (!open || !suggestion || !binBuffer) {
+            if (open) setPreview(null);
+            return;
+        }
+
+        try {
+            const tempDefinition = JSON.parse(JSON.stringify(suggestion.originalDefinition));
+
+            if (correctionsToApply.x && suggestion.newDefinition.xAxisDef) {
+                tempDefinition.xAxisDef.equation = suggestion.newDefinition.xAxisDef.equation;
+            }
+            if (correctionsToApply.y && suggestion.newDefinition.yAxisDef) {
+                tempDefinition.yAxisDef.equation = suggestion.newDefinition.yAxisDef.equation;
+            }
+            if (correctionsToApply.z) {
+                tempDefinition.equation = suggestion.newDefinition.equation;
+            }
+            
+            const correctedXAxis = readAxisFromBin(binBuffer, tempDefinition.xAxisDef);
+            const correctedYAxis = readAxisFromBin(binBuffer, tempDefinition.yAxisDef);
+            const correctedMap = readMapFromBin(binBuffer, tempDefinition, correctedXAxis, correctedYAxis);
+
+            setPreview({
+                map: correctedMap,
+                axes: {
+                    x: correctedXAxis,
+                    y: correctedYAxis,
+                    xLabel: tempDefinition.xAxisDef?.label || 'Eixo X',
+                    yLabel: tempDefinition.yAxisDef?.label || 'Eixo Y',
+                }
+            });
+        } catch (error) {
+            console.error("Error generating correction preview", error);
+            setPreview(null);
+        }
+
+    }, [open, correctionsToApply, suggestion, binBuffer]);
+
     if (!suggestion) return null;
 
     const { originalDefinition, newDefinition, reasoning } = suggestion;
@@ -1151,17 +1201,59 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl">
+            <DialogContent className="max-w-7xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <GitCompareArrows className="text-primary"/>
                         Sugestão de Correção da IA
                     </DialogTitle>
                     <DialogDescription>
-                        A IA detetou um problema e sugere as seguintes correções. Selecione quais deseja aplicar.
+                         A IA detetou um problema. Selecione as correções para pré-visualizar e aplicar.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-4">
+                     <div>
+                        <h3 className="font-semibold mb-2 text-center">Original</h3>
+                        <div className="h-[400px] overflow-auto border rounded-md">
+                          <MapTable
+                            mapData={suggestion.originalMap}
+                            xAxis={suggestion.originalAxes.x}
+                            yAxis={suggestion.originalAxes.y}
+                            xAxisLabel={suggestion.originalAxes.xLabel}
+                            yAxisLabel={suggestion.originalAxes.yLabel}
+                            isEditable={false}
+                            onSortAxis={() => {}}
+                            onResetSort={() => {}}
+                            onCellChange={() => {}}
+                          />
+                        </div>
+                    </div>
+                    <div>
+                        <h3 className="font-semibold mb-2 text-center">Pré-visualização (com correções selecionadas)</h3>
+                        <div className="h-[400px] overflow-auto border rounded-md">
+                           {preview ? (
+                             <MapTable
+                                mapData={preview.map}
+                                xAxis={preview.axes.x}
+                                yAxis={preview.axes.y}
+                                xAxisLabel={preview.axes.xLabel}
+                                yAxisLabel={preview.axes.yLabel}
+                                isEditable={false}
+                                onSortAxis={() => {}}
+                                onResetSort={() => {}}
+                                onCellChange={() => {}}
+                             />
+                           ) : (
+                             <div className="flex items-center justify-center h-full text-muted-foreground">
+                                A gerar pré-visualização...
+                             </div>
+                           )}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-4 pt-4">
                     <div className="space-y-2">
                         <h3 className="text-sm font-semibold text-muted-foreground">Justificação da IA:</h3>
                         <p className="text-sm p-3 bg-muted rounded-md border">{reasoning}</p>
@@ -1170,13 +1262,13 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                     <Separator />
 
                     <div className="space-y-4">
-                        <h3 className="text-lg font-semibold">Correções Propostas</h3>
+                        <h3 className="text-lg font-semibold">Comandos (Selecione para pré-visualizar e aplicar)</h3>
                         
                         {hasXCorrection && newDefinition.xAxisDef && originalDefinition.xAxisDef && (
-                            <div className="flex items-start space-x-4 p-3 rounded-lg border">
+                            <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
                                 <Checkbox id="corr_x" className="mt-1" checked={correctionsToApply.x} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, x: !!checked}))} />
                                 <div className="grid gap-1.5 leading-none">
-                                    <label htmlFor="corr_x" className="text-sm font-medium">Correção do Eixo X ({originalDefinition.xAxisDef.label})</label>
+                                    <label htmlFor="corr_x" className="text-sm font-medium">Corrigir Eixo X ({originalDefinition.xAxisDef.label})</label>
                                     <div className="text-xs space-y-1">
                                         <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.xAxisDef.equation}</code></p>
                                         <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.xAxisDef.equation}</code></p>
@@ -1186,10 +1278,10 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                         )}
 
                         {hasYCorrection && newDefinition.yAxisDef && originalDefinition.yAxisDef && (
-                            <div className="flex items-start space-x-4 p-3 rounded-lg border">
+                            <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
                                 <Checkbox id="corr_y" className="mt-1" checked={correctionsToApply.y} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, y: !!checked}))} />
                                 <div className="grid gap-1.5 leading-none">
-                                    <label htmlFor="corr_y" className="text-sm font-medium">Correção do Eixo Y ({originalDefinition.yAxisDef.label})</label>
+                                    <label htmlFor="corr_y" className="text-sm font-medium">Corrigir Eixo Y ({originalDefinition.yAxisDef.label})</label>
                                     <div className="text-xs space-y-1">
                                         <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.yAxisDef.equation}</code></p>
                                         <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.yAxisDef.equation}</code></p>
@@ -1199,10 +1291,10 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                         )}
                         
                         {hasZCorrection && (
-                             <div className="flex items-start space-x-4 p-3 rounded-lg border">
+                             <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
                                 <Checkbox id="corr_z" className="mt-1" checked={correctionsToApply.z} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, z: !!checked}))} />
                                 <div className="grid gap-1.5 leading-none">
-                                    <label htmlFor="corr_z" className="text-sm font-medium">Correção dos Dados do Mapa (Eixo Z)</label>
+                                    <label htmlFor="corr_z" className="text-sm font-medium">Corrigir Dados do Mapa (Eixo Z)</label>
                                     <div className="text-xs space-y-1">
                                         <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.equation}</code></p>
                                         <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
