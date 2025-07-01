@@ -18,7 +18,17 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlertCircle, CheckCircle, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Cube } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import type { PlotlyProps } from 'react-plotly.js';
+
+// Dynamically import Plotly to avoid SSR issues and show a loader
+const Plot = dynamic(() => import('react-plotly.js'), {
+  ssr: false,
+  loading: () => <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>,
+});
+
 
 // Simplified MapTable to only display data
 function MapTable({
@@ -88,6 +98,53 @@ function MapTable({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// New 3D Surface Plot component
+function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel }: { mapData: MapData; xAxis: (string | number)[]; yAxis: (string | number)[]; xAxisLabel: string; yAxisLabel: string; }) {
+  const data: PlotlyProps['data'] = [{
+    x: yAxis as any[],
+    y: xAxis as any[],
+    z: mapData as any[][],
+    type: 'surface',
+    colorscale: [
+      [0, 'rgb(0,0,255)'],      // Blue for low values
+      [0.5, 'rgb(0,255,0)'],    // Green for mid values
+      [1, 'rgb(255,0,0)']       // Red for high values
+    ],
+    colorbar: {
+      title: 'Valor',
+      tickfont: { color: 'hsl(var(--foreground))' },
+      titlefont: { color: 'hsl(var(--foreground))' }
+    }
+  }];
+
+  const layout: PlotlyProps['layout'] = {
+    title: '',
+    autosize: true,
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    font: { color: 'hsl(var(--foreground))' },
+    scene: {
+      xaxis: { title: yAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+      yaxis: { title: xAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+      zaxis: { title: 'Valor', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+      camera: { eye: {x: 1.8, y: -1.8, z: 1.2} }
+    },
+    margin: { l: 0, r: 0, b: 0, t: 0 },
+  };
+
+  return (
+    <div className="h-full w-full">
+      <Plot
+        data={data}
+        layout={layout}
+        useResizeHandler
+        className="h-full w-full"
+        config={{ responsive: true }}
+      />
     </div>
   );
 }
@@ -724,16 +781,27 @@ export default function EcuTuningAssistant() {
 
                     {/* Map View */}
                     <main className="xl:col-span-9">
-                        <Card className="min-h-[85vh]">
+                        <Card className="min-h-[85vh] flex flex-col">
                             <CardHeader>
                                 <CardTitle>Visualizador de Mapas</CardTitle>
                                 <CardDescription>{selectedMapName || "Carregue os ficheiros e selecione um mapa para começar"}</CardDescription>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="flex-1 flex flex-col min-h-0">
                                 {originalMap && axes ? (
-                                    <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>
+                                    <Tabs defaultValue="2d" className="flex-1 flex flex-col">
+                                        <TabsList className="mb-2">
+                                            <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Visualização 2D</TabsTrigger>
+                                            <TabsTrigger value="3d"><Cube className="mr-2 h-4 w-4" />Visualização 3D</TabsTrigger>
+                                        </TabsList>
+                                        <TabsContent value="2d" className="flex-1 relative">
+                                            <MapTable mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>
+                                        </TabsContent>
+                                        <TabsContent value="3d" className="flex-1">
+                                            <SurfacePlot3D mapData={originalMap} xAxis={axes.x} yAxis={axes.y} xAxisLabel={axes.xLabel} yAxisLabel={axes.yLabel}/>
+                                        </TabsContent>
+                                    </Tabs>
                                 ) : (
-                                    <div className="h-96 flex flex-col items-center justify-center text-center text-muted-foreground">
+                                    <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
                                         <FileUp className="w-16 h-16 mb-4"/>
                                         <p className="font-semibold">Nenhum mapa carregado</p>
                                         <p className="text-sm">Por favor carregue um ficheiro .BIN e procure por mapas ou carregue um .XDF.</p>
