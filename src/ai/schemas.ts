@@ -39,5 +39,6 @@ export const FindMapsInputSchema = z.object({
 
 export const FindMapsOutputSchema = z.object({
   maps: z.array(PotentialMapSchema),
+  analysis: z.string().optional().describe("An analysis of the scan, especially if no maps are found. Explains why, e.g., data seems encrypted or unstructured."),
 });
 export type FindMapsOutput = z.infer<typeof FindMapsOutputSchema>;

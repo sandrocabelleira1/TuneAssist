@@ -888,34 +888,40 @@ export default function EcuTuningAssistant() {
 
         setIsScanning(false);
 
-        if (result.success && result.data && result.data.maps.length > 0) {
-            addLog(`IA encontrou ${result.data.maps.length} mapas potenciais.`, 'success');
+        if (result.success && result.data) {
+            if (result.data.maps.length > 0) {
+                addLog(`IA encontrou ${result.data.maps.length} mapas potenciais.`, 'success');
 
-            const newPotentialMaps: XDFDefinition[] = result.data.maps.map(pMap => ({
-                name: `${pMap.name} (IA)`,
-                address: pMap.address,
-                rows: pMap.rows,
-                cols: pMap.cols,
-                dataSize: pMap.dataSize,
-                isBigEndian: false, // Assume little-endian as a common default
-                equation: 'X',
-                xAxisDef: { address: null, count: pMap.cols, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Coluna' },
-                yAxisDef: { address: null, count: pMap.rows, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Linha' },
-                isPotential: true,
-            }));
+                const newPotentialMaps: XDFDefinition[] = result.data.maps.map(pMap => ({
+                    name: `${pMap.name} (IA)`,
+                    address: pMap.address,
+                    rows: pMap.rows,
+                    cols: pMap.cols,
+                    dataSize: pMap.dataSize,
+                    isBigEndian: false, // Assume little-endian as a common default
+                    equation: 'X',
+                    xAxisDef: { address: null, count: pMap.cols, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Coluna' },
+                    yAxisDef: { address: null, count: pMap.rows, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Linha' },
+                    isPotential: true,
+                }));
 
-            setAvailableMaps(prev => {
-                const existingAddresses = new Set(prev.map(m => m.address));
-                const filteredNewMaps = newPotentialMaps.filter(m => !existingAddresses.has(m.address));
-                return [...prev, ...filteredNewMaps];
-            });
-
+                setAvailableMaps(prev => {
+                    const existingAddresses = new Set(prev.map(m => m.address));
+                    const filteredNewMaps = newPotentialMaps.filter(m => !existingAddresses.has(m.address));
+                    return [...prev, ...filteredNewMaps];
+                });
+            } else {
+                const analysisMessage = result.data.analysis || 'A IA concluiu a análise mas não encontrou novos mapas potenciais.';
+                addLog(analysisMessage, 'info');
+                toast({
+                    title: "Procura Concluída",
+                    description: analysisMessage,
+                    duration: 8000
+                });
+            }
         } else if (result.error) {
             addLog(`Erro ao procurar mapas: ${result.error}`, 'error');
             toast({ variant: 'destructive', title: "Falha na Procura", description: result.error });
-        } else {
-            addLog('A IA não encontrou novos mapas potenciais.', 'info');
-            toast({ title: "Procura Concluída", description: "Nenhum novo mapa potencial foi encontrado." });
         }
     };
 

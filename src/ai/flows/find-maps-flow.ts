@@ -44,7 +44,9 @@ The provided hex data is from the start of the file. The address of each map sho
 
 A list of existing maps is provided below. Do not suggest maps that are already defined. Your main goal is to find new, unidentified maps by looking for structured data that is NOT part of the existing maps. Pay close attention to the addresses to avoid any overlaps.
 
-Respond ONLY with a JSON object containing a 'maps' key, which holds an array of map objects matching the specified output schema. Be critical and only identify maps you are confident about.
+IMPORTANT: If you cannot confidently identify any new maps, respond with an empty 'maps' array and provide a brief explanation in the 'analysis' field. For example, explain that the data appears to be encrypted, compressed, or simply lacks the structured patterns typical of ECU maps.
+
+Respond ONLY with a JSON object matching the specified output schema. Be critical and only identify maps you are confident about.
 
 Hex Data:
 {{{binHexData}}}
@@ -65,7 +67,7 @@ const findMapsFlow = ai.defineFlow(
   async (input) => {
     const { output } = await prompt(input);
     if (!output) {
-      throw new Error("A IA não conseguiu encontrar nenhum mapa potencial.");
+      return { maps: [], analysis: "A IA devolveu uma resposta inesperada. Por favor, tente novamente." };
     }
     return output;
   }
