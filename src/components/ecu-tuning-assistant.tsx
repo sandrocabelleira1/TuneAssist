@@ -230,6 +230,7 @@ export default function EcuTuningAssistant() {
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
     const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
+    const [mapVersion, setMapVersion] = useState(0);
 
     const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: (string|number)[], y: (string|number)[] }>>>({});
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
@@ -514,6 +515,7 @@ export default function EcuTuningAssistant() {
               setDisplayAxes(mapAxes);
             }
             
+            setMapVersion(v => v + 1);
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
 
         } catch (error) {
@@ -595,6 +597,7 @@ export default function EcuTuningAssistant() {
         if (workingMap && sourceAxes) {
             setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
             setDisplayAxes(JSON.parse(JSON.stringify(sourceAxes)));
+            setMapVersion(v => v + 1);
             addLog('Ordenação do mapa revertida para o original.', 'info');
         }
     };
@@ -722,15 +725,15 @@ export default function EcuTuningAssistant() {
 
         // Conditionally apply corrections based on user's checkbox selection.
         // We trust the user's intent from the UI.
-        if (correctionsToApply.x && newDefinition.xAxisDef && suggestedDefinition.xAxisDef) {
+        if (correctionsToApply.x && newDefinition.xAxisDef && suggestedDefinition.xAxisDef?.equation) {
             newDefinition.xAxisDef.equation = suggestedDefinition.xAxisDef.equation;
             appliedCorrectionsLog.push("Eixo X");
         }
-        if (correctionsToApply.y && newDefinition.yAxisDef && suggestedDefinition.yAxisDef) {
+        if (correctionsToApply.y && newDefinition.yAxisDef && suggestedDefinition.yAxisDef?.equation) {
             newDefinition.yAxisDef.equation = suggestedDefinition.yAxisDef.equation;
             appliedCorrectionsLog.push("Eixo Y");
         }
-        if (correctionsToApply.z) {
+        if (correctionsToApply.z && suggestedDefinition.equation) {
             newDefinition.equation = suggestedDefinition.equation;
             appliedCorrectionsLog.push("Dados do Mapa (Z)");
         }
@@ -770,6 +773,7 @@ export default function EcuTuningAssistant() {
                 def.name === selectedMapName ? newDefinition : def
             );
             setXdfFile({ ...xdfFile, definitions: newDefinitions });
+            setMapVersion(v => v + 1);
             
             addLog(`Correções da IA aplicadas para: ${appliedCorrectionsLog.join(', ')} no mapa "${selectedMapName}".`, 'success');
             toast({ title: 'Correções Aplicadas', description: `O mapa foi atualizado com as sugestões selecionadas.` });
@@ -992,6 +996,7 @@ export default function EcuTuningAssistant() {
                                         </TabsList>
                                         <TabsContent value="2d" forceMount className="flex-1 relative data-[state=inactive]:hidden">
                                             <MapTable 
+                                                key={`map-table-${selectedMapName}-${mapVersion}`}
                                                 mapData={displayMap} 
                                                 xAxis={displayAxes.x} 
                                                 yAxis={displayAxes.y} 
@@ -1146,7 +1151,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
             const initialCorrections = {
                 x: suggestion.newDefinition.xAxisDef?.equation !== suggestion.originalDefinition.xAxisDef?.equation,
                 y: suggestion.newDefinition.yAxisDef?.equation !== suggestion.originalDefinition.yAxisDef?.equation,
-                z: suggestion.newDefinition.equation !== suggestion.originalDefinition.equation,
+                z: !!suggestion.newDefinition.equation && suggestion.newDefinition.equation !== suggestion.originalDefinition.equation,
             };
             setCorrectionsToApply(initialCorrections);
         } else {
@@ -1164,13 +1169,13 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
         try {
             const tempDefinition = JSON.parse(JSON.stringify(suggestion.originalDefinition));
 
-            if (correctionsToApply.x && suggestion.newDefinition.xAxisDef) {
+            if (correctionsToApply.x && suggestion.newDefinition.xAxisDef?.equation) {
                 tempDefinition.xAxisDef.equation = suggestion.newDefinition.xAxisDef.equation;
             }
-            if (correctionsToApply.y && suggestion.newDefinition.yAxisDef) {
+            if (correctionsToApply.y && suggestion.newDefinition.yAxisDef?.equation) {
                 tempDefinition.yAxisDef.equation = suggestion.newDefinition.yAxisDef.equation;
             }
-            if (correctionsToApply.z) {
+            if (correctionsToApply.z && suggestion.newDefinition.equation) {
                 tempDefinition.equation = suggestion.newDefinition.equation;
             }
             
