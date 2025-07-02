@@ -32,27 +32,27 @@ const prompt = ai.definePrompt({
       { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
     ],
   },
-  prompt: `You are an expert ECU reverse engineer, acting like the software WinOLS. Your task is to analyze a hexadecimal string from a vehicle's ECU binary (.bin) file and identify potential data maps. These maps are typically 2D grids of 8-bit or 16-bit values. Look for structured blocks of data with patterns, such as smooth increments/decrements, that are characteristic of tuning maps (e.g., ignition timing, fuel injection, throttle position).
+  prompt: `Você é um engenheiro reverso de ECU especialista, agindo como o software WinOLS. A sua tarefa é analisar uma string hexadecimal de um ficheiro binário (.bin) da ECU de um veículo e identificar potenciais mapas de dados. Estes mapas são tipicamente grelhas 2D de valores de 8 ou 16 bits. Procure por blocos de dados estruturados com padrões, como incrementos/decrementos suaves, que são característicos de mapas de afinação (ex: avanço de ignição, injeção de combustível, posição do acelerador).
 {{#if brand}}
 
-The ECU is from a {{brand}} motorcycle. Use this information to give more accurate names to the maps you find, based on common map types for this brand.
+A ECU é de uma motocicleta {{brand}}. Use esta informação para dar nomes mais precisos aos mapas que encontrar, com base nos tipos de mapas comuns para esta marca.
 {{/if}}
 
-Based on your analysis, generate a list of potential maps. For each map, provide a plausible name, its starting memory address (in decimal), its dimensions (rows and columns), and the data size (1 for 8-bit, 2 for 16-bit). Your analysis must be based solely on the provided hex data.
+Com base na sua análise, gere uma lista de mapas potenciais. Para cada mapa, forneça um nome plausível, o seu endereço de memória inicial (em decimal), as suas dimensões (linhas e colunas) e o tamanho dos dados (1 para 8 bits, 2 para 16 bits). A sua análise deve basear-se unicamente nos dados hexadecimais fornecidos.
 
-The provided hex data is from the start of the file. The address of each map should be its offset from the beginning of this data.
+Os dados hexadecimais fornecidos são do início do ficheiro. O endereço de cada mapa deve ser o seu offset a partir do início destes dados.
 
-A list of existing maps is provided below. Do not suggest maps that are already defined. Your main goal is to find new, unidentified maps by looking for structured data that is NOT part of the existing maps. Pay close attention to the addresses to avoid any overlaps.
+Uma lista de mapas existentes é fornecida abaixo. Não sugira mapas que já estão definidos. O seu principal objetivo é encontrar mapas novos, não identificados, procurando por dados estruturados que NÃO fazem parte dos mapas existentes. Preste muita atenção aos endereços para evitar sobreposições.
 
-IMPORTANT: If you cannot confidently identify any new maps, respond with an empty 'maps' array and provide a brief explanation in the 'analysis' field. For example, explain that the data appears to be encrypted, compressed, or simply lacks the structured patterns typical of ECU maps.
+IMPORTANTE: A sua resposta para os nomes dos mapas e a análise DEVE ser em Português do Brasil. Se não conseguir identificar com confiança nenhum mapa novo, responda com um array 'maps' vazio e forneça uma breve explicação no campo 'analysis'. Por exemplo, explique que os dados parecem estar encriptados, comprimidos ou simplesmente não têm os padrões estruturados típicos de mapas de ECU.
 
-Respond ONLY with a JSON object matching the specified output schema. Be critical and only identify maps you are confident about.
+Responda APENAS com um objeto JSON que corresponda ao schema de saída especificado. Seja crítico e identifique apenas mapas sobre os quais tem confiança.
 
-Hex Data:
+Dados Hexadecimais:
 {{{binHexData}}}
 
 {{#if existingMaps}}
-Existing maps (ignore these addresses and areas):
+Mapas existentes (ignore estes endereços e áreas):
 {{{json existingMaps}}}
 {{/if}}
 `,

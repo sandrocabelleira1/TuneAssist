@@ -19,11 +19,11 @@ export const ValidateMapTypeOutputSchema = z.object({
 export type ValidateMapTypeOutput = z.infer<typeof ValidateMapTypeOutputSchema>;
 
 export const PotentialMapSchema = z.object({
-  name: z.string().describe('A descriptive name for the map, e.g., "Mapa de Ignição 1" or "Tabela de Combustível 3".'),
-  address: z.number().describe('The starting memory address of the map in decimal.'),
-  rows: z.number().describe('The number of rows in the map grid.'),
-  cols: z.number().describe('The number of columns in the map grid.'),
-  dataSize: z.number().int().describe('The size of each data point in bytes (must be 1 for 8-bit or 2 for 16-bit).'),
+  name: z.string().describe('Um nome descritivo para o mapa, ex: "Mapa de Ignição 1" ou "Tabela de Combustível 3".'),
+  address: z.number().describe('O endereço de memória inicial do mapa em decimal.'),
+  rows: z.number().describe('O número de linhas na grelha do mapa.'),
+  cols: z.number().describe('O número de colunas na grelha do mapa.'),
+  dataSize: z.number().int().describe('O tamanho de cada ponto de dados em bytes (deve ser 1 para 8 bits ou 2 para 16 bits).'),
 });
 
 export const ExistingMapSchema = z.object({
@@ -32,13 +32,13 @@ export const ExistingMapSchema = z.object({
 });
 
 export const FindMapsInputSchema = z.object({
-  binHexData: z.string().describe('A hexadecimal string representing the first 8192 bytes of the BIN file.'),
-  brand: z.string().optional().describe('The brand of the ECU (e.g., Yamaha, Honda). This helps in identifying common map types for that brand.'),
-  existingMaps: z.array(ExistingMapSchema).optional().describe('An optional list of maps that have already been defined in an XDF, to avoid duplication.'),
+  binHexData: z.string().describe('Uma string hexadecimal representando os primeiros 8192 bytes do ficheiro BIN.'),
+  brand: z.string().optional().describe('A marca da ECU (ex: Yamaha, Honda). Isto ajuda a identificar tipos de mapas comuns para essa marca.'),
+  existingMaps: z.array(ExistingMapSchema).optional().describe('Uma lista opcional de mapas que já foram definidos num XDF, para evitar duplicação.'),
 });
 
 export const FindMapsOutputSchema = z.object({
   maps: z.array(PotentialMapSchema),
-  analysis: z.string().optional().describe("An analysis of the scan, especially if no maps are found. Explains why, e.g., data seems encrypted or unstructured."),
+  analysis: z.string().optional().describe("Uma análise da procura, especialmente se nenhum mapa for encontrado. Explica o porquê, ex: os dados parecem encriptados ou não estruturados."),
 });
 export type FindMapsOutput = z.infer<typeof FindMapsOutputSchema>;
