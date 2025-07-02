@@ -11,10 +11,14 @@ export async function validateMapType(input: ValidateMapTypeInput): Promise<{ su
     return { success: true, data: result };
   } catch (error) {
     console.error("Error in validateMapType action:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('quota')) {
+        return { success: false, error: 'Limite de utilização da IA atingido. Atingiu o limite diário do plano gratuito. Por favor, tente novamente amanhã ou atualize o seu plano da API da Google.' };
+    }
     if (error instanceof z.ZodError) {
       return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
     }
-    const errorMessage = error instanceof Error ? error.message : String(error);
     if (errorMessage.includes('Y is not defined')) {
         return { success: false, error: 'A equação para um dos eixos é inválida. Apenas a variável "X" pode ser usada em equações de eixo. Por favor, corrija a definição XDF.' };
     }
@@ -29,9 +33,14 @@ export async function findPotentialMaps(input: FindMapsInput): Promise<{ success
     return { success: true, data: result };
   } catch (error) {
     console.error("Error in findPotentialMaps action:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('quota')) {
+        return { success: false, error: 'Limite de utilização da IA atingido. Atingiu o limite diário do plano gratuito. Por favor, tente novamente amanhã ou atualize o seu plano da API da Google.' };
+    }
      if (error instanceof z.ZodError) {
       return { success: false, error: `Dados de entrada inválidos: ${error.message}` };
     }
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
+    return { success: false, error: errorMessage };
   }
 }
