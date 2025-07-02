@@ -20,7 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2 } from 'lucide-react';
+import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2 } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
@@ -41,6 +41,7 @@ function MapTable({
   xAxisLabel,
   yAxisLabel,
   onSortAxis,
+  onSortByFirstColumn,
   onResetSort,
   onCellChange,
   isEditable = true,
@@ -51,6 +52,7 @@ function MapTable({
   xAxisLabel: string;
   yAxisLabel: string;
   onSortAxis: (axis: 'x' | 'y') => void;
+  onSortByFirstColumn: () => void;
   onResetSort: () => void;
   onCellChange: (rowIndex: number, colIndex: number, value: string) => void;
   isEditable?: boolean;
@@ -97,6 +99,12 @@ function MapTable({
                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('x')}><ArrowUpNarrowWide className="h-4 w-4 rotate-90" /></Button>
                            </TooltipTrigger>
                            <TooltipContent>Ordenar o eixo X e alinhar os dados das colunas em conformidade.</TooltipContent>
+                       </Tooltip>
+                        <Tooltip>
+                           <TooltipTrigger asChild>
+                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onSortByFirstColumn}><ArrowDownAZ className="h-4 w-4" /></Button>
+                           </TooltipTrigger>
+                           <TooltipContent><p>Ordenar linhas pelos valores da 1ª coluna (Z)</p></TooltipContent>
                        </Tooltip>
                        <Tooltip>
                            <TooltipTrigger asChild>
@@ -592,6 +600,40 @@ export default function EcuTuningAssistant() {
         setDisplayMap(newSortedMap);
         addLog(`Eixo ${axis === 'x' ? displayAxes.xLabel : displayAxes.yLabel} ordenado.`, 'info');
     };
+
+    const handleSortByFirstColumn = useCallback(() => {
+        if (!workingMap || !sourceAxes) return;
+
+        // Create pairs of [value_from_first_column, original_index]
+        const sortable = workingMap.map((row, index) => ({
+            value: row[0], // Sort by the first cell of each row
+            index: index,
+        }));
+
+        // Sort the pairs based on the cell value
+        sortable.sort((a, b) => {
+            const valA = a.value;
+            const valB = b.value;
+            if (valA === null) return 1;
+            if (valB === null) return -1;
+            if (typeof valA === 'number' && typeof valB === 'number') {
+                return valA - valB;
+            }
+            return String(valA).localeCompare(String(valB));
+        });
+
+        // Create the new sorted map and sorted Y axis from the sorted indices
+        const newSortedMap = sortable.map(item => workingMap[item.index]);
+        const newSortedYAxis = sortable.map(item => sourceAxes.y[item.index]);
+        
+        setDisplayMap(newSortedMap);
+        setDisplayAxes(prev => ({
+            ...(prev!),
+            y: newSortedYAxis,
+        }));
+        
+        addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
+    }, [workingMap, sourceAxes, addLog]);
     
     const handleResetSort = () => {
         if (workingMap && sourceAxes) {
@@ -724,7 +766,6 @@ export default function EcuTuningAssistant() {
         let appliedCorrectionsLog = [];
 
         // Conditionally apply corrections based on user's checkbox selection.
-        // We trust the user's intent from the UI.
         if (correctionsToApply.x && newDefinition.xAxisDef && suggestedDefinition.xAxisDef?.equation) {
             newDefinition.xAxisDef.equation = suggestedDefinition.xAxisDef.equation;
             appliedCorrectionsLog.push("Eixo X");
@@ -1003,6 +1044,7 @@ export default function EcuTuningAssistant() {
                                                 xAxisLabel={displayAxes.xLabel} 
                                                 yAxisLabel={displayAxes.yLabel}
                                                 onSortAxis={handleSortAxis}
+                                                onSortByFirstColumn={handleSortByFirstColumn}
                                                 onResetSort={handleResetSort}
                                                 onCellChange={handleCellChange}
                                             />
@@ -1232,6 +1274,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 yAxisLabel={suggestion.originalAxes.yLabel}
                                 isEditable={false}
                                 onSortAxis={() => {}}
+                                onSortByFirstColumn={() => {}}
                                 onResetSort={() => {}}
                                 onCellChange={() => {}}
                               />
@@ -1249,6 +1292,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                     yAxisLabel={preview.axes.yLabel}
                                     isEditable={false}
                                     onSortAxis={() => {}}
+                                    onSortByFirstColumn={() => {}}
                                     onResetSort={() => {}}
                                     onCellChange={() => {}}
                                  />
