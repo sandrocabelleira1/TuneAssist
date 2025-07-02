@@ -33,6 +33,42 @@ const Plot = dynamic(() => import('react-plotly.js'), {
 });
 
 
+function EditableMapCell({ value: initialValue, rowIndex, colIndex, onCellChange, isEditable, min, max }: { value: number | null, rowIndex: number, colIndex: number, onCellChange: (rowIndex: number, colIndex: number, value: string) => void, isEditable: boolean, min: number, max: number }) {
+  const [value, setValue] = useState(initialValue === null || isNaN(initialValue) ? '' : initialValue.toFixed(2));
+
+  useEffect(() => {
+    setValue(initialValue === null || isNaN(initialValue) ? '' : initialValue.toFixed(2));
+  }, [initialValue]);
+  
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (isEditable) {
+      onCellChange(rowIndex, colIndex, e.target.value);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setValue(e.target.value);
+  }
+
+  return (
+    <td className="p-0 border border-border text-center" style={{ backgroundColor: getHeatmapColor(initialValue, min, max) }}>
+      <Input
+        type="text"
+        inputMode="decimal"
+        value={value}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        readOnly={!isEditable}
+        className={cn(
+            "w-[60px] h-8 p-0 text-center bg-transparent border-none rounded-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-background/80",
+            !isEditable && "cursor-default focus-visible:ring-0"
+        )}
+      />
+    </td>
+  );
+}
+
+
 // Simplified MapTable with editable cells
 function MapTable({
   mapData,
@@ -132,19 +168,16 @@ function MapTable({
               {displayYAxis.map((_y, yi) => {
                 const cell = transposedData[yi]?.[xi];
                 return (
-                  <td key={`cell-${xi}-${yi}`} className="p-0 border border-border text-center" style={{ backgroundColor: getHeatmapColor(cell, min, max) }}>
-                     <Input
-                        type="text"
-                        inputMode="decimal"
-                        defaultValue={cell === null || isNaN(cell) ? '' : cell.toFixed(2)}
-                        onBlur={(e) => isEditable && onCellChange(xi, yi, e.target.value)}
-                        readOnly={!isEditable}
-                        className={cn(
-                            "w-[60px] h-8 p-0 text-center bg-transparent border-none rounded-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-background/80",
-                            !isEditable && "cursor-default focus-visible:ring-0"
-                        )}
-                      />
-                  </td>
+                  <EditableMapCell
+                    key={`cell-${xi}-${yi}`}
+                    value={cell}
+                    rowIndex={xi}
+                    colIndex={yi}
+                    onCellChange={onCellChange}
+                    isEditable={isEditable}
+                    min={min}
+                    max={max}
+                  />
                 );
               })}
             </tr>
@@ -238,7 +271,6 @@ export default function EcuTuningAssistant() {
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
     const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
-    const [mapVersion, setMapVersion] = useState(0);
 
     const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: (string|number)[], y: (string|number)[] }>>>({});
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
@@ -523,7 +555,6 @@ export default function EcuTuningAssistant() {
               setDisplayAxes(mapAxes);
             }
             
-            setMapVersion(v => v + 1);
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
 
         } catch (error) {
@@ -598,7 +629,6 @@ export default function EcuTuningAssistant() {
             [axis]: newSortedAxisValues,
         }));
         setDisplayMap(newSortedMap);
-        setMapVersion(v => v + 1);
         addLog(`Eixo ${axis === 'x' ? displayAxes.xLabel : displayAxes.yLabel} ordenado.`, 'info');
     };
 
@@ -632,7 +662,6 @@ export default function EcuTuningAssistant() {
             ...(prev!),
             y: newSortedYAxis,
         }));
-        setMapVersion(v => v + 1);
         addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
     }, [workingMap, sourceAxes, addLog]);
     
@@ -640,7 +669,6 @@ export default function EcuTuningAssistant() {
         if (workingMap && sourceAxes) {
             setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
             setDisplayAxes(JSON.parse(JSON.stringify(sourceAxes)));
-            setMapVersion(v => v + 1);
             addLog('Ordenação do mapa revertida para o original.', 'info');
         }
     };
@@ -815,7 +843,6 @@ export default function EcuTuningAssistant() {
                 def.name === selectedMapName ? newDefinition : def
             );
             setXdfFile({ ...xdfFile, definitions: newDefinitions });
-            setMapVersion(v => v + 1);
             
             addLog(`Correções da IA aplicadas para: ${appliedCorrectionsLog.join(', ')} no mapa "${selectedMapName}".`, 'success');
             toast({ title: 'Correções Aplicadas', description: `O mapa foi atualizado com as sugestões selecionadas.` });
@@ -1037,8 +1064,7 @@ export default function EcuTuningAssistant() {
                                             <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Visualização 3D</TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="2d" forceMount className="flex-1 relative data-[state=inactive]:hidden">
-                                            <MapTable 
-                                                key={`map-table-${selectedMapName}-${mapVersion}`}
+                                            <MapTable
                                                 mapData={displayMap} 
                                                 xAxis={displayAxes.x} 
                                                 yAxis={displayAxes.y} 
