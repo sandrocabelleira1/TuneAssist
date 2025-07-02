@@ -352,7 +352,10 @@ export default function EcuTuningAssistant() {
     // BIN/XDF Compatibility Check
     useEffect(() => {
         if (!binFile || !xdfFile) {
-            setAvailableMaps([]);
+            if (!xdfFile) {
+                // If there's no XDF, availableMaps should be empty (except for potential maps from scanning)
+                setAvailableMaps(prev => prev.filter(m => m.isPotential));
+            }
             return;
         }
 
@@ -379,8 +382,14 @@ export default function EcuTuningAssistant() {
                 validDefinitions.push(def);
             }
         });
-
-        setAvailableMaps(validDefinitions);
+        
+        // Merge with existing potential maps, preventing duplicates
+        setAvailableMaps(prev => {
+            const existingPotentials = prev.filter(m => m.isPotential);
+            const validDefAddresses = new Set(validDefinitions.map(d => d.address));
+            const uniquePotentials = existingPotentials.filter(p => !validDefAddresses.has(p.address));
+            return [...validDefinitions, ...uniquePotentials];
+        });
         
         if (selectedMapName && !validDefinitions.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
@@ -665,6 +674,7 @@ export default function EcuTuningAssistant() {
             ...(prev!),
             y: newSortedYAxis,
         }));
+        setMapRenderKey(p => p + 1);
         addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
     }, [workingMap, sourceAxes, addLog]);
     
@@ -685,7 +695,7 @@ export default function EcuTuningAssistant() {
       if (isNaN(newValue)) {
         addLog(`Valor inválido introduzido: "${value}". Apenas números são permitidos.`, 'error');
         // Re-render display map to revert the input field
-        setDisplayMap(JSON.parse(JSON.stringify(displayMap)));
+        setMapRenderKey(p => p + 1);
         return;
       }
       
@@ -862,8 +872,8 @@ export default function EcuTuningAssistant() {
     };
 
     const handleScanForMaps = async () => {
-        if (!binFile || !xdfFile) {
-            toast({ variant: 'destructive', title: "Erro", description: "Carregue um ficheiro BIN e XDF primeiro." });
+        if (!binFile) {
+            toast({ variant: 'destructive', title: "Erro", description: "Carregue um ficheiro BIN primeiro." });
             return;
         }
 
@@ -872,7 +882,7 @@ export default function EcuTuningAssistant() {
 
         const scanBuffer = binFile.buffer.slice(0, 8192);
         const hexData = bufferToHex(scanBuffer);
-        const existingMaps = xdfFile.definitions.map(d => ({ name: d.name, address: d.address }));
+        const existingMaps = xdfFile ? xdfFile.definitions.map(d => ({ name: d.name, address: d.address })) : [];
 
         const result = await findPotentialMaps({ binHexData: hexData, existingMaps });
 
@@ -989,7 +999,7 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
                                     <Select onValueChange={handleMapSelect} disabled={availableMaps.length === 0} value={selectedMapName}>
-                                        <SelectTrigger><SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : !xdfFile ? "Carregue ou selecione um XDF" : "Selecione um mapa"} /></SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : availableMaps.length === 0 ? "Nenhum mapa disponível" : "Selecione um mapa"} /></SelectTrigger>
                                         <SelectContent>
                                             {availableMaps.map(def => (
                                               <SelectItem key={def.name} value={def.name} className="flex items-center">
@@ -1015,11 +1025,11 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">4. Análise com IA</h3>
                                     <div className="space-y-2">
-                                        <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || !xdfFile || isScanning}>
+                                        <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || isScanning}>
                                             {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                                             Procurar Mapas Novos
                                         </Button>
-                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || isValidatingMap}>
+                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || isValidatingMap || !xdfFile}>
                                             {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                                             Analisar e Corrigir Mapa
                                         </Button>
@@ -1300,6 +1310,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                             <h3 className="font-semibold mb-2 text-center">Original</h3>
                             <div className="h-[400px] overflow-auto border rounded-md">
                               <MapTable
+                                key={mapRenderKey + '-orig'}
                                 mapData={suggestion.originalMap}
                                 xAxis={suggestion.originalAxes.x}
                                 yAxis={suggestion.originalAxes.y}
@@ -1318,6 +1329,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                             <div className="h-[400px] overflow-auto border rounded-md">
                                {preview ? (
                                  <MapTable
+                                    key={mapRenderKey + '-prev'}
                                     mapData={preview.map}
                                     xAxis={preview.axes.x}
                                     yAxis={preview.axes.y}
