@@ -890,7 +890,13 @@ export default function EcuTuningAssistant() {
 
         if (result.success && result.data) {
             if (result.data.maps.length > 0) {
-                addLog(`IA encontrou ${result.data.maps.length} mapas potenciais.`, 'success');
+                const numMapsFound = result.data.maps.length;
+                const message = `A IA encontrou ${numMapsFound} mapa${numMapsFound > 1 ? 's' : ''} potencial${numMapsFound > 1 ? 's' : ''}.`;
+                addLog(message, 'success');
+                toast({
+                    title: "Mapas Encontrados!",
+                    description: `Foram adicionados ${numMapsFound} mapa${numMapsFound > 1 ? 's' : ''} à lista de seleção.`
+                });
 
                 const newPotentialMaps: XDFDefinition[] = result.data.maps.map(pMap => ({
                     name: `${pMap.name} (IA)`,
