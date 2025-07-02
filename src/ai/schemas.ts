@@ -33,6 +33,7 @@ export const ExistingMapSchema = z.object({
 
 export const FindMapsInputSchema = z.object({
   binHexData: z.string().describe('A hexadecimal string representing the first 8192 bytes of the BIN file.'),
+  brand: z.string().optional().describe('The brand of the ECU (e.g., Yamaha, Honda). This helps in identifying common map types for that brand.'),
   existingMaps: z.array(ExistingMapSchema).optional().describe('An optional list of maps that have already been defined in an XDF, to avoid duplication.'),
 });
 

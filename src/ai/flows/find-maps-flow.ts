@@ -33,6 +33,10 @@ const prompt = ai.definePrompt({
     ],
   },
   prompt: `You are an expert ECU reverse engineer, acting like the software WinOLS. Your task is to analyze a hexadecimal string from a vehicle's ECU binary (.bin) file and identify potential data maps. These maps are typically 2D grids of 8-bit or 16-bit values. Look for structured blocks of data with patterns, such as smooth increments/decrements, that are characteristic of tuning maps (e.g., ignition timing, fuel injection, throttle position).
+{{#if brand}}
+
+The ECU is from a {{brand}} motorcycle. Use this information to give more accurate names to the maps you find, based on common map types for this brand.
+{{/if}}
 
 Based on your analysis, generate a list of potential maps. For each map, provide a plausible name, its starting memory address (in decimal), its dimensions (rows and columns), and the data size (1 for 8-bit, 2 for 16-bit). Your analysis must be based solely on the provided hex data.
 

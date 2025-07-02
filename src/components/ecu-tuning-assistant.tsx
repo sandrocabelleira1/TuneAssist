@@ -872,19 +872,19 @@ export default function EcuTuningAssistant() {
     };
 
     const handleScanForMaps = async () => {
-        if (!binFile) {
-            toast({ variant: 'destructive', title: "Erro", description: "Carregue um ficheiro BIN primeiro." });
+        if (!binFile || selectedBrandForNewXdf === 'no-brand') {
+            toast({ variant: 'destructive', title: "Ação Necessária", description: "Por favor, carregue um ficheiro BIN e selecione uma marca para procurar mapas." });
             return;
         }
 
         setIsScanning(true);
-        addLog('A iniciar a procura de mapas com IA...', 'info');
+        addLog(`A iniciar a procura de mapas com IA para a marca ${selectedBrandForNewXdf}...`, 'info');
 
         const scanBuffer = binFile.buffer.slice(0, 8192);
         const hexData = bufferToHex(scanBuffer);
         const existingMaps = xdfFile ? xdfFile.definitions.map(d => ({ name: d.name, address: d.address })) : [];
 
-        const result = await findPotentialMaps({ binHexData: hexData, existingMaps });
+        const result = await findPotentialMaps({ binHexData: hexData, existingMaps, brand: selectedBrandForNewXdf });
 
         setIsScanning(false);
 
@@ -1025,7 +1025,7 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">4. Análise com IA</h3>
                                     <div className="space-y-2">
-                                        <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || isScanning}>
+                                        <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || isScanning || selectedBrandForNewXdf === 'no-brand'}>
                                             {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                                             Procurar Mapas Novos
                                         </Button>
