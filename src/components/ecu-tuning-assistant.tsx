@@ -720,19 +720,21 @@ export default function EcuTuningAssistant() {
         const suggestedDefinition = aiSuggestion.newDefinition;
         let appliedCorrectionsLog = [];
 
-        // Conditionally apply corrections
-        if (correctionsToApply.x && newDefinition.xAxisDef && suggestedDefinition.xAxisDef?.equation && newDefinition.xAxisDef.equation !== suggestedDefinition.xAxisDef.equation) {
+        // Conditionally apply corrections based on user's checkbox selection.
+        // We trust the user's intent from the UI.
+        if (correctionsToApply.x && newDefinition.xAxisDef && suggestedDefinition.xAxisDef) {
             newDefinition.xAxisDef.equation = suggestedDefinition.xAxisDef.equation;
             appliedCorrectionsLog.push("Eixo X");
         }
-        if (correctionsToApply.y && newDefinition.yAxisDef && suggestedDefinition.yAxisDef?.equation && newDefinition.yAxisDef.equation !== suggestedDefinition.yAxisDef.equation) {
+        if (correctionsToApply.y && newDefinition.yAxisDef && suggestedDefinition.yAxisDef) {
             newDefinition.yAxisDef.equation = suggestedDefinition.yAxisDef.equation;
             appliedCorrectionsLog.push("Eixo Y");
         }
-        if (correctionsToApply.z && newDefinition.equation !== suggestedDefinition.equation) {
+        if (correctionsToApply.z) {
             newDefinition.equation = suggestedDefinition.equation;
             appliedCorrectionsLog.push("Dados do Mapa (Z)");
         }
+
 
         if (appliedCorrectionsLog.length === 0) {
             addLog("Nenhuma correção foi selecionada para ser aplicada.", "info");
