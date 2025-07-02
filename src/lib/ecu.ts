@@ -363,3 +363,9 @@ export function generateChecksum(buffer: ArrayBuffer): string {
     }
     return checksum.toString(16).toUpperCase().padStart(4, '0');
 }
+
+export function bufferToHex(buffer: ArrayBuffer): string {
+  return [...new Uint8Array(buffer)]
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}

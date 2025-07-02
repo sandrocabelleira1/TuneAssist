@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder } from '@/lib/types';
-import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum } from '@/lib/ecu';
+import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, bufferToHex } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
@@ -245,12 +245,6 @@ type AISuggestion = {
     correctedAxes: { x: (string | number)[]; y: (string | number)[], xLabel: string; yLabel: string; };
     newDefinition: XDFDefinition;
     originalDefinition: XDFDefinition;
-}
-
-function bufferToHex(buffer: ArrayBuffer) {
-  return [...new Uint8Array(buffer)]
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 // Main Component
