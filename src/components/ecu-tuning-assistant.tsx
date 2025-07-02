@@ -598,6 +598,7 @@ export default function EcuTuningAssistant() {
             [axis]: newSortedAxisValues,
         }));
         setDisplayMap(newSortedMap);
+        setMapVersion(v => v + 1);
         addLog(`Eixo ${axis === 'x' ? displayAxes.xLabel : displayAxes.yLabel} ordenado.`, 'info');
     };
 
@@ -631,7 +632,7 @@ export default function EcuTuningAssistant() {
             ...(prev!),
             y: newSortedYAxis,
         }));
-        
+        setMapVersion(v => v + 1);
         addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
     }, [workingMap, sourceAxes, addLog]);
     
@@ -1246,7 +1247,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
     const { originalDefinition, newDefinition, reasoning } = suggestion;
     const hasXCorrection = newDefinition.xAxisDef?.equation !== originalDefinition.xAxisDef?.equation;
     const hasYCorrection = newDefinition.yAxisDef?.equation !== originalDefinition.yAxisDef?.equation;
-    const hasZCorrection = newDefinition.equation !== originalDefinition.equation;
+    const hasZCorrection = !!newDefinition.equation && newDefinition.equation !== originalDefinition.equation;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
