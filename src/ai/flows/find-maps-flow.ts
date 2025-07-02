@@ -24,6 +24,14 @@ const prompt = ai.definePrompt({
   model: googleAI.model('gemini-1.5-flash-latest'),
   input: { schema: FindMapsInputSchema },
   output: { schema: FindMapsOutputSchema },
+  config: {
+    safetySettings: [
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+    ],
+  },
   prompt: `You are an expert ECU reverse engineer, acting like the software WinOLS. Your task is to analyze a hexadecimal string from a vehicle's ECU binary (.bin) file and identify potential data maps. These maps are typically 2D grids of 8-bit or 16-bit values. Look for structured blocks of data with patterns, such as smooth increments/decrements, that are characteristic of tuning maps (e.g., ignition timing, fuel injection, throttle position).
 
 Based on your analysis, generate a list of potential maps. For each map, provide a plausible name, its starting memory address (in decimal), its dimensions (rows and columns), and the data size (1 for 8-bit, 2 for 16-bit). Your analysis must be based solely on the provided hex data.
