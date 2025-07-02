@@ -42,7 +42,7 @@ Com base na sua análise, gere uma lista de mapas potenciais. Para cada mapa, fo
 
 Os dados hexadecimais fornecidos são do início do ficheiro. O endereço de cada mapa deve ser o seu offset a partir do início destes dados.
 
-Uma lista de mapas existentes é fornecida abaixo. Não sugira mapas que já estão definidos. O seu principal objetivo é encontrar mapas novos, não identificados, procurando por dados estruturados que NÃO fazem parte dos mapas existentes. Preste muita atenção aos endereços para evitar sobreposições.
+Uma lista de mapas existentes é fornecida abaixo, incluindo o seu endereço inicial e tamanho total em bytes. Não sugira mapas que já estão definidos ou que se sobreponham a estas áreas de memória. O seu principal objetivo é encontrar mapas novos, não identificados, procurando por dados estruturados que NÃO fazem parte dos mapas existentes.
 
 IMPORTANTE: A sua resposta para os nomes dos mapas e a análise DEVE ser em Português do Brasil. Se não conseguir identificar com confiança nenhum mapa novo, responda com um array 'maps' vazio e forneça uma breve explicação no campo 'analysis'. Por exemplo, explique que os dados parecem estar encriptados, comprimidos ou simplesmente não têm os padrões estruturados típicos de mapas de ECU.
 
@@ -52,7 +52,7 @@ Dados Hexadecimais:
 {{{binHexData}}}
 
 {{#if existingMaps}}
-Mapas existentes (ignore estes endereços e áreas):
+Mapas existentes (ignore estas áreas de memória):
 {{{json existingMaps}}}
 {{/if}}
 `,

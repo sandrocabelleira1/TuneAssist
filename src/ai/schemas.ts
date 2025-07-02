@@ -29,6 +29,7 @@ export const PotentialMapSchema = z.object({
 export const ExistingMapSchema = z.object({
   name: z.string(),
   address: z.number(),
+  sizeInBytes: z.number().describe('O tamanho total do mapa em bytes, para que a IA possa evitar sobreposições.'),
 });
 
 export const FindMapsInputSchema = z.object({

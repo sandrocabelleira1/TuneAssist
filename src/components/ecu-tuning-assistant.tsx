@@ -882,7 +882,13 @@ export default function EcuTuningAssistant() {
 
         const scanBuffer = binFile.buffer.slice(0, 8192);
         const hexData = bufferToHex(scanBuffer);
-        const existingMaps = xdfFile ? xdfFile.definitions.map(d => ({ name: d.name, address: d.address })) : [];
+        const existingMaps = xdfFile 
+            ? xdfFile.definitions.map(d => ({ 
+                name: d.name, 
+                address: d.address,
+                sizeInBytes: d.rows * d.cols * d.dataSize 
+            })) 
+            : [];
 
         const result = await findPotentialMaps({ binHexData: hexData, existingMaps, brand: selectedBrandForNewXdf });
 
