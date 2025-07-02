@@ -271,6 +271,7 @@ export default function EcuTuningAssistant() {
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
     const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
+    const [mapRenderKey, setMapRenderKey] = useState(0);
 
     const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: (string|number)[], y: (string|number)[] }>>>({});
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
@@ -555,6 +556,7 @@ export default function EcuTuningAssistant() {
               setDisplayAxes(mapAxes);
             }
             
+            setMapRenderKey(p => p + 1); // Force a re-render of the table components
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
 
         } catch (error) {
@@ -597,6 +599,7 @@ export default function EcuTuningAssistant() {
           addLog('Não foi possível guardar os eixos personalizados: ficheiro BIN não carregado.', 'error');
         }
         
+        setMapRenderKey(p => p + 1); // Force re-render
         setIsAxesModalOpen(false);
         addLog('Eixos do mapa atualizados.', 'success');
     };
@@ -669,6 +672,7 @@ export default function EcuTuningAssistant() {
         if (workingMap && sourceAxes) {
             setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
             setDisplayAxes(JSON.parse(JSON.stringify(sourceAxes)));
+            setMapRenderKey(p => p + 1); // Force re-render
             addLog('Ordenação do mapa revertida para o original.', 'info');
         }
     };
@@ -844,6 +848,7 @@ export default function EcuTuningAssistant() {
             );
             setXdfFile({ ...xdfFile, definitions: newDefinitions });
             
+            setMapRenderKey(p => p + 1); // Force re-render
             addLog(`Correções da IA aplicadas para: ${appliedCorrectionsLog.join(', ')} no mapa "${selectedMapName}".`, 'success');
             toast({ title: 'Correções Aplicadas', description: `O mapa foi atualizado com as sugestões selecionadas.` });
 
@@ -1065,6 +1070,7 @@ export default function EcuTuningAssistant() {
                                         </TabsList>
                                         <TabsContent value="2d" forceMount className="flex-1 relative data-[state=inactive]:hidden">
                                             <MapTable
+                                                key={mapRenderKey}
                                                 mapData={displayMap} 
                                                 xAxis={displayAxes.x} 
                                                 yAxis={displayAxes.y} 
@@ -1077,7 +1083,7 @@ export default function EcuTuningAssistant() {
                                             />
                                         </TabsContent>
                                         <TabsContent value="3d" forceMount className="flex-1 data-[state=inactive]:hidden">
-                                            <SurfacePlot3D mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
+                                            <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
                                         </TabsContent>
                                     </Tabs>
                                 ) : (
