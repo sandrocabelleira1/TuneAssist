@@ -925,7 +925,8 @@ export default function EcuTuningAssistant() {
                         let counter = 2;
                         while (allKnownNames.has(finalName)) {
                             // If "Map (IA)" exists, try "Map (IA) (2)", then "(3)", etc.
-                            finalName = `${newMap.name} (${counter})`;
+                            // The base name for appending the counter should be the original name, not the one with the previous counter.
+                            finalName = `${newMap.name.replace(/ \(\d+\)$/, '')} (${counter})`;
                             counter++;
                         }
                         newMap.name = finalName;
