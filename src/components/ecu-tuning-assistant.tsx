@@ -876,12 +876,12 @@ export default function EcuTuningAssistant() {
 
         const scanBuffer = binFile.buffer.slice(0, 8192);
         const hexData = bufferToHex(scanBuffer);
-        const existingMaps = xdfFile 
-            ? xdfFile.definitions.map(d => ({ 
-                name: d.name, 
+        const existingMaps = xdfFile
+            ? xdfFile.definitions.map(d => ({
+                name: d.name,
                 address: d.address,
-                sizeInBytes: d.rows * d.cols * d.dataSize 
-            })) 
+                sizeInBytes: d.rows * d.cols * d.dataSize
+            }))
             : [];
 
         const result = await findPotentialMaps({ binHexData: hexData, existingMaps, brand: selectedBrandForNewXdf });
@@ -913,8 +913,27 @@ export default function EcuTuningAssistant() {
 
                 setAvailableMaps(prev => {
                     const existingAddresses = new Set(prev.map(m => m.address));
-                    const filteredNewMaps = newPotentialMaps.filter(m => !existingAddresses.has(m.address));
-                    return [...prev, ...filteredNewMaps];
+                    const allKnownNames = new Set(prev.map(m => m.name));
+                    const newMapsToAdd: XDFDefinition[] = [];
+
+                    // First, filter out maps with addresses that already exist
+                    const mapsToProcess = newPotentialMaps.filter(pMap => !existingAddresses.has(pMap.address));
+
+                    // Then, ensure unique names for the new maps
+                    mapsToProcess.forEach(newMap => {
+                        let finalName = newMap.name;
+                        let counter = 2;
+                        while (allKnownNames.has(finalName)) {
+                            // If "Map (IA)" exists, try "Map (IA) (2)", then "(3)", etc.
+                            finalName = `${newMap.name} (${counter})`;
+                            counter++;
+                        }
+                        newMap.name = finalName;
+                        newMapsToAdd.push(newMap);
+                        allKnownNames.add(finalName); // Add the newly generated unique name to the set for subsequent checks
+                    });
+                    
+                    return [...prev, ...newMapsToAdd];
                 });
             } else {
                 const analysisMessage = result.data.analysis || 'A IA concluiu a análise mas não encontrou novos mapas potenciais.';
