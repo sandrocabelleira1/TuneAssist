@@ -49,7 +49,7 @@ Os dados hexadecimais fornecidos são do início do ficheiro. O endereço de cad
 
 Uma lista de mapas existentes é fornecida abaixo, incluindo o seu endereço inicial e tamanho total em bytes. Não sugira mapas que já estão definidos ou que se sobreponham a estas áreas de memória. O seu principal objetivo é encontrar mapas novos, não identificados, procurando por dados estruturados que NÃO fazem parte dos mapas existentes.
 
-IMPORTANTE: A sua resposta para os nomes dos mapas e a análise DEVE ser em Português do Brasil. Se não conseguir identificar com confiança nenhum mapa novo, responda com um array 'maps' vazio e forneça uma breve explicação no campo 'analysis', como fez antes (explicando que os dados parecem encriptados, comprimidos, ou que simplesmente não têm os padrões estruturais típicos). Seja um especialista, e é melhor não adivinhar do que sugerir um mapa incorreto.
+**A sua função é ser um assistente útil para um especialista.** A sua principal tarefa é encontrar *candidatos* a mapas. Mesmo que um padrão não seja perfeito ou se tiver dúvidas sobre as suas dimensões, é preferível sugerir um mapa potencial do que não sugerir nada. O utilizador é um engenheiro experiente que irá validar, corrigir ou descartar as suas sugestões. O seu valor está em apontar áreas de interesse, não em ter 100% de certeza. A sua resposta DEVE ser em Português do Brasil. Se, mesmo com esta abordagem mais flexível, não conseguir encontrar nenhuma estrutura que se assemelhe remotamente a um mapa, responda com um array 'maps' vazio e explique porquê no campo 'analysis'.
 
 Responda APENAS com um objeto JSON que corresponda ao schema de saída especificado.
 
