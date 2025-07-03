@@ -591,17 +591,17 @@ export default function EcuTuningAssistant() {
         }
     };
     
-    const handleConfirmAxes = (newAxesData: { y: string, x: string }) => {
+    const handleConfirmAxes = (newData: { y: string, x: string, zEquation: string }) => {
         if (!displayAxes || !selectedMapName || !binFile) return;
 
         const definition = availableMaps.find(d => d.name === selectedMapName);
         if (!definition) {
-            addLog(`Definição de mapa "${selectedMapName}" não encontrada para recálculo dos eixos.`, 'error');
+            addLog(`Definição de mapa "${selectedMapName}" não encontrada para recálculo.`, 'error');
             return;
         }
 
-        const newY = newAxesData.y.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
-        const newX = newAxesData.x.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
+        const newY = newData.y.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
+        const newX = newData.x.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
 
         if (newY.length !== displayAxes.y.length || newX.length !== displayAxes.x.length) {
             addLog('O número de valores dos eixos não corresponde às dimensões originais.', 'error');
@@ -610,8 +610,12 @@ export default function EcuTuningAssistant() {
         }
         
         try {
-            // Recalculate map data with the new axes, as Z values might depend on them
-            const newMapData = readMapFromBin(binFile.buffer, definition, newX, newY);
+            // Create a new definition with the updated equation
+            const newDefinition = JSON.parse(JSON.stringify(definition)) as XDFDefinition;
+            newDefinition.equation = newData.zEquation;
+
+            // Recalculate map data with the new axes AND the new Z-equation
+            const newMapData = readMapFromBin(binFile.buffer, newDefinition, newX, newY);
             
             const newAxesState = { ...displayAxes, x: newX, y: newY };
 
@@ -624,25 +628,32 @@ export default function EcuTuningAssistant() {
               x: newX.map((value, index) => ({ value, index })),
               y: newY.map((value, index) => ({ value, index })),
             });
-
+            
+            // Update the main XDF definition state so the equation change persists for the session
+            if (xdfFile) {
+                const newDefinitions = xdfFile.definitions.map(def => 
+                    def.name === selectedMapName ? newDefinition : def
+                );
+                setXdfFile({ ...xdfFile, definitions: newDefinitions });
+            }
 
             if (binFile?.checksum) {
               setCustomAxes(prev => ({
                   ...prev,
                   [binFile.checksum]: { ...(prev[binFile.checksum] || {}), [selectedMapName]: { x: newX, y: newY } }
               }));
-              addLog('Eixos personalizados guardados para este ficheiro BIN.', 'success');
-              toast({ title: 'Eixos Personalizados Guardados', description: 'As suas correções foram guardadas e serão aplicadas automaticamente a este mapa.' });
+              addLog('Eixos e/ou equação personalizados guardados para este ficheiro BIN.', 'success');
+              toast({ title: 'Correções Guardadas', description: 'As suas correções de eixos/equação foram guardadas.' });
             } else {
-              toast({ variant: 'destructive', title: "Erro", description: "Não foi possível guardar os eixos porque nenhum ficheiro BIN está carregado." });
-              addLog('Não foi possível guardar os eixos personalizados: ficheiro BIN não carregado.', 'error');
+              toast({ variant: 'destructive', title: "Erro", description: "Não foi possível guardar as correções porque nenhum ficheiro BIN está carregado." });
+              addLog('Não foi possível guardar as correções: ficheiro BIN não carregado.', 'error');
             }
             
             setMapRenderKey(p => p + 1); // Force re-render
             setIsAxesModalOpen(false);
-            addLog('Eixos do mapa e dados (eixo Z) recalculados com sucesso.', 'success');
+            addLog('Eixos e dados do mapa (eixo Z) recalculados com sucesso.', 'success');
         } catch (error) {
-            const msg = `Erro ao recalcular o mapa com os novos eixos: ${(error as Error).message}`;
+            const msg = `Erro ao recalcular o mapa com as novas correções: ${(error as Error).message}`;
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Recálculo", description: msg });
         }
@@ -1094,13 +1105,13 @@ export default function EcuTuningAssistant() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <h3 className="font-semibold text-primary">3. Corrigir Eixos (Opcional)</h3>
+                                    <h3 className="font-semibold text-primary">3. Corrigir Mapa (Opcional)</h3>
                                     <p className="text-xs text-muted-foreground">
-                                        Se os eixos (RPM, Carga, etc.) parecerem incorretos, corrija-os manualmente. A precisão da IA depende de eixos corretos.
+                                        Se os eixos ou os valores dos dados parecerem incorretos, corrija-os manualmente. A precisão da IA depende de dados base corretos.
                                     </p>
                                     <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!displayMap}>
                                         <GitCompareArrows className="mr-2 h-4 w-4" />
-                                        Corrigir Eixos do Mapa
+                                        Corrigir Eixos / Equação
                                     </Button>
                                 </div>
 
@@ -1191,7 +1202,13 @@ export default function EcuTuningAssistant() {
                 </div>
                 
                 {/* Modals */}
-                <EditAxesModal open={isAxesModalOpen} onOpenChange={setIsAxesModalOpen} onConfirm={handleConfirmAxes} currentAxes={displayAxes} />
+                <EditAxesModal
+                    open={isAxesModalOpen}
+                    onOpenChange={setIsAxesModalOpen}
+                    onConfirm={handleConfirmAxes}
+                    currentAxes={displayAxes}
+                    currentDefinition={availableMaps.find(d => d.name === selectedMapName)}
+                />
                 <MapAnalysisResultModal open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen} result={analysisResult} />
                 <MapCorrectionSuggestionModal 
                     open={isSuggestionModalOpen} 
@@ -1224,39 +1241,54 @@ export default function EcuTuningAssistant() {
     );
 }
 
-function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes }: { open: boolean, onOpenChange: (open: boolean) => void, onConfirm: (axes: { x: string, y: string }) => void, currentAxes: { x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null }) {
+function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes, currentDefinition }: { 
+    open: boolean, 
+    onOpenChange: (open: boolean) => void, 
+    onConfirm: (data: { x: string, y: string, zEquation: string }) => void, 
+    currentAxes: { x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null,
+    currentDefinition: XDFDefinition | undefined,
+}) {
     const [yAxis, setYAxis] = useState('');
     const [xAxis, setXAxis] = useState('');
+    const [zEquation, setZEquation] = useState('');
 
     useEffect(() => {
-        if(open && currentAxes) {
+        if(open && currentAxes && currentDefinition) {
             setYAxis(currentAxes.y.join(', '));
             setXAxis(currentAxes.x.join(', '));
+            setZEquation(currentDefinition.equation);
         }
-    }, [open, currentAxes]);
+    }, [open, currentAxes, currentDefinition]);
+
+    if (!currentDefinition) return null; // Or a loading/disabled state
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Corrigir e Salvar Eixos do Mapa</DialogTitle>
+                    <DialogTitle>Corrigir Eixos e Equação do Mapa</DialogTitle>
                     <DialogDescription>
-                        Os eixos corrigidos serão guardados e carregados automaticamente para este mapa neste ficheiro BIN.
+                        Ajuste os valores dos eixos (cabeçalhos) ou a equação de cálculo para os dados do mapa (Eixo Z). As correções serão guardadas para este mapa.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                     <div>
-                        <Label htmlFor="yAxisText">Eixo Y ({currentAxes?.yLabel || 'e.g. RPM'})</Label>
+                        <Label htmlFor="yAxisText">Eixo Y ({currentAxes?.yLabel || 'e.g. RPM'}) - Valores</Label>
                         <Input id="yAxisText" value={yAxis} onChange={e => setYAxis(e.target.value)} placeholder="e.g. 800, 1000, 1200..." />
                     </div>
                     <div>
-                        <Label htmlFor="xAxisText">Eixo X ({currentAxes?.xLabel || 'e.g. Carga/TPS'})</Label>
+                        <Label htmlFor="xAxisText">Eixo X ({currentAxes?.xLabel || 'e.g. Carga/TPS'}) - Valores</Label>
                         <Input id="xAxisText" value={xAxis} onChange={e => setXAxis(e.target.value)} placeholder="e.g. 10, 20, 30..."/>
+                    </div>
+                     <div>
+                        <Label htmlFor="zEquationText">Eixo Z (Dados do Mapa) - Equação</Label>
+                        <Input id="zEquationText" value={zEquation} onChange={e => setZEquation(e.target.value)} placeholder="e.g. X / 10"/>
+                        <p className="text-xs text-muted-foreground mt-1">Use 'X' como variável para o valor lido do ficheiro BIN.</p>
                     </div>
                 </div>
                 <DialogFooter>
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button onClick={() => onConfirm({ y: yAxis, x: xAxis })}>Confirmar e Salvar</Button>
+                    <Button onClick={() => onConfirm({ y: yAxis, x: xAxis, zEquation: zEquation })}>Confirmar e Salvar</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
