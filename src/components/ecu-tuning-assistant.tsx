@@ -1155,6 +1155,7 @@ export default function EcuTuningAssistant() {
                     suggestion={aiSuggestion} 
                     onAccept={handleAcceptSuggestion}
                     binBuffer={binFile?.buffer || null}
+                    mapRenderKey={mapRenderKey}
                 />
                 <AlertDialog open={isXdfErrorModalOpen} onOpenChange={setIsXdfErrorModalOpen}>
                     <AlertDialogContent>
@@ -1264,7 +1265,7 @@ function MapAnalysisResultModal({ open, onOpenChange, result }: { open: boolean,
     );
 }
 
-function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept, binBuffer }: { open: boolean, onOpenChange: (open: boolean) => void, suggestion: AISuggestion | null, onAccept: (corrections: { x: boolean; y: boolean; z: boolean; }) => void, binBuffer: ArrayBuffer | null }) {
+function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept, binBuffer, mapRenderKey }: { open: boolean, onOpenChange: (open: boolean) => void, suggestion: AISuggestion | null, onAccept: (corrections: { x: boolean; y: boolean; z: boolean; }) => void, binBuffer: ArrayBuffer | null, mapRenderKey: number }) {
     const [correctionsToApply, setCorrectionsToApply] = useState({ x: true, y: true, z: true });
     const [preview, setPreview] = useState<{ map: MapData; axes: { x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } } | null>(null);
 
