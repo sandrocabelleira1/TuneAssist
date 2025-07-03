@@ -570,8 +570,14 @@ export default function EcuTuningAssistant() {
     };
     
     const handleConfirmAxes = (newAxesData: { y: string, x: string }) => {
-        if (!displayAxes || !selectedMapName) return;
-        
+        if (!displayAxes || !selectedMapName || !binFile) return;
+
+        const definition = availableMaps.find(d => d.name === selectedMapName);
+        if (!definition) {
+            addLog(`Definição de mapa "${selectedMapName}" não encontrada para recálculo dos eixos.`, 'error');
+            return;
+        }
+
         const newY = newAxesData.y.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
         const newX = newAxesData.x.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
 
@@ -581,30 +587,43 @@ export default function EcuTuningAssistant() {
             return;
         }
         
-        const newAxesState = { ...displayAxes, x: newX, y: newY };
-        setSourceAxes(newAxesState);
-        setDisplayAxes(newAxesState);
-        setOriginalSortOrder({
-          x: newX.map((value, index) => ({ value, index })),
-          y: newY.map((value, index) => ({ value, index })),
-        });
+        try {
+            // Recalculate map data with the new axes, as Z values might depend on them
+            const newMapData = readMapFromBin(binFile.buffer, definition, newX, newY);
+            
+            const newAxesState = { ...displayAxes, x: newX, y: newY };
+
+            setWorkingMap(newMapData);
+            setDisplayMap(newMapData);
+            setSourceAxes(newAxesState);
+            setDisplayAxes(newAxesState);
+
+            setOriginalSortOrder({
+              x: newX.map((value, index) => ({ value, index })),
+              y: newY.map((value, index) => ({ value, index })),
+            });
 
 
-        if (binFile?.checksum) {
-          setCustomAxes(prev => ({
-              ...prev,
-              [binFile.checksum]: { ...(prev[binFile.checksum] || {}), [selectedMapName]: { x: newX, y: newY } }
-          }));
-          addLog('Eixos personalizados guardados para este ficheiro BIN.', 'success');
-          toast({ title: 'Eixos Personalizados Guardados', description: 'As suas correções foram guardadas e serão aplicadas automaticamente a este mapa.' });
-        } else {
-          toast({ variant: 'destructive', title: "Erro", description: "Não foi possível guardar os eixos porque nenhum ficheiro BIN está carregado." });
-          addLog('Não foi possível guardar os eixos personalizados: ficheiro BIN não carregado.', 'error');
+            if (binFile?.checksum) {
+              setCustomAxes(prev => ({
+                  ...prev,
+                  [binFile.checksum]: { ...(prev[binFile.checksum] || {}), [selectedMapName]: { x: newX, y: newY } }
+              }));
+              addLog('Eixos personalizados guardados para este ficheiro BIN.', 'success');
+              toast({ title: 'Eixos Personalizados Guardados', description: 'As suas correções foram guardadas e serão aplicadas automaticamente a este mapa.' });
+            } else {
+              toast({ variant: 'destructive', title: "Erro", description: "Não foi possível guardar os eixos porque nenhum ficheiro BIN está carregado." });
+              addLog('Não foi possível guardar os eixos personalizados: ficheiro BIN não carregado.', 'error');
+            }
+            
+            setMapRenderKey(p => p + 1); // Force re-render
+            setIsAxesModalOpen(false);
+            addLog('Eixos do mapa e dados (eixo Z) recalculados com sucesso.', 'success');
+        } catch (error) {
+            const msg = `Erro ao recalcular o mapa com os novos eixos: ${(error as Error).message}`;
+            addLog(msg, 'error');
+            toast({ variant: 'destructive', title: "Erro de Recálculo", description: msg });
         }
-        
-        setMapRenderKey(p => p + 1); // Force re-render
-        setIsAxesModalOpen(false);
-        addLog('Eixos do mapa atualizados.', 'success');
     };
 
     const handleSortAxis = (axis: 'x' | 'y') => {
@@ -912,22 +931,16 @@ export default function EcuTuningAssistant() {
                 }));
 
                 setAvailableMaps(prev => {
-                    const existingAddresses = new Set(prev.map(m => m.address));
-                    // Get all names from the previous state AND the new maps we are about to add
                     const allKnownNames = new Set(prev.map(m => m.name));
                     
                     const newMapsToAdd: XDFDefinition[] = [];
 
-                    const mapsToProcess = newPotentialMaps.filter(pMap => !existingAddresses.has(pMap.address));
-
-                    mapsToProcess.forEach(pMap => {
+                    newPotentialMaps.forEach(pMap => {
                         let finalName = pMap.name;
-                        let counter = 2;
-                        
-                        // Check if the initial name is already used (either in prev state or by a new map we just added)
+                        // Check if the initial name is already used. If so, create a unique one.
                         if (allKnownNames.has(finalName)) {
+                            let counter = 2;
                             const baseName = pMap.name.replace(/ \(\d+\)$/, '');
-                            // Keep generating new names until we find one that's not used
                             do {
                                 finalName = `${baseName} (${counter})`;
                                 counter++;
