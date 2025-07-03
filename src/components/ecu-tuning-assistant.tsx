@@ -450,6 +450,17 @@ export default function EcuTuningAssistant() {
                     setActiveXdfBrand(brandValue);
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
 
+                    // When loading a new XDF, clear any custom axes for the current BIN
+                    // to prevent applying old corrections to a new definition set.
+                    if (binFile?.checksum) {
+                        setCustomAxes(prev => {
+                            const newCustomAxes = { ...prev };
+                            delete newCustomAxes[binFile.checksum];
+                            return newCustomAxes;
+                        });
+                        addLog('Correções de eixos personalizados limpas para este BIN devido ao novo XDF.', 'info');
+                    }
+
                     // Add to library
                     try {
                         const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text, brand: brandValue }};
@@ -494,6 +505,17 @@ export default function EcuTuningAssistant() {
             setSelectedXdfFromLibrary(name);
             setActiveXdfBrand(xdfData.brand || '');
             addLog(`XDF "${name}" ${xdfData.brand ? `(Marca: ${xdfData.brand}) `: ''}carregado da biblioteca.`, 'success');
+            
+            // When loading a new XDF, clear any custom axes for the current BIN.
+            if (binFile?.checksum) {
+                setCustomAxes(prev => {
+                    const newCustomAxes = { ...prev };
+                    delete newCustomAxes[binFile.checksum];
+                    return newCustomAxes;
+                });
+                addLog('Correções de eixos personalizados limpas para este BIN devido ao novo XDF.', 'info');
+            }
+
         } catch (error) {
             addLog(`Erro ao carregar ${name} da biblioteca: ${(error as Error).message}`, 'error');
             setIsXdfErrorModalOpen(true);
@@ -854,6 +876,15 @@ export default function EcuTuningAssistant() {
                 xLabel: newDefinition.xAxisDef?.label || 'Eixo X',
                 yLabel: newDefinition.yAxisDef?.label || 'Eixo Y'
             };
+
+            // Persist the AI-corrected axes just like a manual correction
+            if (binFile?.checksum) {
+                setCustomAxes(prev => ({
+                    ...prev,
+                    [binFile.checksum]: { ...(prev[binFile.checksum] || {}), [selectedMapName]: { x: newSourceAxes.x, y: newSourceAxes.y } }
+                }));
+                addLog('Correções de eixos da IA guardadas para este ficheiro BIN.', 'info');
+            }
 
             // Update all the component's state
             setWorkingMap(correctedMap);
