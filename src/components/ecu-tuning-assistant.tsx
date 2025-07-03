@@ -913,29 +913,35 @@ export default function EcuTuningAssistant() {
 
                 setAvailableMaps(prev => {
                     const existingAddresses = new Set(prev.map(m => m.address));
+                    // Get all names from the previous state AND the new maps we are about to add
                     const allKnownNames = new Set(prev.map(m => m.name));
+                    
                     const newMapsToAdd: XDFDefinition[] = [];
 
-                    // First, filter out maps with addresses that already exist
                     const mapsToProcess = newPotentialMaps.filter(pMap => !existingAddresses.has(pMap.address));
 
-                    // Then, ensure unique names for the new maps
-                    mapsToProcess.forEach(newMap => {
-                        let finalName = newMap.name;
+                    mapsToProcess.forEach(pMap => {
+                        let finalName = pMap.name;
                         let counter = 2;
-                        while (allKnownNames.has(finalName)) {
-                            // If "Map (IA)" exists, try "Map (IA) (2)", then "(3)", etc.
-                            // The base name for appending the counter should be the original name, not the one with the previous counter.
-                            finalName = `${newMap.name.replace(/ \(\d+\)$/, '')} (${counter})`;
-                            counter++;
+                        
+                        // Check if the initial name is already used (either in prev state or by a new map we just added)
+                        if (allKnownNames.has(finalName)) {
+                            const baseName = pMap.name.replace(/ \(\d+\)$/, '');
+                            // Keep generating new names until we find one that's not used
+                            do {
+                                finalName = `${baseName} (${counter})`;
+                                counter++;
+                            } while (allKnownNames.has(finalName));
                         }
-                        newMap.name = finalName;
-                        newMapsToAdd.push(newMap);
-                        allKnownNames.add(finalName); // Add the newly generated unique name to the set for subsequent checks
+                        
+                        // Add the unique map to our temporary list and record its name
+                        newMapsToAdd.push({ ...pMap, name: finalName });
+                        allKnownNames.add(finalName);
                     });
                     
                     return [...prev, ...newMapsToAdd];
                 });
+
             } else {
                 const analysisMessage = result.data.analysis || 'A IA concluiu a análise mas não encontrou novos mapas potenciais.';
                 addLog(analysisMessage, 'info');
