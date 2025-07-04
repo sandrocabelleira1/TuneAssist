@@ -269,6 +269,7 @@ export default function EcuTuningAssistant() {
 
     const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: (string|number)[], y: (string|number)[] }>>>({});
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
+    const [potentialMapsDb, setPotentialMapsDb] = useState<Record<string, XDFDefinition[]>>({});
     const [selectedXdfFromLibrary, setSelectedXdfFromLibrary] = useState<string>('');
     const [selectedBrandForNewXdf, setSelectedBrandForNewXdf] = useState<string>('no-brand');
     const [activeXdfBrand, setActiveXdfBrand] = useState<string>('');
@@ -314,18 +315,23 @@ export default function EcuTuningAssistant() {
     }, [visibleLogs]);
 
 
-    // Load custom axes & XDF library from localStorage on component mount
+    // Load custom data from localStorage on component mount
     useEffect(() => {
         try {
             const savedAxes = localStorage.getItem('customAxesData');
             if (savedAxes) {
                 setCustomAxes(JSON.parse(savedAxes));
-                addLog('Eixos personalizados carregados do armazenamento local.', 'debug');
+                addLog('Eixos personalizados carregados.', 'debug');
             }
             const savedLibrary = localStorage.getItem('xdfLibrary');
             if (savedLibrary) {
                 setXdfLibrary(JSON.parse(savedLibrary));
-                addLog('Biblioteca XDF carregada do armazenamento local.', 'debug');
+                addLog('Biblioteca XDF carregada.', 'debug');
+            }
+            const savedPotentialMaps = localStorage.getItem('potentialMapsLibrary');
+            if (savedPotentialMaps) {
+                setPotentialMapsDb(JSON.parse(savedPotentialMaps));
+                addLog('Biblioteca de mapas potenciais carregada.', 'debug');
             }
         } catch (error) {
             console.error("Failed to load from localStorage", error);
@@ -333,23 +339,22 @@ export default function EcuTuningAssistant() {
         }
     }, [addLog]);
 
-    // Save custom axes to localStorage whenever they change
+    // Save custom data to localStorage whenever they change
     useEffect(() => {
         try {
-            localStorage.setItem('customAxesData', JSON.stringify(customAxes));
+            if (Object.keys(customAxes).length > 0) localStorage.setItem('customAxesData', JSON.stringify(customAxes));
+            if (Object.keys(xdfLibrary).length > 0) localStorage.setItem('xdfLibrary', JSON.stringify(xdfLibrary));
+            if (Object.keys(potentialMapsDb).length > 0) localStorage.setItem('potentialMapsLibrary', JSON.stringify(potentialMapsDb));
         } catch (error) {
-            console.error("Failed to save custom axes to localStorage", error);
-            addLog('Não foi possível guardar os eixos personalizados no armazenamento local.', 'error');
+            console.error("Failed to save to localStorage", error);
+            addLog('Não foi possível guardar dados no armazenamento local.', 'error');
         }
-    }, [customAxes, addLog]);
+    }, [customAxes, xdfLibrary, potentialMapsDb]);
 
-    // BIN/XDF Compatibility Check
+    // Rebuild available maps when files or potential maps DB changes
     useEffect(() => {
-        if (!binFile || !xdfFile) {
-            if (!xdfFile) {
-                // If there's no XDF, availableMaps should be empty (except for potential maps from scanning)
-                setAvailableMaps(prev => prev.filter(m => m.isPotential));
-            }
+        if (!binFile) {
+            setAvailableMaps([]);
             return;
         }
 
@@ -357,42 +362,43 @@ export default function EcuTuningAssistant() {
         const validDefinitions: XDFDefinition[] = [];
         let invalidCount = 0;
 
-        xdfFile.definitions.forEach(def => {
-            let isInvalid = false;
-            const mapEndAddr = def.address + (def.rows * def.cols * def.dataSize);
-            if (mapEndAddr > binSize || def.address < 0) { isInvalid = true; }
-            if (!isInvalid && def.xAxisDef?.address !== null) {
-                const axisEndAddr = def.xAxisDef.address + (def.xAxisDef.count * def.xAxisDef.dataSize);
-                if (axisEndAddr > binSize || def.xAxisDef.address < 0) { isInvalid = true; }
-            }
-            if (!isInvalid && def.yAxisDef?.address !== null) {
-                const axisEndAddr = def.yAxisDef.address + (def.yAxisDef.count * def.yAxisDef.dataSize);
-                if (axisEndAddr > binSize || def.yAxisDef.address < 0) { isInvalid = true; }
-            }
-            
-            if (isInvalid) {
-                invalidCount++;
-            } else {
-                validDefinitions.push(def);
-            }
-        });
-        
-        // Merge with existing potential maps, preventing duplicates
-        setAvailableMaps(prev => {
-            const existingPotentials = prev.filter(m => m.isPotential);
-            const validDefAddresses = new Set(validDefinitions.map(d => d.address));
-            const uniquePotentials = existingPotentials.filter(p => !validDefAddresses.has(p.address));
-            return [...validDefinitions, ...uniquePotentials];
-        });
-        
-        if (selectedMapName && !validDefinitions.some(def => def.name === selectedMapName)) {
+        if (xdfFile) {
+            xdfFile.definitions.forEach(def => {
+                let isInvalid = false;
+                const mapEndAddr = def.address + (def.rows * def.cols * def.dataSize);
+                if (mapEndAddr > binSize || def.address < 0) { isInvalid = true; }
+                if (!isInvalid && def.xAxisDef?.address !== null) {
+                    const axisEndAddr = def.xAxisDef.address + (def.xAxisDef.count * def.xAxisDef.dataSize);
+                    if (axisEndAddr > binSize || def.xAxisDef.address < 0) { isInvalid = true; }
+                }
+                if (!isInvalid && def.yAxisDef?.address !== null) {
+                    const axisEndAddr = def.yAxisDef.address + (def.yAxisDef.count * def.yAxisDef.dataSize);
+                    if (axisEndAddr > binSize || def.yAxisDef.address < 0) { isInvalid = true; }
+                }
+
+                if (isInvalid) {
+                    invalidCount++;
+                } else {
+                    validDefinitions.push(def);
+                }
+            });
+        }
+
+        const previouslyFoundMaps = potentialMapsDb[binFile.checksum] || [];
+        const definedAddresses = new Set(validDefinitions.map(d => d.address));
+        const uniquePotentials = previouslyFoundMaps.filter(pMap => !definedAddresses.has(pMap.address));
+
+        const combinedMaps = [...validDefinitions, ...uniquePotentials];
+        setAvailableMaps(combinedMaps);
+
+        if (selectedMapName && !combinedMaps.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
             setDisplayMap(null);
             setDisplayAxes(null);
         }
-        
+
         if (invalidCount > 0) {
-            const totalCount = xdfFile.definitions.length;
+            const totalCount = xdfFile?.definitions.length || 0;
             const warningMsg = `${invalidCount} de ${totalCount} definições de mapa são incompatíveis com o ficheiro BIN e foram ocultadas.`;
             addLog(warningMsg, 'error');
             toast({
@@ -402,8 +408,7 @@ export default function EcuTuningAssistant() {
                 duration: 8000,
             });
         }
-
-    }, [binFile, xdfFile, addLog, toast, selectedMapName]);
+    }, [binFile, xdfFile, potentialMapsDb, addLog, toast, selectedMapName]);
 
 
     const resetState = () => {
@@ -432,13 +437,22 @@ export default function EcuTuningAssistant() {
             try {
                 const buffer = event.target?.result as ArrayBuffer;
                 if (type === 'bin') {
-                    setXdfFile(null); setSelectedMapName('');
-                    setDisplayMap(null); setDisplayAxes(null);
+                    // Reset everything when a new BIN is loaded
+                    setXdfFile(null); 
+                    setSelectedMapName('');
+                    setDisplayMap(null);
+                    setDisplayAxes(null);
                     setAvailableMaps([]);
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
                     addLog(`Ficheiro BIN carregado: ${file.name} (Checksum: ${checksum})`, 'success');
+                    
+                    const mapsForBin = potentialMapsDb[checksum] || [];
+                    if (mapsForBin.length > 0) {
+                      addLog(`${mapsForBin.length} mapa(s) potencial(is) previamente encontrado(s) foram carregados para este BIN.`, 'info');
+                    }
+
                 } else { // XDF
                     const text = new TextDecoder().decode(buffer);
                     const definitions = parseXDF(text);
@@ -465,7 +479,6 @@ export default function EcuTuningAssistant() {
                     try {
                         const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text, brand: brandValue }};
                         setXdfLibrary(newLibrary);
-                        localStorage.setItem('xdfLibrary', JSON.stringify(newLibrary));
                         setSelectedXdfFromLibrary(file.name);
                         addLog(`"${file.name}" ${brandValue ? `(Marca: ${brandValue}) `: ''}adicionado à biblioteca XDF.`, 'info');
                     } catch (error) {
@@ -629,8 +642,16 @@ export default function EcuTuningAssistant() {
               y: newY.map((value, index) => ({ value, index })),
             });
             
-            // Update the main XDF definition state so the equation change persists for the session
-            if (xdfFile) {
+            // Update the main definition state so the equation change persists for the session
+            if (definition.isPotential) {
+                // If it's a potential map, save the whole updated definition to the potential maps DB
+                setPotentialMapsDb(prev => ({
+                    ...prev,
+                    [binFile.checksum]: (prev[binFile.checksum] || []).map(pMap => 
+                        pMap.name === selectedMapName ? newDefinition : pMap
+                    ),
+                }));
+            } else if (xdfFile) {
                 const newDefinitions = xdfFile.definitions.map(def => 
                     def.name === selectedMapName ? newDefinition : def
                 );
@@ -771,7 +792,7 @@ export default function EcuTuningAssistant() {
 
 
     const handleValidateMap = async () => {
-        if (!displayMap || !displayAxes || !selectedMapName || !binFile || !xdfFile) return;
+        if (!displayMap || !displayAxes || !selectedMapName || !binFile) return;
 
         setIsValidatingMap(true);
         addLog(`A iniciar a análise do tipo de mapa para "${selectedMapName}"...`, 'info');
@@ -802,11 +823,11 @@ export default function EcuTuningAssistant() {
 
             const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation } = result.data;
             const hasSuggestion = suggestedEquation || suggestedXAxisEquation || suggestedYAxisEquation;
+            
+            const currentDef = availableMaps.find(d => d.name === selectedMapName);
+            if (!currentDef) return;
 
             if (hasSuggestion) {
-                const currentDef = xdfFile.definitions.find(d => d.name === selectedMapName);
-                if (!currentDef) return;
-
                 const newDefinition = JSON.parse(JSON.stringify(currentDef)) as XDFDefinition;
                 if (suggestedEquation && newDefinition) newDefinition.equation = suggestedEquation;
                 if (suggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = suggestedXAxisEquation;
@@ -847,7 +868,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleAcceptSuggestion = (correctionsToApply: { x: boolean; y: boolean; z: boolean; }) => {
-        if (!aiSuggestion || !xdfFile || !binFile || !selectedMapName) return;
+        if (!aiSuggestion || !binFile || !selectedMapName) return;
 
         // Start with the original definition from before this suggestion
         const newDefinition = JSON.parse(JSON.stringify(aiSuggestion.originalDefinition)) as XDFDefinition;
@@ -888,16 +909,34 @@ export default function EcuTuningAssistant() {
                 yLabel: newDefinition.yAxisDef?.label || 'Eixo Y'
             };
 
-            // Persist the AI-corrected axes just like a manual correction
+            // Persist the corrected definition based on its type
+            if (newDefinition.isPotential) {
+                setPotentialMapsDb(prev => ({
+                    ...prev,
+                    [binFile.checksum]: (prev[binFile.checksum] || []).map(pMap => 
+                        pMap.address === newDefinition.address ? newDefinition : pMap
+                    ),
+                }));
+                 addLog(`Correções da IA guardadas para o mapa potencial "${selectedMapName}".`, 'success');
+            } else if (xdfFile) {
+                const newDefinitions = xdfFile.definitions.map(def => 
+                    def.name === selectedMapName ? newDefinition : def
+                );
+                setXdfFile({ ...xdfFile, definitions: newDefinitions });
+                 addLog(`Correções da IA aplicadas à definição XDF para "${selectedMapName}".`, 'success');
+            }
+
+
+            // Persist the AI-corrected axes values just like a manual correction
             if (binFile?.checksum) {
                 setCustomAxes(prev => ({
                     ...prev,
                     [binFile.checksum]: { ...(prev[binFile.checksum] || {}), [selectedMapName]: { x: newSourceAxes.x, y: newSourceAxes.y } }
                 }));
-                addLog('Correções de eixos da IA guardadas para este ficheiro BIN.', 'info');
+                addLog('Valores de eixos da IA guardados para este ficheiro BIN.', 'debug');
             }
 
-            // Update all the component's state
+            // Update all the component's state for immediate UI feedback
             setWorkingMap(correctedMap);
             setDisplayMap(correctedMap);
             setSourceAxes(newSourceAxes);
@@ -907,14 +946,7 @@ export default function EcuTuningAssistant() {
               y: newSourceAxes.y.map((value, index) => ({ value, index })),
             });
             
-            // Update the main XDF definition state
-            const newDefinitions = xdfFile.definitions.map(def => 
-                def.name === selectedMapName ? newDefinition : def
-            );
-            setXdfFile({ ...xdfFile, definitions: newDefinitions });
-            
             setMapRenderKey(p => p + 1); // Force re-render
-            addLog(`Correções da IA aplicadas para: ${appliedCorrectionsLog.join(', ')} no mapa "${selectedMapName}".`, 'success');
             toast({ title: 'Correções Aplicadas', description: `O mapa foi atualizado com as sugestões selecionadas.` });
 
         } catch (error) {
@@ -937,78 +969,60 @@ export default function EcuTuningAssistant() {
 
         const scanBuffer = binFile.buffer.slice(0, 8192);
         const hexData = bufferToHex(scanBuffer);
-        const existingMaps = xdfFile
-            ? xdfFile.definitions.map(d => ({
+        const existingMaps = availableMaps.map(d => ({
                 name: d.name,
                 address: d.address,
                 sizeInBytes: d.rows * d.cols * d.dataSize
-            }))
-            : [];
+            }));
 
         const result = await findPotentialMaps({ binHexData: hexData, existingMaps, brand: selectedBrandForNewXdf });
 
         setIsScanning(false);
 
-        if (result.success && result.data) {
-            if (result.data.maps.length > 0) {
-                const numMapsFound = result.data.maps.length;
-                const message = `A IA encontrou ${numMapsFound} mapa${numMapsFound > 1 ? 's' : ''} potencial${numMapsFound > 1 ? 's' : ''}.`;
-                addLog(message, 'success');
-                toast({
-                    title: "Mapas Encontrados!",
-                    description: `Foram adicionados ${numMapsFound} mapa${numMapsFound > 1 ? 's' : ''} à lista de seleção.`
-                });
+        if (result.success && result.data?.maps.length > 0) {
+            const numMapsFound = result.data.maps.length;
+            const message = `A IA encontrou ${numMapsFound} mapa${numMapsFound > 1 ? 's' : ''} potencial${numMapsFound > 1 ? 's' : ''}. Eles foram guardados para este BIN.`;
+            addLog(message, 'success');
+            toast({
+                title: "Mapas Encontrados!",
+                description: message
+            });
 
-                const newPotentialMaps: XDFDefinition[] = result.data.maps.map(pMap => ({
-                    name: `${pMap.name} (IA)`,
-                    address: pMap.address,
-                    rows: pMap.rows,
-                    cols: pMap.cols,
-                    dataSize: pMap.dataSize,
-                    isBigEndian: false, // Assume little-endian as a common default
-                    equation: 'X',
-                    xAxisDef: { address: null, count: pMap.cols, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Coluna' },
-                    yAxisDef: { address: null, count: pMap.rows, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Linha' },
-                    isPotential: true,
-                }));
+            const newPotentialMaps: XDFDefinition[] = result.data.maps.map(pMap => ({
+                name: `${pMap.name} (IA)`,
+                address: pMap.address,
+                rows: pMap.rows,
+                cols: pMap.cols,
+                dataSize: pMap.dataSize,
+                isBigEndian: false, // Assume little-endian as a common default
+                equation: 'X',
+                xAxisDef: { address: null, count: pMap.cols, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Coluna' },
+                yAxisDef: { address: null, count: pMap.rows, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Linha' },
+                isPotential: true,
+            }));
+            
+            setPotentialMapsDb(prevDb => {
+                const existingForThisBin = prevDb[binFile.checksum] || [];
+                const existingAddresses = new Set(existingForThisBin.map(m => m.address));
+                const mapsToAdd = newPotentialMaps.filter(pMap => !existingAddresses.has(pMap.address));
 
-                setAvailableMaps(prev => {
-                    const allKnownNames = new Set(prev.map(m => m.name));
-                    
-                    const newMapsToAdd: XDFDefinition[] = [];
+                return {
+                    ...prevDb,
+                    [binFile.checksum]: [...existingForThisBin, ...mapsToAdd]
+                };
+            });
 
-                    newPotentialMaps.forEach(pMap => {
-                        let finalName = pMap.name;
-                        // Check if the initial name is already used. If so, create a unique one.
-                        if (allKnownNames.has(finalName)) {
-                            let counter = 2;
-                            const baseName = pMap.name.replace(/ \(\d+\)$/, '');
-                            do {
-                                finalName = `${baseName} (${counter})`;
-                                counter++;
-                            } while (allKnownNames.has(finalName));
-                        }
-                        
-                        // Add the unique map to our temporary list and record its name
-                        newMapsToAdd.push({ ...pMap, name: finalName });
-                        allKnownNames.add(finalName);
-                    });
-                    
-                    return [...prev, ...newMapsToAdd];
-                });
-
-            } else {
-                const analysisMessage = result.data.analysis || 'A IA concluiu a análise mas não encontrou novos mapas potenciais.';
-                addLog(analysisMessage, 'info');
-                toast({
-                    title: "Procura Concluída",
-                    description: analysisMessage,
-                    duration: 8000
-                });
-            }
         } else if (result.error) {
             addLog(`Erro ao procurar mapas: ${result.error}`, 'error');
             toast({ variant: 'destructive', title: "Falha na Procura", description: result.error });
+        } else {
+            const analysisMessage = result.data?.analysis || 'A IA concluiu a análise mas não encontrou novos mapas potenciais.';
+            addLog(analysisMessage, 'info');
+            toast({
+                title: "Procura Concluída",
+                description: analysisMessage,
+                duration: 8000
+            });
         }
     };
 
@@ -1122,7 +1136,7 @@ export default function EcuTuningAssistant() {
                                             {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                                             Procurar Mapas Novos
                                         </Button>
-                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || isValidatingMap || !xdfFile}>
+                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || isValidatingMap}>
                                             {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                                             Analisar e Corrigir Mapa
                                         </Button>
