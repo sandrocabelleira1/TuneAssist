@@ -369,3 +369,95 @@ export function bufferToHex(buffer: ArrayBuffer): string {
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }
+
+
+function invertEquation(eq: string, value: number): number {
+  if (value === null || isNaN(value)) {
+    throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
+  }
+  
+  eq = eq.trim();
+  // Handle simple case: just the variable
+  if (eq.toUpperCase() === 'X') return value;
+
+  // Pattern: X [op] C  e.g., X * 0.1
+  let match = eq.match(/^X\s*([*\/+-])\s*([\d\.]+)$/i);
+  if (match) {
+    const op = match[1];
+    const C = parseFloat(match[2]);
+    if (isNaN(C)) throw new Error(`Constante inválida na equação: ${match[2]}`);
+    if (op === '*') return value / C;
+    if (op === '/') return value * C;
+    if (op === '+') return value - C;
+    if (op === '-') return value + C;
+  }
+
+  // Pattern: C [op] X e.g., 1023 - X
+  match = eq.match(/^([\d\.]+)\s*([*\/+-])\s*X$/i);
+  if (match) {
+    const C = parseFloat(match[1]);
+    const op = match[2];
+    if (isNaN(C)) throw new Error(`Constante inválida na equação: ${match[1]}`);
+    // Commutative cases
+    if (op === '*') return value / C;
+    if (op === '+') return value - C;
+    // Non-commutative cases
+    if (op === '-') return C - value; // e.g. value = C - X  =>  X = C - value
+    if (op === '/') return C / value; // e.g. value = C / X  =>  X = C / value
+  }
+
+  throw new Error(`A inversão da equação não é suportada para a expressão: "${eq}"`);
+}
+
+
+export function writeMapToBin(
+    binBuffer: ArrayBuffer,
+    def: XDFDefinition,
+    mapData: MapData
+): ArrayBuffer {
+    if (!def || !binBuffer || !mapData) {
+        throw new Error('Parâmetros inválidos fornecidos para writeMapToBin.');
+    }
+
+    const newBuffer = binBuffer.slice(0); // Create a mutable copy
+    const view = new DataView(newBuffer);
+    
+    for (let r = 0; r < def.rows; r++) {
+        for (let c = 0; c < def.cols; c++) {
+            const finalValue = mapData[r][c];
+            if (finalValue === null) {
+                // If a cell is null (e.g. invalid input), we skip writing to it
+                // to avoid corrupting the BIN with NaN values.
+                continue;
+            }
+
+            // Invert the equation to find the raw value to write
+            const rawValue = invertEquation(def.equation, finalValue);
+            
+            // Round to nearest integer, as we'll be writing integer types.
+            const intValue = Math.round(rawValue);
+            
+            const offset = def.address + (r * def.cols + c) * def.dataSize;
+
+            if (offset + def.dataSize > view.byteLength) {
+                console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
+                continue;
+            }
+
+            try {
+                if (def.dataSize === 1) {
+                    // Clamp value to 8-bit range
+                    view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
+                } else if (def.dataSize === 2) {
+                    // Clamp value to 16-bit range
+                    view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
+                }
+            } catch (e) {
+                console.error(`Erro ao escrever no buffer no offset ${offset}:`, e);
+                throw new Error(`Erro ao escrever no buffer no offset ${offset}.`);
+            }
+        }
+    }
+    
+    return newBuffer;
+}

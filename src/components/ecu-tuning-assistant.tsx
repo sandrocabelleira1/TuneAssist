@@ -3,13 +3,13 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder } from '@/lib/types';
-import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, bufferToHex } from '@/lib/ecu';
+import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, bufferToHex, writeMapToBin } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,7 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2 } from 'lucide-react';
+import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
@@ -389,9 +389,23 @@ export default function EcuTuningAssistant() {
         const uniquePotentials = previouslyFoundMaps.filter(pMap => !definedAddresses.has(pMap.address));
 
         const combinedMaps = [...validDefinitions, ...uniquePotentials];
-        setAvailableMaps(combinedMaps);
+        const finalMapNames = new Set<string>();
+        const uniqueCombinedMaps = combinedMaps.map(def => {
+            let newName = def.name;
+            if (finalMapNames.has(newName)) {
+                let count = 2;
+                do {
+                    newName = `${def.name} (${count})`;
+                    count++;
+                } while (finalMapNames.has(newName));
+            }
+            finalMapNames.add(newName);
+            return { ...def, name: newName };
+        });
 
-        if (selectedMapName && !combinedMaps.some(def => def.name === selectedMapName)) {
+        setAvailableMaps(uniqueCombinedMaps);
+
+        if (selectedMapName && !uniqueCombinedMaps.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
             setDisplayMap(null);
             setDisplayAxes(null);
@@ -981,26 +995,43 @@ export default function EcuTuningAssistant() {
 
         if (result.success && result.data?.maps.length > 0) {
             const numMapsFound = result.data.maps.length;
-            const message = `A IA encontrou ${numMapsFound} mapa${numMapsFound > 1 ? 's' : ''} potencial${numMapsFound > 1 ? 's' : ''}. Eles foram guardados para este BIN.`;
+            
+            // De-duplicate names before adding
+            const existingAndPotentials = [...availableMaps.map(m => m.name), ...potentialMapsDb[binFile.checksum]?.map(m => m.name) || []];
+            const allKnownNames = new Set(existingAndPotentials);
+            
+            const newPotentialMaps: XDFDefinition[] = result.data.maps.map(pMap => {
+                let uniqueName = `${pMap.name} (IA)`;
+                if (allKnownNames.has(uniqueName)) {
+                    let count = 2;
+                    do {
+                        uniqueName = `${pMap.name} (IA) (${count})`;
+                        count++;
+                    } while (allKnownNames.has(uniqueName));
+                }
+                allKnownNames.add(uniqueName);
+
+                return {
+                    name: uniqueName,
+                    address: pMap.address,
+                    rows: pMap.rows,
+                    cols: pMap.cols,
+                    dataSize: pMap.dataSize,
+                    isBigEndian: false, // Assume little-endian as a common default
+                    equation: 'X',
+                    xAxisDef: { address: null, count: pMap.cols, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Coluna' },
+                    yAxisDef: { address: null, count: pMap.rows, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Linha' },
+                    isPotential: true,
+                };
+            });
+            
+            const message = `A IA encontrou ${newPotentialMaps.length} novo(s) mapa(s) potencial(is). Eles foram guardados para este BIN.`;
             addLog(message, 'success');
             toast({
                 title: "Mapas Encontrados!",
                 description: message
             });
 
-            const newPotentialMaps: XDFDefinition[] = result.data.maps.map(pMap => ({
-                name: `${pMap.name} (IA)`,
-                address: pMap.address,
-                rows: pMap.rows,
-                cols: pMap.cols,
-                dataSize: pMap.dataSize,
-                isBigEndian: false, // Assume little-endian as a common default
-                equation: 'X',
-                xAxisDef: { address: null, count: pMap.cols, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Coluna' },
-                yAxisDef: { address: null, count: pMap.rows, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Linha' },
-                isPotential: true,
-            }));
-            
             setPotentialMapsDb(prevDb => {
                 const existingForThisBin = prevDb[binFile.checksum] || [];
                 const existingAddresses = new Set(existingForThisBin.map(m => m.address));
@@ -1023,6 +1054,44 @@ export default function EcuTuningAssistant() {
                 description: analysisMessage,
                 duration: 8000
             });
+        }
+    };
+    
+    const handleSaveModifiedBin = () => {
+        if (!binFile || !workingMap || !selectedMapName) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Nenhum ficheiro BIN ou mapa carregado para guardar.' });
+            return;
+        }
+        const definition = availableMaps.find(d => d.name === selectedMapName);
+        if (!definition) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível encontrar a definição do mapa selecionado.' });
+            return;
+        }
+
+        addLog('A iniciar a modificação do ficheiro BIN...', 'info');
+
+        try {
+            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, workingMap);
+            const newChecksum = generateChecksum(modifiedBuffer);
+            
+            addLog(`Modificação concluída. Novo checksum: ${newChecksum}`, 'success');
+
+            const blob = new Blob([modifiedBuffer], { type: 'application/octet-stream' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            const originalName = binFile.name.endsWith('.bin') ? binFile.name.slice(0, -4) : binFile.name;
+            link.download = `${originalName}_modificado.bin`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+            
+            toast({ title: 'Sucesso!', description: `Ficheiro "${link.download}" guardado.` });
+
+        } catch (error) {
+            const msg = `Falha ao guardar o BIN: ${(error as Error).message}`;
+            addLog(msg, 'error');
+            toast({ variant: 'destructive', title: 'Erro ao Guardar', description: msg });
         }
     };
 
@@ -1211,6 +1280,14 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 )}
                             </CardContent>
+                            {displayMap && (
+                                <CardFooter className="border-t pt-4 justify-end">
+                                    <Button onClick={handleSaveModifiedBin} disabled={!binFile || !workingMap}>
+                                        <Save className="mr-2 h-4 w-4" />
+                                        Guardar BIN Modificado
+                                    </Button>
+                                </CardFooter>
+                            )}
                         </Card>
                     </main>
                 </div>
