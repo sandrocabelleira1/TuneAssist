@@ -376,51 +376,62 @@ function invertEquation(eq: string, value: number): number {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
-    // Sanitize the equation: remove parentheses and extra whitespace
-    const sanitizedEq = eq.replace(/[()]/g, '').trim();
+    // Replace case-insensitive 'x' with 'X' and trim
+    const cleanEq = eq.replace(/x/gi, 'X').trim();
 
-    // Check for the simple case first
-    if (sanitizedEq.toUpperCase() === 'X') {
+    // Case 1: Simplest case, no operation
+    if (cleanEq === 'X') {
         return value;
     }
 
-    // Split the equation into parts, also handles multiple spaces
-    const parts = sanitizedEq.split(/\s+/).filter(p => p.length > 0);
+    // Regex to capture the structure: (number) (operator) (X) or (X) (operator) (number)
+    // This handles optional parentheses and spaces, and also floating point/negative numbers.
+    // Groupings:
+    // 1: (X) if it's the first operand
+    // 2: operator if X is first
+    // 3: number if X is first
+    // 4: number if X is second
+    // 5: operator if X is second
+    // 6: (X) if it's the second operand
+    const pattern = /^\(?(X)\)?\s*([+\-*/])\s*\(?(-?\d*\.?\d+)\)?$|^\(?(-?\d*\.?\d+)\)?\s*([+\-*/])\s*\(?(X)\)?$/;
+    const match = cleanEq.match(pattern);
 
-    if (parts.length !== 3) {
-        throw new Error(`A inversão da equação não é suportada para a expressão: "${eq}"`);
+    if (!match) {
+        throw new Error(`A inversão da equação não é suportada para a expressão: "${eq}". Formatos suportados são 'X op C' ou 'C op X'.`);
     }
-
-    const [part1, op, part3] = parts;
 
     let C: number;
+    let operator: string;
     let isXFirst: boolean;
 
-    if (part1.toUpperCase() === 'X' && !isNaN(parseFloat(part3))) {
-        C = parseFloat(part3);
+    // The regex has two main groups separated by |. We check which one matched.
+    if (match[1] && match[1].toUpperCase() === 'X') {
+        // Matched: X op C
         isXFirst = true;
-    } else if (part3.toUpperCase() === 'X' && !isNaN(parseFloat(part1))) {
-        C = parseFloat(part1);
-        isXFirst = false;
+        operator = match[2];
+        C = parseFloat(match[3]);
     } else {
-        throw new Error(`Formato de equação não suportado: "${eq}". Esperado 'X op C' ou 'C op X'.`);
+        // Matched: C op X
+        isXFirst = false;
+        C = parseFloat(match[4]);
+        operator = match[5];
     }
-
+    
     if (isXFirst) { // Case: X op C
-        switch (op) {
+        switch (operator) {
             case '+': return value - C;
             case '-': return value + C;
-            case '*': return value / C;
+            case '*': return C !== 0 ? value / C : 0;
             case '/': return value * C;
-            default: throw new Error(`Operador não suportado na equação: "${op}"`);
+            default: throw new Error(`Operador não suportado na equação: "${operator}"`);
         }
     } else { // Case: C op X
-        switch (op) {
-            case '+': return value - C; // C + X = val => X = val - C
-            case '*': return value / C; // C * X = val => X = val / C
-            case '-': return C - value; // C - X = val => X = C - val
-            case '/': return C / value; // C / X = val => X = C / val
-            default: throw new Error(`Operador não suportado na equação: "${op}"`);
+        switch (operator) {
+            case '+': return value - C;
+            case '-': return C - value;
+            case '*': return C !== 0 ? value / C : 0;
+            case '/': return value !== 0 ? C / value : 0;
+            default: throw new Error(`Operador não suportado na equação: "${operator}"`);
         }
     }
 }
