@@ -20,7 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save } from 'lucide-react';
+import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save, Pencil } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
@@ -287,6 +287,8 @@ export default function EcuTuningAssistant() {
     const [isXdfErrorModalOpen, setIsXdfErrorModalOpen] = useState(false);
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+    const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
+    const [mapToEdit, setMapToEdit] = useState<XDFDefinition | null>(null);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -1095,6 +1097,78 @@ export default function EcuTuningAssistant() {
         }
     };
 
+    const handleOpenEditNameModal = () => {
+        if (!selectedMapName) return;
+        const map = availableMaps.find(m => m.name === selectedMapName);
+        if (map) {
+            setMapToEdit(map);
+            setIsEditNameModalOpen(true);
+        } else {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível encontrar o mapa para editar.' });
+        }
+    };
+
+    const handleConfirmNameChange = (oldName: string, newName: string) => {
+        const trimmedNewName = newName.trim();
+        if (!trimmedNewName) {
+            toast({ variant: 'destructive', title: 'Nome Inválido', description: 'O nome do mapa não pode estar vazio.' });
+            return;
+        }
+
+        if (trimmedNewName !== oldName && availableMaps.some(m => m.name === trimmedNewName)) {
+            toast({ variant: 'destructive', title: 'Nome Duplicado', description: 'Já existe um mapa com este nome.' });
+            return;
+        }
+
+        let mapUpdated = false;
+
+        // Try to update in potential maps first
+        if (binFile?.checksum && potentialMapsDb[binFile.checksum]) {
+            const potentialMapIndex = potentialMapsDb[binFile.checksum].findIndex(m => m.name === oldName);
+            if (potentialMapIndex > -1) {
+                setPotentialMapsDb(prev => {
+                    const newPotentialMaps = [...prev[binFile.checksum]];
+                    newPotentialMaps[potentialMapIndex] = { ...newPotentialMaps[potentialMapIndex], name: trimmedNewName };
+                    return { ...prev, [binFile.checksum]: newPotentialMaps };
+                });
+                mapUpdated = true;
+            }
+        }
+
+        // If not a potential map, try to update in XDF definitions
+        if (!mapUpdated && xdfFile) {
+            const xdfMapIndex = xdfFile.definitions.findIndex(m => m.name === oldName);
+            if (xdfMapIndex > -1) {
+                setXdfFile(prev => {
+                    const newDefinitions = [...prev!.definitions];
+                    newDefinitions[xdfMapIndex] = { ...newDefinitions[xdfMapIndex], name: trimmedNewName };
+                    return { ...prev!, definitions: newDefinitions };
+                });
+                mapUpdated = true;
+            }
+        }
+        
+        // Update customAxes keys if an entry exists
+        if (mapUpdated && binFile?.checksum && customAxes[binFile.checksum]?.[oldName]) {
+            setCustomAxes(prev => {
+                const newBinAxes = { ...prev[binFile.checksum] };
+                newBinAxes[trimmedNewName] = newBinAxes[oldName];
+                delete newBinAxes[oldName];
+                return { ...prev, [binFile.checksum]: newBinAxes };
+            });
+        }
+        
+        if (mapUpdated) {
+            setSelectedMapName(trimmedNewName);
+            toast({ title: 'Nome Atualizado', description: `O mapa foi renomeado para "${trimmedNewName}".` });
+        } else {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível encontrar o mapa para renomear.' });
+        }
+
+        setIsEditNameModalOpen(false);
+        setMapToEdit(null);
+    };
+
 
     return (
         <TooltipProvider>
@@ -1174,17 +1248,29 @@ export default function EcuTuningAssistant() {
                                 
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
-                                    <Select onValueChange={handleMapSelect} disabled={availableMaps.length === 0} value={selectedMapName}>
-                                        <SelectTrigger><SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : availableMaps.length === 0 ? "Nenhum mapa disponível" : "Selecione um mapa"} /></SelectTrigger>
-                                        <SelectContent>
-                                            {availableMaps.map(def => (
-                                              <SelectItem key={def.name} value={def.name} className="flex items-center">
-                                                  {def.isPotential && <Sparkles className="mr-2 h-4 w-4 text-primary shrink-0" />}
-                                                  <span>{def.name}</span>
-                                              </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <div className="flex items-center gap-2">
+                                        <Select onValueChange={handleMapSelect} disabled={availableMaps.length === 0} value={selectedMapName} >
+                                            <SelectTrigger className="flex-1"><SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : availableMaps.length === 0 ? "Nenhum mapa disponível" : "Selecione um mapa"} /></SelectTrigger>
+                                            <SelectContent>
+                                                {availableMaps.map(def => (
+                                                  <SelectItem key={def.name} value={def.name} className="flex items-center">
+                                                      {def.isPotential && <Sparkles className="mr-2 h-4 w-4 text-primary shrink-0" />}
+                                                      <span>{def.name}</span>
+                                                  </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleOpenEditNameModal} disabled={!selectedMapName}>
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>Editar Nome do Mapa</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </div>
                                 </div>
 
                                 <div className="space-y-2">
@@ -1308,6 +1394,12 @@ export default function EcuTuningAssistant() {
                     onAccept={handleAcceptSuggestion}
                     binBuffer={binFile?.buffer || null}
                     mapRenderKey={mapRenderKey}
+                />
+                <EditNameModal
+                    open={isEditNameModalOpen}
+                    onOpenChange={setIsEditNameModalOpen}
+                    currentName={mapToEdit?.name || ''}
+                    onConfirm={handleConfirmNameChange}
                 />
                 <AlertDialog open={isXdfErrorModalOpen} onOpenChange={setIsXdfErrorModalOpen}>
                     <AlertDialogContent>
@@ -1619,6 +1711,55 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                         <CheckCircle className="mr-2"/>
                         Aplicar Correções Selecionadas
                     </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+
+function EditNameModal({ open, onOpenChange, onConfirm, currentName }: { 
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onConfirm: (oldName: string, newName: string) => void;
+    currentName: string;
+}) {
+    const [newName, setNewName] = useState('');
+
+    useEffect(() => {
+        if (open) {
+            setNewName(currentName);
+        }
+    }, [open, currentName]);
+
+    const handleConfirm = () => {
+        onConfirm(currentName, newName);
+    };
+
+    if (!open) return null;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Editar Nome do Mapa</DialogTitle>
+                    <DialogDescription>
+                        Escolha um novo nome para "{currentName}".
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2 py-4">
+                    <Label htmlFor="mapNameInput" className="sr-only">Nome do Mapa</Label>
+                    <Input
+                        id="mapNameInput"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleConfirm(); } }}
+                        autoFocus
+                    />
+                </div>
+                <DialogFooter>
+                    <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button onClick={handleConfirm}>Guardar Nome</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
