@@ -381,11 +381,11 @@ function invertEquation(eq: string, value: number): number {
   if (eq.toUpperCase() === 'X') return value;
 
   // Pattern: X [op] C  e.g., X * 0.1
-  let match = eq.match(/^X\s*([*\/+-])\s*([\d\.]+)$/i);
-  if (match) {
-    const op = match[1];
-    const C = parseFloat(match[2]);
-    if (isNaN(C)) throw new Error(`Constante inválida na equação: ${match[2]}`);
+  const matchXFirst = eq.match(/^X\s*([*\/+-])\s*([\d\.]+)$/i);
+  if (matchXFirst) {
+    const op = matchXFirst[1];
+    const C = parseFloat(matchXFirst[2]);
+    if (isNaN(C)) throw new Error(`Constante inválida na equação: ${matchXFirst[2]}`);
     if (op === '*') return value / C;
     if (op === '/') return value * C;
     if (op === '+') return value - C;
@@ -393,11 +393,11 @@ function invertEquation(eq: string, value: number): number {
   }
 
   // Pattern: C [op] X e.g., 1023 - X
-  match = eq.match(/^([\d\.]+)\s*([*\/+-])\s*X$/i);
-  if (match) {
-    const C = parseFloat(match[1]);
-    const op = match[2];
-    if (isNaN(C)) throw new Error(`Constante inválida na equação: ${match[1]}`);
+  const matchCFirst = eq.match(/^([\d\.]+)\s*([*\/+-])\s*X$/i);
+  if (matchCFirst) {
+    const C = parseFloat(matchCFirst[1]);
+    const op = matchCFirst[2];
+    if (isNaN(C)) throw new Error(`Constante inválida na equação: ${matchCFirst[1]}`);
     // Commutative cases
     if (op === '*') return value / C;
     if (op === '+') return value - C;
