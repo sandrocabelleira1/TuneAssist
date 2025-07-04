@@ -1,7 +1,7 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['react-markdown', 'remark-gfm'],
+  transpilePackages: ['react-markdown', 'remark-gfm', 'react-plotly.js', 'plotly.js'],
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,
