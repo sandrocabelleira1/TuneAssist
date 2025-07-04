@@ -376,24 +376,29 @@ function invertEquation(eq: string, value: number): number {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
-    // Replace case-insensitive 'x' with 'X' and trim
     const cleanEq = eq.replace(/x/gi, 'X').trim();
 
-    // Case 1: Simplest case, no operation
     if (cleanEq === 'X') {
         return value;
     }
 
-    // Regex to capture the structure: (number) (operator) (X) or (X) (operator) (number)
-    // This handles optional parentheses and spaces, and also floating point/negative numbers.
-    // Groupings:
-    // 1: (X) if it's the first operand
-    // 2: operator if X is first
-    // 3: number if X is first
-    // 4: number if X is second
-    // 5: operator if X is second
-    // 6: (X) if it's the second operand
-    const pattern = /^\(?(X)\)?\s*([+\-*/])\s*\(?(-?\d*\.?\d+)\)?$|^\(?(-?\d*\.?\d+)\)?\s*([+\-*/])\s*\(?(X)\)?$/;
+    // A robust regex for numbers that handles integers and floats (e.g., 1024, 10.23).
+    const numberPattern = '(-?\\d+(\\.\\d*)?)';
+    
+    // This regex captures the structure "X op C" or "C op X", allowing for spaces and parentheses.
+    const pattern = new RegExp(
+      `^\\(?(X)\\)?[\\s]*([+\\-*\\/])[\\s]*\\(?${numberPattern}\\)?[\\s]*$|^\\(?${numberPattern}\\)?[\\s]*([+\\-*\\/])[\\s]*\\(?(X)\\)?[\\s]*$`
+    );
+    
+    // Deconstructed regex groups:
+    // Part 1 (X op C):
+    //   match[1]: X
+    //   match[2]: operator
+    //   match[3]: The full number C
+    // Part 2 (C op X):
+    //   match[5]: The full number C
+    //   match[7]: operator
+    //   match[8]: X
     const match = cleanEq.match(pattern);
 
     if (!match) {
@@ -404,7 +409,6 @@ function invertEquation(eq: string, value: number): number {
     let operator: string;
     let isXFirst: boolean;
 
-    // The regex has two main groups separated by |. We check which one matched.
     if (match[1] && match[1].toUpperCase() === 'X') {
         // Matched: X op C
         isXFirst = true;
@@ -413,8 +417,8 @@ function invertEquation(eq: string, value: number): number {
     } else {
         // Matched: C op X
         isXFirst = false;
-        C = parseFloat(match[4]);
-        operator = match[5];
+        C = parseFloat(match[5]);
+        operator = match[7];
     }
     
     if (isXFirst) { // Case: X op C
