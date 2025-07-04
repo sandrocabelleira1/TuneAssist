@@ -372,41 +372,57 @@ export function bufferToHex(buffer: ArrayBuffer): string {
 
 
 function invertEquation(eq: string, value: number): number {
-  if (value === null || isNaN(value)) {
-    throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
-  }
-  
-  eq = eq.trim();
-  // Handle simple case: just the variable
-  if (eq.toUpperCase() === 'X') return value;
+    if (value === null || isNaN(value)) {
+        throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
+    }
 
-  // Pattern: X [op] C  e.g., X * 0.1
-  const matchXFirst = eq.match(/^X\s*([*\/+-])\s*([\d\.]+)$/i);
-  if (matchXFirst) {
-    const op = matchXFirst[1];
-    const C = parseFloat(matchXFirst[2]);
-    if (isNaN(C)) throw new Error(`Constante inválida na equação: ${matchXFirst[2]}`);
-    if (op === '*') return value / C;
-    if (op === '/') return value * C;
-    if (op === '+') return value - C;
-    if (op === '-') return value + C;
-  }
+    // Sanitize the equation: remove parentheses and extra whitespace
+    const sanitizedEq = eq.replace(/[()]/g, '').trim();
 
-  // Pattern: C [op] X e.g., 1023 - X
-  const matchCFirst = eq.match(/^([\d\.]+)\s*([*\/+-])\s*X$/i);
-  if (matchCFirst) {
-    const C = parseFloat(matchCFirst[1]);
-    const op = matchCFirst[2];
-    if (isNaN(C)) throw new Error(`Constante inválida na equação: ${matchCFirst[1]}`);
-    // Commutative cases
-    if (op === '*') return value / C;
-    if (op === '+') return value - C;
-    // Non-commutative cases
-    if (op === '-') return C - value; // e.g. value = C - X  =>  X = C - value
-    if (op === '/') return C / value; // e.g. value = C / X  =>  X = C / value
-  }
+    // Check for the simple case first
+    if (sanitizedEq.toUpperCase() === 'X') {
+        return value;
+    }
 
-  throw new Error(`A inversão da equação não é suportada para a expressão: "${eq}"`);
+    // Split the equation into parts, also handles multiple spaces
+    const parts = sanitizedEq.split(/\s+/).filter(p => p.length > 0);
+
+    if (parts.length !== 3) {
+        throw new Error(`A inversão da equação não é suportada para a expressão: "${eq}"`);
+    }
+
+    const [part1, op, part3] = parts;
+
+    let C: number;
+    let isXFirst: boolean;
+
+    if (part1.toUpperCase() === 'X' && !isNaN(parseFloat(part3))) {
+        C = parseFloat(part3);
+        isXFirst = true;
+    } else if (part3.toUpperCase() === 'X' && !isNaN(parseFloat(part1))) {
+        C = parseFloat(part1);
+        isXFirst = false;
+    } else {
+        throw new Error(`Formato de equação não suportado: "${eq}". Esperado 'X op C' ou 'C op X'.`);
+    }
+
+    if (isXFirst) { // Case: X op C
+        switch (op) {
+            case '+': return value - C;
+            case '-': return value + C;
+            case '*': return value / C;
+            case '/': return value * C;
+            default: throw new Error(`Operador não suportado na equação: "${op}"`);
+        }
+    } else { // Case: C op X
+        switch (op) {
+            case '+': return value - C; // C + X = val => X = val - C
+            case '*': return value / C; // C * X = val => X = val / C
+            case '-': return C - value; // C - X = val => X = C - val
+            case '/': return C / value; // C / X = val => X = C / val
+            default: throw new Error(`Operador não suportado na equação: "${op}"`);
+        }
+    }
 }
 
 
