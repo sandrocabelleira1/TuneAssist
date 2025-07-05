@@ -242,15 +242,17 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   }
   
   const view = new DataView(binBuffer);
-  // The equation is already sanitized to use 'X' during parsing.
-  const sanitizedEquation = axisDef.equation;
+  // Sanitize the equation for JS execution.
+  const sanitizedEquation = (axisDef.equation || 'X')
+      .replace(/,/g, '.') // Replace comma decimal separators with periods
+      .replace(/\bVALUE\b/gi, 'X') // Standardize variable to 'X'
+      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)'); // Handle IF functions
 
   let equationFunc;
   try {
       equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
       if (e instanceof SyntaxError) {
-          // If it's a syntax error, it's not a valid JS equation. Treat it as a text label.
           console.warn(`A equação do eixo "${axisDef.equation}" foi tratada como uma etiqueta de texto devido a um erro de sintaxe.`);
           return Array.from({ length: axisDef.count }, () => axisDef.equation);
       }
@@ -302,19 +304,16 @@ export function readMapFromBin(
   const map: MapData = [];
   
   // Sanitize the equation for JS execution.
-  // 1. Recognize 'VALUE' as a variable, just like 'X'.
-  // 2. Replace XDF-style IF(condition, then, else) with JS ternary operator.
   const sanitizedEquation = (def.equation || 'X')
-      .replace(/\bVALUE\b/gi, 'X')
-      .replace(/IF\((.+?),(.+?),(.+?)\)/gi, '($1 ? $2 : $3)');
+      .replace(/,/g, '.') // Replace comma decimal separators with periods
+      .replace(/\bVALUE\b/gi, 'X') // Standardize variable to 'X'
+      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)'); // Handle IF functions
 
   let equationFunc;
   try {
-    // If equation is invalid, the function will throw, and the catch block will handle it.
     equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
     console.error(`Equação de mapa inválida "${def.equation}" (sanitizada para "${sanitizedEquation}") para "${def.name}": ${e}. A utilizar valores "crus".`);
-    // If equation compilation fails, create a function that just returns the raw value.
     equationFunc = (X: number) => X;
   }
 
@@ -340,13 +339,11 @@ export function readMapFromBin(
         const xVal = (c < xAxis.length && typeof xAxis[c] === 'number') ? xAxis[c] : 0;
         const yVal = (r < yAxis.length && typeof yAxis[r] === 'number') ? yAxis[r] : 0;
         
-        // Also wrap the execution in a try-catch, as it can fail with ReferenceError etc.
         const calculatedValue = equationFunc(rawValue, xVal, yVal, 0);
         row.push(calculatedValue);
 
       } catch(e) {
           console.error(`Erro ao aplicar equação "${sanitizedEquation}" na célula [${r},${c}] do mapa "${def.name}": ${e}. A utilizar o valor "cru".`);
-          // Re-read rawValue inside catch to be safe, as it might not be assigned if the error is early
           if (def.dataSize === 1) rawValue = view.getUint8(offset);
           else if (def.dataSize === 2) rawValue = view.getUint16(offset, !def.isBigEndian);
           else rawValue = null;
@@ -373,30 +370,23 @@ export function bufferToHex(buffer: ArrayBuffer): string {
     .join('');
 }
 
-/**
- * Inverts a simple mathematical equation to solve for 'X'.
- * This function is critical for converting a user-edited value (final value)
- * back into the raw value that needs to be written to the binary file.
- * This new version is robust and handles `X op C` and `C op X` formats.
- * @param eq The equation string from the XDF, e.g., "X / 10.23", or "1023 - X".
- * @param value The final, calculated value that the user sees or enters.
- * @returns The raw value (inverted X) to be written to the binary.
- */
 function invertEquation(eq: string, value: number): number {
     if (value === null || isNaN(value)) {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
-    // Clean up the equation for reliable parsing: remove spaces, parentheses, and standardize variables.
-    const cleanEq = eq.replace(/\s/g, '').replace(/[()]/g, '').replace(/\bVALUE\b/gi, 'X').replace(/\bx\b/gi, 'X');
+    const cleanEq = (eq || 'X')
+        .replace(/,/g, '.') // Replace commas with periods for consistency
+        .replace(/\s/g, '')
+        .replace(/[()]/g, '')
+        .replace(/\bVALUE\b/gi, 'X')
+        .replace(/\bx\b/gi, 'X');
     
     if (cleanEq === 'X') return value;
     if (cleanEq === '-X') return -value;
 
-    // This robust pattern handles integers, decimals, and scientific notation (e.g., 1.525E-5)
     const numberPattern = "-?(?:\\d*\\.\\d+|\\d+\\.?)(?:[eE][+-]?\\d+)?";
     
-    // Pattern 1: X op C (e.g., X/10, X*0.5, X+100)
     const pattern1 = new RegExp(`^X([+\\-*\\/])(${numberPattern})$`);
     const match1 = cleanEq.match(pattern1);
     if (match1) {
@@ -409,11 +399,9 @@ function invertEquation(eq: string, value: number): number {
             case '-': return value + C;
             case '*': return C !== 0 ? value / C : 0;
             case '/': return value * C;
-            default: break; // Should not happen
         }
     }
 
-    // Pattern 2: C op X (e.g., 1023-X)
     const pattern2 = new RegExp(`^(${numberPattern})([+\\-*\\/])X$`);
     const match2 = cleanEq.match(pattern2);
     if (match2) {
@@ -430,11 +418,9 @@ function invertEquation(eq: string, value: number): number {
                      throw new Error(`Divisão por zero ao inverter a equação "${eq}" com o valor 0.`);
                 }
                 return C / value;
-            default: break;
         }
     }
     
-    // Fallback for complex equations not matching simple patterns
     throw new Error(`A inversão da equação não é suportada para a complexidade de: "${eq}". Apenas os formatos "X op C" ou "C op X" são suportados para escrita.`);
 }
 
@@ -455,18 +441,12 @@ export function writeMapToBin(
         for (let c = 0; c < def.cols; c++) {
             const finalValue = mapData[r][c];
             if (finalValue === null) {
-                // If a cell is null (e.g. invalid input), we skip writing to it
-                // to avoid corrupting the BIN with NaN values.
                 continue;
             }
 
             try {
-                // Invert the equation to find the raw value to write
                 const rawValue = invertEquation(def.equation, finalValue);
-                
-                // Round to nearest integer, as we'll be writing integer types.
                 const intValue = Math.round(rawValue);
-                
                 const offset = def.address + (r * def.cols + c) * def.dataSize;
 
                 if (offset + def.dataSize > view.byteLength) {
@@ -475,17 +455,13 @@ export function writeMapToBin(
                 }
                 
                 if (def.dataSize === 1) {
-                    // Clamp value to 8-bit range
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                    // Clamp value to 16-bit range
                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
-                 // We log the error but continue, so one bad cell doesn't stop the whole save.
                  console.error(`Não foi possível escrever a célula [${r},${c}] para o mapa "${def.name}": ${errorMsg}`);
-                 // Optionally, you could toast a notification to the user here.
             }
         }
     }
