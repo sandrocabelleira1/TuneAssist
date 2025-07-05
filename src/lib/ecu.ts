@@ -3,13 +3,52 @@
 
 import type { XDFDefinition, AxisDefinition, MapData } from './types';
 
+/**
+ * Finds a child element in a case-insensitive manner for tags and attributes.
+ * Supports simple tag selectors ('math') and simple attribute selectors ('XDFAXIS[id="z"]').
+ * @param parent The element to search within.
+ * @param selectors The possible selectors.
+ * @returns The found element or null.
+ */
 function findNode(parent: Element, ...selectors: string[]): Element | null {
-  for (const selector of selectors) {
-    const node = parent.querySelector(selector);
-    if (node) return node;
-  }
-  return null;
+    if (!parent) return null;
+
+    for (const selector of selectors) {
+        // Simple tag name selector, e.g., "math"
+        const isSimpleTag = /^[a-zA-Z0-9]+$/.test(selector);
+        if (isSimpleTag) {
+            for (const child of Array.from(parent.children)) {
+                if (child.tagName.toLowerCase() === selector.toLowerCase()) {
+                    return child;
+                }
+            }
+        } else {
+            // More complex selector like 'XDFAXIS[id="z"]'
+            const match = selector.match(/^([a-zA-Z0-9]+)\[([a-zA-Z]+)="(.+?)"\]$/);
+            if (match) {
+                const [, tagName, attrName, attrValue] = match;
+                for (const child of Array.from(parent.children)) {
+                    if (child.tagName.toLowerCase() === tagName.toLowerCase()) {
+                        const val = getAttr(child, attrName);
+                        if (val && val.toLowerCase() === attrValue.toLowerCase()) {
+                            return child;
+                        }
+                    }
+                }
+            } else {
+              // Fallback to querySelector for any other complex cases, though it might be case-sensitive.
+              try {
+                const node = parent.querySelector(selector);
+                if (node) return node;
+              } catch (e) {
+                console.warn(`Could not execute querySelector for "${selector}", it might be invalid.`, e);
+              }
+            }
+        }
+    }
+    return null;
 }
+
 
 /**
  * Gets an attribute from an element in a case-insensitive manner.
@@ -34,7 +73,7 @@ function getAttr(element: Element | null, ...names: string[]): string | null {
 function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axisType: 'x' | 'y'): AxisDefinition {
     if (!axisNode) return null;
 
-    const defaultLabel = axisType === 'x' ? 'Carga' : 'RPM';
+    const defaultLabel = axisType === 'y' ? 'RPM' : 'Carga';
 
     const localCountNode = findNode(axisNode, 'indexcount', 'INDEXCOUNT');
     const count = localCountNode ? parseInt(localCountNode.textContent || '0', 10) : 0;
@@ -102,8 +141,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                 return isNaN(num) ? l.trim() : num;
             });
             // If count wasn't defined, infer from labels
-            if (count === 0) return { staticLabels, count: labels.length, label: localLabel, equation: 'X', equationVar: 'X' } as AxisDefinition;
-            return { staticLabels, count, label: localLabel, equation: 'X', equationVar: 'X' } as AxisDefinition;
+            if (count === 0) return { staticLabels, count: labels.length, label: localLabel || defaultLabel, equation: 'X', equationVar: 'X' } as AxisDefinition;
+            return { staticLabels, count, label: localLabel || defaultLabel, equation: 'X', equationVar: 'X' } as AxisDefinition;
         }
     }
 
@@ -115,7 +154,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     const isBigEndian = getAttr(embeddedData, 'bigendian') === '1';
     
     const mathNode = findNode(axisNode, 'math', 'MATH');
-    const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
+    const equation = getAttr(mathNode || axisNode, 'equation', 'Equation') || 'X';
     const varNode = findNode(mathNode || axisNode, 'VAR', 'var');
     const equationVar = getAttr(varNode, 'id') || 'X';
 
@@ -144,7 +183,18 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     throw new Error('Erro de análise XML: O ficheiro XDF parece estar corrompido ou mal formatado.');
   }
 
-  const xdfTables = xmlDoc.querySelectorAll('XDFTABLE, table');
+  // Robustly find all table elements, case-insensitively
+  const allElements = xmlDoc.getElementsByTagName('*');
+  const xdfTables: Element[] = [];
+  for (const el of Array.from(allElements)) {
+      if (el.tagName.toLowerCase() === 'xdftable' || el.tagName.toLowerCase() === 'table') {
+          // Ensure we don't add nested tables if they exist in the structure
+          if (!el.parentElement || (el.parentElement.tagName.toLowerCase() !== 'xdftable' && el.parentElement.tagName.toLowerCase() !== 'table')) {
+            xdfTables.push(el);
+          }
+      }
+  }
+
   if (xdfTables.length === 0) {
     throw new Error('Nenhuma definição de <XDFTABLE> ou <table> foi encontrada no ficheiro.');
   }
@@ -154,11 +204,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   for (const table of xdfTables) {
       const uniqueid = getAttr(table, 'uniqueid');
       // Only add tables with a valid, non-default ID to the map.
-      // Ignore "0x0" or "0" as they are likely default/null values and not unique.
       if (uniqueid && uniqueid !== '0x0' && uniqueid !== '0') {
           if (tableMap.has(uniqueid)) {
-            // Warn about duplicates but still add, allowing the last one to be used.
-            // This mirrors some tools' behavior but is not ideal.
             console.warn(`ID único de tabela duplicado encontrado: ${uniqueid}. A ligação a esta tabela pode ser ambígua.`);
           }
           tableMap.set(uniqueid, table);
@@ -170,7 +217,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
   // Second pass: parse each table definition
   for (const table of xdfTables) {
-    const originalName = table.querySelector('title')?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
+    const originalName = findNode(table, 'title')?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
     
     // Add a try-catch block to make parsing robust. One bad table shouldn't stop the whole process.
     try {
@@ -202,7 +249,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
-      const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
+      const equation = getAttr(mathNode || zAxisNode, 'equation', 'Equation') || 'X';
       
       const varNode = findNode(mathNode || zAxisNode, 'var', 'VAR');
       const equationVar = getAttr(varNode, 'id') || 'X';
@@ -212,17 +259,17 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         continue;
       }
 
-      let xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'), tableMap, 'x');
-      let yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'), tableMap, 'y');
+      let yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'yaxis'), tableMap, 'y');
+      let xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'xaxis'), tableMap, 'x');
 
-      if (!xAxisDef || xAxisDef.count !== cols) {
-          if (xAxisDef) console.warn(`Contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${cols}). A inferir o eixo.`);
-          xAxisDef = { address: null, count: cols, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'Carga (Inferido)' };
-      }
-      
       if (!yAxisDef || yAxisDef.count !== rows) {
           if (yAxisDef) console.warn(`Contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rows}). A inferir o eixo.`);
           yAxisDef = { address: null, count: rows, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'RPM (Inferido)' };
+      }
+      
+      if (!xAxisDef || xAxisDef.count !== cols) {
+          if (xAxisDef) console.warn(`Contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${cols}). A inferir o eixo.`);
+          xAxisDef = { address: null, count: cols, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'Carga (Inferido)' };
       }
 
       // Generate a unique name for the map before pushing.
