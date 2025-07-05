@@ -340,7 +340,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       .replace(/,/g, '.')
       .replace(new RegExp(`\\b${axisDef.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)`
-      .replace(/if\s*\((.+?)\)\s*\{(.+?)\}\s*else\s*\{(.+?)\}/gi, '($1 ? $2 : $3)')
+      .replace(/if\s*\(([\s\S]+?)\)\s*\{([\s\S]+?)\}\s*else\s*\{([\s\S]+?)\}/gi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)');
 
@@ -397,7 +397,7 @@ export function readMapFromBin(
       .replace(/,/g, '.')
       .replace(new RegExp(`\\b${def.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)`
-      .replace(/if\s*\((.+?)\)\s*\{(.+?)\}\s*else\s*\{(.+?)\}/gi, '($1 ? $2 : $3)')
+      .replace(/if\s*\(([\s\S]+?)\)\s*\{([\s\S]+?)\}\s*else\s*\{([\s\S]+?)\}/gi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)');
 
