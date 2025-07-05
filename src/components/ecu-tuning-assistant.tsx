@@ -441,20 +441,12 @@ export default function EcuTuningAssistant() {
         setSelectedBrandForNewXdf('no-brand');
         setAvailableMaps([]);
         
-        // Hard reset of localStorage-backed state
-        setCustomAxes({});
-        setPotentialMapsDb({});
-        try {
-            localStorage.removeItem('customAxesData');
-            localStorage.removeItem('potentialMapsLibrary');
-            addLog('Armazenamento de sessão (eixos, mapas encontrados) foi limpo.', 'info');
-        } catch (error) {
-            addLog('Não foi possível limpar o armazenamento local.', 'error');
-        }
+        // As bibliotecas do utilizador (eixos personalizados, mapas encontrados, XDFs) são preservadas.
+        // Estamos apenas a reiniciar o estado da sessão atual.
 
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
-        addLog('O estado da sessão foi reiniciado.', 'info');
+        addLog('O estado da sessão foi reiniciado. As suas bibliotecas foram preservadas.', 'info');
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
