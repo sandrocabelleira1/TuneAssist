@@ -306,16 +306,12 @@ export function readMapFromBin(
   
   let equationFunc;
   try {
+    // If equation is invalid, the function will throw, and the catch block will handle it.
     equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
-    if (e instanceof SyntaxError) {
-        console.warn(`A equação do mapa "${def.equation}" foi tratada como inválida devido a um erro de sintaxe. Os valores do mapa serão nulos.`);
-        equationFunc = () => null;
-    } else {
-        console.error(`Equação do mapa inválida "${def.equation}": ${e}`);
-        // Create a function that always returns null if the equation is invalid
-        equationFunc = () => null;
-    }
+    console.error(`Equação de mapa inválida "${def.equation}" para "${def.name}": ${e}. A utilizar valores "crus".`);
+    // If equation compilation fails, create a function that just returns the raw value.
+    equationFunc = (X: number) => X;
   }
 
   for (let r = 0; r < def.rows; r++) {
@@ -323,10 +319,11 @@ export function readMapFromBin(
     for (let c = 0; c < def.cols; c++) {
       const offset = def.address + (r * def.cols + c) * def.dataSize;
       if (offset + def.dataSize > view.byteLength) {
-        console.error(`Leitura do mapa fora dos limites. Offset: ${offset}`);
+        console.error(`Leitura do mapa fora dos limites para "${def.name}". Offset: ${offset}`);
         row.push(null);
         continue;
       }
+      
       let rawValue;
       try {
         if (def.dataSize === 1) rawValue = view.getUint8(offset);
@@ -338,16 +335,18 @@ export function readMapFromBin(
 
         const xVal = (c < xAxis.length && typeof xAxis[c] === 'number') ? xAxis[c] : 0;
         const yVal = (r < yAxis.length && typeof yAxis[r] === 'number') ? yAxis[r] : 0;
+        
+        // Also wrap the execution in a try-catch, as it can fail with ReferenceError etc.
+        const calculatedValue = equationFunc(rawValue, xVal, yVal, 0);
+        row.push(calculatedValue);
 
-        row.push(equationFunc(rawValue, xVal, yVal, 0));
       } catch(e) {
-        if (e instanceof ReferenceError) {
-          console.warn(`A equação do mapa "${def.equation}" parece ser uma etiqueta de texto. A usá-la diretamente.`);
-          row.push(null); // Or handle as text if needed
-        } else {
-          console.error(`Erro ao aplicar equação do mapa: ${e}`);
-          row.push(null);
-        }
+          console.error(`Erro ao aplicar equação "${def.equation}" na célula [${r},${c}] do mapa "${def.name}": ${e}. A utilizar o valor "cru".`);
+          // Re-read rawValue inside catch to be safe, as it might not be assigned if the error is early
+          if (def.dataSize === 1) rawValue = view.getUint8(offset);
+          else if (def.dataSize === 2) rawValue = view.getUint16(offset, !def.isBigEndian);
+          else rawValue = null;
+          row.push(rawValue);
       }
     }
     map.push(row);
