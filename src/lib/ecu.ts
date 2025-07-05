@@ -370,13 +370,12 @@ export function bufferToHex(buffer: ArrayBuffer): string {
     .join('');
 }
 
-
 /**
  * Inverts a simple mathematical equation to solve for 'X'.
  * This function is critical for converting a user-edited value (final value)
  * back into the raw value that needs to be written to the binary file.
- * It is rebuilt to be robust against formatting and scientific notation.
- * @param eq The equation string from the XDF, e.g., "X / 10.23", "X*1.525E-3", or "1023 - X".
+ * This new version is robust and handles `X op C` and `C op X` formats.
+ * @param eq The equation string from the XDF, e.g., "X / 10.23", or "1023 - X".
  * @param value The final, calculated value that the user sees or enters.
  * @returns The raw value (inverted X) to be written to the binary.
  */
@@ -385,79 +384,53 @@ function invertEquation(eq: string, value: number): number {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
-    // 1. Clean the equation string: remove spaces, parentheses, and standardize variable to 'X'.
-    const cleanEq = eq.replace(/\s+/g, '').replace(/[()]/g, '').replace(/x/gi, 'X');
+    const cleanEq = eq.replace(/\s/g, '').replace(/[()]/g, '').replace(/x/gi, 'X');
 
-    // 2. Handle simple cases directly for efficiency.
     if (cleanEq === 'X') return value;
     if (cleanEq === '-X') return -value;
 
-    // 3. Use a robust regex to parse the equation into three parts: operand1, operator, operand2.
-    // This regex correctly identifies 'X', integers, decimals, and scientific notation.
-    const operandPattern = '(X|-?(?:\\d*\\.\\d+|\\d+\\.?)(?:[Ee][+-]?\\d+)?)';
-    const pattern = new RegExp(`^${operandPattern}([+\\-*\\/])${operandPattern}$`);
-    const match = cleanEq.match(pattern);
-
-    // 4. If the pattern doesn't match, the equation is too complex or malformed.
-    if (!match) {
-        // Fallback for simple single-operand equations (e.g. "X+10") which might fail the complex regex
-        const simpleParts = cleanEq.split(/([+\-*/])/);
-        if (simpleParts.length === 3 && (simpleParts[0].toUpperCase() === 'X' || simpleParts[2].toUpperCase() === 'X')) {
-             // It's a simple expression, re-run with this simpler logic
-             const [op1, op, op2] = simpleParts;
-             return invertSimple(op1, op, op2, value, eq);
-        }
-        throw new Error(`A inversão da equação não é suportada para a expressão: "${eq}". Formatos suportados são 'X op C' ou 'C op X'.`);
-    }
-
-    // 5. Extract the components from the regex match.
-    const [, operand1, operator, operand2] = match;
+    const numberPattern = "-?(?:\\d*\\.\\d+|\\d+\\.?)(?:[Ee][+-]?\\d+)?";
     
-    return invertSimple(operand1, operator, operand2, value, eq);
-}
-
-function invertSimple(operand1: string, operator: string, operand2: string, value: number, originalEq: string): number {
-    let C: number;
-    let isXFirst: boolean;
-
-    // 6. Determine which operand is the variable 'X' and which is the constant 'C'.
-    if (operand1.toUpperCase() === 'X') {
-        isXFirst = true;
-        C = parseFloat(operand2);
-    } else if (operand2.toUpperCase() === 'X') {
-        isXFirst = false;
-        C = parseFloat(operand1);
-    } else {
-        throw new Error(`A equação deve conter a variável 'X' para ser invertida: "${originalEq}".`);
-    }
-
-    // 7. Validate that the constant 'C' was parsed correctly.
-    if (isNaN(C)) {
-        throw new Error(`Não foi possível analisar a constante numérica na equação: "${originalEq}"`);
-    }
-
-    // 8. Apply the correct inverse mathematical operation.
-    if (isXFirst) { // Case: `X op C = value`
+    // Pattern 1: X op C (e.g., X/10, X*0.5, X+100)
+    const pattern1 = new RegExp(`^X([+\\-*\\/])(${numberPattern})$`);
+    const match1 = cleanEq.match(pattern1);
+    if (match1) {
+        const [, operator, C_str] = match1;
+        const C = parseFloat(C_str);
+        if (isNaN(C)) throw new Error(`Não foi possível analisar a constante na equação "${eq}"`);
+        
         switch (operator) {
-            case '+': return value - C; // X + C = value  => X = value - C
-            case '-': return value + C; // X - C = value  => X = value + C
-            case '*': return C !== 0 ? value / C : 0; // X * C = value  => X = value / C
-            case '/': return value * C; // X / C = value  => X = value * C
-            default: throw new Error(`Operador não suportado na equação: "${operator}"`);
+            case '+': return value - C;
+            case '-': return value + C;
+            case '*': return C !== 0 ? value / C : 0;
+            case '/': return value * C;
+            default: break; // Should not happen
         }
-    } else { // Case: `C op X = value`
+    }
+
+    // Pattern 2: C op X (e.g., 1023-X)
+    const pattern2 = new RegExp(`^(${numberPattern})([+\\-*\\/])X$`);
+    const match2 = cleanEq.match(pattern2);
+    if (match2) {
+        const [, C_str, operator] = match2;
+        const C = parseFloat(C_str);
+        if (isNaN(C)) throw new Error(`Não foi possível analisar a constante na equação "${eq}"`);
+
         switch (operator) {
-            case '+': return value - C; // C + X = value  => X = value - C
-            case '-': return C - value; // C - X = value  => X = C - value
-            case '*': return C !== 0 ? value / C : 0; // C * X = value  => X = value / C
+            case '+': return value - C;
+            case '-': return C - value;
+            case '*': return C !== 0 ? value / C : 0;
             case '/': 
                 if (value === 0) {
-                    throw new Error(`Divisão por zero ao inverter equação "${originalEq}" com valor 0.`);
+                     throw new Error(`Divisão por zero ao inverter a equação "${eq}" com o valor 0.`);
                 }
-                return C / value; // C / X = value  => X = C / value
-            default: throw new Error(`Operador não suportado na equação: "${operator}"`);
+                return C / value;
+            default: break;
         }
     }
+    
+    // If we're here, neither of the simple patterns matched.
+    throw new Error(`A inversão da equação não é suportada para: "${eq}". Os formatos suportados são "X op C" ou "C op X".`);
 }
 
 
