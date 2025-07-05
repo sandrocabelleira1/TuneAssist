@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -439,6 +440,18 @@ export default function EcuTuningAssistant() {
         setActiveXdfBrand('');
         setSelectedBrandForNewXdf('no-brand');
         setAvailableMaps([]);
+        
+        // Hard reset of localStorage-backed state
+        setCustomAxes({});
+        setPotentialMapsDb({});
+        try {
+            localStorage.removeItem('customAxesData');
+            localStorage.removeItem('potentialMapsLibrary');
+            addLog('Armazenamento de sessão (eixos, mapas encontrados) foi limpo.', 'info');
+        } catch (error) {
+            addLog('Não foi possível limpar o armazenamento local.', 'error');
+        }
+
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
         addLog('O estado da sessão foi reiniciado.', 'info');
