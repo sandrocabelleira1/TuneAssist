@@ -31,8 +31,10 @@ function getAttr(element: Element | null, ...names: string[]): string | null {
 }
 
 
-function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): AxisDefinition {
+function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axisType: 'x' | 'y'): AxisDefinition {
     if (!axisNode) return null;
+
+    const defaultLabel = axisType === 'x' ? 'Carga' : 'RPM';
 
     const localCountNode = findNode(axisNode, 'indexcount', 'INDEXCOUNT');
     const count = localCountNode ? parseInt(localCountNode.textContent || '0', 10) : 0;
@@ -64,7 +66,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
 
                 const sourceMathNode = findNode(linkedZAxis, 'math', 'MATH');
                 const sourceEquation = getAttr(sourceMathNode || linkedZAxis, 'Equation', 'equation') || 'X';
-                const sourceVarNode = findNode(sourceMathNode || linkedZAxis, 'VAR', 'var');
+                
+                const sourceVarNode = findNode(sourceMathNode || linkedZAxis, 'var', 'VAR');
+                // Use getAttr for case-insensitivity
                 const sourceEquationVar = getAttr(sourceVarNode, 'id') || 'X';
                 
                 // For 1D tables used as axes, rows or cols can define the count
@@ -80,7 +84,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
                         isBigEndian: sourceIsBigEndian,
                         equation: sourceEquation,
                         equationVar: sourceEquationVar,
-                        label: localLabel || (axisNode.id.toLowerCase().includes('x') ? 'Carga' : 'RPM'),
+                        label: localLabel || defaultLabel,
                     };
                 }
             }
@@ -124,7 +128,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         isBigEndian, 
         equation,
         equationVar,
-        label: localLabel || (axisNode.id.toLowerCase().includes('x') ? 'Carga' : 'RPM'),
+        label: localLabel || defaultLabel,
     };
 }
 
@@ -199,7 +203,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
       const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
-      const varNode = findNode(mathNode || zAxisNode, 'VAR', 'var');
+      
+      const varNode = findNode(mathNode || zAxisNode, 'var', 'VAR');
       const equationVar = getAttr(varNode, 'id') || 'X';
 
       if (isNaN(address) || rows === 0 || cols === 0) {
@@ -207,8 +212,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         continue;
       }
 
-      let xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'), tableMap);
-      let yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'), tableMap);
+      let xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'), tableMap, 'x');
+      let yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'), tableMap, 'y');
 
       if (!xAxisDef || xAxisDef.count !== cols) {
           if (xAxisDef) console.warn(`Contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${cols}). A inferir o eixo.`);
@@ -413,6 +418,34 @@ function invertEquation(eq: string, eqVar: string, value: number): number {
     const match = cleanEq.match(pattern);
     
     if (!match) {
+        // Fallback for simple multiplication/division without spaces
+        const mulDivPattern = /X\s*([*/])\s*(-?\d*\.?\d+(?:[eE][+-]?\d+)?)|(-?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*([*/])\s*X/;
+        const mulDivMatch = cleanEq.match(mulDivPattern);
+        if (mulDivMatch) {
+            let C: number, operator: string, varIsFirst: boolean;
+            if(mulDivMatch[1]) { // X * C
+                varIsFirst = true;
+                operator = mulDivMatch[1];
+                C = parseFloat(mulDivMatch[2]);
+            } else { // C * X
+                varIsFirst = false;
+                C = parseFloat(mulDivMatch[3]);
+                operator = mulDivMatch[4];
+            }
+             if (isNaN(C)) throw new Error(`Não foi possível analisar a constante na equação "${eq}"`);
+             switch (operator) {
+                case '*':
+                    if (C === 0) return 0;
+                    return value / C;
+                case '/':
+                     if (varIsFirst) {
+                        return value * C;
+                    } else {
+                        if (value === 0) throw new Error(`Divisão por zero ao inverter a equação "${eq}" com o valor 0.`);
+                        return C / value;
+                    }
+            }
+        }
         throw new Error(`A inversão da equação não é suportada para a complexidade de: "${eq}".`);
     }
     
