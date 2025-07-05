@@ -248,11 +248,24 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian') === '1';
 
-      const mathNode = findNode(zAxisNode, 'math', 'MATH');
+      // --- New Z-axis equation parsing logic ---
+      // The Z-axis math node can be a direct child of the table, not the z-axis node.
+      // This is a common pattern. Prioritize a math node with id="z".
+      let mathNode = findNode(table, 'math[id="z"]', 'MATH[id="z"]');
+      if (!mathNode) {
+          // If not found, look for the first generic math node at the table level.
+          mathNode = findNode(table, 'math', 'MATH');
+      }
+      if (!mathNode) {
+          // As a final fallback for older/different formats, check inside the z-axis node itself.
+          mathNode = findNode(zAxisNode, 'math', 'MATH');
+      }
+
+      // Now extract the equation and variable from the best-found math node, or the zAxisNode as a last resort.
       const equation = getAttr(mathNode || zAxisNode, 'equation', 'Equation') || 'X';
-      
       const varNode = findNode(mathNode || zAxisNode, 'var', 'VAR');
       const equationVar = getAttr(varNode, 'id') || 'X';
+
 
       if (isNaN(address) || rows === 0 || cols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
