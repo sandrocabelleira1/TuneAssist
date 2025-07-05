@@ -259,17 +259,20 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         continue;
       }
 
+      const rowsCount = Math.max(rows, cols);
+      const colsCount = Math.min(rows, cols);
+
       let yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'yaxis'), tableMap, 'y');
       let xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'xaxis'), tableMap, 'x');
 
-      if (!yAxisDef || yAxisDef.count !== rows) {
-          if (yAxisDef) console.warn(`Contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rows}). A inferir o eixo.`);
-          yAxisDef = { address: null, count: rows, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'RPM (Inferido)' };
+      if (!yAxisDef || yAxisDef.count !== rowsCount) {
+          if (yAxisDef) console.warn(`Contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rowsCount}). A inferir o eixo.`);
+          yAxisDef = { address: null, count: rowsCount, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'RPM' };
       }
       
-      if (!xAxisDef || xAxisDef.count !== cols) {
-          if (xAxisDef) console.warn(`Contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${cols}). A inferir o eixo.`);
-          xAxisDef = { address: null, count: cols, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'Carga (Inferido)' };
+      if (!xAxisDef || xAxisDef.count !== colsCount) {
+          if (xAxisDef) console.warn(`Contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${colsCount}). A inferir o eixo.`);
+          xAxisDef = { address: null, count: colsCount, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'Carga' };
       }
 
       // Generate a unique name for the map before pushing.
@@ -284,8 +287,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       definitions.push({ 
         name: tableName, 
         address, 
-        rows, 
-        cols, 
+        rows: rowsCount, 
+        cols: colsCount, 
         dataSize, 
         isBigEndian, 
         equation,
