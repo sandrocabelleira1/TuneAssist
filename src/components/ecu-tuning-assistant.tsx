@@ -621,7 +621,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleConfirmAxes = (newData: { y: string, x: string, zEquation: string }) => {
-        if (!displayAxes || !selectedMapName || !binFile) return;
+        if (!sourceAxes || !selectedMapName || !binFile) return;
 
         const definition = availableMaps.find(d => d.name === selectedMapName);
         if (!definition) {
@@ -632,7 +632,7 @@ export default function EcuTuningAssistant() {
         const newY = newData.y.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
         const newX = newData.x.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
 
-        if (newY.length !== displayAxes.y.length || newX.length !== displayAxes.x.length) {
+        if (newY.length !== sourceAxes.y.length || newX.length !== sourceAxes.x.length) {
             addLog('O número de valores dos eixos não corresponde às dimensões originais.', 'error');
             toast({ variant: 'destructive', title: "Erro nos Eixos", description: "O número de valores deve corresponder às dimensões originais." });
             return;
@@ -646,7 +646,7 @@ export default function EcuTuningAssistant() {
             // Recalculate map data with the new axes AND the new Z-equation
             const newMapData = readMapFromBin(binFile.buffer, newDefinition, newX, newY);
             
-            const newAxesState = { ...displayAxes, x: newX, y: newY };
+            const newAxesState = { ...sourceAxes, x: newX, y: newY };
 
             setWorkingMap(newMapData);
             setDisplayMap(newMapData);
@@ -1383,7 +1383,7 @@ export default function EcuTuningAssistant() {
                     open={isAxesModalOpen}
                     onOpenChange={setIsAxesModalOpen}
                     onConfirm={handleConfirmAxes}
-                    currentAxes={displayAxes}
+                    currentAxes={sourceAxes}
                     currentDefinition={availableMaps.find(d => d.name === selectedMapName)}
                 />
                 <MapAnalysisResultModal open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen} result={analysisResult} />
