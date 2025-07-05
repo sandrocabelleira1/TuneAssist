@@ -42,9 +42,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
                 const sourceIsBigEndian = sourceEmbeddedData.getAttribute('bigendian') === '1';
 
                 const sourceMathNode = findNode(linkedZAxis, 'math', 'MATH');
-                const sourceEquation = sourceMathNode?.getAttribute('equation') || 'X';
+                const sourceEquation = sourceMathNode?.getAttribute('equation') || sourceMathNode?.getAttribute('Equation') || 'X';
                 const sourceVarNode = findNode(sourceMathNode || linkedZAxis, 'VAR', 'var');
-                const sourceEquationVar = sourceVarNode?.getAttribute('id') || 'X';
+                const sourceEquationVar = sourceVarNode?.getAttribute('id') || sourceVarNode?.getAttribute('ID') || 'X';
                 
                 // For 1D tables used as axes, rows or cols can define the count
                 const linkedRows = parseInt(sourceEmbeddedData.getAttribute('mmedrowcount') || '0');
@@ -90,9 +90,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
     const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
     
     const mathNode = findNode(axisNode, 'math', 'MATH');
-    const equation = mathNode?.getAttribute('equation') || 'X';
+    const equation = mathNode?.getAttribute('equation') || mathNode?.getAttribute('Equation') || 'X';
     const varNode = findNode(mathNode || axisNode, 'VAR', 'var');
-    const equationVar = varNode?.getAttribute('id') || 'X';
+    const equationVar = varNode?.getAttribute('id') || varNode?.getAttribute('ID') || 'X';
 
     if (count === 0) return null;
 
@@ -177,9 +177,9 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const isBigEndian = zEmbeddedData.getAttribute('bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
-      const equation = mathNode?.getAttribute('equation') || 'X';
+      const equation = mathNode?.getAttribute('equation') || mathNode?.getAttribute('Equation') || 'X';
       const varNode = findNode(mathNode || zAxisNode, 'VAR', 'var');
-      const equationVar = varNode?.getAttribute('id') || 'X';
+      const equationVar = varNode?.getAttribute('id') || varNode?.getAttribute('ID') || 'X';
 
       if (isNaN(address) || rows === 0 || cols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
@@ -248,16 +248,12 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       .replace(new RegExp(`\\b${axisDef.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)'); // Handle IF functions
 
-  let equationFunc;
+  let equationFunc: Function;
   try {
       equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
-      if (e instanceof SyntaxError) {
-          console.warn(`A equação do eixo "${axisDef.equation}" foi tratada como uma etiqueta de texto devido a um erro de sintaxe.`);
-          return Array.from({ length: axisDef.count }, () => axisDef.equation);
-      }
-      console.error(`Equação do eixo inválida "${axisDef.equation}": ${e}`);
-      return Array.from({ length: axisDef.count }, () => NaN);
+      console.error(`Equação de eixo inválida "${axisDef.equation}" para "${axisDef.label}": ${e}. A utilizar valores "crus".`);
+      equationFunc = (X: number) => X; // Fallback to raw value if equation is invalid
   }
   
   const axisData: (number | string)[] = [];
@@ -269,23 +265,21 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
         while(axisData.length < axisDef.count) axisData.push(NaN);
         break;
     }
+    
     let rawValue;
-    try {
-        if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
-        else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, !axisDef.isBigEndian);
-        else {
-            axisData.push(NaN);
-            continue;
-        }
-        axisData.push(equationFunc(rawValue, 0, 0, 0));
-    } catch (e) {
-      if (e instanceof ReferenceError) {
-        console.warn(`A equação do eixo "${axisDef.equation}" parece ser uma etiqueta de texto. A usá-la diretamente.`);
-        axisData.push(axisDef.equation);
-      } else {
-        console.error(`Erro ao aplicar equação do eixo: ${e}`);
+    if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
+    else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, !axisDef.isBigEndian);
+    else {
         axisData.push(NaN);
-      }
+        continue;
+    }
+
+    try {
+        const calculatedValue = equationFunc(rawValue, 0, 0, 0);
+        axisData.push(calculatedValue);
+    } catch (e) {
+        console.error(`Erro ao aplicar a equação de eixo "${axisDef.equation}" no valor raw ${rawValue}: ${e}. A utilizar o valor raw.`);
+        axisData.push(rawValue); // Fallback to the raw value
     }
   }
   return axisData;
@@ -309,7 +303,7 @@ export function readMapFromBin(
       .replace(new RegExp(`\\b${def.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)'); // Handle IF functions
 
-  let equationFunc;
+  let equationFunc: Function;
   try {
     equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
@@ -328,14 +322,14 @@ export function readMapFromBin(
       }
       
       let rawValue;
-      try {
-        if (def.dataSize === 1) rawValue = view.getUint8(offset);
-        else if (def.dataSize === 2) rawValue = view.getUint16(offset, !def.isBigEndian);
-        else {
-            row.push(null);
-            continue;
-        }
+      if (def.dataSize === 1) rawValue = view.getUint8(offset);
+      else if (def.dataSize === 2) rawValue = view.getUint16(offset, !def.isBigEndian);
+      else {
+          row.push(null);
+          continue;
+      }
 
+      try {
         const xVal = (c < xAxis.length && typeof xAxis[c] === 'number') ? xAxis[c] : 0;
         const yVal = (r < yAxis.length && typeof yAxis[r] === 'number') ? yAxis[r] : 0;
         
@@ -344,9 +338,6 @@ export function readMapFromBin(
 
       } catch(e) {
           console.error(`Erro ao aplicar equação "${sanitizedEquation}" na célula [${r},${c}] do mapa "${def.name}": ${e}. A utilizar o valor "cru".`);
-          if (def.dataSize === 1) rawValue = view.getUint8(offset);
-          else if (def.dataSize === 2) rawValue = view.getUint16(offset, !def.isBigEndian);
-          else rawValue = null;
           row.push(rawValue);
       }
     }
@@ -374,55 +365,58 @@ function invertEquation(eq: string, eqVar: string, value: number): number {
     if (value === null || isNaN(value)) {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
-
-    // Sanitize the equation by replacing the specific variable with a standard 'X'
+    
+    // Sanitize the equation for robust parsing
     const cleanEq = (eq || 'X')
         .replace(/,/g, '.')
         .replace(new RegExp(`\\b${eqVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
-        .replace(/\s/g, '');
+        .replace(/\s/g, '')
+        .replace(/[()]/g, ''); // Remove parentheses
 
     if (cleanEq === 'X') return value;
     if (cleanEq === '-X') return -value;
 
-    const numberPattern = "-?(?:\\d*\\.\\d+|\\d+\\.?)(?:[eE][+-]?\\d+)?";
+    // Pattern to find the variable 'X', the operator, and the constant number.
+    // This is more robust than splitting by space. It handles integers, floats, and scientific notation.
+    const pattern = /^(X)?([+\-*/])?(-?\d*\.?\d+(?:[eE][+-]?\d+)?)|(-?\d*\.?\d+(?:[eE][+-]?\d+)?)([+\-*/])(X)$/;
+    const match = cleanEq.match(pattern);
     
-    // Pattern 1: X op C (e.g., X / 10.23 or X * 0.001525)
-    const pattern1 = new RegExp(`^X([+\\-*\\/])(${numberPattern})$`);
-    const match1 = cleanEq.match(pattern1);
-    if (match1) {
-        const [, operator, C_str] = match1;
-        const C = parseFloat(C_str);
-        if (isNaN(C)) throw new Error(`Não foi possível analisar a constante na equação "${eq}"`);
-        
-        switch (operator) {
-            case '+': return value - C;
-            case '-': return value + C;
-            case '*': return C !== 0 ? value / C : 0;
-            case '/': return value * C;
-        }
+    if (!match) {
+        throw new Error(`A inversão da equação não é suportada para a complexidade de: "${eq}".`);
     }
 
-    // Pattern 2: C op X (e.g., 1024 - X)
-    const pattern2 = new RegExp(`^(${numberPattern})([+\\-*\\/])X$`);
-    const match2 = cleanEq.match(pattern2);
-    if (match2) {
-        const [, C_str, operator] = match2;
-        const C = parseFloat(C_str);
-        if (isNaN(C)) throw new Error(`Não foi possível analisar a constante na equação "${eq}"`);
+    let C: number, operator: string, varIsFirst: boolean;
 
-        switch (operator) {
-            case '+': return value - C;
-            case '-': return C - value;
-            case '*': return C !== 0 ? value / C : 0;
-            case '/': 
-                if (value === 0) {
-                     throw new Error(`Divisão por zero ao inverter a equação "${eq}" com o valor 0.`);
-                }
+    if (match[1] === 'X') { // Case: X op C (e.g., X/10.23)
+        varIsFirst = true;
+        operator = match[2]!;
+        C = parseFloat(match[3]!);
+    } else { // Case: C op X (e.g., 1024-X)
+        varIsFirst = false;
+        C = parseFloat(match[4]!);
+        operator = match[5]!;
+    }
+    
+    if (isNaN(C)) throw new Error(`Não foi possível analisar a constante na equação "${eq}"`);
+
+    switch (operator) {
+        case '+':
+            return value - C;
+        case '-':
+            return varIsFirst ? value + C : C - value;
+        case '*':
+            if (C === 0) return 0; // Avoid division by zero, assume result is 0
+            return value / C;
+        case '/':
+            if (varIsFirst) {
+                return value * C;
+            } else {
+                if (value === 0) throw new Error(`Divisão por zero ao inverter a equação "${eq}" com o valor 0.`);
                 return C / value;
-        }
+            }
     }
     
-    throw new Error(`A inversão da equação não é suportada para a complexidade de: "${eq}". Apenas os formatos "X op C" ou "C op X" são suportados para escrita.`);
+    throw new Error(`Operador desconhecido "${operator}" na equação "${eq}".`);
 }
 
 
