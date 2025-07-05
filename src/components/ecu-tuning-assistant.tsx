@@ -34,12 +34,20 @@ const Plot = dynamic(() => import('react-plotly.js'), {
 });
 
 
-function EditableMapCell({ value: initialValue, rowIndex, colIndex, onCellChange, isEditable, min, max }: { value: number | null, rowIndex: number, colIndex: number, onCellChange: (rowIndex: number, colIndex: number, value: string) => void, isEditable: boolean, min: number, max: number }) {
-  const [value, setValue] = useState(initialValue === null || isNaN(initialValue) ? '' : initialValue.toFixed(2));
+function EditableMapCell({ value: initialValue, rowIndex, colIndex, onCellChange, isEditable, min, max, valueFormat }: { value: number | null, rowIndex: number, colIndex: number, onCellChange: (rowIndex: number, colIndex: number, value: string) => void, isEditable: boolean, min: number, max: number, valueFormat: 'integer' | 'decimal' }) {
+  const formatValue = useCallback((val: number | null) => {
+    if (val === null || isNaN(val)) return '';
+    if (valueFormat === 'integer') {
+      return Math.round(val).toString();
+    }
+    return val.toFixed(2);
+  }, [valueFormat]);
+    
+  const [value, setValue] = useState(formatValue(initialValue));
 
   useEffect(() => {
-    setValue(initialValue === null || isNaN(initialValue) ? '' : initialValue.toFixed(2));
-  }, [initialValue]);
+    setValue(formatValue(initialValue));
+  }, [initialValue, formatValue]);
   
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     if (isEditable) {
@@ -55,7 +63,7 @@ function EditableMapCell({ value: initialValue, rowIndex, colIndex, onCellChange
     <td className="p-0 border border-border text-center" style={{ backgroundColor: getHeatmapColor(initialValue, min, max) }}>
       <Input
         type="text"
-        inputMode="decimal"
+        inputMode={valueFormat === 'integer' ? 'numeric' : 'decimal'}
         value={value}
         onChange={handleChange}
         onBlur={handleBlur}
@@ -82,6 +90,7 @@ function MapTable({
   onResetSort,
   onCellChange,
   isEditable = true,
+  valueFormat = 'decimal',
 }: {
   mapData: MapData;
   xAxis: (string | number)[];
@@ -93,6 +102,7 @@ function MapTable({
   onResetSort: () => void;
   onCellChange: (rowIndex: number, colIndex: number, value: string) => void;
   isEditable?: boolean;
+  valueFormat?: 'integer' | 'decimal';
 }) {
   const { min, max } = useMemo(() => {
     let minVal = Infinity;
@@ -178,6 +188,7 @@ function MapTable({
                     isEditable={isEditable}
                     min={min}
                     max={max}
+                    valueFormat={valueFormat}
                   />
                 );
               })}
@@ -295,6 +306,17 @@ export default function EcuTuningAssistant() {
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
     const logEndRef = useRef<HTMLDivElement>(null);
+
+    const valueFormat = useMemo<'integer' | 'decimal'>(() => {
+        if (!selectedMapName) return 'decimal';
+        const lowerCaseName = selectedMapName.toLowerCase();
+        // Keywords for injection time maps that should be integers
+        const integerKeywords = ['tps', 'map', 'injeção', 'injection', 'injector'];
+        if (integerKeywords.some(keyword => lowerCaseName.includes(keyword))) {
+            return 'integer';
+        }
+        return 'decimal';
+    }, [selectedMapName]);
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         if (type === 'debug' && !debugMode) return;
@@ -588,8 +610,8 @@ export default function EcuTuningAssistant() {
             const mapAxes = {
               x: tempEixoX,
               y: tempEixoY,
-              xLabel: definition.xAxisDef?.label || 'Eixo X',
-              yLabel: definition.yAxisDef?.label || 'Eixo Y',
+              xLabel: definition.xAxisDef?.label || 'Carga',
+              yLabel: definition.yAxisDef?.label || 'RPM',
             };
             
             setWorkingMap(map);
@@ -861,8 +883,8 @@ export default function EcuTuningAssistant() {
                     const correctedAxesPreview = {
                         x: correctedXAxisPreview,
                         y: correctedYAxisPreview,
-                        xLabel: newDefinition.xAxisDef?.label || 'Eixo X',
-                        yLabel: newDefinition.yAxisDef?.label || 'Eixo Y'
+                        xLabel: newDefinition.xAxisDef?.label || 'Carga',
+                        yLabel: newDefinition.yAxisDef?.label || 'RPM'
                     };
 
                     setAiSuggestion({
@@ -926,8 +948,8 @@ export default function EcuTuningAssistant() {
             const newSourceAxes = {
                 x: correctedXAxis,
                 y: correctedYAxis,
-                xLabel: newDefinition.xAxisDef?.label || 'Eixo X',
-                yLabel: newDefinition.yAxisDef?.label || 'Eixo Y'
+                xLabel: newDefinition.xAxisDef?.label || 'Carga',
+                yLabel: newDefinition.yAxisDef?.label || 'RPM'
             };
 
             // Persist the corrected definition based on its type
@@ -1357,6 +1379,7 @@ export default function EcuTuningAssistant() {
                                                 onSortByFirstColumn={handleSortByFirstColumn}
                                                 onResetSort={handleResetSort}
                                                 onCellChange={handleCellChange}
+                                                valueFormat={valueFormat}
                                             />
                                         </TabsContent>
                                         <TabsContent value="3d" forceMount className="flex-1 data-[state=inactive]:hidden">
@@ -1576,8 +1599,8 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                 axes: {
                     x: correctedXAxis,
                     y: correctedYAxis,
-                    xLabel: tempDefinition.xAxisDef?.label || 'Eixo X',
-                    yLabel: tempDefinition.yAxisDef?.label || 'Eixo Y',
+                    xLabel: tempDefinition.xAxisDef?.label || 'Carga',
+                    yLabel: tempDefinition.yAxisDef?.label || 'RPM',
                 }
             });
         } catch (error) {
