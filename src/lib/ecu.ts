@@ -371,70 +371,79 @@ export function bufferToHex(buffer: ArrayBuffer): string {
 }
 
 
+/**
+ * Inverts a simple mathematical equation to solve for 'X'.
+ * This function is critical for converting a user-edited value (final value)
+ * back into the raw value that needs to be written to the binary file.
+ * @param eq The equation string from the XDF, e.g., "X / 10.23" or "1023 - X".
+ * @param value The final, calculated value that the user sees or enters.
+ * @returns The raw value (inverted X) to be written to the binary.
+ */
 function invertEquation(eq: string, value: number): number {
     if (value === null || isNaN(value)) {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
-
-    const cleanEq = eq.replace(/x/gi, 'X').trim();
-
-    if (cleanEq === 'X') {
-        return value;
-    }
-
-    // A robust regex for numbers that handles integers and floats (e.g., 1024, 10.23).
-    const numberPattern = '(-?\\d+(\\.\\d*)?)';
     
-    // This regex captures the structure "X op C" or "C op X", allowing for spaces and parentheses.
-    const pattern = new RegExp(
-      `^\\(?(X)\\)?[\\s]*([+\\-*\\/])[\\s]*\\(?${numberPattern}\\)?[\\s]*$|^\\(?${numberPattern}\\)?[\\s]*([+\\-*\\/])[\\s]*\\(?(X)\\)?[\\s]*$`
-    );
-    
-    // Deconstructed regex groups:
-    // Part 1 (X op C):
-    //   match[1]: X
-    //   match[2]: operator
-    //   match[3]: The full number C
-    // Part 2 (C op X):
-    //   match[5]: The full number C
-    //   match[7]: operator
-    //   match[8]: X
+    // 1. Clean the equation string: remove spaces, standardize variable to 'X', and remove parentheses.
+    // This makes parsing much more reliable. e.g., "( x / 10.23 )" becomes "X/10.23".
+    const cleanEq = eq.replace(/\s+/g, '').replace(/[()]/g, '').replace(/x/gi, 'X');
+
+    // 2. Handle simple cases directly.
+    if (cleanEq === 'X') return value;
+    if (cleanEq === '-X') return -value;
+
+    // 3. Use a robust regex to parse the cleaned equation into three parts: operand1, operator, operand2.
+    //    - Operand: Can be 'X' or a number (integer or float, positive or negative).
+    //    - Operator: Must be one of +, -, *, /
+    const operandPattern = '(X|-?\\d*\\.?\\d+)'; 
+    const pattern = new RegExp(`^${operandPattern}([+\\-*\\/])${operandPattern}$`);
     const match = cleanEq.match(pattern);
 
+    // 4. If the pattern doesn't match, the equation is too complex for this simple inverter.
     if (!match) {
         throw new Error(`A inversão da equação não é suportada para a expressão: "${eq}". Formatos suportados são 'X op C' ou 'C op X'.`);
     }
 
+    // 5. Extract the components from the regex match.
+    const operand1 = match[1];
+    const operator = match[2];
+    const operand2 = match[3];
+
     let C: number;
-    let operator: string;
     let isXFirst: boolean;
 
-    if (match[1] && match[1].toUpperCase() === 'X') {
-        // Matched: X op C
+    // 6. Determine which operand is the variable 'X' and which is the constant 'C'.
+    if (operand1.toUpperCase() === 'X') {
         isXFirst = true;
-        operator = match[2];
-        C = parseFloat(match[3]);
-    } else {
-        // Matched: C op X
+        C = parseFloat(operand2);
+    } else if (operand2.toUpperCase() === 'X') {
         isXFirst = false;
-        C = parseFloat(match[5]);
-        operator = match[7];
+        C = parseFloat(operand1);
+    } else {
+        // This should not happen if the XDF is valid, as the equation for a value must contain the value itself.
+        throw new Error(`A equação deve conter a variável 'X' para ser invertida: "${eq}".`);
     }
     
-    if (isXFirst) { // Case: X op C
+    // 7. Validate that the constant 'C' was parsed correctly.
+    if (isNaN(C)) {
+        throw new Error(`Não foi possível analisar a constante numérica na equação: "${eq}"`);
+    }
+
+    // 8. Apply the correct inverse mathematical operation based on the original equation structure.
+    if (isXFirst) { // Case: `X op C = value`
         switch (operator) {
-            case '+': return value - C;
-            case '-': return value + C;
-            case '*': return C !== 0 ? value / C : 0;
-            case '/': return value * C;
+            case '+': return value - C; // X + C = value  => X = value - C
+            case '-': return value + C; // X - C = value  => X = value + C
+            case '*': return C !== 0 ? value / C : 0; // X * C = value  => X = value / C
+            case '/': return value * C; // X / C = value  => X = value * C
             default: throw new Error(`Operador não suportado na equação: "${operator}"`);
         }
-    } else { // Case: C op X
+    } else { // Case: `C op X = value`
         switch (operator) {
-            case '+': return value - C;
-            case '-': return C - value;
-            case '*': return C !== 0 ? value / C : 0;
-            case '/': return value !== 0 ? C / value : 0;
+            case '+': return value - C; // C + X = value  => X = value - C
+            case '-': return C - value; // C - X = value  => X = C - value
+            case '*': return C !== 0 ? value / C : 0; // C * X = value  => X = value / C
+            case '/': return value !== 0 ? C / value : 0; // C / X = value  => X = C / value
             default: throw new Error(`Operador não suportado na equação: "${operator}"`);
         }
     }
