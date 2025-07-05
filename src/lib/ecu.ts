@@ -11,6 +11,26 @@ function findNode(parent: Element, ...selectors: string[]): Element | null {
   return null;
 }
 
+/**
+ * Gets an attribute from an element in a case-insensitive manner.
+ * @param element The element to get the attribute from.
+ * @param names The possible names of the attribute.
+ * @returns The attribute value or null if not found.
+ */
+function getAttr(element: Element | null, ...names: string[]): string | null {
+    if (!element) return null;
+    for (const name of names) {
+        const lowerName = name.toLowerCase();
+        for (const attr of Array.from(element.attributes)) {
+            if (attr.name.toLowerCase() === lowerName) {
+                return attr.value;
+            }
+        }
+    }
+    return null;
+}
+
+
 function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): AxisDefinition {
     if (!axisNode) return null;
 
@@ -24,10 +44,11 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
     ).trim();
 
     const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
-    const isLinked = embedInfoNode?.getAttribute('type') === '3';
+    const embedType = getAttr(embedInfoNode, 'type');
+    const isLinked = embedType === '3';
 
-    if (isLinked) {
-        const linkId = embedInfoNode.getAttribute('linkobjid');
+    if (isLinked && embedInfoNode) {
+        const linkId = getAttr(embedInfoNode, 'linkobjid');
         const linkedTable = linkId ? tableMap.get(linkId) : null;
         
         // A linked axis sources its data from the Z-axis of another table.
@@ -35,20 +56,20 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         if (linkedZAxis) {
             const sourceEmbeddedData = findNode(linkedZAxis, 'embeddeddata', 'EMBEDDEDDATA');
             if (sourceEmbeddedData) {
-                const sourceAddrStr = sourceEmbeddedData.getAttribute('mmedaddress');
+                const sourceAddrStr = getAttr(sourceEmbeddedData, 'mmedaddress');
                 const sourceAddr = sourceAddrStr ? parseInt(sourceAddrStr, 16) : null;
-                const sourceDataSizeBitsStr = sourceEmbeddedData.getAttribute('mmedelementsizebits') || '8';
+                const sourceDataSizeBitsStr = getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '8';
                 const sourceDataSize = parseInt(sourceDataSizeBitsStr, 10) / 8;
-                const sourceIsBigEndian = sourceEmbeddedData.getAttribute('bigendian') === '1';
+                const sourceIsBigEndian = getAttr(sourceEmbeddedData, 'bigendian') === '1';
 
                 const sourceMathNode = findNode(linkedZAxis, 'math', 'MATH');
-                const sourceEquation = sourceMathNode?.getAttribute('equation') || sourceMathNode?.getAttribute('Equation') || 'X';
+                const sourceEquation = getAttr(sourceMathNode || linkedZAxis, 'Equation', 'equation') || 'X';
                 const sourceVarNode = findNode(sourceMathNode || linkedZAxis, 'VAR', 'var');
-                const sourceEquationVar = sourceVarNode?.getAttribute('id') || sourceVarNode?.getAttribute('ID') || 'X';
+                const sourceEquationVar = getAttr(sourceVarNode, 'id') || 'X';
                 
                 // For 1D tables used as axes, rows or cols can define the count
-                const linkedRows = parseInt(sourceEmbeddedData.getAttribute('mmedrowcount') || '0');
-                const linkedCols = parseInt(sourceEmbeddedData.getAttribute('mmedcolcount') || '0');
+                const linkedRows = parseInt(getAttr(sourceEmbeddedData, 'mmedrowcount') || '0');
+                const linkedCols = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || '0');
                 const sourceCount = Math.max(linkedRows, linkedCols);
 
                 if (sourceAddr !== null && !isNaN(sourceAddr)) {
@@ -70,7 +91,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
     const labelNodes = axisNode.querySelectorAll('label, LABEL');
     let staticLabels: (string | number)[] | undefined = undefined;
     if (labelNodes.length > 0) {
-        const labels = Array.from(labelNodes).map(l => l.getAttribute('value') || '');
+        const labels = Array.from(labelNodes).map(l => getAttr(l, 'value') || '');
         if (labels.length > 0) {
             staticLabels = labels.map(l => {
                 const num = parseFloat(l);
@@ -83,16 +104,16 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
     }
 
     const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-    const addrStr = embeddedData?.getAttribute('mmedaddress');
+    const addrStr = getAttr(embeddedData, 'mmedaddress');
     const addr = addrStr ? parseInt(addrStr, 16) : null;
-    const dataSizeBitsStr = embeddedData?.getAttribute('mmedelementsizebits') || findNode(embedInfoNode || axisNode, 'data_size', 'DATA_SIZE')?.textContent || '8';
+    const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits') || findNode(embedInfoNode || axisNode, 'data_size', 'DATA_SIZE')?.textContent || '8';
     const dataSizeBits = parseInt(dataSizeBitsStr, 10);
-    const isBigEndian = embeddedData?.getAttribute('bigendian') === '1';
+    const isBigEndian = getAttr(embeddedData, 'bigendian') === '1';
     
     const mathNode = findNode(axisNode, 'math', 'MATH');
-    const equation = mathNode?.getAttribute('equation') || mathNode?.getAttribute('Equation') || 'X';
+    const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
     const varNode = findNode(mathNode || axisNode, 'VAR', 'var');
-    const equationVar = varNode?.getAttribute('id') || varNode?.getAttribute('ID') || 'X';
+    const equationVar = getAttr(varNode, 'id') || 'X';
 
     if (count === 0) return null;
 
@@ -127,7 +148,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   // First pass: create a lookup map of all tables by their uniqueid for linked axis resolution.
   const tableMap = new Map<string, Element>();
   for (const table of xdfTables) {
-      const uniqueid = table.getAttribute('uniqueid');
+      const uniqueid = getAttr(table, 'uniqueid');
       // Only add tables with a valid, non-default ID to the map.
       // Ignore "0x0" or "0" as they are likely default/null values and not unique.
       if (uniqueid && uniqueid !== '0x0' && uniqueid !== '0') {
@@ -145,7 +166,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
   // Second pass: parse each table definition
   for (const table of xdfTables) {
-    const originalName = table.querySelector('title')?.textContent || table.getAttribute('name') || 'Tabela Sem Nome';
+    const originalName = table.querySelector('title')?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
     
     // Add a try-catch block to make parsing robust. One bad table shouldn't stop the whole process.
     try {
@@ -165,21 +186,21 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           continue;
       }
       
-      const zAddressStr = zEmbeddedData.getAttribute('mmedaddress');
+      const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
       if (!zAddressStr) {
           console.warn(`A tabela "${originalName}" foi ignorada: o eixo Z não tem endereço (mmedaddress).`);
           continue;
       }
       const address = parseInt(zAddressStr, 16);
-      const rows = parseInt(zEmbeddedData.getAttribute('mmedrowcount') || '0');
-      const cols = parseInt(zEmbeddedData.getAttribute('mmedcolcount') || '0');
-      const dataSize = parseInt(zEmbeddedData.getAttribute('mmedelementsizebits') || '8') / 8;
-      const isBigEndian = zEmbeddedData.getAttribute('bigendian') === '1';
+      const rows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
+      const cols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
+      const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
+      const isBigEndian = getAttr(zEmbeddedData, 'bigendian') === '1';
 
       const mathNode = findNode(zAxisNode, 'math', 'MATH');
-      const equation = mathNode?.getAttribute('equation') || mathNode?.getAttribute('Equation') || 'X';
+      const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
       const varNode = findNode(mathNode || zAxisNode, 'VAR', 'var');
-      const equationVar = varNode?.getAttribute('id') || varNode?.getAttribute('ID') || 'X';
+      const equationVar = getAttr(varNode, 'id') || 'X';
 
       if (isNaN(address) || rows === 0 || cols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
@@ -253,7 +274,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
       console.error(`Equação de eixo inválida "${axisDef.equation}" para "${axisDef.label}": ${e}. A utilizar valores "crus".`);
-      equationFunc = (X: number) => X; // Fallback to raw value if equation is invalid
+      // Fallback: return raw values if equation is invalid
+      equationFunc = (X: number) => X;
   }
   
   const axisData: (number | string)[] = [];
@@ -369,32 +391,41 @@ function invertEquation(eq: string, eqVar: string, value: number): number {
     // Sanitize the equation for robust parsing
     const cleanEq = (eq || 'X')
         .replace(/,/g, '.')
-        .replace(new RegExp(`\\b${eqVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
-        .replace(/\s/g, '')
-        .replace(/[()]/g, ''); // Remove parentheses
+        .replace(new RegExp(`\\b${eqVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X');
 
-    if (cleanEq === 'X') return value;
-    if (cleanEq === '-X') return -value;
+    // Handle complex functions first
+    const ifMatch = cleanEq.match(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/i);
+    if (ifMatch) {
+      // Cannot reliably invert an IF statement. This is a limitation.
+      // We assume the user wants to write the value back as is, if the equation was just for display.
+      // A better approach would be to not allow editing for maps with non-invertible equations.
+      // For now, we return the value, assuming it's already a "raw" value or the user knows what they're doing.
+      console.warn(`A inversão da equação não é suportada para a função IF: "${eq}". A tentar escrever o valor diretamente.`);
+      return value;
+    }
+    
+    // Simple cases
+    if (cleanEq.trim() === 'X') return value;
+    if (cleanEq.trim() === '-X') return -value;
 
     // Pattern to find the variable 'X', the operator, and the constant number.
-    // This is more robust than splitting by space. It handles integers, floats, and scientific notation.
-    const pattern = /^(X)?([+\-*/])?(-?\d*\.?\d+(?:[eE][+-]?\d+)?)|(-?\d*\.?\d+(?:[eE][+-]?\d+)?)([+\-*/])(X)$/;
+    const pattern = /^\s*(-?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*([+\-*/])\s*X\s*|\s*X\s*([+\-*/])\s*(-?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*$/;
     const match = cleanEq.match(pattern);
     
     if (!match) {
         throw new Error(`A inversão da equação não é suportada para a complexidade de: "${eq}".`);
     }
-
+    
     let C: number, operator: string, varIsFirst: boolean;
 
-    if (match[1] === 'X') { // Case: X op C (e.g., X/10.23)
+    if (match[3] !== undefined) { // Case: X op C (e.g., X/10.23 or X * 0.00152)
         varIsFirst = true;
-        operator = match[2]!;
-        C = parseFloat(match[3]!);
+        operator = match[3];
+        C = parseFloat(match[4]);
     } else { // Case: C op X (e.g., 1024-X)
         varIsFirst = false;
-        C = parseFloat(match[4]!);
-        operator = match[5]!;
+        C = parseFloat(match[1]);
+        operator = match[2];
     }
     
     if (isNaN(C)) throw new Error(`Não foi possível analisar a constante na equação "${eq}"`);
