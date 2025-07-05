@@ -57,8 +57,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
                         count: count > 0 ? count : sourceCount, // Prefer local count, fallback to linked table's count
                         dataSize: sourceDataSize,
                         isBigEndian: sourceIsBigEndian,
-                        equation: sourceEquation.replace(new RegExp(`\\b${sourceEquationVar}\\b`, 'ig'), 'X'),
-                        equationVar: 'X',
+                        equation: sourceEquation,
+                        equationVar: sourceEquationVar,
                         label: localLabel || (axisNode.id.toLowerCase().includes('x') ? 'Carga' : 'RPM'),
                     };
                 }
@@ -77,8 +77,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
                 return isNaN(num) ? l.trim() : num;
             });
             // If count wasn't defined, infer from labels
-            if (count === 0) return { staticLabels, count: labels.length, label: localLabel } as AxisDefinition;
-            return { staticLabels, count, label: localLabel } as AxisDefinition;
+            if (count === 0) return { staticLabels, count: labels.length, label: localLabel, equation: 'X', equationVar: 'X' } as AxisDefinition;
+            return { staticLabels, count, label: localLabel, equation: 'X', equationVar: 'X' } as AxisDefinition;
         }
     }
 
@@ -101,8 +101,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         count, 
         dataSize: dataSizeBits / 8, 
         isBigEndian, 
-        equation: equation.replace(new RegExp(`\\b${equationVar}\\b`, 'ig'), 'X'),
-        equationVar: 'X',
+        equation,
+        equationVar,
         label: localLabel || (axisNode.id.toLowerCase().includes('x') ? 'Carga' : 'RPM'),
     };
 }
@@ -215,8 +215,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         cols, 
         dataSize, 
         isBigEndian, 
-        equation: equation.replace(new RegExp(`\\b${equationVar}\\b`, 'ig'), 'X'),
-        equationVar: 'X',
+        equation,
+        equationVar,
         xAxisDef, 
         yAxisDef 
       });
@@ -245,7 +245,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   // Sanitize the equation for JS execution.
   const sanitizedEquation = (axisDef.equation || 'X')
       .replace(/,/g, '.') // Replace comma decimal separators with periods
-      .replace(/\bVALUE\b/gi, 'X') // Standardize variable to 'X'
+      .replace(new RegExp(`\\b${axisDef.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)'); // Handle IF functions
 
   let equationFunc;
@@ -306,7 +306,7 @@ export function readMapFromBin(
   // Sanitize the equation for JS execution.
   const sanitizedEquation = (def.equation || 'X')
       .replace(/,/g, '.') // Replace comma decimal separators with periods
-      .replace(/\bVALUE\b/gi, 'X') // Standardize variable to 'X'
+      .replace(new RegExp(`\\b${def.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)'); // Handle IF functions
 
   let equationFunc;
@@ -370,23 +370,23 @@ export function bufferToHex(buffer: ArrayBuffer): string {
     .join('');
 }
 
-function invertEquation(eq: string, value: number): number {
+function invertEquation(eq: string, eqVar: string, value: number): number {
     if (value === null || isNaN(value)) {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
+    // Sanitize the equation by replacing the specific variable with a standard 'X'
     const cleanEq = (eq || 'X')
-        .replace(/,/g, '.') // Replace commas with periods for consistency
-        .replace(/\s/g, '')
-        .replace(/[()]/g, '')
-        .replace(/\bVALUE\b/gi, 'X')
-        .replace(/\bx\b/gi, 'X');
-    
+        .replace(/,/g, '.')
+        .replace(new RegExp(`\\b${eqVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
+        .replace(/\s/g, '');
+
     if (cleanEq === 'X') return value;
     if (cleanEq === '-X') return -value;
 
     const numberPattern = "-?(?:\\d*\\.\\d+|\\d+\\.?)(?:[eE][+-]?\\d+)?";
     
+    // Pattern 1: X op C (e.g., X / 10.23 or X * 0.001525)
     const pattern1 = new RegExp(`^X([+\\-*\\/])(${numberPattern})$`);
     const match1 = cleanEq.match(pattern1);
     if (match1) {
@@ -402,6 +402,7 @@ function invertEquation(eq: string, value: number): number {
         }
     }
 
+    // Pattern 2: C op X (e.g., 1024 - X)
     const pattern2 = new RegExp(`^(${numberPattern})([+\\-*\\/])X$`);
     const match2 = cleanEq.match(pattern2);
     if (match2) {
@@ -445,7 +446,7 @@ export function writeMapToBin(
             }
 
             try {
-                const rawValue = invertEquation(def.equation, finalValue);
+                const rawValue = invertEquation(def.equation, def.equationVar, finalValue);
                 const intValue = Math.round(rawValue);
                 const offset = def.address + (r * def.cols + c) * def.dataSize;
 
