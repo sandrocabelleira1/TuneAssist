@@ -301,15 +301,19 @@ export function readMapFromBin(
   const view = new DataView(binBuffer);
   const map: MapData = [];
   
-  // The equation is already sanitized to use 'X' during parsing.
-  const sanitizedEquation = def.equation;
-  
+  // Sanitize the equation for JS execution.
+  // 1. Replace XDF-style IF(condition, then, else) with JS ternary operator.
+  //    This is a simple replacement and might not handle deeply nested IFs perfectly,
+  //    but it covers the most common use cases.
+  const sanitizedEquation = (def.equation || 'X')
+      .replace(/IF\((.+?),(.+?),(.+?)\)/gi, '($1 ? $2 : $3)');
+
   let equationFunc;
   try {
     // If equation is invalid, the function will throw, and the catch block will handle it.
     equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
-    console.error(`Equação de mapa inválida "${def.equation}" para "${def.name}": ${e}. A utilizar valores "crus".`);
+    console.error(`Equação de mapa inválida "${def.equation}" (sanitizada para "${sanitizedEquation}") para "${def.name}": ${e}. A utilizar valores "crus".`);
     // If equation compilation fails, create a function that just returns the raw value.
     equationFunc = (X: number) => X;
   }
@@ -341,7 +345,7 @@ export function readMapFromBin(
         row.push(calculatedValue);
 
       } catch(e) {
-          console.error(`Erro ao aplicar equação "${def.equation}" na célula [${r},${c}] do mapa "${def.name}": ${e}. A utilizar o valor "cru".`);
+          console.error(`Erro ao aplicar equação "${sanitizedEquation}" na célula [${r},${c}] do mapa "${def.name}": ${e}. A utilizar o valor "cru".`);
           // Re-read rawValue inside catch to be safe, as it might not be assigned if the error is early
           if (def.dataSize === 1) rawValue = view.getUint8(offset);
           else if (def.dataSize === 2) rawValue = view.getUint16(offset, !def.isBigEndian);
@@ -383,12 +387,14 @@ function invertEquation(eq: string, value: number): number {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
+    // Clean up the equation for reliable parsing
     const cleanEq = eq.replace(/\s/g, '').replace(/[()]/g, '').replace(/x/gi, 'X');
-
+    
     if (cleanEq === 'X') return value;
     if (cleanEq === '-X') return -value;
 
-    const numberPattern = "-?(?:\\d*\\.\\d+|\\d+\\.?)(?:[Ee][+-]?\\d+)?";
+    // This robust pattern handles integers, decimals, and scientific notation (e.g., 1.525E-5)
+    const numberPattern = "-?(?:\\d*\\.\\d+|\\d+\\.?)(?:[eE][+-]?\\d+)?";
     
     // Pattern 1: X op C (e.g., X/10, X*0.5, X+100)
     const pattern1 = new RegExp(`^X([+\\-*\\/])(${numberPattern})$`);
@@ -428,8 +434,8 @@ function invertEquation(eq: string, value: number): number {
         }
     }
     
-    // If we're here, neither of the simple patterns matched.
-    throw new Error(`A inversão da equação não é suportada para: "${eq}". Os formatos suportados são "X op C" ou "C op X".`);
+    // Fallback for complex equations not matching simple patterns
+    throw new Error(`A inversão da equação não é suportada para a complexidade de: "${eq}". Apenas os formatos "X op C" ou "C op X" são suportados para escrita.`);
 }
 
 
@@ -454,20 +460,20 @@ export function writeMapToBin(
                 continue;
             }
 
-            // Invert the equation to find the raw value to write
-            const rawValue = invertEquation(def.equation, finalValue);
-            
-            // Round to nearest integer, as we'll be writing integer types.
-            const intValue = Math.round(rawValue);
-            
-            const offset = def.address + (r * def.cols + c) * def.dataSize;
-
-            if (offset + def.dataSize > view.byteLength) {
-                console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
-                continue;
-            }
-
             try {
+                // Invert the equation to find the raw value to write
+                const rawValue = invertEquation(def.equation, finalValue);
+                
+                // Round to nearest integer, as we'll be writing integer types.
+                const intValue = Math.round(rawValue);
+                
+                const offset = def.address + (r * def.cols + c) * def.dataSize;
+
+                if (offset + def.dataSize > view.byteLength) {
+                    console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
+                    continue;
+                }
+                
                 if (def.dataSize === 1) {
                     // Clamp value to 8-bit range
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
@@ -476,8 +482,10 @@ export function writeMapToBin(
                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
                 }
             } catch (e) {
-                console.error(`Erro ao escrever no buffer no offset ${offset}:`, e);
-                throw new Error(`Erro ao escrever no buffer no offset ${offset}.`);
+                 const errorMsg = e instanceof Error ? e.message : String(e);
+                 // We log the error but continue, so one bad cell doesn't stop the whole save.
+                 console.error(`Não foi possível escrever a célula [${r},${c}] para o mapa "${def.name}": ${errorMsg}`);
+                 // Optionally, you could toast a notification to the user here.
             }
         }
     }
