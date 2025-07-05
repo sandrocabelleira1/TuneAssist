@@ -302,10 +302,10 @@ export function readMapFromBin(
   const map: MapData = [];
   
   // Sanitize the equation for JS execution.
-  // 1. Replace XDF-style IF(condition, then, else) with JS ternary operator.
-  //    This is a simple replacement and might not handle deeply nested IFs perfectly,
-  //    but it covers the most common use cases.
+  // 1. Recognize 'VALUE' as a variable, just like 'X'.
+  // 2. Replace XDF-style IF(condition, then, else) with JS ternary operator.
   const sanitizedEquation = (def.equation || 'X')
+      .replace(/\bVALUE\b/gi, 'X')
       .replace(/IF\((.+?),(.+?),(.+?)\)/gi, '($1 ? $2 : $3)');
 
   let equationFunc;
@@ -387,8 +387,8 @@ function invertEquation(eq: string, value: number): number {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
-    // Clean up the equation for reliable parsing
-    const cleanEq = eq.replace(/\s/g, '').replace(/[()]/g, '').replace(/x/gi, 'X');
+    // Clean up the equation for reliable parsing: remove spaces, parentheses, and standardize variables.
+    const cleanEq = eq.replace(/\s/g, '').replace(/[()]/g, '').replace(/\bVALUE\b/gi, 'X').replace(/\bx\b/gi, 'X');
     
     if (cleanEq === 'X') return value;
     if (cleanEq === '-X') return -value;
