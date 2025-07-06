@@ -125,6 +125,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                 const sourceDataSize = parseInt(sourceDataSizeBitsStr, 10) / 8;
                 const sourceIsBigEndian = getAttr(sourceEmbeddedData, 'bigendian') === '1';
 
+                const sourceMajorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
+                const sourceMinorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
+
                 const sourceMathNode = findNode(linkedZAxis, 'math', 'MATH');
                 const sourceEquation = getAttr(sourceMathNode || linkedZAxis, 'Equation', 'equation') || 'X';
                 
@@ -143,6 +146,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                         isBigEndian: sourceIsBigEndian,
                         equation: sourceEquation,
                         equationVar: sourceEquationVar,
+                        majorStride: sourceMajorStride,
+                        minorStride: sourceMinorStride,
                         label: localLabel || defaultLabel,
                     };
                 }
@@ -160,8 +165,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                 const num = parseFloat(l);
                 return isNaN(num) ? l.trim() : num;
             });
-            if (count === 0) return { staticLabels, count: labels.length, label: localLabel || defaultLabel, equation: 'X', equationVar: 'X' } as AxisDefinition;
-            return { staticLabels, count, label: localLabel || defaultLabel, equation: 'X', equationVar: 'X' } as AxisDefinition;
+            if (count === 0) return { staticLabels, count: labels.length, label: localLabel || defaultLabel, equation: 'X', equationVar: 'X', majorStride: 0, minorStride: 0 } as AxisDefinition;
+            return { staticLabels, count, label: localLabel || defaultLabel, equation: 'X', equationVar: 'X', majorStride: 0, minorStride: 0 } as AxisDefinition;
         }
     }
 
@@ -171,6 +176,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits') || findDirectChild(embedInfoNode || axisNode, 'data_size', 'DATA_SIZE')?.textContent || '8';
     const dataSizeBits = parseInt(dataSizeBitsStr, 10);
     const isBigEndian = getAttr(embeddedData, 'bigendian') === '1';
+
+    const majorStride = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
+    const minorStride = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10) / 8;
     
     const mathNode = findDirectChild(axisNode, 'math', 'MATH');
     const equation = getAttr(mathNode || axisNode, 'equation', 'Equation') || 'X';
@@ -186,6 +194,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         isBigEndian, 
         equation,
         equationVar,
+        majorStride,
+        minorStride,
         label: localLabel || defaultLabel,
     };
 }
@@ -292,6 +302,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian') === '1';
 
+      const majorStride = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
+      const minorStride = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
 
       if (isNaN(address) || rows === 0 || cols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
@@ -321,12 +333,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       if (!yAxisDef || yAxisDef.count !== rowsCount) {
           if (yAxisDef) console.warn(`Contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rowsCount}). A inferir o eixo.`);
-          yAxisDef = { address: null, count: rowsCount, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'RPM' };
+          yAxisDef = { address: null, count: rowsCount, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'RPM', majorStride: 0, minorStride: 0 };
       }
       
       if (!xAxisDef || xAxisDef.count !== colsCount) {
           if (xAxisDef) console.warn(`Contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${colsCount}). A inferir o eixo.`);
-          xAxisDef = { address: null, count: colsCount, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'Carga' };
+          xAxisDef = { address: null, count: colsCount, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'Carga', majorStride: 0, minorStride: 0 };
       }
 
       let tableName = originalName;
@@ -346,6 +358,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         isBigEndian, 
         equation,
         equationVar,
+        majorStride, 
+        minorStride,
         xAxisDef, 
         yAxisDef 
       });
@@ -393,8 +407,13 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   
   const axisData: (number | string)[] = [];
   
+  let stride = Math.max(axisDef.majorStride || 0, axisDef.minorStride || 0);
+  if (stride === 0) {
+      stride = axisDef.dataSize;
+  }
+
   for (let i = 0; i < axisDef.count; i++) {
-    const offset = axisDef.address + (i * axisDef.dataSize);
+    const offset = axisDef.address + (i * stride);
     if (offset + axisDef.dataSize > view.byteLength) {
         console.error(`Leitura do eixo fora dos limites. Endereço: ${axisDef.address}, Offset: ${offset}. O eixo pode estar incompleto.`);
         while(axisData.length < axisDef.count) axisData.push(NaN);
@@ -453,11 +472,15 @@ export function readMapFromBin(
     console.error(`Equação de mapa inválida "${def.equation}" (sanitizada para "${sanitizedEquation}") para "${def.name}": ${e}. A utilizar valores "crus".`);
     equationFunc = (X: number) => X;
   }
+  
+  const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
+  const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
+
 
   for (let r = 0; r < def.rows; r++) {
     const row: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
-      const offset = def.address + (r * def.cols + c) * def.dataSize;
+      const offset = def.address + (r * majorStride) + (c * minorStride);
       if (offset + def.dataSize > view.byteLength) {
         console.error(`Leitura do mapa fora dos limites para "${def.name}". Offset: ${offset}`);
         row.push(null);
@@ -612,6 +635,9 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
+    const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
+    const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
+
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             const finalValue = mapData[r][c];
@@ -622,7 +648,7 @@ export function writeMapToBin(
             try {
                 const rawValue = invertEquation(def.equation, def.equationVar, finalValue);
                 const intValue = Math.round(rawValue);
-                const offset = def.address + (r * def.cols + c) * def.dataSize;
+                const offset = def.address + (r * majorStride) + (c * minorStride);
 
                 if (offset + def.dataSize > view.byteLength) {
                     console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);

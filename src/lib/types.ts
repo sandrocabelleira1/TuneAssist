@@ -6,6 +6,8 @@ export type AxisDefinition = {
   equation: string;
   equationVar: string;
   label: string;
+  majorStride: number; // in bytes
+  minorStride: number; // in bytes
   staticLabels?: (string | number)[];
 } | null;
 
@@ -18,6 +20,8 @@ export type XDFDefinition = {
   isBigEndian: boolean;
   equation: string;
   equationVar: string;
+  majorStride: number; // in bytes
+  minorStride: number; // in bytes
   xAxisDef: AxisDefinition;
   yAxisDef: AxisDefinition;
   isPotential?: boolean;
