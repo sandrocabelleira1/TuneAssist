@@ -49,13 +49,11 @@ const prompt = ai.definePrompt({
     - \`suggestedXAxisEquation\`: Para corrigir o eixo X.
     - \`suggestedYAxisEquation\`: Para corrigir o eixo Y.
     **Importante:** Os campos de equação DEVEM conter apenas expressões matemáticas válidas (ex: "X * 0.1") ou ser omitidos do JSON de saída. NÃO preencha estes campos com texto como "análise necessária".
-5.  **Lógica Especial para Mapas de Combustível:** Se o \`mapName\` indica que é um mapa de combustível principal (ex: "Comb TPS", "Comb MAP", "Fuel Map") e os valores dos dados (\`mapData\`) estão na faixa de VE (Eficiência Volumétrica, ~30-120), é provável que a equação atual (\`equation\`), que é usada para calcular os dados, esteja a mostrar valores de carga em vez do tempo de injeção final.
-    - **Sua Tarefa:** Converter estes valores para um tempo de injeção em microssegundos (µs), compondo uma nova equação.
-    - **Sugestão de Equação:** Para uma Yamaha R3, um fator de conversão de VE para µs é geralmente entre 90 e 100. **Envolva a equação existente, fornecida no campo \`equation\`, com um fator de conversão.** Por exemplo:
-        - Se a equação atual for \`X/128\`, a sua sugestão para \`suggestedEquation\` deve ser \`(X/128) * 91.65\`.
-        - Se a equação atual for \`X/514.56\`, a sua sugestão deve ser \`(X/514.56) * 91.65\`.
-        - Se a equação atual for apenas \`X\`, a sua sugestão deve ser \`X * 91.65\`.
-    - **Justificação:** No campo \`reasoning\`, explique que os valores atuais parecem ser de VE/carga e que você está a sugerir uma conversão para tempo de injeção (µs) para uma visualização mais prática, com base em injetores típicos para a moto. Defina a confiança como 'Média'.
+5.  **Lógica Especial para Mapas de Combustível:** Esta é a sua tarefa mais importante. Se o \`mapName\` contiver "Comb" (Combustível), "Fuel", ou "Injeção", e os valores em \`mapData\` estiverem maioritariamente entre 20 e 200, é quase certo que a equação atual (\`equation\`) está a calcular um valor de Carga ou Eficiência Volumétrica (VE), e NÃO o tempo de injeção final. O utilizador precisa de ver o tempo de injeção em microssegundos (µs), que para uma Yamaha R3 estará tipicamente na casa dos 1000-8000 µs.
+    - **Sua Tarefa OBRIGATÓRIA:** Você DEVE compor uma nova equação para o campo \`suggestedEquation\`. Esta nova equação TEM de pegar na equação existente (do campo \`equation\`) e multiplicá-la por um fator de conversão.
+    - **Fator de Conversão:** Para uma Yamaha R3, o fator de conversão de VE para tempo de injeção (µs) é tipicamente **91.65**.
+    - **Regra de Composição:** A sua sugestão DEVE seguir este formato: \`({{{equation}}}) * 91.65\`. Não simplifique a expressão. Se a equação for \`X/128\`, a sua sugestão TEM de ser \`(X/128) * 91.65\`. Se a equação for \`X\`, a sua sugestão TEM de ser \`(X) * 91.65\`. Se a equação for \`X/514.56\`, a sua sugestão TEM de ser \`(X/514.56) * 91.65\`.
+    - **Justificação:** No campo \`reasoning\`, explique: "Os valores atuais parecem ser de Eficiência Volumétrica (VE). Para mostrar o tempo de injeção real em microssegundos (µs), que é mais útil para a afinação, sugeri uma nova equação que multiplica o cálculo de VE por um fator de conversão típico para os injetores de uma Yamaha R3." Defina a confiança como 'Alta' ou 'Média'.
 6.  **Justifique a sua Conclusão:** No campo \`reasoning\`, explique o seu raciocínio de forma clara, referindo-se aos pontos de referência. Ex: "Confiança Baixa. O eixo de RPM começa em 8000, o que é um valor irrealista para a marcha lenta. O nome indica 'Ignição', mas os valores dos dados estão acima de 200, sugerindo que a escala está incorreta. Sugiro correções para os eixos e para os dados."
 
 **Formato da Saída (JSON OBRIGATÓRIO):**
