@@ -202,11 +202,45 @@ function MapTable({
 
 // New 3D Surface Plot component
 function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel }: { mapData: MapData; xAxis: (string | number)[]; yAxis: (string | number)[]; xAxisLabel: string; yAxisLabel: string; }) {
+  const plotData = useMemo(() => {
+    // A 3D surface plot requires numeric axes.
+    const isXNumeric = yAxis.every(v => typeof v === 'number' && isFinite(v));
+    const isYNumeric = xAxis.every(v => typeof v === 'number' && isFinite(v));
+
+    if (!isXNumeric || !isYNumeric) {
+      return null;
+    }
+
+    // Replace any nulls in the z data with NaN so Plotly can handle them as gaps.
+    const sanitizedZ = mapData.map(row => 
+      row.map(cell => (cell === null || !isFinite(cell) ? NaN : cell))
+    );
+
+    return {
+      x: yAxis, // yAxis is the horizontal axis in the table, so it's the x for the plot
+      y: xAxis, // xAxis is the vertical axis in the table, so it's the y for the plot
+      z: sanitizedZ,
+    };
+  }, [mapData, xAxis, yAxis]);
+
+  if (!plotData) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+        <div className="text-center p-4">
+            <AlertCircle className="mx-auto h-12 w-12" />
+            <p className="mt-4 font-semibold">Não é possível apresentar o gráfico 3D</p>
+            <p className="text-sm">Os gráficos 3D necessitam de eixos com valores puramente numéricos.</p>
+        </div>
+      </div>
+    );
+  }
+
   const data: PlotlyProps['data'] = [{
-    x: yAxis as any[],
-    y: xAxis as any[],
-    z: mapData as any[][],
+    x: plotData.x as any[],
+    y: plotData.y as any[],
+    z: plotData.z as any[][],
     type: 'surface',
+    connectgaps: false, // Important for handling NaN
     colorscale: [
       [0, 'rgb(0,0,255)'],      // Blue for low values
       [0.5, 'rgb(0,255,0)'],    // Green for mid values
