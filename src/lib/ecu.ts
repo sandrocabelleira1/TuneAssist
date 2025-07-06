@@ -190,6 +190,37 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     };
 }
 
+/**
+ * Finds the main <math> node for the Z-axis data, intelligently excluding axis-specific math nodes.
+ * @param tableNode The main table element.
+ * @param zAxisNode The Z-axis element.
+ * @param xAxisNode The X-axis element.
+ * @param yAxisNode The Y-axis element.
+ * @returns The main math node, or null if not found.
+ */
+function findMainMathNode(tableNode: Element, zAxisNode: Element, xAxisNode: Element | null, yAxisNode: Element | null): Element | null {
+    // Priority 1: A <math> node inside the Z-axis definition itself. This is the most specific.
+    const zMath = findNode(zAxisNode, 'math', 'MATH');
+    if (zMath) {
+        return zMath;
+    }
+
+    // Priority 2: Find all math nodes in the table, and exclude any that belong to X or Y axes.
+    const allMathNodes = Array.from(tableNode.getElementsByTagName('math'));
+    const xMath = xAxisNode ? findNode(xAxisNode, 'math', 'MATH') : null;
+    const yMath = yAxisNode ? findNode(yAxisNode, 'math', 'MATH') : null;
+
+    for (const mathNode of allMathNodes) {
+        if (mathNode !== xMath && mathNode !== yMath) {
+            // This is a candidate for the main math node. Return the first one we find.
+            return mathNode;
+        }
+    }
+    
+    // Fallback: If no other math node is found, there might not be one.
+    return null;
+}
+
 
 export function parseXDF(xmlString: string): XDFDefinition[] {
   if (typeof DOMParser === 'undefined') {
@@ -261,19 +292,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian') === '1';
 
-      // NEW, more robust logic for finding the main data (Z-axis) equation
-      // 1. Look for a <math> node inside the <XDFAXIS[id="z"]> node first.
-      let mathNode = findNode(zAxisNode, 'math', 'MATH');
-      if (!mathNode) {
-        // 2. If not found, look for a <math> node that is a DIRECT child of the <table> node.
-        // This is a common pattern and avoids picking up equations from other axes by mistake.
-        mathNode = findDirectChild(table, 'math', 'MATH');
-      }
-
-      const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
-      const varNode = findNode(mathNode, 'var', 'VAR');
-      const equationVar = getAttr(varNode, 'id') || 'X';
-
 
       if (isNaN(address) || rows === 0 || cols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
@@ -290,9 +308,17 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const yAxisId = isTransposed ? 'x' : 'y';
       const xAxisId = isTransposed ? 'y' : 'x';
 
-      let yAxisDef = parseAxis(findNode(table, `XDFAXIS[id="${yAxisId}"]`, `yaxis`), tableMap, 'y');
-      let xAxisDef = parseAxis(findNode(table, `XDFAXIS[id="${xAxisId}"]`, `xaxis`), tableMap, 'x');
+      const yAxisNode = findNode(table, `XDFAXIS[id="${yAxisId}"]`, `yaxis`);
+      const xAxisNode = findNode(table, `XDFAXIS[id="${xAxisId}"]`, `xaxis`);
+
+      let yAxisDef = parseAxis(yAxisNode, tableMap, 'y');
+      let xAxisDef = parseAxis(xAxisNode, tableMap, 'x');
       
+      const mathNode = findMainMathNode(table, zAxisNode, xAxisNode, yAxisNode);
+      const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
+      const varNode = findNode(mathNode, 'var', 'VAR');
+      const equationVar = getAttr(varNode, 'id') || 'X';
+
       if (!yAxisDef || yAxisDef.count !== rowsCount) {
           if (yAxisDef) console.warn(`Contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rowsCount}). A inferir o eixo.`);
           yAxisDef = { address: null, count: rowsCount, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'RPM' };
