@@ -1,5 +1,3 @@
-
-
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -13,7 +11,7 @@ import type { XDFDefinition, AxisDefinition, MapData } from './types';
  * @param selectors The possible selectors.
  * @returns The found element or null.
  */
-function findNode(parent: Element, ...selectors: string[]): Element | null {
+function findNode(parent: Element | null, ...selectors: string[]): Element | null {
     if (!parent) return null;
 
     for (const selector of selectors) {
@@ -56,6 +54,24 @@ function findNode(parent: Element, ...selectors: string[]): Element | null {
     return null;
 }
 
+/**
+ * Finds a DIRECT child element by tag name, case-insensitively.
+ * @param parent The element to search within.
+ * @param tagNames The possible tag names.
+ * @returns The found direct child element or null.
+ */
+function findDirectChild(parent: Element | null, ...tagNames: string[]): Element | null {
+    if (!parent) return null;
+    for (const tagName of tagNames) {
+        const lowerTagName = tagName.toLowerCase();
+        for (const child of Array.from(parent.children)) {
+            if (child.tagName.toLowerCase() === lowerTagName) {
+                return child;
+            }
+        }
+    }
+    return null;
+}
 
 /**
  * Gets an attribute from an element in a case-insensitive manner.
@@ -81,19 +97,6 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     if (!axisNode) return null;
 
     const defaultLabel = axisType === 'y' ? 'RPM' : 'Carga';
-
-    // IMPORTANT: For parsing an axis's own properties, we need to search its *direct children*, not all descendants.
-    // We create a non-recursive finder function for this scope.
-    const findDirectChild = (parent: Element, ...selectors: string[]) => {
-        for (const selector of selectors) {
-            for (const child of Array.from(parent.children)) {
-                 if (child.tagName.toLowerCase() === selector.toLowerCase()) {
-                    return child;
-                }
-            }
-        }
-        return null;
-    }
 
     const localCountNode = findDirectChild(axisNode, 'indexcount', 'INDEXCOUNT');
     const count = localCountNode ? parseInt(localCountNode.textContent || '0', 10) : 0;
@@ -258,16 +261,17 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian') === '1';
 
-      let mathNode = findNode(table, 'math[id="z"]', 'MATH[id="z"]');
+      // NEW, more robust logic for finding the main data (Z-axis) equation
+      // 1. Look for a <math> node inside the <XDFAXIS[id="z"]> node first.
+      let mathNode = findNode(zAxisNode, 'math', 'MATH');
       if (!mathNode) {
-          mathNode = findNode(table, 'math', 'MATH');
-      }
-      if (!mathNode) {
-          mathNode = findNode(zAxisNode, 'math', 'MATH');
+        // 2. If not found, look for a <math> node that is a DIRECT child of the <table> node.
+        // This is a common pattern and avoids picking up equations from other axes by mistake.
+        mathNode = findDirectChild(table, 'math', 'MATH');
       }
 
-      const equation = getAttr(mathNode || zAxisNode, 'equation', 'Equation') || 'X';
-      const varNode = findNode(mathNode || zAxisNode, 'var', 'VAR');
+      const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
+      const varNode = findNode(mathNode, 'var', 'VAR');
       const equationVar = getAttr(varNode, 'id') || 'X';
 
 
@@ -341,11 +345,13 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   }
   
   const view = new DataView(binBuffer);
+  // Improved sanitizer: handles multi-line if/else and removes newlines within the expression.
   const sanitizedEquation = (axisDef.equation || 'X')
       .replace(/,/g, '.')
+      .replace(/\s*\r?\n\s*/g, ' ') // Replace newlines and surrounding whitespace with a single space
       .replace(new RegExp(`\\b${axisDef.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
-      // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)`
-      .replace(/if\s*\(([\s\S]+?)\)\s*\{([\s\S]+?)\}\s*else\s*\{([\s\S]+?)\}/gmi, '($1 ? $2 : $3)')
+      // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)` - now handles expressions with spaces/newlines
+      .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)');
 
@@ -403,9 +409,10 @@ export function readMapFromBin(
 
   const sanitizedEquation = (def.equation || 'X')
       .replace(/,/g, '.')
+      .replace(/\s*\r?\n\s*/g, ' ') // Replace newlines and surrounding whitespace with a single space
       .replace(new RegExp(`\\b${def.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)`
-      .replace(/if\s*\(([\s\S]+?)\)\s*\{([\s\S]+?)\}\s*else\s*\{([\s\S]+?)\}/gmi, '($1 ? $2 : $3)')
+      .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)');
 
