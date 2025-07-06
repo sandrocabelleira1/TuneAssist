@@ -379,7 +379,9 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)` - now handles expressions with spaces/newlines
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
-      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)');
+      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
+      // Add implicit multiplication, e.g., X100 -> X * 100
+      .replace(/(X)(\d)/gi, 'X * $2');
 
   let equationFunc: Function;
   try {
@@ -440,7 +442,9 @@ export function readMapFromBin(
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)`
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
-      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)');
+      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
+      // Add implicit multiplication, e.g., X100 -> X * 100
+      .replace(/(X)(\d)/gi, 'X * $2');
 
   let equationFunc: Function;
   try {
