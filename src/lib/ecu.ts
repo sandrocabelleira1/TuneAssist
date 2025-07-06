@@ -215,14 +215,21 @@ function findMainMathNode(tableNode: Element, zAxisNode: Element, xAxisNode: Ele
         return zMath;
     }
 
-    // Priority 2: Find all math nodes in the table, and exclude any that belong to X or Y axes.
+    // Priority 2: Find all math nodes in the table, and exclude any that are descendants of the X or Y axes.
     const allMathNodes = Array.from(tableNode.getElementsByTagName('math'));
-    const xMath = xAxisNode ? findNode(xAxisNode, 'math', 'MATH') : null;
-    const yMath = yAxisNode ? findNode(yAxisNode, 'math', 'MATH') : null;
 
     for (const mathNode of allMathNodes) {
-        if (mathNode !== xMath && mathNode !== yMath) {
-            // This is a candidate for the main math node. Return the first one we find.
+        let isAxisMath = false;
+        // Check if this math node belongs to the X or Y axis by checking if it's a descendant.
+        if (xAxisNode && xAxisNode.contains(mathNode)) {
+            isAxisMath = true;
+        }
+        if (yAxisNode && yAxisNode.contains(mathNode)) {
+            isAxisMath = true;
+        }
+
+        // If it's not an axis math node, it must be the main one. Return the first one we find.
+        if (!isAxisMath) {
             return mathNode;
         }
     }
@@ -512,7 +519,8 @@ export function readMapFromBin(
         row.push(calculatedValue);
 
       } catch(e) {
-          console.error(`Erro ao aplicar equação "${sanitizedEquation}" na célula [${r},${c}] do mapa "${def.name}": ${e}. A utilizar o valor "cru".`);
+          const errorMessage = e instanceof Error ? e.message : String(e);
+          console.error(`Erro ao aplicar equação "${sanitizedEquation}" na célula [${r},${c}] do mapa "${def.name}": ${errorMessage}. A utilizar o valor "cru".`);
           row.push(rawValue);
       }
     }
