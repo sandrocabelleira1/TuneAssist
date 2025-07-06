@@ -343,12 +343,22 @@ export default function EcuTuningAssistant() {
 
     const valueFormat = useMemo<'integer' | 'decimal'>(() => {
         if (!selectedMapName) return 'decimal';
+        
         const lowerCaseName = selectedMapName.toLowerCase();
-        // Keywords for injection time maps that should be integers
-        const integerKeywords = ['tps', 'map', 'injeção', 'injection', 'injector'];
-        if (integerKeywords.some(keyword => lowerCaseName.includes(keyword))) {
+        
+        // Ignition maps are always decimal
+        const ignitionKeywords = ['ignição', 'ignition', 'avanço', 'spark'];
+        if (ignitionKeywords.some(keyword => lowerCaseName.includes(keyword))) {
+            return 'decimal';
+        }
+
+        // Injection maps are usually integers
+        const injectionKeywords = ['tps', 'map', 'injeção', 'injection', 'injector', 'combustível', 'fuel'];
+        if (injectionKeywords.some(keyword => lowerCaseName.includes(keyword))) {
             return 'integer';
         }
+
+        // Default to decimal for unknown maps
         return 'decimal';
     }, [selectedMapName]);
 
