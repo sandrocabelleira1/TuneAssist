@@ -40,7 +40,7 @@ function EditableMapCell({ value: initialValue, rowIndex, colIndex, onCellChange
     if (valueFormat === 'integer') {
       return Math.round(val).toString();
     }
-    return val.toFixed(2);
+    return String(Number(val.toFixed(1)));
   }, [valueFormat]);
     
   const [value, setValue] = useState(formatValue(initialValue));
