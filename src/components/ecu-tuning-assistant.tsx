@@ -40,6 +40,7 @@ function EditableMapCell({ value: initialValue, rowIndex, colIndex, onCellChange
     if (valueFormat === 'integer') {
       return Math.round(val).toString();
     }
+    // For decimal, show one decimal place only if it's not a whole number
     return String(Number(val.toFixed(1)));
   }, [valueFormat]);
     
@@ -317,7 +318,8 @@ export default function EcuTuningAssistant() {
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [potentialMapsDb, setPotentialMapsDb] = useState<Record<string, XDFDefinition[]>>({});
     const [selectedXdfFromLibrary, setSelectedXdfFromLibrary] = useState<string>('');
-    const [selectedBrandForNewXdf, setSelectedBrandForNewXdf] = useState<string>('no-brand');
+    const [selectedBrandForNewXdf, setSelectedBrandForNewXdf] = useState<string>('Yamaha');
+    const [motorcycleModel, setMotorcycleModel] = useState<string>('R3');
     const [activeXdfBrand, setActiveXdfBrand] = useState<string>('');
 
 
@@ -1059,7 +1061,7 @@ export default function EcuTuningAssistant() {
         }
 
         setIsScanning(true);
-        addLog(`A iniciar a procura de mapas com IA para a marca ${selectedBrandForNewXdf}...`, 'info');
+        addLog(`A iniciar a procura de mapas com IA para a marca ${selectedBrandForNewXdf}${motorcycleModel ? ` ${motorcycleModel}` : ''}...`, 'info');
 
         const scanBuffer = binFile.buffer.slice(0, 8192);
         const hexData = bufferToHex(scanBuffer);
@@ -1069,7 +1071,7 @@ export default function EcuTuningAssistant() {
                 sizeInBytes: d.rows * d.cols * d.dataSize
             }));
 
-        const result = await findPotentialMaps({ binHexData: hexData, existingMaps, brand: selectedBrandForNewXdf });
+        const result = await findPotentialMaps({ binHexData: hexData, existingMaps, brand: selectedBrandForNewXdf, model: motorcycleModel });
 
         setIsScanning(false);
 
@@ -1268,29 +1270,34 @@ export default function EcuTuningAssistant() {
                             <CardContent className="space-y-6">
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">1. Carregar Ficheiros</h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Button variant="outline" onClick={() => binInputRef.current?.click()}><FileUp className="mr-2"/> .BIN</Button>
-                                        <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
-                                        
-                                        <div>
-                                            <div className="space-y-1">
-                                                <Label className="text-xs text-muted-foreground">Marca para novo XDF</Label>
-                                                <Select value={selectedBrandForNewXdf} onValueChange={setSelectedBrandForNewXdf}>
-                                                    <SelectTrigger className="h-10"><SelectValue placeholder="Marca..." /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="no-brand">Nenhuma</SelectItem>
-                                                        <SelectItem value="Yamaha">Yamaha</SelectItem>
-                                                        <SelectItem value="Honda">Honda</SelectItem>
-                                                        <SelectItem value="Suzuki">Suzuki</SelectItem>
-                                                        <SelectItem value="Kawasaki">Kawasaki</SelectItem>
-                                                        <SelectItem value="BMW">BMW</SelectItem>
-                                                        <SelectItem value="Ducati">Ducati</SelectItem>
-                                                        <SelectItem value="Triumph">Triumph</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
+                                    <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}><FileUp className="mr-2"/> .BIN</Button>
+                                    <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
+
+                                    <div className="space-y-1 pt-2">
+                                        <Label className="text-xs text-muted-foreground">Marca e Modelo (para procura com IA e novos XDFs)</Label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Select value={selectedBrandForNewXdf} onValueChange={setSelectedBrandForNewXdf}>
+                                                <SelectTrigger className="h-10"><SelectValue placeholder="Marca..." /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="no-brand">Nenhuma</SelectItem>
+                                                    <SelectItem value="Yamaha">Yamaha</SelectItem>
+                                                    <SelectItem value="Honda">Honda</SelectItem>
+                                                    <SelectItem value="Suzuki">Suzuki</SelectItem>
+                                                    <SelectItem value="Kawasaki">Kawasaki</SelectItem>
+                                                    <SelectItem value="BMW">BMW</SelectItem>
+                                                    <SelectItem value="Ducati">Ducati</SelectItem>
+                                                    <SelectItem value="Triumph">Triumph</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <Input 
+                                                className="h-10"
+                                                placeholder="Modelo (ex: R3)" 
+                                                value={motorcycleModel} 
+                                                onChange={(e) => setMotorcycleModel(e.target.value)} 
+                                            />
                                         </div>
                                     </div>
+                                    
                                     <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}><Plus className="mr-2"/> Adicionar novo .XDF à biblioteca</Button>
                                     <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
                                     {binFile && <p className="text-xs text-green-400 truncate">BIN: {binFile.name}</p>}

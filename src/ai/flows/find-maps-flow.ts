@@ -40,7 +40,7 @@ const prompt = ai.definePrompt({
 3.  **Ignorar Ruído e Preenchimento:** O ficheiro BIN contém muito mais do que apenas mapas. Ignore ativamente longas sequências do mesmo byte (ex: 00 00 00... ou FF FF FF...) e dados que parecem ser de alta entropia (aleatórios), pois estes são provavelmente código do programa ou preenchimento, e não mapas de dados. Concentre-se nas "ilhas" de dados estruturados.
 
 {{#if brand}}
-A ECU é de uma motocicleta {{brand}}. Use esta informação para dar nomes mais precisos aos mapas que encontrar, com base nos tipos de mapas comuns para esta marca.
+A ECU é de uma motocicleta {{brand}}{{#if model}} {{model}}{{/if}}. Use esta informação para dar nomes mais precisos aos mapas que encontrar, com base nos tipos de mapas comuns para esta marca e modelo.
 {{/if}}
 
 Com base na sua análise, gere uma lista de mapas potenciais. Para cada mapa, forneça um nome plausível, o seu endereço de memória inicial (em decimal), as suas dimensões (linhas e colunas) e o tamanho dos dados (1 para 8 bits, 2 para 16 bits).

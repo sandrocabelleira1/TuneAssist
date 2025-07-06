@@ -35,6 +35,7 @@ export const ExistingMapSchema = z.object({
 export const FindMapsInputSchema = z.object({
   binHexData: z.string().describe('Uma string hexadecimal representando os primeiros 8192 bytes do ficheiro BIN.'),
   brand: z.string().optional().describe('A marca da ECU (ex: Yamaha, Honda). Isto ajuda a identificar tipos de mapas comuns para essa marca.'),
+  model: z.string().optional().describe('O modelo da motocicleta (ex: R3, CBR600RR). Isto ajuda a dar nomes ainda mais precisos aos mapas.'),
   existingMaps: z.array(ExistingMapSchema).optional().describe('Uma lista opcional de mapas que já foram definidos num XDF, para evitar duplicação.'),
 });
 
