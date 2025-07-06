@@ -345,7 +345,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       .replace(/,/g, '.')
       .replace(new RegExp(`\\b${axisDef.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)`
-      .replace(/if\s*\(([\s\S]+?)\)\s*\{([\s\S]+?)\}\s*else\s*\{([\s\S]+?)\}/gi, '($1 ? $2 : $3)')
+      .replace(/if\s*\(([\s\S]+?)\)\s*\{([\s\S]+?)\}\s*else\s*\{([\s\S]+?)\}/gmi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)');
 
@@ -398,11 +398,14 @@ export function readMapFromBin(
   const view = new DataView(binBuffer);
   const map: MapData = [];
   
+  // Logic to determine if this is a map that can contain signed values (like ignition timing).
+  const isPotentiallySignedMap = ['ignição', 'ignition', 'avanço', 'spark', 'timing'].some(kw => def.name.toLowerCase().includes(kw));
+
   const sanitizedEquation = (def.equation || 'X')
       .replace(/,/g, '.')
       .replace(new RegExp(`\\b${def.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)`
-      .replace(/if\s*\(([\s\S]+?)\)\s*\{([\s\S]+?)\}\s*else\s*\{([\s\S]+?)\}/gi, '($1 ? $2 : $3)')
+      .replace(/if\s*\(([\s\S]+?)\)\s*\{([\s\S]+?)\}\s*else\s*\{([\s\S]+?)\}/gmi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)');
 
@@ -425,9 +428,18 @@ export function readMapFromBin(
       }
       
       let rawValue;
-      if (def.dataSize === 1) rawValue = view.getUint8(offset);
-      else if (def.dataSize === 2) rawValue = view.getUint16(offset, !def.isBigEndian);
-      else {
+      if (def.dataSize === 1) {
+          // For 8-bit, check if ignition maps can be signed. This is less common and often handled by an offset in the equation itself.
+          // Sticking to unsigned for 8-bit is a safer default.
+          rawValue = view.getUint8(offset);
+      } else if (def.dataSize === 2) {
+          // For 16-bit values, ignition maps are frequently signed.
+          if (isPotentiallySignedMap) {
+              rawValue = view.getInt16(offset, !def.isBigEndian);
+          } else {
+              rawValue = view.getUint16(offset, !def.isBigEndian);
+          }
+      } else {
           row.push(null);
           continue;
       }
@@ -594,4 +606,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
