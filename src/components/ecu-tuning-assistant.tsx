@@ -229,7 +229,6 @@ export default function EcuTuningAssistant() {
     const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
     const [mapRenderKey, setMapRenderKey] = useState(0);
 
-    const [customAxes, setCustomAxes] = useState<Record<string, Record<string, { x: (string|number)[], y: (string|number)[] }>>>({});
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [potentialMapsDb, setPotentialMapsDb] = useState<Record<string, XDFDefinition[]>>({});
     const [selectedXdfFromLibrary, setSelectedXdfFromLibrary] = useState<string>('');
@@ -315,11 +314,6 @@ export default function EcuTuningAssistant() {
     // Load custom data from localStorage on component mount
     useEffect(() => {
         try {
-            const savedAxes = localStorage.getItem('customAxesData');
-            if (savedAxes) {
-                setCustomAxes(JSON.parse(savedAxes));
-                addLog('Eixos personalizados carregados.', 'debug');
-            }
             const savedLibrary = localStorage.getItem('xdfLibrary');
             if (savedLibrary) {
                 setXdfLibrary(JSON.parse(savedLibrary));
@@ -339,14 +333,13 @@ export default function EcuTuningAssistant() {
     // Save custom data to localStorage whenever they change
     useEffect(() => {
         try {
-            if (Object.keys(customAxes).length > 0) localStorage.setItem('customAxesData', JSON.stringify(customAxes));
             if (Object.keys(xdfLibrary).length > 0) localStorage.setItem('xdfLibrary', JSON.stringify(xdfLibrary));
             if (Object.keys(potentialMapsDb).length > 0) localStorage.setItem('potentialMapsLibrary', JSON.stringify(potentialMapsDb));
         } catch (error) {
             console.error("Failed to save to localStorage", error);
             addLog('Não foi possível guardar dados no armazenamento local.', 'error');
         }
-    }, [customAxes, xdfLibrary, potentialMapsDb]);
+    }, [xdfLibrary, potentialMapsDb]);
 
     // Rebuild available maps when files or potential maps DB changes
     useEffect(() => {
@@ -436,7 +429,7 @@ export default function EcuTuningAssistant() {
         setAvailableMaps([]);
         setAudioUrl(null);
         
-        // As bibliotecas do utilizador (eixos personalizados, mapas encontrados, XDFs) são preservadas.
+        // As bibliotecas do utilizador (mapas encontrados, XDFs) são preservadas.
         // Estamos apenas a reiniciar o estado da sessão atual.
 
         if (binInputRef.current) binInputRef.current.value = '';
@@ -481,17 +474,6 @@ export default function EcuTuningAssistant() {
                     setActiveXdfBrand(brandValue);
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
 
-                    // When loading a new XDF, clear any custom axes for the current BIN
-                    // to prevent applying old corrections to a new definition set.
-                    if (binFile?.checksum) {
-                        setCustomAxes(prev => {
-                            const newCustomAxes = { ...prev };
-                            delete newCustomAxes[binFile.checksum];
-                            return newCustomAxes;
-                        });
-                        addLog('Correções de eixos personalizados limpas para este BIN devido ao novo XDF.', 'info');
-                    }
-
                     // Add to library
                     try {
                         const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text, brand: brandValue }};
@@ -535,17 +517,6 @@ export default function EcuTuningAssistant() {
             setSelectedXdfFromLibrary(name);
             setActiveXdfBrand(xdfData.brand || '');
             addLog(`XDF "${name}" ${xdfData.brand ? `(Marca: ${xdfData.brand}) `: ''}carregado da biblioteca.`, 'success');
-            
-            // When loading a new XDF, clear any custom axes for the current BIN.
-            if (binFile?.checksum) {
-                setCustomAxes(prev => {
-                    const newCustomAxes = { ...prev };
-                    delete newCustomAxes[binFile.checksum];
-                    return newCustomAxes;
-                });
-                addLog('Correções de eixos personalizados limpas para este BIN devido ao novo XDF.', 'info');
-            }
-
         } catch (error) {
             addLog(`Erro ao carregar ${name} da biblioteca: ${(error as Error).message}`, 'error');
             setIsXdfErrorModalOpen(true);
@@ -591,26 +562,12 @@ export default function EcuTuningAssistant() {
             
             setWorkingMap(map);
             setDisplayMap(JSON.parse(JSON.stringify(map)));
+            setSourceAxes(mapAxes);
+            setDisplayAxes(mapAxes);
             setOriginalSortOrder({
               x: mapAxes.x.map((value, index) => ({ value, index })),
               y: mapAxes.y.map((value, index) => ({ value, index })),
             });
-            
-            if (binFile?.checksum) {
-              const userAxes = customAxes[binFile.checksum]?.[name];
-              if (userAxes) {
-                  const newAxes = { ...mapAxes, x: userAxes.x, y: userAxes.y };
-                  setSourceAxes(newAxes);
-                  setDisplayAxes(newAxes);
-                  addLog(`Eixos personalizados carregados para o mapa "${name}".`, 'info');
-              } else {
-                  setSourceAxes(mapAxes);
-                  setDisplayAxes(mapAxes);
-              }
-            } else {
-              setSourceAxes(mapAxes);
-              setDisplayAxes(mapAxes);
-            }
             
             setMapRenderKey(p => p + 1); // Force a re-render of the table components
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
@@ -622,78 +579,70 @@ export default function EcuTuningAssistant() {
         }
     };
     
-    const handleConfirmAxes = (newData: { y: string, x: string, zEquation: string }) => {
-        if (!sourceAxes || !selectedMapName || !binFile) return;
+    const handleConfirmAxes = (data: { xEquation: string, yEquation: string, zEquation: string }) => {
+        if (!selectedMapName || !binFile) return;
 
         const definition = availableMaps.find(d => d.name === selectedMapName);
-        if (!definition) {
-            addLog(`Definição de mapa "${selectedMapName}" não encontrada para recálculo.`, 'error');
+        if (!definition || !definition.xAxisDef || !definition.yAxisDef) {
+            addLog(`Definição de mapa ou de eixo para "${selectedMapName}" não encontrada para recálculo.`, 'error');
             return;
         }
 
-        const newY = newData.y.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
-        const newX = newData.x.split(',').map(s => { const n = parseFloat(s.trim()); return isNaN(n) ? s.trim() : n; });
-
-        if (newY.length !== sourceAxes.y.length || newX.length !== sourceAxes.x.length) {
-            addLog('O número de valores dos eixos não corresponde às dimensões originais.', 'error');
-            toast({ variant: 'destructive', title: "Erro nos Eixos", description: "O número de valores deve corresponder às dimensões originais." });
-            return;
-        }
-        
         try {
-            // Create a new definition with the updated equation
+            // Create a new definition with the updated equations
             const newDefinition = JSON.parse(JSON.stringify(definition)) as XDFDefinition;
-            newDefinition.equation = newData.zEquation;
+            newDefinition.equation = data.zEquation;
+            newDefinition.xAxisDef!.equation = data.xEquation;
+            newDefinition.yAxisDef!.equation = data.yEquation;
 
-            // Recalculate map data with the new axes AND the new Z-equation
+            // Recalculate axes and map data with the new definitions
+            const newX = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
+            const newY = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
             const newMapData = readMapFromBin(binFile.buffer, newDefinition, newX, newY);
-            
-            const newAxesState = { ...sourceAxes, x: newX, y: newY };
 
+            const newAxesState = {
+              x: newX,
+              y: newY,
+              xLabel: newDefinition.xAxisDef?.label || 'Carga',
+              yLabel: newDefinition.yAxisDef?.label || 'RPM',
+            };
+
+            // Persist the updated definition for the current session
+            if (newDefinition.isPotential) {
+                setPotentialMapsDb(prev => ({
+                    ...prev,
+                    [binFile.checksum]: (prev[binFile.checksum] || []).map(pMap =>
+                        pMap.name === selectedMapName ? newDefinition : pMap
+                    ),
+                }));
+                addLog(`Equações atualizadas para o mapa potencial "${selectedMapName}".`, 'success');
+            } else if (xdfFile) {
+                const newDefinitions = xdfFile.definitions.map(def =>
+                    def.name === selectedMapName ? newDefinition : def
+                );
+                setXdfFile({ ...xdfFile, definitions: newDefinitions });
+                addLog(`Equações atualizadas na definição XDF para "${selectedMapName}".`, 'success');
+            } else {
+                addLog(`Não foi possível persistir as alterações na equação para "${selectedMapName}".`, 'error');
+            }
+
+            // Update the component's state to reflect the changes
             setWorkingMap(newMapData);
             setDisplayMap(newMapData);
             setSourceAxes(newAxesState);
             setDisplayAxes(newAxesState);
             setAudioUrl(null);
-
             setOriginalSortOrder({
               x: newX.map((value, index) => ({ value, index })),
               y: newY.map((value, index) => ({ value, index })),
             });
             
-            // Update the main definition state so the equation change persists for the session
-            if (definition.isPotential) {
-                // If it's a potential map, save the whole updated definition to the potential maps DB
-                setPotentialMapsDb(prev => ({
-                    ...prev,
-                    [binFile.checksum]: (prev[binFile.checksum] || []).map(pMap => 
-                        pMap.name === selectedMapName ? newDefinition : pMap
-                    ),
-                }));
-            } else if (xdfFile) {
-                const newDefinitions = xdfFile.definitions.map(def => 
-                    def.name === selectedMapName ? newDefinition : def
-                );
-                setXdfFile({ ...xdfFile, definitions: newDefinitions });
-            }
-
-            if (binFile?.checksum) {
-              setCustomAxes(prev => ({
-                  ...prev,
-                  [binFile.checksum]: { ...(prev[binFile.checksum] || {}), [selectedMapName]: { x: newX, y: newY } }
-              }));
-              addLog('Eixos e/ou equação personalizados guardados para este ficheiro BIN.', 'success');
-              toast({ title: 'Correções Guardadas', description: 'As suas correções de eixos/equação foram guardadas.' });
-            } else {
-              toast({ variant: 'destructive', title: "Erro", description: "Não foi possível guardar as correções porque nenhum ficheiro BIN está carregado." });
-              addLog('Não foi possível guardar as correções: ficheiro BIN não carregado.', 'error');
-            }
-            
-            setMapRenderKey(p => p + 1); // Force re-render
+            setMapRenderKey(p => p + 1);
             setIsAxesModalOpen(false);
-            addLog('Eixos e dados do mapa (eixo Z) recalculados com sucesso.', 'success');
+            toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
+
         } catch (error) {
-            const msg = `Erro ao recalcular o mapa com as novas correções: ${(error as Error).message}`;
+            const msg = `Erro ao recalcular o mapa com as novas equações: ${(error as Error).message}`;
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Recálculo", description: msg });
         }
@@ -951,16 +900,6 @@ export default function EcuTuningAssistant() {
                  addLog(`Correções da IA aplicadas à definição XDF para "${selectedMapName}".`, 'success');
             }
 
-
-            // Persist the AI-corrected axes values just like a manual correction
-            if (binFile?.checksum) {
-                setCustomAxes(prev => ({
-                    ...prev,
-                    [binFile.checksum]: { ...(prev[binFile.checksum] || {}), [selectedMapName]: { x: newSourceAxes.x, y: newSourceAxes.y } }
-                }));
-                addLog('Valores de eixos da IA guardados para este ficheiro BIN.', 'debug');
-            }
-
             // Update all the component's state for immediate UI feedback
             setWorkingMap(correctedMap);
             setDisplayMap(correctedMap);
@@ -1158,16 +1097,6 @@ export default function EcuTuningAssistant() {
             }
         }
         
-        // Update customAxes keys if an entry exists
-        if (mapUpdated && binFile?.checksum && customAxes[binFile.checksum]?.[oldName]) {
-            setCustomAxes(prev => {
-                const newBinAxes = { ...prev[binFile.checksum] };
-                newBinAxes[trimmedNewName] = newBinAxes[oldName];
-                delete newBinAxes[oldName];
-                return { ...prev, [binFile.checksum]: newBinAxes };
-            });
-        }
-        
         if (mapUpdated) {
             setSelectedMapName(trimmedNewName);
             toast({ title: 'Nome Atualizado', description: `O mapa foi renomeado para "${trimmedNewName}".` });
@@ -1353,7 +1282,7 @@ export default function EcuTuningAssistant() {
                                     </p>
                                     <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!displayMap}>
                                         <GitCompareArrows className="mr-2 h-4 w-4" />
-                                        Corrigir Eixos / Equação
+                                        Corrigir Equações
                                     </Button>
                                 </div>
 
@@ -1461,7 +1390,6 @@ export default function EcuTuningAssistant() {
                     open={isAxesModalOpen}
                     onOpenChange={setIsAxesModalOpen}
                     onConfirm={handleConfirmAxes}
-                    currentAxes={sourceAxes}
                     currentDefinition={availableMaps.find(d => d.name === selectedMapName)}
                 />
                 <MapAnalysisResultModal open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen} result={analysisResult} />
@@ -1502,54 +1430,55 @@ export default function EcuTuningAssistant() {
     );
 }
 
-function EditAxesModal({ open, onOpenChange, onConfirm, currentAxes, currentDefinition }: { 
+function EditAxesModal({ open, onOpenChange, onConfirm, currentDefinition }: { 
     open: boolean, 
     onOpenChange: (open: boolean) => void, 
-    onConfirm: (data: { x: string, y: string, zEquation: string }) => void, 
-    currentAxes: { x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null,
+    onConfirm: (data: { xEquation: string, yEquation: string, zEquation: string }) => void, 
     currentDefinition: XDFDefinition | undefined,
 }) {
-    const [yAxis, setYAxis] = useState('');
-    const [xAxis, setXAxis] = useState('');
+    const [yEquation, setYEquation] = useState('');
+    const [xEquation, setXEquation] = useState('');
     const [zEquation, setZEquation] = useState('');
 
     useEffect(() => {
-        if(open && currentAxes && currentDefinition) {
-            setYAxis(currentAxes.y.join(', '));
-            setXAxis(currentAxes.x.join(', '));
-            setZEquation(currentDefinition.equation);
+        if(open && currentDefinition) {
+            setYEquation(currentDefinition.yAxisDef?.equation || 'X');
+            setXEquation(currentDefinition.xAxisDef?.equation || 'X');
+            setZEquation(currentDefinition.equation || 'X');
         }
-    }, [open, currentAxes, currentDefinition]);
+    }, [open, currentDefinition]);
 
-    if (!currentDefinition) return null; // Or a loading/disabled state
+    if (!currentDefinition) return null;
+
+    const yAxisLabel = currentDefinition.yAxisDef?.label || 'Eixo Y';
+    const xAxisLabel = currentDefinition.xAxisDef?.label || 'Eixo X';
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Corrigir Eixos e Equação do Mapa</DialogTitle>
+                    <DialogTitle>Editar Equações do Mapa</DialogTitle>
                     <DialogDescription>
-                        Ajuste os valores dos eixos (cabeçalhos) ou a equação de cálculo para os dados do mapa (Eixo Z). As correções serão guardadas para este mapa.
+                        Ajuste as equações de cálculo para os eixos e para os dados do mapa. Use 'X' como a variável para o valor lido do ficheiro BIN.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4">
-                    <div>
-                        <Label htmlFor="yAxisText">Eixo Y ({currentAxes?.yLabel || 'e.g. RPM'}) - Valores</Label>
-                        <Input id="yAxisText" value={yAxis} onChange={e => setYAxis(e.target.value)} placeholder="e.g. 800, 1000, 1200..." />
+                <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="yEquationText">Equação do Eixo Y ({yAxisLabel})</Label>
+                        <Input id="yEquationText" value={yEquation} onChange={e => setYEquation(e.target.value)} />
                     </div>
-                    <div>
-                        <Label htmlFor="xAxisText">Eixo X ({currentAxes?.xLabel || 'e.g. Carga/TPS'}) - Valores</Label>
-                        <Input id="xAxisText" value={xAxis} onChange={e => setXAxis(e.target.value)} placeholder="e.g. 10, 20, 30..."/>
+                    <div className="space-y-2">
+                        <Label htmlFor="xEquationText">Equação do Eixo X ({xAxisLabel})</Label>
+                        <Input id="xEquationText" value={xEquation} onChange={e => setXEquation(e.target.value)} />
                     </div>
-                     <div>
-                        <Label htmlFor="zEquationText">Eixo Z (Dados do Mapa) - Equação</Label>
-                        <Input id="zEquationText" value={zEquation} onChange={e => setZEquation(e.target.value)} placeholder="e.g. X / 10"/>
-                        <p className="text-xs text-muted-foreground mt-1">Use 'X' como variável para o valor lido do ficheiro BIN.</p>
+                     <div className="space-y-2">
+                        <Label htmlFor="zEquationText">Equação dos Dados do Mapa (Eixo Z)</Label>
+                        <Input id="zEquationText" value={zEquation} onChange={e => setZEquation(e.target.value)} />
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button onClick={() => onConfirm({ y: yAxis, x: xAxis, zEquation: zEquation })}>Confirmar e Salvar</Button>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button onClick={() => onConfirm({ yEquation, xEquation, zEquation })}>Aplicar e Recalcular</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -1843,3 +1772,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+    
