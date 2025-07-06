@@ -346,19 +346,26 @@ export default function EcuTuningAssistant() {
         
         const lowerCaseName = selectedMapName.toLowerCase();
         
-        // Ignition maps are always decimal
-        const ignitionKeywords = ['ignição', 'ignition', 'avanço', 'spark'];
+        // Rule 1: Explicit ignition maps are ALWAYS decimal.
+        const ignitionKeywords = ['ignição', 'ignition', 'avanço', 'spark', 'timing'];
         if (ignitionKeywords.some(keyword => lowerCaseName.includes(keyword))) {
             return 'decimal';
         }
 
-        // Injection maps are usually integers
-        const injectionKeywords = ['tps', 'map', 'injeção', 'injection', 'injector', 'combustível', 'fuel'];
+        // Rule 2: Explicit injection-related maps are usually integer.
+        // We REMOVED 'map' from this list to avoid ambiguity.
+        const injectionKeywords = ['tps', 'injeção', 'injection', 'injector', 'combustível', 'fuel', 've', 'etv', 'borboleta'];
         if (injectionKeywords.some(keyword => lowerCaseName.includes(keyword))) {
             return 'integer';
         }
 
-        // Default to decimal for unknown maps
+        // Rule 3: Handle the ambiguous 'map' keyword. If it wasn't flagged as ignition by Rule 1,
+        // we can more safely assume it refers to a Manifold Absolute Pressure (load) map, which is integer.
+        if (lowerCaseName.includes('map')) {
+            return 'integer';
+        }
+
+        // Rule 4: Default to decimal for any other unknown map types.
         return 'decimal';
     }, [selectedMapName]);
 
