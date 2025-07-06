@@ -1,4 +1,5 @@
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -275,7 +276,11 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         continue;
       }
       
-      const isTransposed = rows < cols;
+      // Robust transposition detection using the official 'type' attribute.
+      const zEmbedInfoNode = findNode(zAxisNode, 'embedinfo', 'EMBEDINFO');
+      const embedType = getAttr(zEmbedInfoNode, 'type');
+      const isTransposed = embedType === '2';
+
       const rowsCount = isTransposed ? cols : rows;
       const colsCount = isTransposed ? rows : cols;
       const yAxisId = isTransposed ? 'x' : 'y';
@@ -589,3 +594,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
