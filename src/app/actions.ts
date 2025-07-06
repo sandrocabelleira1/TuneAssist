@@ -1,7 +1,9 @@
 'use server';
 import { validateMapType as validateMapTypeFlow, type ValidateMapTypeInput, type ValidateMapTypeOutput } from '@/ai/flows/validate-map-type-flow';
 import { findMaps as findMapsFlow, type FindMapsInput, type FindMapsOutput } from '@/ai/flows/find-maps-flow';
-import { ValidateMapTypeInputSchema, FindMapsInputSchema } from '@/ai/schemas';
+import { explainMap as explainMapFlow, type ExplainMapInput, type ExplainMapOutput } from '@/ai/flows/explain-map-flow';
+import { generateSpeech as generateSpeechFlow, type TextToSpeechInput, type TextToSpeechOutput } from '@/ai/flows/text-to-speech-flow';
+import { ValidateMapTypeInputSchema, FindMapsInputSchema, ExplainMapInputSchema, TextToSpeechInputSchema } from '@/ai/schemas';
 import { z } from 'zod';
 
 export async function validateMapType(input: ValidateMapTypeInput): Promise<{ success: boolean; data?: ValidateMapTypeOutput; error?: string }> {
@@ -47,5 +49,35 @@ export async function findPotentialMaps(input: FindMapsInput): Promise<{ success
     }
     
     return { success: false, error: `Ocorreu um erro inesperado ao procurar mapas: ${errorMessage}` };
+  }
+}
+
+export async function explainMap(input: ExplainMapInput): Promise<{ success: boolean; data?: ExplainMapOutput; error?: string }> {
+  try {
+    const validatedInput = ExplainMapInputSchema.parse(input);
+    const result = await explainMapFlow(validatedInput);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error("Error in explainMap action:", error);
+    if (error instanceof z.ZodError) {
+      return { success: false, error: `Dados de entrada inválidos: ${JSON.stringify(error.flatten().fieldErrors)}` };
+    }
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: `Ocorreu um erro inesperado ao gerar a explicação: ${errorMessage}` };
+  }
+}
+
+export async function generateSpeech(text: TextToSpeechInput): Promise<{ success: boolean; data?: TextToSpeechOutput; error?: string }> {
+  try {
+    const validatedInput = TextToSpeechInputSchema.parse(text);
+    const result = await generateSpeechFlow(validatedInput);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error("Error in generateSpeech action:", error);
+    if (error instanceof z.ZodError) {
+      return { success: false, error: `Dados de entrada inválidos: ${JSON.stringify(error.flatten().fieldErrors)}` };
+    }
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: `Ocorreu um erro inesperado ao gerar o áudio: ${errorMessage}` };
   }
 }

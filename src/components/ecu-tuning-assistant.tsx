@@ -5,7 +5,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder } from '@/lib/types';
 import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, bufferToHex, writeMapToBin } from '@/lib/ecu';
-import { validateMapType, findPotentialMaps } from '@/app/actions';
+import { validateMapType, findPotentialMaps, explainMap, generateSpeech } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save, Pencil } from 'lucide-react';
+import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save, Pencil, AudioLines, Pause } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
@@ -328,6 +328,9 @@ export default function EcuTuningAssistant() {
     const [isValidatingMap, setIsValidatingMap] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<{ confidence: string; suspectedType: string; reasoning: string; } | null>(null);
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
+    const [isExplaining, setIsExplaining] = useState(false);
+    const [audioUrl, setAudioUrl] = useState<string | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
 
 
     // Modal state
@@ -342,6 +345,7 @@ export default function EcuTuningAssistant() {
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
     const logEndRef = useRef<HTMLDivElement>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     const valueFormat = useMemo<'integer' | 'decimal'>(() => {
         if (!selectedMapName) return 'decimal';
@@ -515,6 +519,7 @@ export default function EcuTuningAssistant() {
         setActiveXdfBrand('');
         setSelectedBrandForNewXdf('no-brand');
         setAvailableMaps([]);
+        setAudioUrl(null);
         
         // As bibliotecas do utilizador (eixos personalizados, mapas encontrados, XDFs) são preservadas.
         // Estamos apenas a reiniciar o estado da sessão atual.
@@ -539,6 +544,7 @@ export default function EcuTuningAssistant() {
                     setDisplayMap(null);
                     setDisplayAxes(null);
                     setAvailableMaps([]);
+                    setAudioUrl(null);
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
@@ -608,7 +614,7 @@ export default function EcuTuningAssistant() {
             const definitions = parseXDF(xdfData.content);
             if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
             
-            setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null);
+            setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null); setAudioUrl(null);
 
             setXdfFile({ name, definitions });
             setSelectedXdfFromLibrary(name);
@@ -653,6 +659,7 @@ export default function EcuTuningAssistant() {
         }
 
         setSelectedMapName(name);
+        setAudioUrl(null);
         try {
             const tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef);
             const tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef);
@@ -732,6 +739,7 @@ export default function EcuTuningAssistant() {
             setDisplayMap(newMapData);
             setSourceAxes(newAxesState);
             setDisplayAxes(newAxesState);
+            setAudioUrl(null);
 
             setOriginalSortOrder({
               x: newX.map((value, index) => ({ value, index })),
@@ -881,6 +889,7 @@ export default function EcuTuningAssistant() {
         const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
         newDisplayMap[rowIndex][colIndex] = newValue;
         setDisplayMap(newDisplayMap);
+        setAudioUrl(null);
       } else {
         addLog('Não foi possível atualizar o valor: célula correspondente não encontrada após a ordenação.', 'error');
       }
@@ -1037,6 +1046,7 @@ export default function EcuTuningAssistant() {
             setDisplayMap(correctedMap);
             setSourceAxes(newSourceAxes);
             setDisplayAxes(newSourceAxes);
+            setAudioUrl(null);
             setOriginalSortOrder({
               x: newSourceAxes.x.map((value, index) => ({ value, index })),
               y: newSourceAxes.y.map((value, index) => ({ value, index })),
@@ -1249,10 +1259,68 @@ export default function EcuTuningAssistant() {
         setMapToEdit(null);
     };
 
+    const handleExplainMap = async () => {
+        if (isPlaying) {
+            audioRef.current?.pause();
+            return;
+        }
+        if (audioUrl && !isPlaying) {
+            audioRef.current?.play();
+            return;
+        }
+        if (!displayMap || !displayAxes || !selectedMapName) return;
+
+        setIsExplaining(true);
+        addLog(`A gerar explicação áudio para "${selectedMapName}"...`, 'info');
+        setAudioUrl(null);
+
+        try {
+            // 1. Get explanation text
+            const explanationResult = await explainMap({
+                mapName: selectedMapName,
+                mapData: displayMap,
+                xAxis: displayAxes.x,
+                yAxis: displayAxes.y,
+                xAxisLabel: displayAxes.xLabel,
+                yAxisLabel: displayAxes.yLabel
+            });
+
+            if (!explanationResult.success || !explanationResult.data?.explanation) {
+                throw new Error(explanationResult.error || 'A IA não conseguiu gerar o texto da explicação.');
+            }
+
+            addLog('Texto da explicação gerado. A gerar áudio...', 'debug');
+
+            // 2. Get audio for the text
+            const speechResult = await generateSpeech(explanationResult.data.explanation);
+
+            if (!speechResult.success || !speechResult.data?.media) {
+                throw new Error(speechResult.error || 'A IA não conseguiu gerar o áudio.');
+            }
+
+            setAudioUrl(speechResult.data.media);
+            addLog('Explicação em áudio pronta.', 'success');
+
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            addLog(`Falha ao gerar explicação: ${msg}`, 'error');
+            toast({ variant: 'destructive', title: 'Erro na Explicação', description: msg });
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
+    useEffect(() => {
+        if (audioUrl && audioRef.current) {
+            audioRef.current.play().catch(e => console.error("Erro ao reproduzir áudio:", e));
+        }
+    }, [audioUrl]);
+
 
     return (
         <TooltipProvider>
             <div className="max-w-screen-2xl mx-auto">
+                <audio ref={audioRef} src={audioUrl || ''} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} />
                 <header className="text-center mb-8 flex items-center justify-center relative">
                     <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
                         <Sparkles className="text-primary w-8 h-8"/> TuneAssist AI
@@ -1379,6 +1447,10 @@ export default function EcuTuningAssistant() {
                                          <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || isValidatingMap}>
                                             {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                                             Analisar e Corrigir Mapa
+                                        </Button>
+                                        <Button variant="outline" className="w-full" onClick={handleExplainMap} disabled={!displayMap || isExplaining}>
+                                            {isExplaining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <AudioLines className="mr-2 h-4 w-4" />}
+                                            {isExplaining ? 'A Gerar...' : isPlaying ? 'Pausar' : audioUrl ? 'Ouvir Novamente' : 'Ouvir Explicação'}
                                         </Button>
                                     </div>
                                 </div>

@@ -44,3 +44,26 @@ export const FindMapsOutputSchema = z.object({
   analysis: z.string().optional().describe("Uma análise da procura, especialmente se nenhum mapa for encontrado. Explica o porquê, ex: os dados parecem encriptados ou não estruturados."),
 });
 export type FindMapsOutput = z.infer<typeof FindMapsOutputSchema>;
+
+export const ExplainMapInputSchema = z.object({
+    mapName: z.string(),
+    mapData: z.array(z.array(z.number().nullable())),
+    xAxis: z.array(z.union([z.string(), z.number()])),
+    yAxis: z.array(z.union([z.string(), z.number()])),
+    xAxisLabel: z.string(),
+    yAxisLabel: z.string(),
+});
+export type ExplainMapInput = z.infer<typeof ExplainMapInputSchema>;
+
+export const ExplainMapOutputSchema = z.object({
+    explanation: z.string().describe('A explicação textual do mapa.'),
+});
+export type ExplainMapOutput = z.infer<typeof ExplainMapOutputSchema>;
+
+export const TextToSpeechInputSchema = z.string();
+export type TextToSpeechInput = z.infer<typeof TextToSpeechInputSchema>;
+
+export const TextToSpeechOutputSchema = z.object({
+    media: z.string().describe('A data URI para o ficheiro de áudio WAV gerado.'),
+});
+export type TextToSpeechOutput = z.infer<typeof TextToSpeechOutputSchema>;
