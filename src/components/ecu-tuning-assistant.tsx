@@ -814,6 +814,13 @@ export default function EcuTuningAssistant() {
     const handleValidateMap = async () => {
         if (!displayMap || !displayAxes || !selectedMapName || !binFile) return;
 
+        const currentDef = availableMaps.find(d => d.name === selectedMapName);
+        if (!currentDef) {
+            addLog(`Não foi possível encontrar a definição do mapa para validar.`, 'error');
+            toast({ variant: 'destructive', title: 'Erro de Validação', description: 'Não foi possível encontrar a definição do mapa selecionado.' });
+            return;
+        }
+
         setIsValidatingMap(true);
         addLog(`A iniciar a análise do tipo de mapa para "${selectedMapName}"...`, 'info');
 
@@ -832,6 +839,7 @@ export default function EcuTuningAssistant() {
             mapData: displayMap,
             xAxis: numericXAxis,
             yAxis: numericYAxis,
+            equation: currentDef.equation,
         });
 
         setIsValidatingMap(false);
@@ -844,9 +852,6 @@ export default function EcuTuningAssistant() {
             const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation } = result.data;
             const hasSuggestion = suggestedEquation || suggestedXAxisEquation || suggestedYAxisEquation;
             
-            const currentDef = availableMaps.find(d => d.name === selectedMapName);
-            if (!currentDef) return;
-
             if (hasSuggestion) {
                 const newDefinition = JSON.parse(JSON.stringify(currentDef)) as XDFDefinition;
                 if (suggestedEquation && newDefinition) newDefinition.equation = suggestedEquation;

@@ -49,9 +49,12 @@ const prompt = ai.definePrompt({
     - \`suggestedXAxisEquation\`: Para corrigir o eixo X.
     - \`suggestedYAxisEquation\`: Para corrigir o eixo Y.
     **Importante:** Os campos de equação DEVEM conter apenas expressões matemáticas válidas (ex: "X * 0.1") ou ser omitidos do JSON de saída. NÃO preencha estes campos com texto como "análise necessária".
-5.  **Lógica Especial para Mapas de Combustível:** Se o \`mapName\` indica que é um mapa de combustível principal (ex: "Comb TPS", "Comb MAP", "Fuel Map") e os valores dos dados (\`mapData\`) estão na faixa de VE (Eficiência Volumétrica, ~30-120), é provável que a equação atual seja simples (como 'X') e esteja a mostrar valores de carga, não o tempo de injeção final.
-    - **Sua Tarefa:** Converta estes valores para um tempo de injeção mais útil em microssegundos (µs).
-    - **Sugestão de Equação:** Para uma Yamaha R3, um fator de conversão de VE para µs é geralmente entre 90 e 100. **Sugira uma equação como \`X * 91.65\` para o campo \`suggestedEquation\`** para converter os valores de carga em µs.
+5.  **Lógica Especial para Mapas de Combustível:** Se o \`mapName\` indica que é um mapa de combustível principal (ex: "Comb TPS", "Comb MAP", "Fuel Map") e os valores dos dados (\`mapData\`) estão na faixa de VE (Eficiência Volumétrica, ~30-120), é provável que a equação atual (\`equation\`), que é usada para calcular os dados, esteja a mostrar valores de carga em vez do tempo de injeção final.
+    - **Sua Tarefa:** Converter estes valores para um tempo de injeção em microssegundos (µs), compondo uma nova equação.
+    - **Sugestão de Equação:** Para uma Yamaha R3, um fator de conversão de VE para µs é geralmente entre 90 e 100. **Envolva a equação existente, fornecida no campo \`equation\`, com um fator de conversão.** Por exemplo:
+        - Se a equação atual for \`X/128\`, a sua sugestão para \`suggestedEquation\` deve ser \`(X/128) * 91.65\`.
+        - Se a equação atual for \`X/514.56\`, a sua sugestão deve ser \`(X/514.56) * 91.65\`.
+        - Se a equação atual for apenas \`X\`, a sua sugestão deve ser \`X * 91.65\`.
     - **Justificação:** No campo \`reasoning\`, explique que os valores atuais parecem ser de VE/carga e que você está a sugerir uma conversão para tempo de injeção (µs) para uma visualização mais prática, com base em injetores típicos para a moto. Defina a confiança como 'Média'.
 6.  **Justifique a sua Conclusão:** No campo \`reasoning\`, explique o seu raciocínio de forma clara, referindo-se aos pontos de referência. Ex: "Confiança Baixa. O eixo de RPM começa em 8000, o que é um valor irrealista para a marcha lenta. O nome indica 'Ignição', mas os valores dos dados estão acima de 200, sugerindo que a escala está incorreta. Sugiro correções para os eixos e para os dados."
 
@@ -60,6 +63,7 @@ A sua resposta deve ser um objeto JSON que corresponda ao schema de saída, cont
 
 **Dados de Entrada:**
 mapName: {{{mapName}}}
+equation: {{{equation}}}
 mapData: {{{json mapData}}}
 xAxis: {{{json xAxis}}}
 yAxis: {{{json yAxis}}}

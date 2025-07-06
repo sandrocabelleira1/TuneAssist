@@ -5,6 +5,7 @@ export const ValidateMapTypeInputSchema = z.object({
     mapData: z.array(z.array(z.number().nullable())).describe('Os dados 2D do mapa.'),
     xAxis: z.array(z.number()).describe('Os valores do eixo X (horizontal).'),
     yAxis: z.array(z.number()).describe('Os valores do eixo Y (vertical).'),
+    equation: z.string().optional().describe('A equação matemática atual para os dados do mapa (eixo Z). Ex: "X/128".'),
 });
 export type ValidateMapTypeInput = z.infer<typeof ValidateMapTypeInputSchema>;
 
