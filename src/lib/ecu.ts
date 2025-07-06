@@ -536,90 +536,98 @@ export function bufferToHex(buffer: ArrayBuffer): string {
     .join('');
 }
 
-function invertEquation(eq: string, eqVar: string, value: number): number {
-    if (value === null || isNaN(value)) {
-        throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
-    }
-    
-    const cleanEq = (eq || 'X')
-        .replace(/,/g, '.')
-        .replace(new RegExp(`\\b${eqVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X');
+/**
+ * Reverses a mathematical equation to find the "raw" value that would produce a given final value.
+ * This function uses a numerical binary search method, which is robust for complex but monotonic equations.
+ * @param eq The equation string (e.g., "(X-256)/514.56").
+ * @param eqVar The variable name in the equation (e.g., "X").
+ * @param finalValue The target value we want to achieve.
+ * @param dataSize The size of the raw data in bytes (1 for 8-bit, 2 for 16-bit).
+ * @param mapName The name of the map, used to infer if the data is signed.
+ * @returns The calculated raw integer value.
+ */
+function invertEquation(
+  eq: string,
+  eqVar: string,
+  finalValue: number,
+  dataSize: number,
+  mapName: string
+): number {
+  if (finalValue === null || isNaN(finalValue)) {
+    throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
+  }
 
-    const ifMatch = cleanEq.match(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/i);
-    if (ifMatch) {
-      console.warn(`A inversão da equação não é suportada para a função IF: "${eq}". A tentar escrever o valor diretamente.`);
-      return value;
-    }
-    
-    if (cleanEq.trim() === 'X') return value;
-    if (cleanEq.trim() === '-X') return -value;
+  // 1. Create the forward function from the equation string.
+  const sanitizedEquation = (eq || 'X')
+    .replace(/,/g, '.')
+    .replace(/\s*\r?\n\s*/g, ' ')
+    .replace(new RegExp(`\\b${eqVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
+    .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
+    .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
+    .replace(/(X)(\d)/gi, 'X * $2');
 
-    const pattern = /^\s*(-?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*([+\-*/])\s*X\s*|\s*X\s*([+\-*/])\s*(-?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*$/;
-    const match = cleanEq.match(pattern);
-    
-    if (!match) {
-        const mulDivPattern = /X\s*([*/])\s*(-?\d*\.?\d+(?:[eE][+-]?\d+)?)|(-?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*([*/])\s*X/;
-        const mulDivMatch = cleanEq.match(mulDivPattern);
-        if (mulDivMatch) {
-            let C: number, operator: string, varIsFirst: boolean;
-            if(mulDivMatch[1]) {
-                varIsFirst = true;
-                operator = mulDivMatch[1];
-                C = parseFloat(mulDivMatch[2]);
-            } else {
-                varIsFirst = false;
-                C = parseFloat(mulDivMatch[3]);
-                operator = mulDivMatch[4];
-            }
-             if (isNaN(C)) throw new Error(`Não foi possível analisar a constante na equação "${eq}"`);
-             switch (operator) {
-                case '*':
-                    if (C === 0) return 0;
-                    return value / C;
-                case '/':
-                     if (varIsFirst) {
-                        return value * C;
-                    } else {
-                        if (value === 0) throw new Error(`Divisão por zero ao inverter a equação "${eq}" com o valor 0.`);
-                        return C / value;
-                    }
-            }
-        }
-        throw new Error(`A inversão da equação não é suportada para a complexidade de: "${eq}".`);
-    }
-    
-    let C: number, operator: string, varIsFirst: boolean;
+  let equationFunc: (x: number) => number;
+  try {
+    equationFunc = new Function('X', `return ${sanitizedEquation}`) as (x: number) => number;
+  } catch (e) {
+    console.error(`Equação inválida para inversão: "${eq}". A assumir 'X'.`);
+    equationFunc = (X: number) => X;
+  }
 
-    if (match[3] !== undefined) {
-        varIsFirst = true;
-        operator = match[3];
-        C = parseFloat(match[4]);
+  // 2. Set up the search range based on data size and map type.
+  const isPotentiallySigned = ['ignição', 'ignition', 'avanço', 'spark', 'timing'].some(kw => mapName.toLowerCase().includes(kw));
+  let low: number, high: number;
+
+  if (dataSize === 1) {
+    low = 0; // 8-bit is typically unsigned.
+    high = 255;
+  } else if (dataSize === 2) {
+    low = isPotentiallySigned ? -32768 : 0;
+    high = isPotentiallySigned ? 32767 : 65535;
+  } else {
+    throw new Error(`Tamanho de dados não suportado para inversão: ${dataSize} bytes.`);
+  }
+
+  // Handle the simplest case directly for performance.
+  if (sanitizedEquation.trim() === 'X') {
+    return Math.round(finalValue);
+  }
+
+  // 3. Perform a binary search to find the integer raw value.
+  let iterations = 100; // More than enough for a 16-bit range.
+  const lowVal = equationFunc(low);
+  const highVal = equationFunc(high);
+
+  // Check if the target value is outside the achievable range.
+  if ((finalValue < lowVal && finalValue < highVal) || (finalValue > lowVal && finalValue > highVal)) {
+    // It's out of range, return the raw value that produces the closest result.
+    const diffLow = Math.abs(lowVal - finalValue);
+    const diffHigh = Math.abs(highVal - finalValue);
+    return diffLow < diffHigh ? low : high;
+  }
+  
+  const isMonotonicIncreasing = highVal > lowVal;
+
+  while (low <= high && iterations > 0) {
+    const mid = Math.floor((low + high) / 2);
+    if(mid === low || mid === high) break; // Avoid infinite loop if range is small
+
+    const midValue = equationFunc(mid);
+    
+    // This logic handles both increasing and decreasing monotonic functions.
+    if ((isMonotonicIncreasing && midValue < finalValue) || (!isMonotonicIncreasing && midValue > finalValue)) {
+      low = mid;
     } else {
-        varIsFirst = false;
-        C = parseFloat(match[1]);
-        operator = match[2];
+      high = mid;
     }
-    
-    if (isNaN(C)) throw new Error(`Não foi possível analisar a constante na equação "${eq}"`);
-
-    switch (operator) {
-        case '+':
-            return value - C;
-        case '-':
-            return varIsFirst ? value + C : C - value;
-        case '*':
-            if (C === 0) return 0;
-            return value / C;
-        case '/':
-            if (varIsFirst) {
-                return value * C;
-            } else {
-                if (value === 0) throw new Error(`Divisão por zero ao inverter a equação "${eq}" com o valor 0.`);
-                return C / value;
-            }
-    }
-    
-    throw new Error(`Operador desconhecido "${operator}" na equação "${eq}".`);
+    iterations--;
+  }
+  
+  // After the loop, low and high are very close. Check which is the better fit.
+  const diffLow = Math.abs(equationFunc(low) - finalValue);
+  const diffHigh = Math.abs(equationFunc(high) - finalValue);
+  
+  return diffLow < diffHigh ? low : high;
 }
 
 
@@ -638,6 +646,8 @@ export function writeMapToBin(
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
     const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
 
+    const isPotentiallySignedMap = ['ignição', 'ignition', 'avanço', 'spark', 'timing'].some(kw => def.name.toLowerCase().includes(kw));
+
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             const finalValue = mapData[r][c];
@@ -646,7 +656,7 @@ export function writeMapToBin(
             }
 
             try {
-                const rawValue = invertEquation(def.equation, def.equationVar, finalValue);
+                const rawValue = invertEquation(def.equation, def.equationVar, finalValue, def.dataSize, def.name);
                 const intValue = Math.round(rawValue);
                 const offset = def.address + (r * majorStride) + (c * minorStride);
 
@@ -658,7 +668,11 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                    view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
+                     if (isPotentiallySignedMap) {
+                        view.setInt16(offset, Math.max(-32768, Math.min(32767, intValue)), !def.isBigEndian);
+                    } else {
+                        view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
+                    }
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
