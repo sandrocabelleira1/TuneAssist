@@ -403,7 +403,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   const sanitizedEquation = (axisDef.equation || 'X')
       .replace(/,/g, '.')
       .replace(/\s*\r?\n\s*/g, ' ') // Replace newlines and surrounding whitespace with a single space
-      .replace(new RegExp(`\\b${axisDef.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
+      .replace(/\b(x|value)\b/gi, 'X') // Standardize variable to 'X'
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)` - now handles expressions with spaces/newlines
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
@@ -471,7 +471,7 @@ export function readMapFromBin(
   const sanitizedEquation = (def.equation || 'X')
       .replace(/,/g, '.')
       .replace(/\s*\r?\n\s*/g, ' ') // Replace newlines and surrounding whitespace with a single space
-      .replace(new RegExp(`\\b${def.equationVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
+      .replace(/\b(x|value)\b/gi, 'X') // Standardize variable to 'X'
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)`
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
@@ -576,7 +576,7 @@ function invertEquation(
   const sanitizedEquation = (eq || 'X')
     .replace(/,/g, '.')
     .replace(/\s*\r?\n\s*/g, ' ')
-    .replace(new RegExp(`\\b${eqVar || 'X'}\\b|\\bVALUE\\b`, 'gi'), 'X')
+    .replace(/\b(x|value)\b/gi, 'X') // Standardize variable to 'X'
     .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
     .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
     .replace(/(X)(\d)/gi, 'X * $2');
