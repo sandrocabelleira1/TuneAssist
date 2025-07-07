@@ -818,21 +818,6 @@ export default function EcuTuningAssistant() {
             return;
         }
 
-        let equationFunc: Function;
-        try {
-            const sanitizedEquation = (currentDef.equation || 'X')
-                .replace(/,/g, '.')
-                .replace(/\s*\r?\n\s*/g, ' ')
-                .replace(/\b(x|value)\b/gi, 'X')
-                .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
-                .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
-                .replace(/(X)(\d)/gi, 'X * $2');
-            equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
-        } catch (e) {
-            addLog(`A equação do mapa "${currentDef.equation}" é inválida. Não é possível fazer a edição rápida.`, 'error');
-            return;
-        }
-
         const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
         const newRawMap = JSON.parse(JSON.stringify(rawMap));
         const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
@@ -856,27 +841,31 @@ export default function EcuTuningAssistant() {
 
                 if (workingRowIndex === -1 || workingColIndex === -1) continue;
 
-                const rawValue = newRawMap[workingRowIndex][workingColIndex];
-                if (rawValue === null) continue;
+                const currentCalculatedValue = newWorkingMap[workingRowIndex][workingColIndex];
+                if (currentCalculatedValue === null) continue;
                 
-                let newRawValue: number;
+                let newCalculatedValue: number;
 
                 if (quickEditType === 'percent') {
                     const changeRatio = 1 + (value / 100) * (operation === 'add' ? 1 : -1);
-                    newRawValue = rawValue * changeRatio;
-                } else { // 'unit' means raw units
+                    newCalculatedValue = currentCalculatedValue * changeRatio;
+                } else { // 'unit' now means the displayed unit
                     const changeAmount = value * (operation === 'add' ? 1 : -1);
-                    newRawValue = rawValue + changeAmount;
+                    newCalculatedValue = currentCalculatedValue + changeAmount;
                 }
                 
-                const xVal = (c < sourceAxes.x.length && typeof sourceAxes.x[c] === 'number') ? sourceAxes.x[c] : 0;
-                const yVal = (r < sourceAxes.y.length && typeof sourceAxes.y[r] === 'number') ? sourceAxes.y[r] : 0;
-                const newCalculatedValue = equationFunc(newRawValue, xVal, yVal, 0);
+                try {
+                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.name);
 
-                newRawMap[workingRowIndex][workingColIndex] = newRawValue;
-                newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
-                newDisplayMap[r][c] = newCalculatedValue;
-                changesMade++;
+                    newRawMap[workingRowIndex][workingColIndex] = newRawValue;
+                    newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
+                    newDisplayMap[r][c] = newCalculatedValue;
+                    changesMade++;
+
+                } catch (e) {
+                     const errorMsg = e instanceof Error ? e.message : "Erro desconhecido";
+                     addLog(`Não foi possível calcular o valor raw para a célula [${r}, ${c}]: ${errorMsg}`, 'error');
+                }
             }
         }
 
@@ -1295,6 +1284,7 @@ export default function EcuTuningAssistant() {
     useEffect(() => {
         const logContainer = document.getElementById('log-container');
         if (logContainer) {
+            // A rolagem automática foi removida por pedido do utilizador
             // logContainer.scrollTop = logContainer.scrollHeight;
         }
     }, [logs]);
