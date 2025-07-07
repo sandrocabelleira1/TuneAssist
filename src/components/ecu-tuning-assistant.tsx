@@ -397,6 +397,18 @@ export default function EcuTuningAssistant() {
                 } while (finalMapNames.has(newName));
             }
             finalMapNames.add(newName);
+            
+            const lowerName = newName.toLowerCase();
+            const isFuelMap = ['comb', 'fuel', 'injeção', 'injection'].some(kw => lowerName.includes(kw));
+
+            // Automatically convert fuel maps from likely microseconds to milliseconds if the equation is just 'X'.
+            // This is a common scenario in XDFs where the final unit conversion is left to the tuning software.
+            if (isFuelMap && def.equation.trim().toLowerCase() === 'x') {
+                const newDef = { ...def, name: newName, equation: '(X) / 1000' };
+                addLog(`Mapa de combustível "${newName}" detetado. A aplicar conversão automática de µs para ms.`, 'debug');
+                return newDef;
+            }
+
             return { ...def, name: newName };
         });
 
@@ -491,11 +503,11 @@ export default function EcuTuningAssistant() {
                     }
                 }
             } catch (error) {
-                addLog(`Erro ao analisar ${file.name}: ${(error as Error).message}`, 'error');
+                const msg = `Erro ao carregar ${file.name}: ${(error as Error).message}`;
+                addLog(msg, 'error');
                 if (type === 'xdf') {
                     setIsXdfErrorModalOpen(true);
                 } else {
-                    const msg = `Erro ao carregar ${file.name}: ${(error as Error).message}`;
                     toast({ variant: 'destructive', title: "Erro no Ficheiro", description: msg });
                 }
             }
@@ -524,7 +536,8 @@ export default function EcuTuningAssistant() {
             setActiveXdfBrand(xdfData.brand || '');
             addLog(`XDF "${name}" ${xdfData.brand ? `(Marca: ${xdfData.brand}) `: ''}carregado da biblioteca.`, 'success');
         } catch (error) {
-            addLog(`Erro ao carregar ${name} da biblioteca: ${(error as Error).message}`, 'error');
+            const msg = `Erro ao carregar ${name} da biblioteca: ${(error as Error).message}`;
+            addLog(msg, 'error');
             setIsXdfErrorModalOpen(true);
             setXdfFile(null);
         }
@@ -805,7 +818,7 @@ export default function EcuTuningAssistant() {
                     const change = Math.abs(displayValue) * (value / 100);
                     newValue = operation === 'add' ? displayValue + change : displayValue - change;
                 } else {
-                    newValue = operation === 'add' ? displayValue + value : displayValue - value;
+                    newValue = operation === 'add' ? displayValue + value : displayValue - change;
                 }
                 
                 newDisplayMap[r][c] = newValue;
