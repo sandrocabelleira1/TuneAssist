@@ -391,22 +391,7 @@ export default function EcuTuningAssistant() {
         const definedAddresses = new Set(validDefinitions.map(d => d.address));
         const uniquePotentials = previouslyFoundMaps.filter(pMap => !definedAddresses.has(pMap.address));
 
-        let combinedMaps = [...validDefinitions, ...uniquePotentials];
-
-        const INJECTION_TIME_FACTOR = 0.09165; 
-        combinedMaps = combinedMaps.map(def => {
-            const isFuelMap = ['comb', 'fuel', 'injeção', 'combustível'].some(kw => def.name.toLowerCase().includes(kw));
-            const isSimpleEquation = !def.equation.includes('*');
-
-            if (isFuelMap && isSimpleEquation) {
-                return {
-                    ...def,
-                    equation: `(${def.equation || 'X'}) * ${INJECTION_TIME_FACTOR}`,
-                };
-            }
-            return def;
-        });
-
+        const combinedMaps = [...validDefinitions, ...uniquePotentials];
 
         const finalMapNames = new Set<string>();
         const uniqueCombinedMaps = combinedMaps.map(def => {
@@ -827,7 +812,7 @@ export default function EcuTuningAssistant() {
                     const change = Math.abs(displayValue) * (value / 100);
                     newValue = operation === 'add' ? displayValue + change : displayValue - change;
                 } else {
-                    newValue = operation === 'add' ? displayValue + value : displayValue - value;
+                    newValue = operation === 'add' ? displayValue + value : displayValue - change;
                 }
                 
                 newDisplayMap[r][c] = newValue;
