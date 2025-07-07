@@ -209,13 +209,20 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
  * @returns The main math node, or null if not found.
  */
 function findMainMathNode(tableNode: Element, zAxisNode: Element, xAxisNode: Element | null, yAxisNode: Element | null): Element | null {
-    // Priority 1: A <math> node inside the Z-axis definition itself. This is the most specific.
-    const zMath = findNode(zAxisNode, 'math', 'MATH');
+    // Priority 1: A <math> node that is a DIRECT child of the Z-axis definition. This is the most specific.
+    const zMath = findDirectChild(zAxisNode, 'math', 'MATH');
     if (zMath) {
         return zMath;
     }
 
-    // Priority 2: Find all math nodes in the table, and exclude any that are descendants of the X or Y axes.
+    // Priority 2: A <math> node that is a DIRECT child of the TABLE definition.
+    // This is a common pattern in some XDFs.
+    const tableMath = findDirectChild(tableNode, 'math', 'MATH');
+    if (tableMath) {
+        return tableMath;
+    }
+    
+    // Fallback: Find all math nodes in the table, and exclude any that are descendants of the X or Y axes.
     const allMathNodes = Array.from(tableNode.getElementsByTagName('math'));
 
     for (const mathNode of allMathNodes) {
@@ -234,7 +241,7 @@ function findMainMathNode(tableNode: Element, zAxisNode: Element, xAxisNode: Ele
         }
     }
     
-    // Fallback: If no other math node is found, there might not be one.
+    // If no other math node is found, there might not be one.
     return null;
 }
 

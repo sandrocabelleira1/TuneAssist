@@ -1453,6 +1453,10 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentDefinition }: {
     const yAxisLabel = currentDefinition.yAxisDef?.label || 'Eixo Y';
     const xAxisLabel = currentDefinition.xAxisDef?.label || 'Eixo X';
 
+    const handleConfirm = () => {
+        onConfirm({ yEquation, xEquation, zEquation });
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
@@ -1478,7 +1482,7 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentDefinition }: {
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button onClick={() => onConfirm({ yEquation, xEquation, zEquation })}>Aplicar e Recalcular</Button>
+                    <Button onClick={handleConfirm}>Aplicar e Recalcular</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -1620,7 +1624,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 xAxis={suggestion.originalAxes.x}
                                 yAxis={suggestion.originalAxes.y}
                                 xAxisLabel={suggestion.originalAxes.xLabel}
-                                yAxisLabel={suggestion.originalAxes.yLabel}
+                                yLabel={suggestion.originalAxes.yLabel}
                                 isEditable={false}
                                 onSortAxis={() => {}}
                                 onSortByFirstColumn={() => {}}
@@ -1639,7 +1643,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                     xAxis={preview.axes.x}
                                     yAxis={preview.axes.y}
                                     xAxisLabel={preview.axes.xLabel}
-                                    yAxisLabel={preview.axes.yLabel}
+                                    yLabel={preview.axes.yLabel}
                                     isEditable={false}
                                     onSortAxis={() => {}}
                                     onSortByFirstColumn={() => {}}
@@ -1772,5 +1776,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-    
