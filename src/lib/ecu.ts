@@ -406,10 +406,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
 
   let equationFunc: Function;
   try {
-      equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
+    equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
-      console.error(`Equação de eixo inválida "${axisDef.equation}" para "${axisDef.label}": ${e}. A utilizar valores "crus".`);
-      equationFunc = (X: number) => X;
+    const error = e instanceof Error ? e.message : String(e);
+    throw new Error(`A equação do eixo "${axisDef.equation}" para "${axisDef.label}" é inválida. (${error})`);
   }
   
   const axisData: (number | string)[] = [];
@@ -476,8 +476,8 @@ export function readMapFromBin(
   try {
     equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
-    console.error(`Equação de mapa inválida "${def.equation}" (sanitizada para "${sanitizedEquation}") para "${def.name}": ${e}. A utilizar valores "crus".`);
-    equationFunc = (X: number) => X;
+    const error = e instanceof Error ? e.message : String(e);
+    throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
@@ -578,8 +578,8 @@ function invertEquation(
   try {
     equationFunc = new Function('X', `return ${sanitizedEquation}`) as (x: number) => number;
   } catch (e) {
-    console.error(`Equação inválida para inversão: "${eq}". A assumir 'X'.`);
-    equationFunc = (X: number) => X;
+    const error = e instanceof Error ? e.message : String(e);
+    throw new Error(`A equação para inversão "${eq}" é inválida. (${error})`);
   }
 
   // 2. Set up the search range based on data size and map type.
