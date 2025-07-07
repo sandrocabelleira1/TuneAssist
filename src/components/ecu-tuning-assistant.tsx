@@ -247,14 +247,15 @@ export default function EcuTuningAssistant() {
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
     const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
+    const [displayIndexMap, setDisplayIndexMap] = useState<{ x: number[], y: number[] } | null>(null);
     const [mapRenderKey, setMapRenderKey] = useState(0);
 
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [potentialMapsDb, setPotentialMapsDb] = useState<Record<string, XDFDefinition[]>>({});
     const [selectedXdfFromLibrary, setSelectedXdfFromLibrary] = useState<string>('');
     const [selectedBrandForNewXdf, setSelectedBrandForNewXdf] = useState<string>('Yamaha');
-    const [motorcycleModel, setMotorcycleModel] = useState<string>('R3');
-    const [activeXdfBrand, setActiveXdfBrand] = useState<string>('');
+    const [motorcycleModel, setMotorcycleModel] = useState('R3');
+    const [activeXdfBrand, setActiveXdfBrand] = useState('');
 
     // Quick Edit & Selection State
     const [quickEditValue, setQuickEditValue] = useState('');
@@ -438,6 +439,7 @@ export default function EcuTuningAssistant() {
         setRawMap(null); setWorkingMap(null); setSourceAxes(null);
         setDisplayMap(null); setDisplayAxes(null);
         setOriginalSortOrder(null);
+        setDisplayIndexMap(null);
         setIsValidatingMap(false);
         setAiSuggestion(null);
         setAnalysisResult(null);
@@ -588,6 +590,10 @@ export default function EcuTuningAssistant() {
               x: mapAxes.x.map((value, index) => ({ value, index })),
               y: mapAxes.y.map((value, index) => ({ value, index })),
             });
+            setDisplayIndexMap({
+              x: mapAxes.x.map((_, i) => i),
+              y: mapAxes.y.map((_, i) => i),
+            });
             
             setMapRenderKey(p => p + 1);
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
@@ -655,6 +661,10 @@ export default function EcuTuningAssistant() {
               x: newX.map((value, index) => ({ value, index })),
               y: newY.map((value, index) => ({ value, index })),
             });
+            setDisplayIndexMap({
+              x: newX.map((_, i) => i),
+              y: newY.map((_, i) => i),
+            });
             
             setMapRenderKey(p => p + 1);
             setIsAxesModalOpen(false);
@@ -686,8 +696,10 @@ export default function EcuTuningAssistant() {
 
         if (axis === 'y') { // Sorting rows
             newSortedMap = newIndexMap.map(originalRowIndex => workingMap[originalRowIndex]);
+            setDisplayIndexMap(prev => ({ ...(prev!), y: newIndexMap }));
         } else { // Sorting columns
             newSortedMap = workingMap.map(row => newIndexMap.map(originalColIndex => row[originalColIndex]));
+            setDisplayIndexMap(prev => ({ ...(prev!), x: newIndexMap }));
         }
 
         setDisplayAxes(prev => ({
@@ -720,12 +732,14 @@ export default function EcuTuningAssistant() {
 
         const newSortedMap = sortable.map(item => workingMap[item.index]);
         const newSortedYAxis = sortable.map(item => sourceAxes.y[item.index]);
+        const newYIndexMap = sortable.map(item => item.index);
         
         setDisplayMap(newSortedMap);
         setDisplayAxes(prev => ({
             ...(prev!),
             y: newSortedYAxis,
         }));
+        setDisplayIndexMap(prev => ({...(prev!), y: newYIndexMap }));
         setSelectedCells(new Set());
         setMapRenderKey(p => p + 1);
         addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
@@ -735,6 +749,10 @@ export default function EcuTuningAssistant() {
         if (workingMap && sourceAxes) {
             setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
             setDisplayAxes(JSON.parse(JSON.stringify(sourceAxes)));
+            setDisplayIndexMap({
+              x: sourceAxes.x.map((_, i) => i),
+              y: sourceAxes.y.map((_, i) => i),
+            });
             setSelectedCells(new Set());
             setMapRenderKey(p => p + 1);
             addLog('Ordenação do mapa revertida para o original.', 'info');
@@ -742,7 +760,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleCellChange = (rowIndex: number, colIndex: number, value: string) => {
-      if (!workingMap || !displayMap) return;
+      if (!workingMap || !displayMap || !displayIndexMap) return;
 
       const newValue = parseFloat(value);
       if (isNaN(newValue)) {
@@ -751,16 +769,10 @@ export default function EcuTuningAssistant() {
         return;
       }
       
-      if (!displayAxes || !sourceAxes) return;
+      const workingRowIndex = displayIndexMap.y[rowIndex];
+      const workingColIndex = displayIndexMap.x[colIndex];
 
-      // Map display indices back to original indices
-      const displayRowValue = displayAxes.y[rowIndex];
-      const displayColValue = displayAxes.x[colIndex];
-      
-      const workingRowIndex = sourceAxes.y.findIndex(v => v === displayRowValue);
-      const workingColIndex = sourceAxes.x.findIndex(v => v === displayColValue);
-
-      if (workingRowIndex !== -1 && workingColIndex !== -1) {
+      if (workingRowIndex !== undefined && workingColIndex !== undefined) {
         // Update the source-of-truth map (workingMap)
         const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
         newWorkingMap[workingRowIndex][workingColIndex] = newValue;
@@ -805,6 +817,7 @@ export default function EcuTuningAssistant() {
         } else {
             newSelection.clear();
             newSelection.add(key);
+            
         }
         setSelectedCells(newSelection);
     }, [selectedCells]);
@@ -812,7 +825,7 @@ export default function EcuTuningAssistant() {
 
     const handleQuickEdit = (operation: 'add' | 'subtract') => {
         const value = parseFloat(quickEditValue);
-        if (isNaN(value) || !workingMap || !rawMap || !displayMap || !displayAxes || !sourceAxes) {
+        if (isNaN(value) || !workingMap || !rawMap || !displayMap || !displayAxes || !sourceAxes || !displayIndexMap) {
             addLog("Valor de edição rápida inválido ou nenhum mapa carregado.", "error");
             return;
         }
@@ -839,12 +852,10 @@ export default function EcuTuningAssistant() {
                     continue;
                 }
 
-                const displayRowValue = displayAxes.y[r];
-                const displayColValue = displayAxes.x[c];
-                const workingRowIndex = sourceAxes.y.findIndex(v => v === displayRowValue);
-                const workingColIndex = sourceAxes.x.findIndex(v => v === displayColValue);
+                const workingRowIndex = displayIndexMap.y[r];
+                const workingColIndex = displayIndexMap.x[c];
 
-                if (workingRowIndex === -1 || workingColIndex === -1) continue;
+                if (workingRowIndex === undefined || workingColIndex === undefined) continue;
 
                 const currentCalculatedValue = newWorkingMap[workingRowIndex][workingColIndex];
                 if (currentCalculatedValue === null) continue;
@@ -1041,6 +1052,10 @@ export default function EcuTuningAssistant() {
             setOriginalSortOrder({
               x: newSourceAxes.x.map((value, index) => ({ value, index })),
               y: newSourceAxes.y.map((value, index) => ({ value, index })),
+            });
+            setDisplayIndexMap({
+              x: newSourceAxes.x.map((_, i) => i),
+              y: newSourceAxes.y.map((_, i) => i),
             });
             
             setMapRenderKey(p => p + 1);
@@ -1404,8 +1419,7 @@ export default function EcuTuningAssistant() {
                                                 </Button>
                                             </TooltipTrigger>
                                             <TooltipContent>
-                                                <p>Editar Nome do Mapa</p>
-                                            </TooltipContent>
+                                                <p>Editar Nome do Mapa</p></TooltipContent>
                                         </Tooltip>
                                     </div>
                                 </div>
