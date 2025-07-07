@@ -38,7 +38,7 @@ function EditableMapCell({ value: initialValue, rowIndex, colIndex, onCellChange
       return Math.round(val).toString();
     }
     // For decimal, show one decimal place only if it's not a whole number
-    return String(Number(val.toFixed(1)));
+    return String(Number(val.toFixed(3)));
   }, [valueFormat]);
     
   const [value, setValue] = useState(formatValue(initialValue));
@@ -121,6 +121,17 @@ function MapTable({
 
   const displayYAxis = xAxis; // Now displayed horizontally on top
   const displayXAxis = yAxis; // Now displayed vertically on the left
+  
+  const yAxisFormatter = (val: string | number) => {
+    if (typeof val !== 'number') return val;
+    return val.toFixed(1);
+  };
+  
+  const xAxisFormatter = (val: string | number) => {
+    if (typeof val !== 'number') return val;
+    return Math.round(val);
+  };
+
 
   return (
     <div className="overflow-auto relative h-full">
@@ -166,7 +177,7 @@ function MapTable({
             </th>
             {displayYAxis.map((y, i) => (
               <th key={`head-y-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
-                {typeof y === 'number' ? Math.round(y) : y}
+                {xAxisFormatter(y)}
               </th>
             ))}
           </tr>
@@ -175,7 +186,7 @@ function MapTable({
           {displayXAxis.map((x, xi) => (
             <tr key={`row-${xi}`}>
               <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">
-                {typeof x === 'number' ? x.toFixed(1) : x}
+                 {yAxisFormatter(x)}
               </td>
               {displayYAxis.map((_y, yi) => {
                 const cell = transposedData[yi]?.[xi];
@@ -269,26 +280,19 @@ export default function EcuTuningAssistant() {
         
         const lowerCaseName = selectedMapName.toLowerCase();
         
-        // Rule 1: Explicit ignition maps are ALWAYS decimal.
-        const ignitionKeywords = ['ignição', 'ignition', 'avanço', 'spark', 'timing'];
-        if (ignitionKeywords.some(keyword => lowerCaseName.includes(keyword))) {
+        // Rule 1: Ignition and fuel maps are ALWAYS decimal.
+        const decimalKeywords = ['ignição', 'ignition', 'avanço', 'spark', 'timing', 'comb', 'fuel', 'injeção'];
+        if (decimalKeywords.some(keyword => lowerCaseName.includes(keyword))) {
             return 'decimal';
         }
 
-        // Rule 2: Explicit injection-related maps are usually integer.
-        // We REMOVED 'map' from this list to avoid ambiguity.
-        const injectionKeywords = ['tps', 'injeção', 'injection', 'injector', 'combustível', 'fuel', 've', 'etv', 'borboleta'];
-        if (injectionKeywords.some(keyword => lowerCaseName.includes(keyword))) {
+        // Rule 2: ETV, TPS, MAP are usually integer.
+        const integerKeywords = ['tps', 'map', 've', 'etv', 'borboleta'];
+        if (integerKeywords.some(keyword => lowerCaseName.includes(keyword))) {
             return 'integer';
         }
 
-        // Rule 3: Handle the ambiguous 'map' keyword. If it wasn't flagged as ignition by Rule 1,
-        // we can more safely assume it refers to a Manifold Absolute Pressure (load) map, which is integer.
-        if (lowerCaseName.includes('map')) {
-            return 'integer';
-        }
-
-        // Rule 4: Default to decimal for any other unknown map types.
+        // Rule 3: Default to decimal for any other unknown map types.
         return 'decimal';
     }, [selectedMapName]);
 
@@ -384,8 +388,8 @@ export default function EcuTuningAssistant() {
         let combinedMaps = [...validDefinitions, ...uniquePotentials];
 
         // --- HEURISTIC TO AUTOMATICALLY CONVERT FUEL MAPS ---
-        // Automatically converts simple VE maps to injection time for display
-        const INJECTION_TIME_FACTOR = 91.65; // Specific to Yamaha R3 as discussed
+        // Converts simple VE maps to injection time (in milliseconds) for display
+        const INJECTION_TIME_FACTOR = 0.09165; // Converts VE to ms for Yamaha R3
         combinedMaps = combinedMaps.map(def => {
             const isFuelMap = ['comb', 'fuel', 'injeção', 'combustível'].some(kw => def.name.toLowerCase().includes(kw));
             // A simple equation is one that doesn't already seem to be a final conversion (e.g., doesn't contain multiplication)
@@ -1669,7 +1673,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                     xAxis={preview.axes.x}
                                     yAxis={preview.axes.y}
                                     xAxisLabel={preview.axes.xLabel}
-                                    yAxisLabel={preview.axes.yLabel}
+                                    yLabel={preview.axes.yLabel}
                                     mapName={suggestion.newDefinition.name}
                                     isEditable={false}
                                     onSortAxis={() => {}}
