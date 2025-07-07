@@ -401,11 +401,11 @@ export default function EcuTuningAssistant() {
             const lowerName = newName.toLowerCase();
             const isFuelMap = ['comb', 'fuel', 'injeção', 'injection'].some(kw => lowerName.includes(kw));
 
-            // Automatically convert fuel maps from likely microseconds to milliseconds if the equation is just 'X'.
+            // Automatically convert 16-bit fuel maps from likely microseconds to milliseconds if the equation is just 'X'.
             // This is a common scenario in XDFs where the final unit conversion is left to the tuning software.
-            if (isFuelMap && def.equation.trim().toLowerCase() === 'x') {
+            if (isFuelMap && def.equation.trim().toLowerCase() === 'x' && def.dataSize === 2) {
                 const newDef = { ...def, name: newName, equation: '(X) / 1000' };
-                addLog(`Mapa de combustível "${newName}" detetado. A aplicar conversão automática de µs para ms.`, 'debug');
+                addLog(`Mapa de combustível de 16-bit "${newName}" detetado. A aplicar conversão automática de µs para ms.`, 'debug');
                 return newDef;
             }
 
