@@ -747,12 +747,13 @@ export default function EcuTuningAssistant() {
       const newValue = parseFloat(value);
       if (isNaN(newValue)) {
         addLog(`Valor inválido introduzido: "${value}". Apenas números são permitidos.`, 'error');
-        setMapRenderKey(p => p + 1);
+        setMapRenderKey(p => p + 1); // Rerender to show original value
         return;
       }
       
       if (!displayAxes || !sourceAxes) return;
 
+      // Map display indices back to original indices
       const displayRowValue = displayAxes.y[rowIndex];
       const displayColValue = displayAxes.x[colIndex];
       
@@ -760,15 +761,18 @@ export default function EcuTuningAssistant() {
       const workingColIndex = sourceAxes.x.findIndex(v => v === displayColValue);
 
       if (workingRowIndex !== -1 && workingColIndex !== -1) {
+        // Update the source-of-truth map (workingMap)
         const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
         newWorkingMap[workingRowIndex][workingColIndex] = newValue;
         setWorkingMap(newWorkingMap);
 
+        // Update the display map to reflect the change immediately
         const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
         newDisplayMap[rowIndex][colIndex] = newValue;
         setDisplayMap(newDisplayMap);
         setAudioUrl(null);
         
+        // Update the underlying raw value
         if (rawMap) {
             const currentDef = availableMaps.find(d => d.name === selectedMapName);
             if (currentDef) {
