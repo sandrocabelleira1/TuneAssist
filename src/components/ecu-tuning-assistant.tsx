@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder } from '@/lib/types';
-import { parseXDF, readMapFromBin, readAxisFromBin, generateChecksum, bufferToHex, writeMapToBin } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBin, readAxisFromBin, generateChecksum, bufferToHex, writeMapToBin, invertEquation } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps, explainMap, generateSpeech } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
@@ -241,6 +241,7 @@ export default function EcuTuningAssistant() {
     const [selectedMapName, setSelectedMapName] = useState<string>('');
 
     // State for map data. "working" is the editable source of truth, "display" is for rendering (can be sorted)
+    const [rawMap, setRawMap] = useState<MapData | null>(null);
     const [workingMap, setWorkingMap] = useState<MapData | null>(null);
     const [sourceAxes, setSourceAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
@@ -401,9 +402,7 @@ export default function EcuTuningAssistant() {
             const lowerName = newName.toLowerCase();
             const isFuelMap = ['comb', 'fuel', 'injeção', 'injection'].some(kw => lowerName.includes(kw));
 
-            // Automatically convert 16-bit fuel maps from likely microseconds to milliseconds if the equation is just 'X'.
-            // This is a common scenario in XDFs where the final unit conversion is left to the tuning software.
-            if (isFuelMap && def.equation.trim().toLowerCase() === 'x' && def.dataSize === 2) {
+            if (isFuelMap && def.dataSize === 2 && def.equation.trim().toLowerCase() === 'x') {
                 const newDef = { ...def, name: newName, equation: '(X) / 1000' };
                 addLog(`Mapa de combustível de 16-bit "${newName}" detetado. A aplicar conversão automática de µs para ms.`, 'debug');
                 return newDef;
@@ -436,7 +435,7 @@ export default function EcuTuningAssistant() {
 
     const resetState = () => {
         setBinFile(null); setXdfFile(null); setSelectedMapName('');
-        setWorkingMap(null); setSourceAxes(null);
+        setRawMap(null); setWorkingMap(null); setSourceAxes(null);
         setDisplayMap(null); setDisplayAxes(null);
         setOriginalSortOrder(null);
         setIsValidatingMap(false);
@@ -468,6 +467,7 @@ export default function EcuTuningAssistant() {
                     setSelectedMapName('');
                     setDisplayMap(null);
                     setDisplayAxes(null);
+                    setRawMap(null);
                     setAvailableMaps([]);
                     setAudioUrl(null);
                     setSelectedCells(new Set());
@@ -528,7 +528,7 @@ export default function EcuTuningAssistant() {
             const definitions = parseXDF(xdfData.content);
             if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
             
-            setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null); setAudioUrl(null);
+            setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
             setSelectedCells(new Set());
 
             setXdfFile({ name, definitions });
@@ -570,7 +570,7 @@ export default function EcuTuningAssistant() {
         try {
             const tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef);
             const tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef);
-            const map = readMapFromBin(binFile.buffer, definition, tempEixoX, tempEixoY);
+            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, tempEixoX, tempEixoY);
 
             const mapAxes = {
               x: tempEixoX,
@@ -579,8 +579,9 @@ export default function EcuTuningAssistant() {
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
             
-            setWorkingMap(map);
-            setDisplayMap(JSON.parse(JSON.stringify(map)));
+            setWorkingMap(calculatedMap);
+            setRawMap(newRawMap);
+            setDisplayMap(JSON.parse(JSON.stringify(calculatedMap)));
             setSourceAxes(mapAxes);
             setDisplayAxes(mapAxes);
             setOriginalSortOrder({
@@ -615,7 +616,7 @@ export default function EcuTuningAssistant() {
 
             const newX = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
             const newY = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-            const newMapData = readMapFromBin(binFile.buffer, newDefinition, newX, newY);
+            const { calculatedMap: newMapData, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, newX, newY);
 
             const newAxesState = {
               x: newX,
@@ -643,6 +644,7 @@ export default function EcuTuningAssistant() {
             }
 
             setWorkingMap(newMapData);
+            setRawMap(newRawMap);
             setDisplayMap(newMapData);
             setSourceAxes(newAxesState);
             setDisplayAxes(newAxesState);
@@ -765,6 +767,21 @@ export default function EcuTuningAssistant() {
         newDisplayMap[rowIndex][colIndex] = newValue;
         setDisplayMap(newDisplayMap);
         setAudioUrl(null);
+        
+        if (rawMap) {
+            const currentDef = availableMaps.find(d => d.name === selectedMapName);
+            if (currentDef) {
+                try {
+                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name);
+                    const newRawMap = JSON.parse(JSON.stringify(rawMap));
+                    newRawMap[workingRowIndex][workingColIndex] = newRawValue;
+                    setRawMap(newRawMap);
+                } catch (e) {
+                    addLog(`Não foi possível calcular o valor raw para a célula [${rowIndex}, ${colIndex}].`, 'error');
+                }
+            }
+        }
+
       } else {
         addLog('Não foi possível atualizar o valor: célula correspondente não encontrada após a ordenação.', 'error');
       }
@@ -790,12 +807,34 @@ export default function EcuTuningAssistant() {
 
     const handleQuickEdit = (operation: 'add' | 'subtract') => {
         const value = parseFloat(quickEditValue);
-        if (isNaN(value) || !workingMap || !displayMap || !displayAxes || !sourceAxes) {
+        if (isNaN(value) || !workingMap || !rawMap || !displayMap || !displayAxes || !sourceAxes) {
             addLog("Valor de edição rápida inválido ou nenhum mapa carregado.", "error");
             return;
         }
 
+        const currentDef = availableMaps.find(d => d.name === selectedMapName);
+        if (!currentDef) {
+            addLog("Definição de mapa não encontrada para edição rápida.", "error");
+            return;
+        }
+
+        let equationFunc: Function;
+        try {
+            const sanitizedEquation = (currentDef.equation || 'X')
+                .replace(/,/g, '.')
+                .replace(/\s*\r?\n\s*/g, ' ')
+                .replace(/\b(x|value)\b/gi, 'X')
+                .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
+                .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
+                .replace(/(X)(\d)/gi, 'X * $2');
+            equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
+        } catch (e) {
+            addLog(`A equação do mapa "${currentDef.equation}" é inválida. Não é possível fazer a edição rápida.`, 'error');
+            return;
+        }
+
         const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
+        const newRawMap = JSON.parse(JSON.stringify(rawMap));
         const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
         let changesMade = 0;
         const hasSelection = selectedCells.size > 0;
@@ -810,33 +849,40 @@ export default function EcuTuningAssistant() {
                     continue;
                 }
 
-                const displayValue = newDisplayMap[r][c];
-                if (displayValue === null) continue;
-
-                let newValue: number;
-                if (quickEditType === 'percent') {
-                    const change = Math.abs(displayValue) * (value / 100);
-                    newValue = operation === 'add' ? displayValue + change : displayValue - change;
-                } else {
-                    newValue = operation === 'add' ? displayValue + value : displayValue - change;
-                }
-                
-                newDisplayMap[r][c] = newValue;
-
                 const displayRowValue = displayAxes.y[r];
                 const displayColValue = displayAxes.x[c];
                 const workingRowIndex = sourceAxes.y.findIndex(v => v === displayRowValue);
                 const workingColIndex = sourceAxes.x.findIndex(v => v === displayColValue);
 
-                if (workingRowIndex !== -1 && workingColIndex !== -1) {
-                    newWorkingMap[workingRowIndex][workingColIndex] = newValue;
+                if (workingRowIndex === -1 || workingColIndex === -1) continue;
+
+                const rawValue = newRawMap[workingRowIndex][workingColIndex];
+                if (rawValue === null) continue;
+                
+                let newRawValue: number;
+
+                if (quickEditType === 'percent') {
+                    const changeRatio = 1 + (value / 100) * (operation === 'add' ? 1 : -1);
+                    newRawValue = rawValue * changeRatio;
+                } else { // 'unit' means raw units
+                    const changeAmount = value * (operation === 'add' ? 1 : -1);
+                    newRawValue = rawValue + changeAmount;
                 }
+                
+                const xVal = (c < sourceAxes.x.length && typeof sourceAxes.x[c] === 'number') ? sourceAxes.x[c] : 0;
+                const yVal = (r < sourceAxes.y.length && typeof sourceAxes.y[r] === 'number') ? sourceAxes.y[r] : 0;
+                const newCalculatedValue = equationFunc(newRawValue, xVal, yVal, 0);
+
+                newRawMap[workingRowIndex][workingColIndex] = newRawValue;
+                newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
+                newDisplayMap[r][c] = newCalculatedValue;
                 changesMade++;
             }
         }
 
         if (changesMade > 0) {
             setWorkingMap(newWorkingMap);
+            setRawMap(newRawMap);
             setDisplayMap(newDisplayMap);
             setAudioUrl(null);
             
@@ -899,7 +945,7 @@ export default function EcuTuningAssistant() {
                 try {
                     const correctedXAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
                     const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-                    const correctedMapPreview = readMapFromBin(binFile.buffer, newDefinition, correctedXAxisPreview, correctedYAxisPreview);
+                    const { calculatedMap: correctedMapPreview } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxisPreview, correctedYAxisPreview);
                     const correctedAxesPreview = {
                         x: correctedXAxisPreview,
                         y: correctedYAxisPreview,
@@ -961,7 +1007,7 @@ export default function EcuTuningAssistant() {
         try {
             const correctedXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
             const correctedYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-            const correctedMap = readMapFromBin(binFile.buffer, newDefinition, correctedXAxis, correctedYAxis);
+            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxis, correctedYAxis);
             const newSourceAxes = {
                 x: correctedXAxis,
                 y: correctedYAxis,
@@ -986,6 +1032,7 @@ export default function EcuTuningAssistant() {
             }
 
             setWorkingMap(correctedMap);
+            setRawMap(correctedRawMap);
             setDisplayMap(correctedMap);
             setSourceAxes(newSourceAxes);
             setDisplayAxes(newSourceAxes);
@@ -1093,7 +1140,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleSaveModifiedBin = () => {
-        if (!binFile || !workingMap || !selectedMapName) {
+        if (!binFile || !rawMap || !selectedMapName) {
             toast({ variant: 'destructive', title: 'Erro', description: 'Nenhum ficheiro BIN ou mapa carregado para guardar.' });
             return;
         }
@@ -1106,7 +1153,7 @@ export default function EcuTuningAssistant() {
         addLog('A iniciar a modificação do ficheiro BIN...', 'info');
 
         try {
-            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, workingMap);
+            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, rawMap);
             const newChecksum = generateChecksum(modifiedBuffer);
             
             addLog(`Modificação concluída. Novo checksum: ${newChecksum}`, 'success');
@@ -1244,6 +1291,13 @@ export default function EcuTuningAssistant() {
             audioRef.current.play().catch(e => console.error("Erro ao reproduzir áudio:", e));
         }
     }, [audioUrl]);
+
+    useEffect(() => {
+        const logContainer = document.getElementById('log-container');
+        if (logContainer) {
+            // logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    }, [logs]);
 
 
     return (
@@ -1394,7 +1448,7 @@ export default function EcuTuningAssistant() {
                                             <Switch id="debugMode" checked={debugMode} onCheckedChange={setDebugMode} />
                                         </div>
                                     </div>
-                                    <ScrollArea className="h-40 w-full rounded-md border p-2 font-mono text-xs">
+                                    <ScrollArea id="log-container" className="h-40 w-full rounded-md border p-2 font-mono text-xs">
                                         {visibleLogs.map(log => (
                                             <div key={log.id} className="flex items-start gap-2">
                                                 <span className="text-muted-foreground shrink-0">{log.timestamp}</span>
@@ -1681,7 +1735,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
             
             const correctedXAxis = readAxisFromBin(binBuffer, tempDefinition.xAxisDef);
             const correctedYAxis = readAxisFromBin(binBuffer, tempDefinition.yAxisDef);
-            const correctedMap = readMapFromBin(binBuffer, tempDefinition, correctedXAxis, correctedYAxis);
+            const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binBuffer, tempDefinition, correctedXAxis, correctedYAxis);
 
             setPreview({
                 map: correctedMap,

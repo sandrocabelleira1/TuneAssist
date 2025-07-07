@@ -454,29 +454,26 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
 }
 
 
-export function readMapFromBin(
+export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
     xAxis: (number | string)[],
     yAxis: (number | string)[]
-): MapData {
-  if (!def || !binBuffer) return [];
+): { calculatedMap: MapData, rawMap: MapData } {
+  if (!def || !binBuffer) return { calculatedMap: [], rawMap: [] };
 
   const view = new DataView(binBuffer);
-  const map: MapData = [];
+  const calculatedMap: MapData = [];
+  const rawMap: MapData = [];
   
-  // Logic to determine if this is a map that can contain signed values (like ignition timing).
   const isPotentiallySignedMap = ['ignição', 'ignition', 'avanço', 'spark', 'timing'].some(kw => def.name.toLowerCase().includes(kw));
 
   const sanitizedEquation = (def.equation || 'X')
       .replace(/,/g, '.')
-      .replace(/\s*\r?\n\s*/g, ' ') // Replace newlines and surrounding whitespace with a single space
-      .replace(/\b(x|value)\b/gi, 'X') // Standardize variable to 'X'
-      // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)`
+      .replace(/\s*\r?\n\s*/g, ' ')
+      .replace(/\b(x|value)\b/gi, 'X')
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
-      // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
-      // Add implicit multiplication, e.g., X100 -> X * 100
       .replace(/(X)(\d)/gi, 'X * $2');
 
   let equationFunc: Function;
@@ -492,48 +489,51 @@ export function readMapFromBin(
 
 
   for (let r = 0; r < def.rows; r++) {
-    const row: (number|null)[] = [];
+    const calculatedRow: (number|null)[] = [];
+    const rawRow: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
       const offset = def.address + (r * majorStride) + (c * minorStride);
       if (offset + def.dataSize > view.byteLength) {
         console.error(`Leitura do mapa fora dos limites para "${def.name}". Offset: ${offset}`);
-        row.push(null);
+        calculatedRow.push(null);
+        rawRow.push(null);
         continue;
       }
       
       let rawValue;
       if (def.dataSize === 1) {
-          // For 8-bit, check if ignition maps can be signed. This is less common and often handled by an offset in the equation itself.
-          // Sticking to unsigned for 8-bit is a safer default.
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          // For 16-bit values, ignition maps are frequently signed.
           if (isPotentiallySignedMap) {
               rawValue = view.getInt16(offset, !def.isBigEndian);
           } else {
               rawValue = view.getUint16(offset, !def.isBigEndian);
           }
       } else {
-          row.push(null);
+          calculatedRow.push(null);
+          rawRow.push(null);
           continue;
       }
+      
+      rawRow.push(rawValue);
 
       try {
         const xVal = (c < xAxis.length && typeof xAxis[c] === 'number') ? xAxis[c] : 0;
         const yVal = (r < yAxis.length && typeof yAxis[r] === 'number') ? yAxis[r] : 0;
         
         const calculatedValue = equationFunc(rawValue, xVal, yVal, 0);
-        row.push(calculatedValue);
+        calculatedRow.push(calculatedValue);
 
       } catch(e) {
           const errorMessage = e instanceof Error ? e.message : String(e);
           console.error(`Erro ao aplicar equação "${sanitizedEquation}" na célula [${r},${c}] do mapa "${def.name}": ${errorMessage}. A utilizar o valor "cru".`);
-          row.push(rawValue);
+          calculatedRow.push(rawValue);
       }
     }
-    map.push(row);
+    calculatedMap.push(calculatedRow);
+    rawMap.push(rawRow);
   }
-  return map;
+  return { calculatedMap, rawMap };
 }
 
 export function generateChecksum(buffer: ArrayBuffer): string {
@@ -561,7 +561,7 @@ export function bufferToHex(buffer: ArrayBuffer): string {
  * @param mapName The name of the map, used to infer if the data is signed.
  * @returns The calculated raw integer value.
  */
-function invertEquation(
+export function invertEquation(
   eq: string,
   eqVar: string,
   finalValue: number,
@@ -649,9 +649,9 @@ function invertEquation(
 export function writeMapToBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-    mapData: MapData
+    rawMapData: MapData
 ): ArrayBuffer {
-    if (!def || !binBuffer || !mapData) {
+    if (!def || !binBuffer || !rawMapData) {
         throw new Error('Parâmetros inválidos fornecidos para writeMapToBin.');
     }
 
@@ -665,13 +665,12 @@ export function writeMapToBin(
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
-            const finalValue = mapData[r][c];
-            if (finalValue === null) {
+            const rawValue = rawMapData[r][c];
+            if (rawValue === null) {
                 continue;
             }
 
             try {
-                const rawValue = invertEquation(def.equation, def.equationVar, finalValue, def.dataSize, def.name);
                 const intValue = Math.round(rawValue);
                 const offset = def.address + (r * majorStride) + (c * minorStride);
 
