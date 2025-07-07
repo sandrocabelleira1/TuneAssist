@@ -281,7 +281,6 @@ export default function EcuTuningAssistant() {
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
-    const logEndRef = useRef<HTMLDivElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     const valueFormat = useMemo<'integer' | 'decimal'>(() => {
@@ -316,12 +315,6 @@ export default function EcuTuningAssistant() {
     const visibleLogs = useMemo(() => {
         return debugMode ? logs : logs.filter(log => log.type !== 'debug');
     }, [logs, debugMode]);
-
-    useEffect(() => {
-        setTimeout(() => {
-            logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-    }, [visibleLogs]);
 
 
     // Load custom data from localStorage on component mount
@@ -812,7 +805,7 @@ export default function EcuTuningAssistant() {
                     const change = Math.abs(displayValue) * (value / 100);
                     newValue = operation === 'add' ? displayValue + change : displayValue - change;
                 } else {
-                    newValue = operation === 'add' ? displayValue + value : displayValue - change;
+                    newValue = operation === 'add' ? displayValue + value : displayValue - value;
                 }
                 
                 newDisplayMap[r][c] = newValue;
@@ -1399,7 +1392,6 @@ export default function EcuTuningAssistant() {
                                                 })}>{log.message}</span>
                                             </div>
                                         ))}
-                                        <div ref={logEndRef} />
                                     </ScrollArea>
                                 </div>
                             </CardContent>
