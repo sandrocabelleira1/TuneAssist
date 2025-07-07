@@ -83,6 +83,7 @@ function MapTable({
   yAxis,
   xAxisLabel,
   yAxisLabel,
+  mapName,
   onSortAxis,
   onSortByFirstColumn,
   onResetSort,
@@ -95,6 +96,7 @@ function MapTable({
   yAxis: (string | number)[];
   xAxisLabel: string;
   yAxisLabel: string;
+  mapName: string;
   onSortAxis: (axis: 'x' | 'y') => void;
   onSortByFirstColumn: () => void;
   onResetSort: () => void;
@@ -128,6 +130,7 @@ function MapTable({
             <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-muted-foreground text-left min-w-[120px]">
               <div className="flex justify-between items-start">
                   <div>
+                      <div className="font-semibold text-xs">Valores (Z): <span className="font-normal text-foreground">{mapName}</span></div>
                       <div className="font-semibold text-xs">Vertical (Y): <span className="font-normal text-foreground">{yAxisLabel}</span></div>
                       <div className="font-semibold text-xs">Horizontal (X): <span className="font-normal text-foreground">{xAxisLabel}</span></div>
                   </div>
@@ -1354,6 +1357,7 @@ export default function EcuTuningAssistant() {
                                                 yAxis={displayAxes.y} 
                                                 xAxisLabel={displayAxes.xLabel} 
                                                 yAxisLabel={displayAxes.yLabel}
+                                                mapName={selectedMapName}
                                                 onSortAxis={handleSortAxis}
                                                 onSortByFirstColumn={handleSortByFirstColumn}
                                                 onResetSort={handleResetSort}
@@ -1626,6 +1630,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 yAxis={suggestion.originalAxes.y}
                                 xAxisLabel={suggestion.originalAxes.xLabel}
                                 yLabel={suggestion.originalAxes.yLabel}
+                                mapName={suggestion.originalDefinition.name}
                                 isEditable={false}
                                 onSortAxis={() => {}}
                                 onSortByFirstColumn={() => {}}
@@ -1645,6 +1650,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                     yAxis={preview.axes.y}
                                     xAxisLabel={preview.axes.xLabel}
                                     yAxisLabel={preview.axes.yLabel}
+                                    mapName={suggestion.newDefinition.name}
                                     isEditable={false}
                                     onSortAxis={() => {}}
                                     onSortByFirstColumn={() => {}}
