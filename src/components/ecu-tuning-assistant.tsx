@@ -381,7 +381,27 @@ export default function EcuTuningAssistant() {
         const definedAddresses = new Set(validDefinitions.map(d => d.address));
         const uniquePotentials = previouslyFoundMaps.filter(pMap => !definedAddresses.has(pMap.address));
 
-        const combinedMaps = [...validDefinitions, ...uniquePotentials];
+        let combinedMaps = [...validDefinitions, ...uniquePotentials];
+
+        // --- HEURISTIC TO AUTOMATICALLY CONVERT FUEL MAPS ---
+        // Automatically converts simple VE maps to injection time for display
+        const INJECTION_TIME_FACTOR = 91.65; // Specific to Yamaha R3 as discussed
+        combinedMaps = combinedMaps.map(def => {
+            const isFuelMap = ['comb', 'fuel', 'injeção', 'combustível'].some(kw => def.name.toLowerCase().includes(kw));
+            // A simple equation is one that doesn't already seem to be a final conversion (e.g., doesn't contain multiplication)
+            const isSimpleEquation = !def.equation.includes('*');
+
+            if (isFuelMap && isSimpleEquation) {
+                return {
+                    ...def,
+                    equation: `(${def.equation || 'X'}) * ${INJECTION_TIME_FACTOR}`,
+                };
+            }
+            return def;
+        });
+        // --- END HEURISTIC LOGIC ---
+
+
         const finalMapNames = new Set<string>();
         const uniqueCombinedMaps = combinedMaps.map(def => {
             let newName = def.name;
