@@ -1452,6 +1452,7 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentDefinition }: {
 
     const yAxisLabel = currentDefinition.yAxisDef?.label || 'Eixo Y';
     const xAxisLabel = currentDefinition.xAxisDef?.label || 'Eixo X';
+    const zAxisLabel = currentDefinition.name || 'Dados Principais';
 
     const handleConfirm = () => {
         onConfirm({ yEquation, xEquation, zEquation });
@@ -1476,7 +1477,7 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentDefinition }: {
                         <Input id="xEquationText" value={xEquation} onChange={e => setXEquation(e.target.value)} />
                     </div>
                      <div className="space-y-2">
-                        <Label htmlFor="zEquationText">Equação dos Dados do Mapa (Eixo Z)</Label>
+                        <Label htmlFor="zEquationText">Equação dos Dados Principais ({zAxisLabel})</Label>
                         <Input id="zEquationText" value={zEquation} onChange={e => setZEquation(e.target.value)} />
                     </div>
                 </div>
@@ -1643,7 +1644,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                     xAxis={preview.axes.x}
                                     yAxis={preview.axes.y}
                                     xAxisLabel={preview.axes.xLabel}
-                                    yLabel={preview.axes.yLabel}
+                                    yAxisLabel={preview.axes.yLabel}
                                     isEditable={false}
                                     onSortAxis={() => {}}
                                     onSortByFirstColumn={() => {}}
