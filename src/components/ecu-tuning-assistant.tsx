@@ -611,6 +611,7 @@ export default function EcuTuningAssistant() {
         try {
             const newDefinition = JSON.parse(JSON.stringify(definition)) as XDFDefinition;
             newDefinition.equation = data.zEquation;
+            newDefinition.equationVar = 'X'; // Assume X for simplicity after manual edit
             newDefinition.xAxisDef!.equation = data.xEquation;
             newDefinition.yAxisDef!.equation = data.yEquation;
 
@@ -847,9 +848,15 @@ export default function EcuTuningAssistant() {
                 let newCalculatedValue: number;
 
                 if (quickEditType === 'percent') {
-                    const changeRatio = 1 + (value / 100) * (operation === 'add' ? 1 : -1);
+                    let effectiveOperation = (operation === 'add' ? 1 : -1);
+                    // If the value is negative, "adding" a percentage should make it less negative (increase its value).
+                    // So we flip the sign of the operation.
+                    if (currentCalculatedValue < 0) {
+                        effectiveOperation *= -1;
+                    }
+                    const changeRatio = 1 + (value / 100) * effectiveOperation;
                     newCalculatedValue = currentCalculatedValue * changeRatio;
-                } else { // 'unit' now means the displayed unit
+                } else { // 'unit'
                     const changeAmount = value * (operation === 'add' ? 1 : -1);
                     newCalculatedValue = currentCalculatedValue + changeAmount;
                 }
@@ -1284,7 +1291,7 @@ export default function EcuTuningAssistant() {
     useEffect(() => {
         const logContainer = document.getElementById('log-container');
         if (logContainer) {
-            // A rolagem automática foi removida por pedido do utilizador
+            // Auto-scrolling removed per user request
             // logContainer.scrollTop = logContainer.scrollHeight;
         }
     }, [logs]);
