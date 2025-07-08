@@ -803,7 +803,7 @@ export default function EcuTuningAssistant() {
           try {
               const xVal = (displayAxes.x[colIndex] as number) || 0;
               const yVal = (displayAxes.y[rowIndex] as number) || 0;
-              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name, { x: xVal, y: yVal, z: 0 });
+              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name, { x: xVal, y: yVal, z: 0 }, { x: displayAxes.xLabel, y: displayAxes.yLabel });
               const newRawMap = JSON.parse(JSON.stringify(rawMap));
               newRawMap[workingRowIndex][workingColIndex] = newRawValue;
               setRawMap(newRawMap);
@@ -888,7 +888,7 @@ export default function EcuTuningAssistant() {
                 try {
                     const xVal = (displayAxes.x[c] as number) || 0;
                     const yVal = (displayAxes.y[r] as number) || 0;
-                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.name, { x: xVal, y: yVal, z: 0 });
+                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.name, { x: xVal, y: yVal, z: 0 }, { x: displayAxes.xLabel, y: displayAxes.yLabel });
 
                     newRawMap[workingRowIndex][workingColIndex] = newRawValue;
                     newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;

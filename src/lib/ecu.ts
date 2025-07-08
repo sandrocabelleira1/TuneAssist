@@ -449,10 +449,21 @@ export function readAndCalculateMapFromBin(
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
       .replace(/(X)(\d)/gi, 'X * $2');
+      
+  let finalEquation = sanitizedEquation;
+  if (def.yAxisDef?.label) {
+      const yLabelVar = def.yAxisDef.label.replace(/[^a-zA-Z0-9_]/g, '');
+      if (yLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${yLabelVar}\\b`, 'gi'), 'y');
+  }
+  if (def.xAxisDef?.label) {
+      const xLabelVar = def.xAxisDef.label.replace(/[^a-zA-Z0-9_]/g, '');
+      if (xLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${xLabelVar}\\b`, 'gi'), 'x');
+  }
+
 
   let equationFunc: Function;
   try {
-    equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
+    equationFunc = new Function('X', 'x', 'y', 'z', `return ${finalEquation || 'X'}`);
   } catch(e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
@@ -542,7 +553,8 @@ export function invertEquation(
   finalValue: number,
   dataSize: number,
   mapName: string,
-  axisValues: { x: number, y: number, z: number }
+  axisValues: { x: number, y: number, z: number },
+  axisLabels: { x: string, y: string }
 ): number {
   if (finalValue === null || isNaN(finalValue)) {
     throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
@@ -557,10 +569,20 @@ export function invertEquation(
     .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
     .replace(/(X)(\d)/gi, 'X * $2');
 
+  let finalEquation = sanitizedEquation;
+  if (axisLabels.y) {
+      const yLabelVar = axisLabels.y.replace(/[^a-zA-Z0-9_]/g, '');
+      if (yLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${yLabelVar}\\b`, 'gi'), 'y');
+  }
+  if (axisLabels.x) {
+      const xLabelVar = axisLabels.x.replace(/[^a-zA-Z0-9_]/g, '');
+      if (xLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${xLabelVar}\\b`, 'gi'), 'x');
+  }
+
   let equationFunc: (X: number, x: number, y: number, z: number) => number;
   try {
     // The function now accepts all axis values to handle complex equations
-    equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation}`) as (X: number, x: number, y: number, z: number) => number;
+    equationFunc = new Function('X', 'x', 'y', 'z', `return ${finalEquation}`) as (X: number, x: number, y: number, z: number) => number;
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação para inversão "${eq}" é inválida. (${error})`);
@@ -581,7 +603,7 @@ export function invertEquation(
   }
 
   // Handle the simplest case directly for performance.
-  if (sanitizedEquation.trim() === 'X') {
+  if (finalEquation.trim() === 'X') {
     return Math.round(finalValue);
   }
 
