@@ -402,10 +402,19 @@ export default function EcuTuningAssistant() {
             
             const lowerName = newName.toLowerCase();
             const isFuelMap = ['comb', 'fuel', 'injeção', 'injection'].some(kw => lowerName.includes(kw));
+            const isIgnitionMap = ['ign', 'ignition', 'avanço', 'spark', 'timing'].some(kw => lowerName.includes(kw));
 
+            // Heuristic for 16-bit Fuel maps (us -> ms)
             if (isFuelMap && def.dataSize === 2 && def.equation.trim().toLowerCase() === 'x') {
                 const newDef = { ...def, name: newName, equation: '(X) / 1000' };
                 addLog(`Mapa de combustível de 16-bit "${newName}" detetado. A aplicar conversão automática de µs para ms.`, 'debug');
+                return newDef;
+            }
+            
+            // Heuristic for 8-bit Ignition maps
+            if (isIgnitionMap && def.dataSize === 1 && def.equation.trim().toLowerCase() === 'x') {
+                const newDef = { ...def, name: newName, equation: 'X / 4' };
+                addLog(`Mapa de ignição de 8-bit "${newName}" detetado. A aplicar conversão automática para graus (X/4).`, 'debug');
                 return newDef;
             }
 
@@ -760,7 +769,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleCellChange = (rowIndex: number, colIndex: number, value: string) => {
-      if (!workingMap || !displayMap || !displayIndexMap) return;
+      if (!workingMap || !displayMap || !displayIndexMap || !rawMap) return;
 
       const newValue = parseFloat(value);
       if (isNaN(newValue)) {
@@ -772,35 +781,34 @@ export default function EcuTuningAssistant() {
       const workingRowIndex = displayIndexMap.y[rowIndex];
       const workingColIndex = displayIndexMap.x[colIndex];
 
-      if (workingRowIndex !== undefined && workingColIndex !== undefined) {
-        // Update the source-of-truth map (workingMap)
-        const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
-        newWorkingMap[workingRowIndex][workingColIndex] = newValue;
-        setWorkingMap(newWorkingMap);
-
-        // Update the display map to reflect the change immediately
-        const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
-        newDisplayMap[rowIndex][colIndex] = newValue;
-        setDisplayMap(newDisplayMap);
-        setAudioUrl(null);
-        
-        // Update the underlying raw value
-        if (rawMap) {
-            const currentDef = availableMaps.find(d => d.name === selectedMapName);
-            if (currentDef) {
-                try {
-                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name);
-                    const newRawMap = JSON.parse(JSON.stringify(rawMap));
-                    newRawMap[workingRowIndex][workingColIndex] = newRawValue;
-                    setRawMap(newRawMap);
-                } catch (e) {
-                    addLog(`Não foi possível calcular o valor raw para a célula [${rowIndex}, ${colIndex}].`, 'error');
-                }
-            }
-        }
-
-      } else {
+      if (workingRowIndex === undefined || workingColIndex === undefined) {
         addLog('Não foi possível atualizar o valor: célula correspondente não encontrada após a ordenação.', 'error');
+        return;
+      }
+
+      // Update the source-of-truth map (workingMap)
+      const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
+      newWorkingMap[workingRowIndex][workingColIndex] = newValue;
+      setWorkingMap(newWorkingMap);
+
+      // Update the display map to reflect the change immediately
+      const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
+      newDisplayMap[rowIndex][colIndex] = newValue;
+      setDisplayMap(newDisplayMap);
+      setAudioUrl(null);
+      
+      // Update the underlying raw value
+      const currentDef = availableMaps.find(d => d.name === selectedMapName);
+      if (currentDef) {
+          try {
+              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name);
+              const newRawMap = JSON.parse(JSON.stringify(rawMap));
+              newRawMap[workingRowIndex][workingColIndex] = newRawValue;
+              setRawMap(newRawMap);
+          } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              addLog(`Não foi possível calcular o valor raw para a célula [${rowIndex}, ${colIndex}]: ${msg}`, 'error');
+          }
       }
     };
 
@@ -864,13 +872,12 @@ export default function EcuTuningAssistant() {
 
                 if (quickEditType === 'percent') {
                     let effectiveOperation = (operation === 'add' ? 1 : -1);
-                    // If the value is negative, "adding" a percentage should make it less negative (increase its value).
-                    // So we flip the sign of the operation.
+                    // If the value is negative, "adding" a percentage should make it more positive (increase its value).
                     if (currentCalculatedValue < 0) {
-                        effectiveOperation *= -1;
+                         newCalculatedValue = currentCalculatedValue * (1 - (value/100 * effectiveOperation));
+                    } else {
+                         newCalculatedValue = currentCalculatedValue * (1 + (value/100 * effectiveOperation));
                     }
-                    const changeRatio = 1 + (value / 100) * effectiveOperation;
-                    newCalculatedValue = currentCalculatedValue * changeRatio;
                 } else { // 'unit'
                     const changeAmount = value * (operation === 'add' ? 1 : -1);
                     newCalculatedValue = currentCalculatedValue + changeAmount;
@@ -1821,7 +1828,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                     xAxis={preview.axes.x}
                                     yAxis={preview.axes.y}
                                     xAxisLabel={preview.axes.xLabel}
-                                    yLabel={preview.axes.yLabel}
+                                    yAxisLabel={preview.axes.yLabel}
                                     mapName={suggestion.newDefinition.name}
                                     isEditable={false}
                                     onSortAxis={() => {}}
