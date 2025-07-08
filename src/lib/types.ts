@@ -1,3 +1,8 @@
+export type AxisDataState = {
+  raw: number[];
+  calculated: (string | number)[];
+};
+
 export type AxisDefinition = {
   address: number | null;
   count: number;

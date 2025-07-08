@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder } from '@/lib/types';
+import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder, AxisDataState } from '@/lib/types';
 import { parseXDF, readAndCalculateMapFromBin, readAxisFromBin, generateChecksum, bufferToHex, writeMapToBin, invertEquation } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps, explainMap, generateSpeech } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
@@ -243,9 +243,9 @@ export default function EcuTuningAssistant() {
     // State for map data. "working" is the editable source of truth, "display" is for rendering (can be sorted)
     const [rawMap, setRawMap] = useState<MapData | null>(null);
     const [workingMap, setWorkingMap] = useState<MapData | null>(null);
-    const [sourceAxes, setSourceAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
+    const [sourceAxes, setSourceAxes] = useState<{ x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string } | null>(null);
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
-    const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
+    const [displayAxes, setDisplayAxes] = useState<{ x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string } | null>(null);
     const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
     const [displayIndexMap, setDisplayIndexMap] = useState<{ x: number[], y: number[] } | null>(null);
     const [mapRenderKey, setMapRenderKey] = useState(0);
@@ -579,13 +579,13 @@ export default function EcuTuningAssistant() {
         setSelectedCells(new Set());
 
         try {
-            const tempEixoX = readAxisFromBin(binFile.buffer, definition.xAxisDef);
-            const tempEixoY = readAxisFromBin(binFile.buffer, definition.yAxisDef);
-            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, tempEixoX, tempEixoY);
+            const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef);
+            const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef);
+            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData);
 
             const mapAxes = {
-              x: tempEixoX,
-              y: tempEixoY,
+              x: axisXData,
+              y: axisYData,
               xLabel: definition.xAxisDef?.label || 'Carga',
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
@@ -596,12 +596,12 @@ export default function EcuTuningAssistant() {
             setSourceAxes(mapAxes);
             setDisplayAxes(mapAxes);
             setOriginalSortOrder({
-              x: mapAxes.x.map((value, index) => ({ value, index })),
-              y: mapAxes.y.map((value, index) => ({ value, index })),
+              x: mapAxes.x.calculated.map((value, index) => ({ value, index })),
+              y: mapAxes.y.calculated.map((value, index) => ({ value, index })),
             });
             setDisplayIndexMap({
-              x: mapAxes.x.map((_, i) => i),
-              y: mapAxes.y.map((_, i) => i),
+              x: mapAxes.x.calculated.map((_, i) => i),
+              y: mapAxes.y.calculated.map((_, i) => i),
             });
             
             setMapRenderKey(p => p + 1);
@@ -667,12 +667,12 @@ export default function EcuTuningAssistant() {
             setAudioUrl(null);
             setSelectedCells(new Set());
             setOriginalSortOrder({
-              x: newX.map((value, index) => ({ value, index })),
-              y: newY.map((value, index) => ({ value, index })),
+              x: newX.calculated.map((value, index) => ({ value, index })),
+              y: newY.calculated.map((value, index) => ({ value, index })),
             });
             setDisplayIndexMap({
-              x: newX.map((_, i) => i),
-              y: newY.map((_, i) => i),
+              x: newX.calculated.map((_, i) => i),
+              y: newY.calculated.map((_, i) => i),
             });
             
             setMapRenderKey(p => p + 1);
@@ -688,46 +688,59 @@ export default function EcuTuningAssistant() {
 
     const handleSortAxis = (axis: 'x' | 'y') => {
         if (!workingMap || !sourceAxes || !originalSortOrder || !displayAxes) return;
-
-        const sortedAxisWithIndices = [...originalSortOrder[axis]].sort((a, b) => {
-            const valA = a.value;
-            const valB = b.value;
-            if (typeof valA === 'number' && typeof valB === 'number') {
-                return valA - valB;
-            }
-            return String(valA).localeCompare(String(valB));
-        });
-
-        const newSortedAxisValues = sortedAxisWithIndices.map(item => item.value);
-        const newIndexMap = sortedAxisWithIndices.map(item => item.index);
-
+    
+        const axisToSort = displayAxes[axis];
+    
+        const sortedAxisWithIndices = axisToSort.calculated
+            .map((value, index) => ({
+                calc: value,
+                raw: axisToSort.raw[index],
+                originalIndex: index,
+            }))
+            .sort((a, b) => {
+                const valA = a.calc;
+                const valB = b.calc;
+                if (typeof valA === 'number' && typeof valB === 'number') {
+                    return valA - valB;
+                }
+                return String(valA).localeCompare(String(valB));
+            });
+    
+        const newSortedCalculated = sortedAxisWithIndices.map(item => item.calc);
+        const newSortedRaw = sortedAxisWithIndices.map(item => item.raw);
+        const newIndexMap = sortedAxisWithIndices.map(item => item.originalIndex);
+    
         let newSortedMap: MapData;
-
+    
         if (axis === 'y') { // Sorting rows
-            newSortedMap = newIndexMap.map(originalRowIndex => workingMap[originalRowIndex]);
+            newSortedMap = newIndexMap.map(originalRowIndex => displayMap![originalRowIndex]);
             setDisplayIndexMap(prev => ({ ...(prev!), y: newIndexMap }));
         } else { // Sorting columns
-            newSortedMap = workingMap.map(row => newIndexMap.map(originalColIndex => row[originalColIndex]));
+            newSortedMap = displayMap!.map(row => newIndexMap.map(originalColIndex => row[originalColIndex]));
             setDisplayIndexMap(prev => ({ ...(prev!), x: newIndexMap }));
         }
-
+    
         setDisplayAxes(prev => ({
-            ...(prev!),
-            [axis]: newSortedAxisValues,
+            ...prev!,
+            [axis]: {
+                calculated: newSortedCalculated,
+                raw: newSortedRaw,
+            },
         }));
         setDisplayMap(newSortedMap);
         setSelectedCells(new Set());
+        setMapRenderKey(k => k + 1);
         addLog(`Eixo ${axis === 'x' ? displayAxes.xLabel : displayAxes.yLabel} ordenado.`, 'info');
     };
 
     const handleSortByFirstColumn = useCallback(() => {
-        if (!workingMap || !sourceAxes) return;
-
-        const sortable = workingMap.map((row, index) => ({
+        if (!displayMap || !displayAxes) return;
+    
+        const sortable = displayMap.map((row, index) => ({
             value: row[0],
-            index: index,
+            originalIndex: index,
         }));
-
+    
         sortable.sort((a, b) => {
             const valA = a.value;
             const valB = b.value;
@@ -738,29 +751,33 @@ export default function EcuTuningAssistant() {
             }
             return String(valA).localeCompare(String(valB));
         });
-
-        const newSortedMap = sortable.map(item => workingMap[item.index]);
-        const newSortedYAxis = sortable.map(item => sourceAxes.y[item.index]);
-        const newYIndexMap = sortable.map(item => item.index);
-        
+    
+        const newSortedMap = sortable.map(item => displayMap[item.originalIndex]);
+        const newSortedYCalc = sortable.map(item => displayAxes.y.calculated[item.originalIndex]);
+        const newSortedYRaw = sortable.map(item => displayAxes.y.raw[item.originalIndex]);
+        const newYIndexMap = sortable.map(item => item.originalIndex);
+    
         setDisplayMap(newSortedMap);
         setDisplayAxes(prev => ({
-            ...(prev!),
-            y: newSortedYAxis,
+            ...prev!,
+            y: {
+                calculated: newSortedYCalc,
+                raw: newSortedYRaw
+            },
         }));
         setDisplayIndexMap(prev => ({...(prev!), y: newYIndexMap }));
         setSelectedCells(new Set());
         setMapRenderKey(p => p + 1);
         addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
-    }, [workingMap, sourceAxes, addLog]);
+    }, [displayMap, displayAxes, addLog]);
     
     const handleResetSort = () => {
         if (workingMap && sourceAxes) {
             setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
             setDisplayAxes(JSON.parse(JSON.stringify(sourceAxes)));
             setDisplayIndexMap({
-              x: sourceAxes.x.map((_, i) => i),
-              y: sourceAxes.y.map((_, i) => i),
+              x: sourceAxes.x.calculated.map((_, i) => i),
+              y: sourceAxes.y.calculated.map((_, i) => i),
             });
             setSelectedCells(new Set());
             setMapRenderKey(p => p + 1);
@@ -799,11 +816,16 @@ export default function EcuTuningAssistant() {
       
       // Update the underlying raw value
       const currentDef = availableMaps.find(d => d.name === selectedMapName);
-      if (currentDef) {
+      if (currentDef && sourceAxes) {
           try {
-              const xVal = (displayAxes.x[colIndex] as number) || 0;
-              const yVal = (displayAxes.y[rowIndex] as number) || 0;
-              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name, { x: xVal, y: yVal, z: 0 }, { x: displayAxes.xLabel, y: displayAxes.yLabel });
+              const axisValues = {
+                  x_calc: (displayAxes.x.calculated[colIndex] as number) || 0,
+                  y_calc: (displayAxes.y.calculated[rowIndex] as number) || 0,
+                  x_raw: displayAxes.x.raw[colIndex] || 0,
+                  y_raw: displayAxes.y.raw[rowIndex] || 0,
+                  z: 0,
+              };
+              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
               const newRawMap = JSON.parse(JSON.stringify(rawMap));
               newRawMap[workingRowIndex][workingColIndex] = newRawValue;
               setRawMap(newRawMap);
@@ -886,9 +908,14 @@ export default function EcuTuningAssistant() {
                 }
                 
                 try {
-                    const xVal = (displayAxes.x[c] as number) || 0;
-                    const yVal = (displayAxes.y[r] as number) || 0;
-                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.name, { x: xVal, y: yVal, z: 0 }, { x: displayAxes.xLabel, y: displayAxes.yLabel });
+                    const axisValues = {
+                        x_calc: (displayAxes.x.calculated[c] as number) || 0,
+                        y_calc: (displayAxes.y.calculated[r] as number) || 0,
+                        x_raw: displayAxes.x.raw[c] || 0,
+                        y_raw: displayAxes.y.raw[r] || 0,
+                        z: 0
+                    };
+                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
 
                     newRawMap[workingRowIndex][workingColIndex] = newRawValue;
                     newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
@@ -930,10 +957,10 @@ export default function EcuTuningAssistant() {
         setIsValidatingMap(true);
         addLog(`A iniciar a análise do tipo de mapa para "${selectedMapName}"...`, 'info');
 
-        const numericXAxis = displayAxes.x.filter(v => typeof v === 'number') as number[];
-        const numericYAxis = displayAxes.y.filter(v => typeof v === 'number') as number[];
+        const numericXAxis = displayAxes.x.calculated.filter(v => typeof v === 'number') as number[];
+        const numericYAxis = displayAxes.y.calculated.filter(v => typeof v === 'number') as number[];
 
-        if(numericXAxis.length !== displayAxes.x.length || numericYAxis.length !== displayAxes.y.length) {
+        if(numericXAxis.length !== displayAxes.x.calculated.length || numericYAxis.length !== displayAxes.y.calculated.length) {
             addLog('A validação de mapa requer eixos puramente numéricos.', 'error');
             toast({ variant: 'destructive', title: 'Falha na Validação', description: 'Os eixos devem ser numéricos para a validação do tipo de mapa.' });
             setIsValidatingMap(false);
@@ -969,8 +996,8 @@ export default function EcuTuningAssistant() {
                     const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
                     const { calculatedMap: correctedMapPreview } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxisPreview, correctedYAxisPreview);
                     const correctedAxesPreview = {
-                        x: correctedXAxisPreview,
-                        y: correctedYAxisPreview,
+                        x: correctedXAxisPreview.calculated,
+                        y: correctedYAxisPreview.calculated,
                         xLabel: newDefinition.xAxisDef?.label || 'Carga',
                         yLabel: newDefinition.yAxisDef?.label || 'RPM'
                     };
@@ -978,7 +1005,12 @@ export default function EcuTuningAssistant() {
                     setAiSuggestion({
                         reasoning: result.data.reasoning,
                         originalMap: displayMap,
-                        originalAxes: displayAxes,
+                        originalAxes: {
+                            x: displayAxes.x.calculated,
+                            y: displayAxes.y.calculated,
+                            xLabel: displayAxes.xLabel,
+                            yLabel: displayAxes.yLabel
+                        },
                         correctedMap: correctedMapPreview,
                         correctedAxes: correctedAxesPreview,
                         newDefinition,
@@ -1061,12 +1093,12 @@ export default function EcuTuningAssistant() {
             setAudioUrl(null);
             setSelectedCells(new Set());
             setOriginalSortOrder({
-              x: newSourceAxes.x.map((value, index) => ({ value, index })),
-              y: newSourceAxes.y.map((value, index) => ({ value, index })),
+              x: newSourceAxes.x.calculated.map((value, index) => ({ value, index })),
+              y: newSourceAxes.y.calculated.map((value, index) => ({ value, index })),
             });
             setDisplayIndexMap({
-              x: newSourceAxes.x.map((_, i) => i),
-              y: newSourceAxes.y.map((_, i) => i),
+              x: newSourceAxes.x.calculated.map((_, i) => i),
+              y: newSourceAxes.y.calculated.map((_, i) => i),
             });
             
             setMapRenderKey(p => p + 1);
@@ -1282,8 +1314,8 @@ export default function EcuTuningAssistant() {
             const explanationResult = await explainMap({
                 mapName: selectedMapName,
                 mapData: displayMap,
-                xAxis: displayAxes.x,
-                yAxis: displayAxes.y,
+                xAxis: displayAxes.x.calculated,
+                yAxis: displayAxes.y.calculated,
                 xAxisLabel: displayAxes.xLabel,
                 yAxisLabel: displayAxes.yLabel
             });
@@ -1516,8 +1548,8 @@ export default function EcuTuningAssistant() {
                                             <MapTable
                                                 key={mapRenderKey}
                                                 mapData={displayMap} 
-                                                xAxis={displayAxes.x} 
-                                                yAxis={displayAxes.y} 
+                                                xAxis={displayAxes.x.calculated} 
+                                                yAxis={displayAxes.y.calculated} 
                                                 xAxisLabel={displayAxes.xLabel} 
                                                 yAxisLabel={displayAxes.yLabel}
                                                 mapName={selectedMapName}
@@ -1531,7 +1563,7 @@ export default function EcuTuningAssistant() {
                                             />
                                         </TabsContent>
                                         <TabsContent value="3d" className="flex-1 data-[state=inactive]:hidden">
-                                            <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
+                                            <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
                                         </TabsContent>
                                     </Tabs>
                                 ) : (
@@ -1773,8 +1805,8 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
             setPreview({
                 map: correctedMap,
                 axes: {
-                    x: correctedXAxis,
-                    y: correctedYAxis,
+                    x: correctedXAxis.calculated,
+                    y: correctedYAxis.calculated,
                     xLabel: tempDefinition.xAxisDef?.label || 'Carga',
                     yLabel: tempDefinition.yAxisDef?.label || 'RPM',
                 }
@@ -1975,5 +2007,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-    

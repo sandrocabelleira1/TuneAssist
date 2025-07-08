@@ -1,7 +1,7 @@
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
-import type { XDFDefinition, AxisDefinition, MapData } from './types';
+import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 /**
  * Finds a DIRECT child element in a case-insensitive manner using tag and optional attribute selectors.
@@ -359,17 +359,22 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 }
 
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): (number | string)[] {
-  if (!axisDef) return [];
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): AxisDataState {
+  if (!axisDef) return { raw: [], calculated: [] };
+
   if (axisDef.staticLabels && axisDef.staticLabels.length > 0) {
       if (axisDef.staticLabels.length !== axisDef.count) {
           console.warn(`O número de etiquetas estáticas (${axisDef.staticLabels.length}) não corresponde à contagem do eixo (${axisDef.count}).`);
       }
-      return axisDef.staticLabels.slice(0, axisDef.count);
+      const calculated = axisDef.staticLabels.slice(0, axisDef.count);
+      const raw = calculated.map((_, i) => i); // Generate dummy raw values for static labels
+      return { raw, calculated };
   }
 
   if (axisDef.address === null) {
-      return Array.from({ length: axisDef.count }, (_, i) => i + 1);
+      const calculated = Array.from({ length: axisDef.count }, (_, i) => i + 1);
+      const raw = calculated.map(v => typeof v === 'number' ? v : 0); // Raw is same as calculated if no address
+      return { raw, calculated };
   }
   
   const view = new DataView(binBuffer);
@@ -393,7 +398,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     throw new Error(`A equação do eixo "${axisDef.equation}" para "${axisDef.label}" é inválida. (${error})`);
   }
   
-  const axisData: (number | string)[] = [];
+  const rawData: number[] = [];
+  const calculatedData: (number | string)[] = [];
   
   let stride = Math.max(axisDef.majorStride || 0, axisDef.minorStride || 0);
   if (stride === 0) {
@@ -404,7 +410,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     const offset = axisDef.address + (i * stride);
     if (offset + axisDef.dataSize > view.byteLength) {
         console.error(`Leitura do eixo fora dos limites. Endereço: ${axisDef.address}, Offset: ${offset}. O eixo pode estar incompleto.`);
-        while(axisData.length < axisDef.count) axisData.push(NaN);
+        while(calculatedData.length < axisDef.count) {
+          rawData.push(NaN);
+          calculatedData.push(NaN);
+        }
         break;
     }
     
@@ -412,27 +421,29 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
     else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, !axisDef.isBigEndian);
     else {
-        axisData.push(NaN);
+        rawData.push(NaN);
+        calculatedData.push(NaN);
         continue;
     }
+    rawData.push(rawValue);
 
     try {
         const calculatedValue = equationFunc(rawValue, 0, 0, 0);
-        axisData.push(calculatedValue);
+        calculatedData.push(calculatedValue);
     } catch (e) {
         console.error(`Erro ao aplicar a equação de eixo "${axisDef.equation}" no valor raw ${rawValue}: ${e}. A utilizar o valor raw.`);
-        axisData.push(rawValue);
+        calculatedData.push(rawValue);
     }
   }
-  return axisData;
+  return { raw: rawData, calculated: calculatedData };
 }
 
 
 export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-    xAxis: (number | string)[],
-    yAxis: (number | string)[]
+    xAxis: AxisDataState,
+    yAxis: AxisDataState
 ): { calculatedMap: MapData, rawMap: MapData } {
   if (!def || !binBuffer) return { calculatedMap: [], rawMap: [] };
 
@@ -445,25 +456,28 @@ export function readAndCalculateMapFromBin(
   const sanitizedEquation = (def.equation || 'X')
       .replace(/,/g, '.')
       .replace(/\s*\r?\n\s*/g, ' ')
-      .replace(/\b(x|value)\b/gi, 'X')
+      .replace(/\b(value)\b/gi, 'X') // Standardize variable to 'X', but keep 'x' for axis
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
       .replace(/(X)(\d)/gi, 'X * $2');
       
   let finalEquation = sanitizedEquation;
+  // Replace labels first, with _calc suffix to avoid collision with raw x/y
   if (def.yAxisDef?.label) {
       const yLabelVar = def.yAxisDef.label.replace(/[^a-zA-Z0-9_]/g, '');
-      if (yLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${yLabelVar}\\b`, 'gi'), 'y');
+      if (yLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${yLabelVar}\\b`, 'gi'), 'y_calc');
   }
   if (def.xAxisDef?.label) {
       const xLabelVar = def.xAxisDef.label.replace(/[^a-zA-Z0-9_]/g, '');
-      if (xLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${xLabelVar}\\b`, 'gi'), 'x');
+      if (xLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${xLabelVar}\\b`, 'gi'), 'x_calc');
   }
 
+  // Then replace literal x/y with _raw suffix
+  finalEquation = finalEquation.replace(/\by\b/g, 'y_raw').replace(/\bx\b/g, 'x_raw');
 
   let equationFunc: Function;
   try {
-    equationFunc = new Function('X', 'x', 'y', 'z', `return ${finalEquation || 'X'}`);
+    equationFunc = new Function('X', 'x_raw', 'y_raw', 'x_calc', 'y_calc', 'z', `return ${finalEquation || 'X'}`);
   } catch(e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
@@ -503,10 +517,12 @@ export function readAndCalculateMapFromBin(
       rawRow.push(rawValue);
 
       try {
-        const xVal = (c < xAxis.length && typeof xAxis[c] === 'number') ? xAxis[c] : 0;
-        const yVal = (r < yAxis.length && typeof yAxis[r] === 'number') ? yAxis[r] : 0;
+        const xCalcVal = (c < xAxis.calculated.length && typeof xAxis.calculated[c] === 'number') ? xAxis.calculated[c] as number : 0;
+        const yCalcVal = (r < yAxis.calculated.length && typeof yAxis.calculated[r] === 'number') ? yAxis.calculated[r] as number : 0;
+        const xRawVal = xAxis.raw[c] ?? 0;
+        const yRawVal = yAxis.raw[r] ?? 0;
         
-        const calculatedValue = equationFunc(rawValue, xVal, yVal, 0);
+        const calculatedValue = equationFunc(rawValue, xRawVal, yRawVal, xCalcVal, yCalcVal, 0);
         calculatedRow.push(calculatedValue);
 
       } catch(e) {
@@ -553,7 +569,7 @@ export function invertEquation(
   finalValue: number,
   dataSize: number,
   mapName: string,
-  axisValues: { x: number, y: number, z: number },
+  axisValues: { x_calc: number, y_calc: number, x_raw: number, y_raw: number, z: number },
   axisLabels: { x: string, y: string }
 ): number {
   if (finalValue === null || isNaN(finalValue)) {
@@ -562,27 +578,31 @@ export function invertEquation(
 
   // 1. Create the forward function from the equation string.
   const sanitizedEquation = (eq || 'X')
-    .replace(/,/g, '.')
-    .replace(/\s*\r?\n\s*/g, ' ')
-    .replace(/\b(x|value)\b/gi, 'X') // Standardize variable to 'X' for the main value
-    .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
-    .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
-    .replace(/(X)(\d)/gi, 'X * $2');
-
+      .replace(/,/g, '.')
+      .replace(/\s*\r?\n\s*/g, ' ')
+      .replace(/\b(value)\b/gi, 'X') // Standardize variable to 'X', but keep 'x' for axis
+      .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
+      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
+      .replace(/(X)(\d)/gi, 'X * $2');
+      
   let finalEquation = sanitizedEquation;
+  // Replace labels first, with _calc suffix to avoid collision with raw x/y
   if (axisLabels.y) {
       const yLabelVar = axisLabels.y.replace(/[^a-zA-Z0-9_]/g, '');
-      if (yLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${yLabelVar}\\b`, 'gi'), 'y');
+      if (yLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${yLabelVar}\\b`, 'gi'), 'y_calc');
   }
   if (axisLabels.x) {
       const xLabelVar = axisLabels.x.replace(/[^a-zA-Z0-9_]/g, '');
-      if (xLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${xLabelVar}\\b`, 'gi'), 'x');
+      if (xLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${xLabelVar}\\b`, 'gi'), 'x_calc');
   }
 
-  let equationFunc: (X: number, x: number, y: number, z: number) => number;
+  // Then replace literal x/y with _raw suffix
+  finalEquation = finalEquation.replace(/\by\b/g, 'y_raw').replace(/\bx\b/g, 'x_raw');
+
+
+  let equationFunc: (X: number, x_raw: number, y_raw: number, x_calc: number, y_calc: number, z: number) => number;
   try {
-    // The function now accepts all axis values to handle complex equations
-    equationFunc = new Function('X', 'x', 'y', 'z', `return ${finalEquation}`) as (X: number, x: number, y: number, z: number) => number;
+    equationFunc = new Function('X', 'x_raw', 'y_raw', 'x_calc', 'y_calc', 'z', `return ${finalEquation || 'X'}`) as any;
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação para inversão "${eq}" é inválida. (${error})`);
@@ -609,8 +629,8 @@ export function invertEquation(
 
   // 3. Perform a binary search to find the integer raw value.
   let iterations = 100; // More than enough for a 16-bit range.
-  const lowVal = equationFunc(low, axisValues.x, axisValues.y, axisValues.z);
-  const highVal = equationFunc(high, axisValues.x, axisValues.y, axisValues.z);
+  const lowVal = equationFunc(low, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z);
+  const highVal = equationFunc(high, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z);
 
   // Check if the target value is outside the achievable range.
   if ((finalValue < lowVal && finalValue < highVal) || (finalValue > lowVal && finalValue > highVal)) {
@@ -625,7 +645,7 @@ export function invertEquation(
     const mid = Math.floor((low + high) / 2);
     if(mid === low || mid === high) break; // Avoid infinite loop if range is small
 
-    const midValue = equationFunc(mid, axisValues.x, axisValues.y, axisValues.z);
+    const midValue = equationFunc(mid, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z);
     
     // This logic handles both increasing and decreasing monotonic functions.
     if ((isMonotonicIncreasing && midValue < finalValue) || (!isMonotonicIncreasing && midValue > finalValue)) {
@@ -637,8 +657,8 @@ export function invertEquation(
   }
   
   // After the loop, low and high are very close. Check which is the better fit.
-  const diffLow = Math.abs(equationFunc(low, axisValues.x, axisValues.y, axisValues.z) - finalValue);
-  const diffHigh = Math.abs(equationFunc(high, axisValues.x, axisValues.y, axisValues.z) - finalValue);
+  const diffLow = Math.abs(equationFunc(low, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z) - finalValue);
+  const diffHigh = Math.abs(equationFunc(high, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z) - finalValue);
   
   return diffLow <= diffHigh ? low : high;
 }
