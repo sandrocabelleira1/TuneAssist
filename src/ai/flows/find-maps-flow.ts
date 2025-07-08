@@ -21,7 +21,7 @@ export type { FindMapsOutput };
 
 const prompt = ai.definePrompt({
   name: 'findMapsPrompt',
-  model: googleAI.model('gemini-1.5-pro-latest'),
+  model: googleAI.model('gemini-1.5-flash-latest'),
   input: { schema: FindMapsInputSchema },
   output: { schema: FindMapsOutputSchema },
   config: {
