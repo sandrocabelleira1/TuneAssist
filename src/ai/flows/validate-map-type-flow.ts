@@ -21,7 +21,7 @@ export type { ValidateMapTypeInput, ValidateMapTypeOutput };
 
 const prompt = ai.definePrompt({
   name: 'validateMapTypePrompt',
-  model: googleAI.model('gemini-1.5-flash-latest'),
+  model: googleAI.model('gemini-1.5-pro-latest'),
   input: { schema: ValidateMapTypeInputSchema },
   output: { schema: ValidateMapTypeOutputSchema },
   config: {

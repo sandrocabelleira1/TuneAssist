@@ -21,7 +21,7 @@ export type { ExplainMapInput, ExplainMapOutput };
 
 const prompt = ai.definePrompt({
   name: 'explainMapPrompt',
-  model: googleAI.model('gemini-1.5-flash-latest'),
+  model: googleAI.model('gemini-1.5-pro-latest'),
   input: { schema: ExplainMapInputSchema },
   output: { schema: ExplainMapOutputSchema },
   config: {
