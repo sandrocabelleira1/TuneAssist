@@ -1836,7 +1836,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                     xAxis={preview.axes.x}
                                     yAxis={preview.axes.y}
                                     xAxisLabel={preview.axes.xLabel}
-                                    yAxisLabel={preview.axes.yLabel}
+                                    yLabel={preview.axes.yLabel}
                                     mapName={suggestion.newDefinition.name}
                                     isEditable={false}
                                     onSortAxis={() => {}}
@@ -1972,3 +1972,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+      
