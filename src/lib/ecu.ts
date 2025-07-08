@@ -4,74 +4,46 @@
 import type { XDFDefinition, AxisDefinition, MapData } from './types';
 
 /**
- * Finds a child element in a case-insensitive manner for tags and attributes.
- * THIS IS NOW RECURSIVE: It searches all descendants, not just direct children.
- * Supports simple tag selectors ('math') and simple attribute selectors ('XDFAXIS[id="z"]').
+ * Finds a DIRECT child element in a case-insensitive manner using tag and optional attribute selectors.
  * @param parent The element to search within.
- * @param selectors The possible selectors.
+ * @param selectors The possible selectors, e.g., 'math', 'XDFAXIS[id="z"]'.
  * @returns The found element or null.
  */
 function findNode(parent: Element | null, ...selectors: string[]): Element | null {
     if (!parent) return null;
 
     for (const selector of selectors) {
-        // Use getElementsByTagName('*') for a recursive search of all descendants
-        const elementsToSearch = Array.from(parent.getElementsByTagName('*'));
-        elementsToSearch.unshift(parent); // Also check the parent element itself
-
-        // Simple tag name selector, e.g., "math"
-        const isSimpleTag = /^[a-zA-Z0-9]+$/.test(selector);
-        if (isSimpleTag) {
-            for (const el of elementsToSearch) {
-                if (el.tagName.toLowerCase() === selector.toLowerCase()) {
-                    return el;
+        // Regex to handle 'tag' or 'tag[attr="value"]'
+        const match = selector.match(/^([a-zA-Z0-9_:]+)(?:\[([a-zA-Z_:]+)="(.+?)"\])?$/);
+        
+        if (match) {
+            const [, tagName, attrName, attrValue] = match;
+            const lowerTagName = tagName.toLowerCase();
+            
+            for (const child of Array.from(parent.children)) {
+                if (child.tagName.toLowerCase() === lowerTagName) {
+                    if (attrName && attrValue) { // Attribute selector part
+                        const val = getAttr(child, attrName);
+                        if (val && val.toLowerCase() === attrValue.toLowerCase()) {
+                            return child;
+                        }
+                    } else { // Simple tag name match
+                        return child;
+                    }
                 }
             }
         } else {
-            // More complex selector like 'XDFAXIS[id="z"]'
-            const match = selector.match(/^([a-zA-Z0-9]+)\[([a-zA-Z]+)="(.+?)"\]$/);
-            if (match) {
-                const [, tagName, attrName, attrValue] = match;
-                for (const el of elementsToSearch) {
-                    if (el.tagName.toLowerCase() === tagName.toLowerCase()) {
-                        const val = getAttr(el, attrName);
-                        if (val && val.toLowerCase() === attrValue.toLowerCase()) {
-                            return el;
-                        }
-                    }
+             // Fallback for simple tag names if regex fails, just in case.
+            for (const child of Array.from(parent.children)) {
+                if (child.tagName.toLowerCase() === selector.toLowerCase()) {
+                    return child;
                 }
-            } else {
-              // Fallback to querySelector for any other complex cases, though it might be case-sensitive.
-              try {
-                const node = parent.querySelector(selector);
-                if (node) return node;
-              } catch (e) {
-                console.warn(`Could not execute querySelector for "${selector}", it might be invalid.`, e);
-              }
             }
         }
     }
     return null;
 }
 
-/**
- * Finds a DIRECT child element by tag name, case-insensitively.
- * @param parent The element to search within.
- * @param tagNames The possible tag names.
- * @returns The found direct child element or null.
- */
-function findDirectChild(parent: Element | null, ...tagNames: string[]): Element | null {
-    if (!parent) return null;
-    for (const tagName of tagNames) {
-        const lowerTagName = tagName.toLowerCase();
-        for (const child of Array.from(parent.children)) {
-            if (child.tagName.toLowerCase() === lowerTagName) {
-                return child;
-            }
-        }
-    }
-    return null;
-}
 
 /**
  * Gets an attribute from an element in a case-insensitive manner.
@@ -98,16 +70,16 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
 
     const defaultLabel = axisType === 'y' ? 'RPM' : 'Carga';
 
-    const localCountNode = findDirectChild(axisNode, 'indexcount', 'INDEXCOUNT');
+    const localCountNode = findNode(axisNode, 'indexcount', 'INDEXCOUNT');
     const count = localCountNode ? parseInt(localCountNode.textContent || '0', 10) : 0;
     
     const localLabel = (
-        findDirectChild(axisNode, 'units', 'UNITS')?.textContent ||
-        findDirectChild(axisNode, 'title', 'TITLE')?.textContent ||
+        findNode(axisNode, 'units', 'UNITS')?.textContent ||
+        findNode(axisNode, 'title', 'TITLE')?.textContent ||
         ''
     ).trim();
 
-    const embedInfoNode = findDirectChild(axisNode, 'embedinfo', 'EMBEDINFO');
+    const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
     const embedType = getAttr(embedInfoNode, 'type');
     const isLinked = embedType === '3';
 
@@ -115,9 +87,10 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         const linkId = getAttr(embedInfoNode, 'linkobjid');
         const linkedTable = linkId ? tableMap.get(linkId) : null;
         
-        const linkedZAxis = linkedTable ? findNode(linkedTable, 'XDFAXIS[id="z"]', 'zaxis') : null;
+        // In linked axes, we might need a recursive find, so we use getElementsByTagName
+        const linkedZAxis = linkedTable?.querySelector('XDFAXIS[id="z"], zaxis');
         if (linkedZAxis) {
-            const sourceEmbeddedData = findNode(linkedZAxis, 'embeddeddata', 'EMBEDDEDDATA');
+            const sourceEmbeddedData = linkedZAxis.querySelector('embeddeddata, EMBEDDEDDATA');
             if (sourceEmbeddedData) {
                 const sourceAddrStr = getAttr(sourceEmbeddedData, 'mmedaddress');
                 const sourceAddr = sourceAddrStr ? parseInt(sourceAddrStr, 16) : null;
@@ -128,10 +101,10 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                 const sourceMajorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
                 const sourceMinorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
 
-                const sourceMathNode = findNode(linkedZAxis, 'math', 'MATH');
+                const sourceMathNode = linkedZAxis.querySelector('math, MATH');
                 const sourceEquation = getAttr(sourceMathNode || linkedZAxis, 'Equation', 'equation') || 'X';
                 
-                const sourceVarNode = findNode(sourceMathNode || linkedZAxis, 'var', 'VAR');
+                const sourceVarNode = (sourceMathNode || linkedZAxis).querySelector('var, VAR');
                 const sourceEquationVar = getAttr(sourceVarNode, 'id') || 'X';
                 
                 const linkedRows = parseInt(getAttr(sourceEmbeddedData, 'mmedrowcount') || '0');
@@ -170,19 +143,19 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         }
     }
 
-    const embeddedData = findDirectChild(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+    const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     const addrStr = getAttr(embeddedData, 'mmedaddress');
     const addr = addrStr ? parseInt(addrStr, 16) : null;
-    const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits') || findDirectChild(embedInfoNode || axisNode, 'data_size', 'DATA_SIZE')?.textContent || '8';
+    const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits') || findNode(embedInfoNode || axisNode, 'data_size', 'DATA_SIZE')?.textContent || '8';
     const dataSizeBits = parseInt(dataSizeBitsStr, 10);
     const isBigEndian = getAttr(embeddedData, 'bigendian') === '1';
 
     const majorStride = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
     const minorStride = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10) / 8;
     
-    const mathNode = findDirectChild(axisNode, 'math', 'MATH');
+    const mathNode = findNode(axisNode, 'math', 'MATH');
     const equation = getAttr(mathNode || axisNode, 'equation', 'Equation') || 'X';
-    const varNode = findDirectChild(mathNode || axisNode, 'VAR', 'var');
+    const varNode = findNode(mathNode || axisNode, 'VAR', 'var');
     const equationVar = getAttr(varNode, 'id') || 'X';
 
     if (count === 0) return null;
@@ -210,20 +183,20 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
  */
 function findMainMathNode(tableNode: Element, zAxisNode: Element, xAxisNode: Element | null, yAxisNode: Element | null): Element | null {
     // Priority 1: A <math> node that is a DIRECT child of the Z-axis definition. This is the most specific.
-    const zMath = findDirectChild(zAxisNode, 'math', 'MATH');
+    const zMath = findNode(zAxisNode, 'math', 'MATH');
     if (zMath) {
         return zMath;
     }
 
     // Priority 2: A <math> node that is a DIRECT child of the TABLE definition.
     // This is a common pattern in some XDFs.
-    const tableMath = findDirectChild(tableNode, 'math', 'MATH');
+    const tableMath = findNode(tableNode, 'math', 'MATH');
     if (tableMath) {
         return tableMath;
     }
     
     // Fallback: Find all math nodes in the table, and exclude any that are descendants of the X or Y axes.
-    const allMathNodes = Array.from(tableNode.getElementsByTagName('math'));
+    const allMathNodes = Array.from(tableNode.getElementsByTagName('math')); // RECURSIVE
 
     for (const mathNode of allMathNodes) {
         let isAxisMath = false;
@@ -286,14 +259,15 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   const nameCounts: Record<string, number> = {};
 
   for (const table of xdfTables) {
-    const originalName = findNode(table, 'title')?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
+    const titleNode = table.querySelector('title, TITLE'); // Recursive find for title
+    const originalName = titleNode?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
     
     try {
       if (originalName === 'Tabela Sem Nome') {
           continue;
       }
 
-      const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'zaxis');
+      const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
       if (!zAxisNode) {
           console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar a definição do eixo Z.`);
           continue;
@@ -334,15 +308,15 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const yAxisId = isTransposed ? 'x' : 'y';
       const xAxisId = isTransposed ? 'y' : 'x';
 
-      const yAxisNode = findNode(table, `XDFAXIS[id="${yAxisId}"]`, `yaxis`);
-      const xAxisNode = findNode(table, `XDFAXIS[id="${xAxisId}"]`, `xaxis`);
+      const yAxisNode = findNode(table, `XDFAXIS[id="${yAxisId}"]`, `XDFAXIS[id="${yAxisId.toUpperCase()}"]`, `yaxis`);
+      const xAxisNode = findNode(table, `XDFAXIS[id="${xAxisId}"]`, `XDFAXIS[id="${xAxisId.toUpperCase()}"]`, `xaxis`);
 
       let yAxisDef = parseAxis(yAxisNode, tableMap, 'y');
       let xAxisDef = parseAxis(xAxisNode, tableMap, 'x');
       
       const mathNode = findMainMathNode(table, zAxisNode, xAxisNode, yAxisNode);
       const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
-      const varNode = findNode(mathNode, 'var', 'VAR');
+      const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
       const equationVar = getAttr(varNode, 'id') || 'X';
 
       if (!yAxisDef || yAxisDef.count !== rowsCount) {
