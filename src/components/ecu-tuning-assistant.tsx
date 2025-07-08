@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -1412,9 +1413,16 @@ export default function EcuTuningAssistant() {
                                             <SelectTrigger className="flex-1"><SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : availableMaps.length === 0 ? "Nenhum mapa disponível" : "Selecione um mapa"} /></SelectTrigger>
                                             <SelectContent>
                                                 {availableMaps.map(def => (
-                                                  <SelectItem key={def.name} value={def.name} className="flex items-center">
-                                                      {def.isPotential && <Sparkles className="mr-2 h-4 w-4 text-primary shrink-0" />}
-                                                      <span>{def.name}</span>
+                                                  <SelectItem key={def.name} value={def.name}>
+                                                      <div className="flex w-full items-center justify-between">
+                                                          <div className="flex items-center gap-2 overflow-hidden">
+                                                              {def.isPotential && <Sparkles className="h-4 w-4 text-primary shrink-0" />}
+                                                              <span className="truncate">{def.name}</span>
+                                                          </div>
+                                                          <span className="ml-4 flex-shrink-0 font-mono text-xs text-muted-foreground">
+                                                              0x{def.address.toString(16).toUpperCase()}
+                                                          </span>
+                                                      </div>
                                                   </SelectItem>
                                                 ))}
                                             </SelectContent>
