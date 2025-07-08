@@ -6,27 +6,40 @@ import { generateSpeech as generateSpeechFlow, type TextToSpeechInput, type Text
 import { ValidateMapTypeInputSchema, FindMapsInputSchema, ExplainMapInputSchema, TextToSpeechInputSchema } from '@/ai/schemas';
 import { z } from 'zod';
 
+// Helper function for common AI error handling
+function handleAiError(error: unknown, context: string): { success: false; error: string } {
+    console.error(`Error in ${context} action:`, error);
+
+    if (error instanceof z.ZodError) {
+      return { success: false, error: `Dados de entrada inválidos: ${JSON.stringify(error.flatten().fieldErrors)}` };
+    }
+    
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const lowerErrorMessage = errorMessage.toLowerCase();
+
+    if (lowerErrorMessage.includes('503') || lowerErrorMessage.includes('service unavailable') || lowerErrorMessage.includes('model is overloaded')) {
+        return { success: false, error: 'O serviço de IA está temporariamente sobrecarregado. Por favor, aguarde um momento e tente novamente.' };
+    }
+    
+    if (lowerErrorMessage.includes('429') || lowerErrorMessage.includes('quota')) {
+        return { success: false, error: 'Limite de utilização da IA atingido. Atingiu o limite diário do plano gratuito. Por favor, tente novamente amanhã ou atualize o seu plano da API da Google.' };
+    }
+    
+    if (errorMessage.includes('Y is not defined')) {
+        return { success: false, error: 'A equação para um dos eixos é inválida. Apenas a variável "X" pode ser usada em equações de eixo. Por favor, corrija a definição XDF.' };
+    }
+    
+    return { success: false, error: `Ocorreu um erro inesperado (${context}): ${errorMessage}` };
+}
+
+
 export async function validateMapType(input: ValidateMapTypeInput): Promise<{ success: boolean; data?: ValidateMapTypeOutput; error?: string }> {
   try {
     const validatedInput = ValidateMapTypeInputSchema.parse(input);
     const result = await validateMapTypeFlow(validatedInput);
     return { success: true, data: result };
   } catch (error) {
-    console.error("Error in validateMapType action:", error);
-    
-    if (error instanceof z.ZodError) {
-      return { success: false, error: `Dados de entrada inválidos: ${JSON.stringify(error.flatten().fieldErrors)}` };
-    }
-    
-    const errorMessage = error instanceof Error ? error.message : String(error);
-
-    if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('quota')) {
-        return { success: false, error: 'Limite de utilização da IA atingido. Atingiu o limite diário do plano gratuito. Por favor, tente novamente amanhã ou atualize o seu plano da API da Google.' };
-    }
-    if (errorMessage.includes('Y is not defined')) {
-        return { success: false, error: 'A equação para um dos eixos é inválida. Apenas a variável "X" pode ser usada em equações de eixo. Por favor, corrija a definição XDF.' };
-    }
-    return { success: false, error: `Ocorreu um erro inesperado durante a validação do mapa: ${errorMessage}` };
+    return handleAiError(error, 'validação do mapa');
   }
 }
 
@@ -36,19 +49,7 @@ export async function findPotentialMaps(input: FindMapsInput): Promise<{ success
     const result = await findMapsFlow(validatedInput);
     return { success: true, data: result };
   } catch (error) {
-    console.error("Error in findPotentialMaps action:", error);
-    
-    if (error instanceof z.ZodError) {
-      return { success: false, error: `Dados de entrada inválidos: ${JSON.stringify(error.flatten().fieldErrors)}` };
-    }
-    
-    const errorMessage = error instanceof Error ? error.message : String(error);
-
-    if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('quota')) {
-        return { success: false, error: 'Limite de utilização da IA atingido. Atingiu o limite diário do plano gratuito. Por favor, tente novamente amanhã ou atualize o seu plano da API da Google.' };
-    }
-    
-    return { success: false, error: `Ocorreu um erro inesperado ao procurar mapas: ${errorMessage}` };
+    return handleAiError(error, 'procura de mapas');
   }
 }
 
@@ -58,12 +59,7 @@ export async function explainMap(input: ExplainMapInput): Promise<{ success: boo
     const result = await explainMapFlow(validatedInput);
     return { success: true, data: result };
   } catch (error) {
-    console.error("Error in explainMap action:", error);
-    if (error instanceof z.ZodError) {
-      return { success: false, error: `Dados de entrada inválidos: ${JSON.stringify(error.flatten().fieldErrors)}` };
-    }
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, error: `Ocorreu um erro inesperado ao gerar a explicação: ${errorMessage}` };
+    return handleAiError(error, 'geração de explicação');
   }
 }
 
@@ -73,11 +69,6 @@ export async function generateSpeech(text: TextToSpeechInput): Promise<{ success
     const result = await generateSpeechFlow(validatedInput);
     return { success: true, data: result };
   } catch (error) {
-    console.error("Error in generateSpeech action:", error);
-    if (error instanceof z.ZodError) {
-      return { success: false, error: `Dados de entrada inválidos: ${JSON.stringify(error.flatten().fieldErrors)}` };
-    }
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, error: `Ocorreu um erro inesperado ao gerar o áudio: ${errorMessage}` };
+    return handleAiError(error, 'geração de áudio');
   }
 }
