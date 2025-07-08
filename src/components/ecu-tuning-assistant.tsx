@@ -414,8 +414,8 @@ export default function EcuTuningAssistant() {
             
             // Heuristic for 8-bit Ignition maps
             if (isIgnitionMap && def.dataSize === 1 && def.equation.trim().toLowerCase() === 'x') {
-                const newDef = { ...def, name: newName, equation: 'X / 4' };
-                addLog(`Mapa de ignição de 8-bit "${newName}" detetado. A aplicar conversão automática para graus (X/4).`, 'debug');
+                const newDef = { ...def, name: newName, equation: '(X - 128) / 2' };
+                addLog(`Mapa de ignição de 8-bit "${newName}" detetado. A aplicar conversão automática para graus (offset-based).`, 'debug');
                 return newDef;
             }
 
