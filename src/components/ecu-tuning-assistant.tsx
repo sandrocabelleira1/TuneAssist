@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -770,7 +769,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleCellChange = (rowIndex: number, colIndex: number, value: string) => {
-      if (!workingMap || !displayMap || !displayIndexMap || !rawMap) return;
+      if (!workingMap || !displayMap || !displayAxes || !displayIndexMap || !rawMap) return;
 
       const newValue = parseFloat(value);
       if (isNaN(newValue)) {
@@ -802,7 +801,9 @@ export default function EcuTuningAssistant() {
       const currentDef = availableMaps.find(d => d.name === selectedMapName);
       if (currentDef) {
           try {
-              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name);
+              const xVal = (displayAxes.x[colIndex] as number) || 0;
+              const yVal = (displayAxes.y[rowIndex] as number) || 0;
+              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name, { x: xVal, y: yVal, z: 0 });
               const newRawMap = JSON.parse(JSON.stringify(rawMap));
               newRawMap[workingRowIndex][workingColIndex] = newRawValue;
               setRawMap(newRawMap);
@@ -885,7 +886,9 @@ export default function EcuTuningAssistant() {
                 }
                 
                 try {
-                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.name);
+                    const xVal = (displayAxes.x[c] as number) || 0;
+                    const yVal = (displayAxes.y[r] as number) || 0;
+                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.name, { x: xVal, y: yVal, z: 0 });
 
                     newRawMap[workingRowIndex][workingColIndex] = newRawValue;
                     newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
@@ -1973,4 +1976,4 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
     );
 }
 
-      
+    

@@ -533,6 +533,7 @@ export function bufferToHex(buffer: ArrayBuffer): string {
  * @param finalValue The target value we want to achieve.
  * @param dataSize The size of the raw data in bytes (1 for 8-bit, 2 for 16-bit).
  * @param mapName The name of the map, used to infer if the data is signed.
+ * @param axisValues The values of the x, y, and z axes for the current cell.
  * @returns The calculated raw integer value.
  */
 export function invertEquation(
@@ -540,7 +541,8 @@ export function invertEquation(
   eqVar: string,
   finalValue: number,
   dataSize: number,
-  mapName: string
+  mapName: string,
+  axisValues: { x: number, y: number, z: number }
 ): number {
   if (finalValue === null || isNaN(finalValue)) {
     throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
@@ -550,14 +552,15 @@ export function invertEquation(
   const sanitizedEquation = (eq || 'X')
     .replace(/,/g, '.')
     .replace(/\s*\r?\n\s*/g, ' ')
-    .replace(/\b(x|value)\b/gi, 'X') // Standardize variable to 'X'
+    .replace(/\b(x|value)\b/gi, 'X') // Standardize variable to 'X' for the main value
     .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
     .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
     .replace(/(X)(\d)/gi, 'X * $2');
 
-  let equationFunc: (x: number) => number;
+  let equationFunc: (X: number, x: number, y: number, z: number) => number;
   try {
-    equationFunc = new Function('X', `return ${sanitizedEquation}`) as (x: number) => number;
+    // The function now accepts all axis values to handle complex equations
+    equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation}`) as (X: number, x: number, y: number, z: number) => number;
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação para inversão "${eq}" é inválida. (${error})`);
@@ -584,12 +587,11 @@ export function invertEquation(
 
   // 3. Perform a binary search to find the integer raw value.
   let iterations = 100; // More than enough for a 16-bit range.
-  const lowVal = equationFunc(low);
-  const highVal = equationFunc(high);
+  const lowVal = equationFunc(low, axisValues.x, axisValues.y, axisValues.z);
+  const highVal = equationFunc(high, axisValues.x, axisValues.y, axisValues.z);
 
   // Check if the target value is outside the achievable range.
   if ((finalValue < lowVal && finalValue < highVal) || (finalValue > lowVal && finalValue > highVal)) {
-    // It's out of range, return the raw value that produces the closest result.
     const diffLow = Math.abs(lowVal - finalValue);
     const diffHigh = Math.abs(highVal - finalValue);
     return diffLow < diffHigh ? low : high;
@@ -601,7 +603,7 @@ export function invertEquation(
     const mid = Math.floor((low + high) / 2);
     if(mid === low || mid === high) break; // Avoid infinite loop if range is small
 
-    const midValue = equationFunc(mid);
+    const midValue = equationFunc(mid, axisValues.x, axisValues.y, axisValues.z);
     
     // This logic handles both increasing and decreasing monotonic functions.
     if ((isMonotonicIncreasing && midValue < finalValue) || (!isMonotonicIncreasing && midValue > finalValue)) {
@@ -613,10 +615,10 @@ export function invertEquation(
   }
   
   // After the loop, low and high are very close. Check which is the better fit.
-  const diffLow = Math.abs(equationFunc(low) - finalValue);
-  const diffHigh = Math.abs(equationFunc(high) - finalValue);
+  const diffLow = Math.abs(equationFunc(low, axisValues.x, axisValues.y, axisValues.z) - finalValue);
+  const diffHigh = Math.abs(equationFunc(high, axisValues.x, axisValues.y, axisValues.z) - finalValue);
   
-  return diffLow < diffHigh ? low : high;
+  return diffLow <= diffHigh ? low : high;
 }
 
 
@@ -671,3 +673,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+    
