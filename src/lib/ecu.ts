@@ -263,7 +263,7 @@ function findMainMathNode(tableNode: Element, zAxisNode: Element): Element | nul
 }
 
 
-export function parseXDF(xmlString: string): XDFDefinition[] {
+export function parseXDF(xmlString: string, password?: string): XDFDefinition[] {
   if (typeof DOMParser === 'undefined') {
     return [];
   }
