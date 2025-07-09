@@ -103,6 +103,12 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
     const embedType = getAttr(embedInfoNode, 'type');
     const isLinked = embedType === '3';
+    
+    const mathNode = findNode(axisNode, 'math', 'MATH');
+    const equation = getAttr(mathNode || axisNode, 'equation', 'Equation') || 'X';
+    const varNode = findNode(mathNode || axisNode, 'VAR', 'var');
+    const equationVar = getAttr(varNode, 'id') || 'X';
+
 
     // --- Case 1: Linked Axis ---
     // If the axis is linked to another table's Z-axis data.
@@ -123,13 +129,6 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                 const sourceMajorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
                 const sourceMinorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
 
-                // For linked axes, the math comes from the linked table's Z-axis.
-                const sourceMathNode = findMainMathNode(linkedTable!, linkedZAxis);
-                const sourceEquation = getAttr(sourceMathNode || linkedZAxis, 'Equation', 'equation') || 'X';
-                
-                const sourceVarNode = findNode((sourceMathNode || linkedZAxis), 'var', 'VAR');
-                const sourceEquationVar = getAttr(sourceVarNode, 'id') || 'X';
-                
                 const linkedRows = parseInt(getAttr(sourceEmbeddedData, 'mmedrowcount') || '0');
                 const linkedCols = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || '0');
                 // The count for a 1D axis linked to a 2D map is the maximum of its dimensions.
@@ -142,8 +141,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                         count: count > 0 ? count : sourceCount,
                         dataSize: sourceDataSize,
                         isBigEndian: sourceIsBigEndian,
-                        equation: sourceEquation,
-                        equationVar: sourceEquationVar,
+                        // IMPORTANT: For linked axes, the math comes from the AXIS itself, not the linked data.
+                        equation: equation,
+                        equationVar: equationVar,
                         majorStride: sourceMajorStride,
                         minorStride: sourceMinorStride,
                         label: localLabel || defaultLabel,
@@ -192,12 +192,6 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
 
     const majorStride = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
     const minorStride = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10) / 8;
-    
-    // The math for the axis is defined within its own scope.
-    const mathNode = findNode(axisNode, 'math', 'MATH');
-    const equation = getAttr(mathNode || axisNode, 'equation', 'Equation') || 'X';
-    const varNode = findNode(mathNode || axisNode, 'VAR', 'var');
-    const equationVar = getAttr(varNode, 'id') || 'X';
 
     // An axis must have a count, and if it's not static, it must have an address.
     if (count === 0 || (addr === null || isNaN(addr))) {
