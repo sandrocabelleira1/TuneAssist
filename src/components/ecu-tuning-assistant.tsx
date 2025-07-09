@@ -264,9 +264,8 @@ export default function EcuTuningAssistant() {
 
     // AI state
     const [isScanning, setIsScanning] = useState(false);
-    const [isValidatingMap, setIsValidatingMap] = useState(false);
-    const [analysisResult, setAnalysisResult] = useState<{ confidence: string; suspectedType: string; reasoning: string; } | null>(null);
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
+    const [mapValidationStatus, setMapValidationStatus] = useState<'idle' | 'loading' | 'valid' | 'suggestion' | 'error'>('idle');
     const [isExplaining, setIsExplaining] = useState(false);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -275,7 +274,6 @@ export default function EcuTuningAssistant() {
     // Modal state
     const [isAxesModalOpen, setIsAxesModalOpen] = useState(false);
     const [isXdfErrorModalOpen, setIsXdfErrorModalOpen] = useState(false);
-    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
     const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
     const [mapToEdit, setMapToEdit] = useState<XDFDefinition | null>(null);
@@ -449,9 +447,8 @@ export default function EcuTuningAssistant() {
         setDisplayMap(null); setDisplayAxes(null);
         setOriginalSortOrder(null);
         setDisplayIndexMap(null);
-        setIsValidatingMap(false);
+        setMapValidationStatus('idle');
         setAiSuggestion(null);
-        setAnalysisResult(null);
         setSelectedXdfFromLibrary('');
         setActiveXdfBrand('');
         setSelectedBrandForNewXdf('no-brand');
@@ -482,6 +479,7 @@ export default function EcuTuningAssistant() {
                     setAvailableMaps([]);
                     setAudioUrl(null);
                     setSelectedCells(new Set());
+                    setMapValidationStatus('idle');
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
@@ -541,6 +539,7 @@ export default function EcuTuningAssistant() {
             
             setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
             setSelectedCells(new Set());
+            setMapValidationStatus('idle');
 
             setXdfFile({ name, definitions });
             setSelectedXdfFromLibrary(name);
@@ -565,6 +564,77 @@ export default function EcuTuningAssistant() {
         toast({ title: 'Biblioteca Limpa', description: 'A sua biblioteca de ficheiros XDF foi removida.' });
     }
 
+    const runAutoValidation = useCallback(async (
+        definition: XDFDefinition, 
+        mapData: MapData, 
+        axes: { x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string }
+    ) => {
+        if (!binFile) return;
+        setMapValidationStatus('loading');
+        addLog(`A iniciar a análise automática para "${definition.name}"...`, 'debug');
+
+        const numericXAxis = axes.x.calculated.filter(v => typeof v === 'number') as number[];
+        const numericYAxis = axes.y.calculated.filter(v => typeof v === 'number') as number[];
+
+        if(numericXAxis.length !== axes.x.calculated.length || numericYAxis.length !== axes.y.calculated.length) {
+            addLog('A validação de mapa requer eixos puramente numéricos.', 'error');
+            setMapValidationStatus('error');
+            return;
+        }
+
+        const result = await validateMapType({
+            mapName: definition.name,
+            mapData: mapData,
+            xAxis: numericXAxis,
+            yAxis: numericYAxis,
+            equation: definition.equation,
+        });
+
+        if (result.success && result.data) {
+            const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation } = result.data;
+            const hasSuggestion = suggestedEquation || suggestedXAxisEquation || suggestedYAxisEquation;
+
+            if (hasSuggestion) {
+                 try {
+                    const newDefinition = JSON.parse(JSON.stringify(definition)) as XDFDefinition;
+                    if (suggestedEquation) newDefinition.equation = suggestedEquation;
+                    if (suggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = suggestedXAxisEquation;
+                    if (suggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = suggestedYAxisEquation;
+
+                    const correctedXAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
+                    const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+                    const { calculatedMap: correctedMapPreview } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxisPreview, correctedYAxisPreview);
+                    
+                    setAiSuggestion({
+                        reasoning: result.data.reasoning,
+                        originalMap: mapData,
+                        originalAxes: { x: axes.x.calculated, y: axes.y.calculated, xLabel: axes.xLabel, yLabel: axes.yLabel },
+                        correctedMap: correctedMapPreview,
+                        correctedAxes: {
+                            x: correctedXAxisPreview.calculated,
+                            y: correctedYAxisPreview.calculated,
+                            xLabel: newDefinition.xAxisDef?.label || 'Carga',
+                            yLabel: newDefinition.yAxisDef?.label || 'RPM'
+                        },
+                        newDefinition,
+                        originalDefinition: JSON.parse(JSON.stringify(definition)),
+                    });
+                    setMapValidationStatus('suggestion');
+                    addLog(`A IA encontrou uma sugestão de melhoria para "${definition.name}".`, 'info');
+                } catch (error) {
+                    addLog(`Erro ao gerar a pré-visualização da IA: ${(error as Error).message}`, 'error');
+                    setMapValidationStatus('error');
+                }
+            } else {
+                setMapValidationStatus('valid');
+                addLog(`Análise da IA concluída para "${definition.name}": Nenhuma correção necessária.`, 'success');
+            }
+        } else {
+            addLog(`A análise automática do mapa falhou: ${result.error}`, 'error');
+            setMapValidationStatus('error');
+        }
+    }, [binFile, addLog]);
+
     const handleMapSelect = (name: string) => {
         if (!binFile || !name) return;
         
@@ -573,7 +643,9 @@ export default function EcuTuningAssistant() {
             addLog(`Definição de mapa "${name}" não encontrada.`, 'error');
             return;
         }
-
+        
+        setMapValidationStatus('idle');
+        setAiSuggestion(null);
         setSelectedMapName(name);
         setAudioUrl(null);
         setSelectedCells(new Set());
@@ -606,6 +678,8 @@ export default function EcuTuningAssistant() {
             
             setMapRenderKey(p => p + 1);
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
+            
+            runAutoValidation(definition, calculatedMap, mapAxes);
 
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
@@ -678,6 +752,9 @@ export default function EcuTuningAssistant() {
             setMapRenderKey(p => p + 1);
             setIsAxesModalOpen(false);
             toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
+            
+            // Re-run validation after manual changes
+            runAutoValidation(newDefinition, newMapData, newAxesState);
 
         } catch (error) {
             const msg = `Erro ao recalcular o mapa com as novas equações: ${(error as Error).message}`;
@@ -813,6 +890,7 @@ export default function EcuTuningAssistant() {
       newDisplayMap[rowIndex][colIndex] = newValue;
       setDisplayMap(newDisplayMap);
       setAudioUrl(null);
+      setMapValidationStatus('idle'); // Any manual change invalidates the last validation
       
       // Update the underlying raw value
       const currentDef = availableMaps.find(d => d.name === selectedMapName);
@@ -934,6 +1012,7 @@ export default function EcuTuningAssistant() {
             setRawMap(newRawMap);
             setDisplayMap(newDisplayMap);
             setAudioUrl(null);
+            setMapValidationStatus('idle'); // Any manual change invalidates the last validation
             
             const targetDescription = hasSelection ? `${changesMade} células selecionadas` : 'todas as células';
             addLog(`Edição rápida aplicada a ${targetDescription}.`, 'success');
@@ -945,107 +1024,15 @@ export default function EcuTuningAssistant() {
 
 
     const handleValidateMap = async () => {
-        if (!displayMap || !displayAxes || !selectedMapName || !binFile) return;
-
+        if (!displayMap || !displayAxes || !selectedMapName) return;
+        
         const currentDef = availableMaps.find(d => d.name === selectedMapName);
         if (!currentDef) {
             addLog(`Não foi possível encontrar a definição do mapa para validar.`, 'error');
-            toast({ variant: 'destructive', title: 'Erro de Validação', description: 'Não foi possível encontrar a definição do mapa selecionado.' });
             return;
         }
 
-        setIsValidatingMap(true);
-        addLog(`A iniciar a análise do tipo de mapa para "${selectedMapName}"...`, 'info');
-
-        const numericXAxis = displayAxes.x.calculated.filter(v => typeof v === 'number') as number[];
-        const numericYAxis = displayAxes.y.calculated.filter(v => typeof v === 'number') as number[];
-
-        if(numericXAxis.length !== displayAxes.x.calculated.length || numericYAxis.length !== displayAxes.y.calculated.length) {
-            addLog('A validação de mapa requer eixos puramente numéricos.', 'error');
-            toast({ variant: 'destructive', title: 'Falha na Validação', description: 'Os eixos devem ser numéricos para a validação do tipo de mapa.' });
-            setIsValidatingMap(false);
-            return;
-        }
-
-        const result = await validateMapType({
-            mapName: selectedMapName,
-            mapData: displayMap,
-            xAxis: numericXAxis,
-            yAxis: numericYAxis,
-            equation: currentDef.equation,
-        });
-
-        setIsValidatingMap(false);
-
-        if (result.success && result.data) {
-            setAnalysisResult(result.data);
-            setIsAnalysisModalOpen(true);
-            addLog(`Análise de tipo de mapa concluída. Confiança: ${result.data.confidence}.`, 'success');
-
-            const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation } = result.data;
-            
-            const isValidEquation = (eq?: string): eq is string => {
-                if (!eq || typeof eq !== 'string') return false;
-                // A strict check. Allows only numbers, X, operators, parentheses, and whitespace.
-                // It will reject equations with other variables like 'RPM', but axis equations
-                // shouldn't have those anyway. They should only depend on their own value 'X'.
-                const invalidChars = /[^0-9.X()*/+\-\s]/i;
-                if (invalidChars.test(eq)) {
-                    addLog(`Sugestão de equação inválida da IA ignorada (caracteres inválidos encontrados): "${eq}"`, 'debug');
-                    return false;
-                }
-                return true;
-            };
-
-            const validSuggestedEquation = isValidEquation(suggestedEquation) ? suggestedEquation : undefined;
-            const validSuggestedXAxisEquation = isValidEquation(suggestedXAxisEquation) ? suggestedXAxisEquation : undefined;
-            const validSuggestedYAxisEquation = isValidEquation(suggestedYAxisEquation) ? suggestedYAxisEquation : undefined;
-
-            const hasSuggestion = validSuggestedEquation || validSuggestedXAxisEquation || validSuggestedYAxisEquation;
-            
-            if (hasSuggestion) {
-                const newDefinition = JSON.parse(JSON.stringify(currentDef)) as XDFDefinition;
-                if (validSuggestedEquation && newDefinition) newDefinition.equation = validSuggestedEquation;
-                if (validSuggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = validSuggestedXAxisEquation;
-                if (validSuggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = validSuggestedYAxisEquation;
-                
-                try {
-                    const correctedXAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-                    const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-                    const { calculatedMap: correctedMapPreview } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxisPreview, correctedYAxisPreview);
-                    const correctedAxesPreview = {
-                        x: correctedXAxisPreview.calculated,
-                        y: correctedYAxisPreview.calculated,
-                        xLabel: newDefinition.xAxisDef?.label || 'Carga',
-                        yLabel: newDefinition.yAxisDef?.label || 'RPM'
-                    };
-
-                    setAiSuggestion({
-                        reasoning: result.data.reasoning,
-                        originalMap: displayMap,
-                        originalAxes: {
-                            x: displayAxes.x.calculated,
-                            y: displayAxes.y.calculated,
-                            xLabel: displayAxes.xLabel,
-                            yLabel: displayAxes.yLabel
-                        },
-                        correctedMap: correctedMapPreview,
-                        correctedAxes: correctedAxesPreview,
-                        newDefinition,
-                        originalDefinition: JSON.parse(JSON.stringify(currentDef)),
-                    });
-                    setIsSuggestionModalOpen(true);
-                    addLog('A IA propôs uma correção para as equações do mapa.', 'info');
-
-                } catch (error) {
-                    addLog(`Erro ao gerar a pré-visualização da IA: ${(error as Error).message}`, 'error');
-                    toast({ variant: 'destructive', title: 'Erro na Pré-visualização', description: 'Não foi possível gerar a pré-visualização da sugestão da IA.' });
-                }
-            }
-        } else {
-            addLog(`A análise do tipo de mapa falhou: ${result.error}`, 'error');
-            toast({ variant: 'destructive', title: 'Falha na Análise do Mapa', description: result.error });
-        }
+        runAutoValidation(currentDef, displayMap, displayAxes);
     };
     
     const handleAcceptSuggestion = (correctionsToApply: { x: boolean; y: boolean; z: boolean; }) => {
@@ -1121,6 +1108,9 @@ export default function EcuTuningAssistant() {
             
             setMapRenderKey(p => p + 1);
             toast({ title: 'Correções Aplicadas', description: `O mapa foi atualizado com as sugestões selecionadas.` });
+            
+            // The map is now considered 'valid' after applying corrections
+            setMapValidationStatus('valid');
 
         } catch (error) {
             addLog(`Erro ao aplicar a sugestão da IA: ${(error as Error).message}`, 'error');
@@ -1550,9 +1540,9 @@ export default function EcuTuningAssistant() {
                                             {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                                             Procurar Mapas Novos
                                         </Button>
-                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || isValidatingMap}>
-                                            {isValidatingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                                            Analisar e Corrigir Mapa
+                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || mapValidationStatus === 'loading'}>
+                                            {mapValidationStatus === 'loading' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                                            {mapValidationStatus === 'suggestion' ? 'Ver Sugestão de Correção' : 'Analisar Mapa Novamente'}
                                         </Button>
                                         <Button variant="outline" className="w-full" onClick={handleExplainMap} disabled={!displayMap || isExplaining}>
                                             {isExplaining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <AudioLines className="mr-2 h-4 w-4" />}
@@ -1592,8 +1582,33 @@ export default function EcuTuningAssistant() {
                     <main className="xl:col-span-9">
                         <Card className="min-h-[85vh] flex flex-col">
                             <CardHeader>
-                                <CardTitle>Visualizador de Mapas</CardTitle>
-                                <CardDescription>{selectedMapName || "Carregue os ficheiros e selecione um mapa para começar"}</CardDescription>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                        <CardTitle className="flex items-center gap-2">
+                                            Visualizador de Mapas
+                                            {mapValidationStatus === 'loading' && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+                                            {mapValidationStatus === 'valid' && (
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                        <CheckCircle className="h-5 w-5 text-green-500" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>A IA confirmou que as equações parecem corretas.</TooltipContent>
+                                                </Tooltip>
+                                            )}
+                                            {mapValidationStatus === 'suggestion' && (
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:text-primary" onClick={() => setIsSuggestionModalOpen(true)}>
+                                                            <Sparkles className="h-5 w-5" />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>A IA tem uma sugestão de correção. Clique para ver.</TooltipContent>
+                                                </Tooltip>
+                                            )}
+                                        </CardTitle>
+                                        <CardDescription>{selectedMapName || "Carregue os ficheiros e selecione um mapa para começar"}</CardDescription>
+                                    </div>
+                                </div>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0">
                                 {displayMap && displayAxes ? (
@@ -1676,7 +1691,6 @@ export default function EcuTuningAssistant() {
                     onConfirm={handleConfirmAxes}
                     currentDefinition={availableMaps.find(d => d.name === selectedMapName)}
                 />
-                <MapAnalysisResultModal open={isAnalysisModalOpen} onOpenChange={setIsAnalysisModalOpen} result={analysisResult} />
                 <MapCorrectionSuggestionModal 
                     open={isSuggestionModalOpen} 
                     onOpenChange={setIsSuggestionModalOpen} 
@@ -1768,52 +1782,6 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentDefinition }: {
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                     <Button onClick={handleConfirm}>Aplicar e Recalcular</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-function MapAnalysisResultModal({ open, onOpenChange, result }: { open: boolean, onOpenChange: (open: boolean) => void, result: { confidence: string; suspectedType: string; reasoning: string; } | null }) {
-    const getConfidenceBadgeVariant = (confidence: string | undefined) => {
-        switch (confidence) {
-            case 'Alta': return 'default';
-            case 'Média': return 'secondary';
-            case 'Baixa': return 'destructive';
-            default: return 'outline';
-        }
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <ShieldCheck className="text-primary"/>
-                        Resultado da Análise do Mapa pela IA
-                    </DialogTitle>
-                    <DialogDescription>
-                        A IA analisou a forma e os padrões dos dados do mapa para fornecer uma segunda opinião.
-                    </DialogDescription>
-                </DialogHeader>
-                {result && (
-                    <div className="space-y-4 pt-4">
-                        <div className="flex items-center gap-4">
-                             <h3 className="text-sm font-semibold text-muted-foreground">Confiança:</h3>
-                             <Badge variant={getConfidenceBadgeVariant(result.confidence)} className="text-base">{result.confidence}</Badge>
-                        </div>
-                         <div className="flex items-center gap-4">
-                             <h3 className="text-sm font-semibold text-muted-foreground">Tipo Suspeito:</h3>
-                             <p className="font-semibold">{result.suspectedType}</p>
-                        </div>
-                        <div>
-                             <h3 className="text-sm font-semibold text-muted-foreground mb-2">Justificação da IA:</h3>
-                             <p className="text-sm p-3 bg-muted rounded-md border">{result.reasoning}</p>
-                        </div>
-                    </div>
-                )}
-                <DialogFooter>
-                    <Button onClick={() => onOpenChange(false)}>Fechar</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
