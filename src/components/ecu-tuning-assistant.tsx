@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -591,15 +592,30 @@ export default function EcuTuningAssistant() {
         });
 
         if (result.success && result.data) {
+            const isValidEquation = (eq: string | undefined): eq is string => {
+                if (!eq) return false;
+                const lowerEq = eq.toLowerCase().trim();
+                if (lowerEq === 'string' || lowerEq.includes('sem alteração') || lowerEq.includes('nenhuma')) {
+                    return false;
+                }
+                const validCharsRegex = /^[a-zA-Z0-9_()+\-*/.\s]+$/;
+                return validCharsRegex.test(eq);
+            };
+
             const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation } = result.data;
-            const hasSuggestion = suggestedEquation || suggestedXAxisEquation || suggestedYAxisEquation;
+
+            const validSuggestedEquation = isValidEquation(suggestedEquation) ? suggestedEquation : undefined;
+            const validSuggestedXAxisEquation = isValidEquation(suggestedXAxisEquation) ? suggestedXAxisEquation : undefined;
+            const validSuggestedYAxisEquation = isValidEquation(suggestedYAxisEquation) ? suggestedYAxisEquation : undefined;
+
+            const hasSuggestion = validSuggestedEquation || validSuggestedXAxisEquation || validSuggestedYAxisEquation;
 
             if (hasSuggestion) {
                  try {
                     const newDefinition = JSON.parse(JSON.stringify(definition)) as XDFDefinition;
-                    if (suggestedEquation) newDefinition.equation = suggestedEquation;
-                    if (suggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = suggestedXAxisEquation;
-                    if (suggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = suggestedYAxisEquation;
+                    if (validSuggestedEquation) newDefinition.equation = validSuggestedEquation;
+                    if (validSuggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = validSuggestedXAxisEquation;
+                    if (validSuggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = validSuggestedYAxisEquation;
 
                     const correctedXAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
                     const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
