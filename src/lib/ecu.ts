@@ -92,7 +92,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     const defaultLabel = axisType === 'y' ? 'RPM' : 'Carga';
 
     const localCountNode = findNode(axisNode, 'indexcount', 'INDEXCOUNT');
-    const count = localCountNode ? parseInt(localCountNode.textContent || '0', 10) : 0;
+    let count = localCountNode ? parseInt(localCountNode.textContent || '0', 10) : 0;
     
     const localLabel = (
         findNode(axisNode, 'units', 'UNITS')?.textContent ||
@@ -163,8 +163,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                 const num = parseFloat(l);
                 return isNaN(num) ? l.trim() : num;
             });
-            // The count should match the number of labels.
+            // The count should match the number of labels. If `indexcount` is missing, use the number of labels.
             const finalCount = count > 0 ? count : labels.length;
+            if (count === 0) count = finalCount;
             return { 
                 staticLabels, 
                 count: finalCount, 
@@ -274,14 +275,27 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     throw new Error('Erro de análise XML: O ficheiro XDF parece estar corrompido ou mal formatado.');
   }
 
-  // Get only top-level tables, not tables nested inside other tables.
-  const xdfTables: Element[] = [];
-  const allTables = xmlDoc.querySelectorAll('xdftable, table');
-  allTables.forEach(table => {
-      if (!table.parentElement?.closest('xdftable, table')) {
-          xdfTables.push(table);
+  // Helper to check if an element is nested within another table-like element.
+  const isNestedInTable = (element: Element | null): boolean => {
+    let parent = element?.parentElement;
+    while(parent) {
+      const parentTagName = parent.tagName.toLowerCase();
+      if (parentTagName === 'xdftable' || parentTagName === 'table') {
+        return true;
       }
-  });
+      parent = parent.parentElement;
+    }
+    return false;
+  };
+  
+  const allElements = xmlDoc.getElementsByTagName('*');
+  const xdfTables: Element[] = [];
+  for(const el of Array.from(allElements)) {
+      const tagName = el.tagName.toLowerCase();
+      if ((tagName === 'xdftable' || tagName === 'table') && !isNestedInTable(el)) {
+          xdfTables.push(el);
+      }
+  }
 
   if (xdfTables.length === 0) {
     throw new Error('Nenhuma definição de <XDFTABLE> ou <table> foi encontrada no ficheiro.');
@@ -388,6 +402,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           if(yAxisDef.address !== null && wasMissing) {
               console.warn(`Definição do eixo Y em falta para "${originalName}". A inferir um substituto com endereço 0x${yAxisDef.address?.toString(16)}.`);
           }
+      } else if (yAxisDef.count === 0) { // If count was explicitly 0 or missing, set it.
+          yAxisDef.count = rowsCount;
       } else if (yAxisDef.count !== rowsCount) {
           console.warn(`A contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rowsCount}). A ajustar para corresponder.`);
           yAxisDef.count = rowsCount;
@@ -409,6 +425,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           if (xAxisDef.address !== null && wasMissing) {
               console.warn(`Definição do eixo X em falta para "${originalName}". A inferir um substituto com endereço 0x${xAxisDef.address?.toString(16)}.`);
           }
+      } else if (xAxisDef.count === 0) { // If count was explicitly 0 or missing, set it.
+          xAxisDef.count = colsCount;
       } else if (xAxisDef.count !== colsCount) {
           console.warn(`A contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${colsCount}). A ajustar para corresponder.`);
           xAxisDef.count = colsCount;
@@ -801,4 +819,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-    
