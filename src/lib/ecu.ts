@@ -263,7 +263,7 @@ function findMainMathNode(tableNode: Element, zAxisNode: Element): Element | nul
 }
 
 
-export function parseXDF(xmlString: string, password?: string): XDFDefinition[] {
+export function parseXDF(xmlString: string): XDFDefinition[] {
   if (typeof DOMParser === 'undefined') {
     return [];
   }
@@ -388,7 +388,7 @@ export function parseXDF(xmlString: string, password?: string): XDFDefinition[] 
           if(yAxisDef.address !== null && wasMissing) {
               console.warn(`Definição do eixo Y em falta para "${originalName}". A inferir um substituto com endereço 0x${yAxisDef.address?.toString(16)}.`);
           }
-      } else if (yAxisDef.count !== rowsCount && yAxisDef.count > 0) {
+      } else if (yAxisDef.count !== rowsCount) {
           console.warn(`A contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rowsCount}). A ajustar para corresponder.`);
           yAxisDef.count = rowsCount;
       }
@@ -409,7 +409,7 @@ export function parseXDF(xmlString: string, password?: string): XDFDefinition[] 
           if (xAxisDef.address !== null && wasMissing) {
               console.warn(`Definição do eixo X em falta para "${originalName}". A inferir um substituto com endereço 0x${xAxisDef.address?.toString(16)}.`);
           }
-      } else if (xAxisDef.count !== colsCount && xAxisDef.count > 0) {
+      } else if (xAxisDef.count !== colsCount) {
           console.warn(`A contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${colsCount}). A ajustar para corresponder.`);
           xAxisDef.count = colsCount;
       }

@@ -238,7 +238,6 @@ export default function EcuTuningAssistant() {
     // File & map state
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer; checksum: string } | null>(null);
     const [xdfFile, setXdfFile] = useState<{ name: string; definitions: XDFDefinition[] } | null>(null);
-    const [xdfPassword, setXdfPassword] = useState('');
     const [availableMaps, setAvailableMaps] = useState<XDFDefinition[]>([]);
     const [selectedMapName, setSelectedMapName] = useState<string>('');
 
@@ -458,7 +457,6 @@ export default function EcuTuningAssistant() {
         setAudioUrl(null);
         setSelectedCells(new Set());
         setQuickEditValue('');
-        setXdfPassword('');
 
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
@@ -495,7 +493,7 @@ export default function EcuTuningAssistant() {
 
                 } else { // XDF
                     const text = new TextDecoder().decode(buffer);
-                    const definitions = parseXDF(text, xdfPassword);
+                    const definitions = parseXDF(text);
                     if (definitions.length === 0) {
                         throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     }
@@ -518,14 +516,6 @@ export default function EcuTuningAssistant() {
                 const msg = `Erro ao carregar ${file.name}: ${(error as Error).message}`;
                 addLog(msg, 'error');
                 if (type === 'xdf') {
-                    if (xdfPassword) {
-                        toast({
-                            variant: 'destructive',
-                            title: "Desencriptação Indisponível",
-                            description: "A funcionalidade para ler XDFs com senha ainda não está implementada. Por favor, guarde uma versão desprotegida.",
-                            duration: 8000
-                        });
-                    }
                     setIsXdfErrorModalOpen(true);
                 } else {
                     toast({ variant: 'destructive', title: "Erro no Ficheiro", description: msg });
@@ -1487,17 +1477,6 @@ export default function EcuTuningAssistant() {
                                     <div className="space-y-2">
                                         <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}><Plus className="mr-2"/> Adicionar novo .XDF à biblioteca</Button>
                                         <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
-                                        <div className="space-y-1">
-                                            <Label htmlFor="xdf-password" className="text-xs">Senha do XDF (Opcional)</Label>
-                                            <Input
-                                                id="xdf-password"
-                                                type="password"
-                                                placeholder="Se o ficheiro for protegido"
-                                                value={xdfPassword}
-                                                onChange={(e) => setXdfPassword(e.target.value)}
-                                                className="h-9"
-                                            />
-                                        </div>
                                     </div>
 
                                     {binFile && <p className="text-xs text-green-400 truncate">BIN: {binFile.name}</p>}
