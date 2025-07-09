@@ -87,10 +87,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         const linkId = getAttr(embedInfoNode, 'linkobjid');
         const linkedTable = linkId ? tableMap.get(linkId) : null;
         
-        // In linked axes, we might need a recursive find, so we use getElementsByTagName
-        const linkedZAxis = linkedTable?.querySelector('XDFAXIS[id="z"], zaxis');
+        const linkedZAxis = findNode(linkedTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
         if (linkedZAxis) {
-            const sourceEmbeddedData = linkedZAxis.querySelector('embeddeddata, EMBEDDEDDATA');
+            const sourceEmbeddedData = findNode(linkedZAxis, 'embeddeddata', 'EMBEDDEDDATA');
             if (sourceEmbeddedData) {
                 const sourceAddrStr = getAttr(sourceEmbeddedData, 'mmedaddress');
                 const sourceAddr = sourceAddrStr ? parseInt(sourceAddrStr, 16) : null;
@@ -101,10 +100,10 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                 const sourceMajorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
                 const sourceMinorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
 
-                const sourceMathNode = linkedZAxis.querySelector('math, MATH');
+                const sourceMathNode = findNode(linkedZAxis, 'math', 'MATH');
                 const sourceEquation = getAttr(sourceMathNode || linkedZAxis, 'Equation', 'equation') || 'X';
                 
-                const sourceVarNode = (sourceMathNode || linkedZAxis).querySelector('var, VAR');
+                const sourceVarNode = findNode((sourceMathNode || linkedZAxis), 'var', 'VAR');
                 const sourceEquationVar = getAttr(sourceVarNode, 'id') || 'X';
                 
                 const linkedRows = parseInt(getAttr(sourceEmbeddedData, 'mmedrowcount') || '0');
@@ -259,7 +258,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   const nameCounts: Record<string, number> = {};
 
   for (const table of xdfTables) {
-    const titleNode = table.querySelector('title, TITLE'); // Recursive find for title
+    const titleNode = findNode(table, 'title', 'TITLE');
     const originalName = titleNode?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
     
     try {
