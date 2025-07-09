@@ -124,7 +124,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                 const sourceMinorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
 
                 // For linked axes, the math comes from the linked table's Z-axis.
-                const sourceMathNode = findNode(linkedZAxis, 'math', 'MATH');
+                const sourceMathNode = findMainMathNode(linkedTable!, linkedZAxis);
                 const sourceEquation = getAttr(sourceMathNode || linkedZAxis, 'Equation', 'equation') || 'X';
                 
                 const sourceVarNode = findNode((sourceMathNode || linkedZAxis), 'var', 'VAR');
