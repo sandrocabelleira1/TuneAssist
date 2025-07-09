@@ -1169,16 +1169,56 @@ export default function EcuTuningAssistant() {
                 }
                 allKnownNames.add(uniqueName);
 
+                const zAddr = pMap.address;
+                const rows = pMap.rows;
+                const cols = pMap.cols;
+                
+                // Assumir defaults para os eixos - isto pode ser refinado mais tarde ou corrigido pelo utilizador/IA
+                const yAxisDataSize = 2; // RPM é geralmente 16-bit
+                const xAxisDataSize = 2; // Carga/TPS também é frequentemente 16-bit
+                const axesAreBigEndian = false;
+
+                // Inferir endereços de eixos assumindo que eles precedem os dados do mapa (padrão comum Y, X, Z)
+                const inferredXAxisAddr = zAddr - (cols * xAxisDataSize);
+                const inferredYAxisAddr = inferredXAxisAddr - (rows * yAxisDataSize);
+
+                const yAxisAddress = inferredYAxisAddr >= 0 ? inferredYAxisAddr : null;
+                const xAxisAddress = yAxisAddress !== null && inferredXAxisAddr >= 0 ? inferredXAxisAddr : null;
+
+                // Sugerir equações padrão para tornar os dados imediatamente úteis
+                const yAxisEquation = 'X * 50';       // Sugere RPMs (ex: 200 * 50 = 10000 RPM)
+                const xAxisEquation = 'X / 10.23';    // Sugere Carga/TPS % (converte 0-1023 para 0-100)
+
                 return {
                     name: uniqueName,
-                    address: pMap.address,
-                    rows: pMap.rows,
-                    cols: pMap.cols,
+                    address: zAddr,
+                    rows: rows,
+                    cols: cols,
                     dataSize: pMap.dataSize,
-                    isBigEndian: false,
+                    isBigEndian: false, // O Z-data endianness é do mapa
                     equation: 'X',
-                    xAxisDef: { address: null, count: pMap.cols, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Coluna' },
-                    yAxisDef: { address: null, count: pMap.rows, dataSize: 1, isBigEndian: false, equation: 'X', label: 'Linha' },
+                    xAxisDef: { 
+                        address: xAxisAddress, 
+                        count: cols, 
+                        dataSize: xAxisDataSize, 
+                        isBigEndian: axesAreBigEndian, 
+                        equation: xAxisAddress !== null ? xAxisEquation : 'X',
+                        equationVar: 'X',
+                        label: 'Carga',
+                        majorStride: 0, 
+                        minorStride: 0,
+                    },
+                    yAxisDef: { 
+                        address: yAxisAddress, 
+                        count: rows, 
+                        dataSize: yAxisDataSize, 
+                        isBigEndian: axesAreBigEndian, 
+                        equation: yAxisAddress !== null ? yAxisEquation : 'X',
+                        equationVar: 'X',
+                        label: 'RPM',
+                        majorStride: 0, 
+                        minorStride: 0,
+                    },
                     isPotential: true,
                 };
             });

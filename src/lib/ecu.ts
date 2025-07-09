@@ -338,32 +338,66 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
       const equationVar = getAttr(varNode, 'id') || 'X';
 
-      // Lenient axis validation:
-      // If an axis was parsed, trust it. If its count is inconsistent, log a warning and fix it.
-      // Only fall back to a placeholder if the axis could not be parsed at all.
-      if (yAxisDef) {
-        if (yAxisDef.count !== 0 && yAxisDef.count !== rowsCount) {
-          console.warn(`A contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rowsCount}). A ajustar a contagem do eixo para corresponder.`);
+      // --- Inferencia de Eixos e Validação ---
+      // Lógica para lidar com XDFs incompletos ou inconsistentes de forma robusta.
+
+      const defaultYDataSize = 2;
+      const defaultXDataSize = 2;
+      const inferredXAddr = address - (colsCount * (xAxisDef?.dataSize || defaultXDataSize));
+      const inferredYAddr = inferredXAddr - (rowsCount * (yAxisDef?.dataSize || defaultYDataSize));
+
+      if (!yAxisDef || yAxisDef.address === null) {
+          const wasMissing = !yAxisDef;
+          yAxisDef = {
+              ...(yAxisDef || {} as Partial<AxisDefinition>),
+              address: inferredYAddr >= 0 ? inferredYAddr : null,
+              count: rowsCount,
+              dataSize: yAxisDef?.dataSize || defaultYDataSize,
+              isBigEndian: yAxisDef?.isBigEndian || false,
+              equation: (yAxisDef?.equation && yAxisDef.equation !== 'X') ? yAxisDef.equation : 'X * 50',
+              equationVar: yAxisDef?.equationVar || 'X',
+              label: yAxisDef?.label || 'RPM',
+              majorStride: yAxisDef?.majorStride || 0,
+              minorStride: yAxisDef?.minorStride || 0,
+          };
+          if(yAxisDef.address !== null) {
+            if (wasMissing) {
+              console.warn(`Definição do eixo Y em falta para "${originalName}". A inferir um substituto com endereço 0x${yAxisDef.address?.toString(16)}.`);
+            } else {
+              console.warn(`Endereço do eixo Y em falta para "${originalName}". A inferir endereço 0x${yAxisDef.address?.toString(16)}.`);
+            }
+          }
+      } else if (yAxisDef.count !== rowsCount) {
+          console.warn(`A contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rowsCount}). A ajustar para corresponder.`);
           yAxisDef.count = rowsCount;
-        } else if (yAxisDef.count === 0) {
-          yAxisDef.count = rowsCount;
-        }
-      } else {
-        console.warn(`Não foi possível analisar uma definição válida do eixo Y para "${originalName}". A inferir um eixo de substituição.`);
-        yAxisDef = { address: null, count: rowsCount, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'RPM', majorStride: 0, minorStride: 0 };
+      }
+      
+      if (!xAxisDef || xAxisDef.address === null) {
+          const wasMissing = !xAxisDef;
+           xAxisDef = {
+              ...(xAxisDef || {} as Partial<AxisDefinition>),
+              address: inferredXAddr >= 0 ? inferredXAddr : null,
+              count: colsCount,
+              dataSize: xAxisDef?.dataSize || defaultXDataSize,
+              isBigEndian: xAxisDef?.isBigEndian || false,
+              equation: (xAxisDef?.equation && xAxisDef.equation !== 'X') ? xAxisDef.equation : 'X / 10.23',
+              equationVar: xAxisDef?.equationVar || 'X',
+              label: xAxisDef?.label || 'Carga',
+              majorStride: xAxisDef?.majorStride || 0,
+              minorStride: xAxisDef?.minorStride || 0,
+          };
+          if (xAxisDef.address !== null) {
+            if (wasMissing) {
+              console.warn(`Definição do eixo X em falta para "${originalName}". A inferir um substituto com endereço 0x${xAxisDef.address?.toString(16)}.`);
+            } else {
+              console.warn(`Endereço do eixo X em falta para "${originalName}". A inferir endereço 0x${xAxisDef.address?.toString(16)}.`);
+            }
+          }
+      } else if (xAxisDef.count !== colsCount) {
+          console.warn(`A contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${colsCount}). A ajustar para corresponder.`);
+          xAxisDef.count = colsCount;
       }
 
-      if (xAxisDef) {
-        if (xAxisDef.count !== 0 && xAxisDef.count !== colsCount) {
-          console.warn(`A contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${colsCount}). A ajustar a contagem do eixo para corresponder.`);
-          xAxisDef.count = colsCount;
-        } else if (xAxisDef.count === 0) {
-            xAxisDef.count = colsCount;
-        }
-      } else {
-        console.warn(`Não foi possível analisar uma definição válida do eixo X para "${originalName}". A inferir um eixo de substituição.`);
-        xAxisDef = { address: null, count: colsCount, dataSize: 2, isBigEndian: false, equation: 'X', equationVar: 'X', label: 'Carga', majorStride: 0, minorStride: 0 };
-      }
 
       let tableName = originalName;
       if (nameCounts[originalName]) {
