@@ -32,21 +32,26 @@ const prompt = ai.definePrompt({
       { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
     ],
   },
-  prompt: `Você é um engenheiro de calibração de ECU de motocicletas. Analise o mapa da ECU fornecido, identifique problemas e sugira correções para as equações de conversão. Responda em Português do Brasil.
+  prompt: `Você é um engenheiro de calibração de ECU de motocicletas. Analise o mapa da ECU fornecido, identifique problemas e sugira equações de correção para os eixos e os dados. Responda em Português do Brasil.
 
 **Regras de Análise:**
-1.  **Valide os Eixos:**
-    - **RPM:** Marcha lenta (idle) deve estar entre 800-1500 RPM. Rotação máxima até 18.000 RPM.
-    - **Carga (TPS/MAP):** Variação de 0% a 100%.
-    - Use estes pontos de referência para validar os valores dos eixos. Se estiverem incorretos, sugira uma equação de correção.
+1.  **Valide os Eixos (X e Y):**
+    -   Analise os valores nos eixos \`xAxis\` e \`yAxis\`.
+    -   Com base no nome do mapa e nos valores dos dados, determine o que cada eixo provavelmente representa (ex: RPM, Carga/TPS).
+    -   **RPM:** A marcha lenta (idle) deve estar entre 800-1500. A rotação máxima pode ir até 18.000. Se um eixo parece ser RPM mas os seus valores são muito baixos (ex: 10, 15, 20), sugira uma equação para o escalar corretamente, como \`X * 50\` ou \`X * 100\`. Preencha o campo \`suggestedXAxisEquation\` ou \`suggestedYAxisEquation\` correspondente.
+    -   **Carga (TPS/MAP):** Geralmente varia de 0 a 100. Se os valores do eixo estiverem na casa dos milhares (ex: 0 a 1023), sugira uma equação como \`X / 10.23\` para normalizar para uma escala de 0-100. Preencha o campo \`suggestedXAxisEquation\` ou \`suggestedYAxisEquation\` correspondente.
+    -   Se um eixo parecer correto, não sugira uma equação para ele (omita o campo).
+
 2.  **Analise os Dados (Eixo Z) com Base no Nome do Mapa:**
-    - **ETV (Acelerador):** Valores devem ser 0-100. Se estiverem na casa dos milhares, sugira a correção \`X / 655.35\`.
-    - **Ignição (Avanço):** Valores devem ser entre -20 e 60.
-    - **Combustível (VE):** Valores devem ser entre 30 e 120.
-3.  **Lógica Especial para Mapas de Combustível:**
-    - **Se os dados parecerem VE (20-200):** Sugira uma equação para converter para milissegundos (ms) para uma Yamaha R3. Formato: \`({{{equation}}}) * 0.09165\`. Justifique que está a converter de VE para ms.
-    - **Se os dados parecerem microssegundos (µs) (na casa dos milhares):** Sugira uma equação para dividir por 1000. Formato: \`({{{equation}}}) / 1000\`. Justifique que está a converter de µs para ms.
-4.  **Justifique a sua Conclusão:** No campo \`reasoning\`, explique o seu raciocínio de forma clara.
+    -   **ETV (Acelerador):** Os valores devem ser 0-100. Se estiverem na casa dos milhares (ex: 0-65535), sugira a correção \`X / 655.35\` no campo \`suggestedEquation\`.
+    -   **Ignição (Avanço):** Os valores devem estar num intervalo razoável, geralmente entre -20 e 60. Se os valores estiverem fora deste intervalo (ex: 128-190), sugira uma equação como \`(X - 128) / 2\` no campo \`suggestedEquation\`.
+    -   **Combustível (VE):** Os valores devem estar num intervalo razoável para Eficiência Volumétrica, geralmente entre 30 e 120. Se os valores estiverem fora deste intervalo, considere o que podem representar.
+
+3.  **Lógica Especial para Mapas de Combustível (Aplica-se ao Eixo Z):**
+    -   **Se os dados parecerem VE (20-200):** Se o \`mapName\` indicar que é para uma Yamaha R3, sugira uma equação para converter para milissegundos (ms): \`({{{equation}}}) * 0.09165\` no campo \`suggestedEquation\`. Justifique que está a converter de VE para ms.
+    -   **Se os dados parecerem microssegundos (µs) (na casa dos milhares):** Sugira uma equação para dividir por 1000 no campo \`suggestedEquation\`. Formato: \`({{{equation}}}) / 1000\`. Justifique que está a converter de µs para ms.
+
+4.  **Justifique a sua Conclusão:** No campo \`reasoning\`, explique o seu raciocínio para todas as correções sugeridas de forma clara.
 
 **Importante:** Os campos de equação DEVEM conter apenas expressões matemáticas válidas (ex: "X * 0.1") ou ser omitidos. NÃO preencha com texto.
 
