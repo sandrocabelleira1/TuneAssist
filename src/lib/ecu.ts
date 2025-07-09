@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -42,6 +43,25 @@ function findNode(parent: Element | null, ...selectors: string[]): Element | nul
         }
     }
     return null;
+}
+
+
+/**
+ * Finds ALL DIRECT child elements in a case-insensitive manner using a simple tag selector.
+ * @param parent The element to search within.
+ * @param tagName The tag name to look for (e.g., 'label').
+ * @returns An array of found elements.
+ */
+function findNodes(parent: Element | null, tagName: string): Element[] {
+    if (!parent) return [];
+    const lowerTagName = tagName.toLowerCase();
+    const results: Element[] = [];
+    for (const child of Array.from(parent.children)) {
+        if (child.tagName.toLowerCase() === lowerTagName) {
+            results.push(child);
+        }
+    }
+    return results;
 }
 
 
@@ -128,7 +148,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     }
 
     // --- Fallback to standard parsing (static labels or direct address) ---
-    const labelNodes = axisNode.querySelectorAll('label, LABEL');
+    const labelNodes = findNodes(axisNode, 'label');
     let staticLabels: (string | number)[] | undefined = undefined;
     if (labelNodes.length > 0) {
         const labels = Array.from(labelNodes).map(l => getAttr(l, 'value') || '');
