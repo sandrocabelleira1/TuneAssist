@@ -879,7 +879,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleCellChange = (rowIndex: number, colIndex: number, value: string) => {
-      if (!workingMap || !displayMap || !displayAxes || !displayIndexMap || !rawMap) return;
+      if (!workingMap || !displayMap || !displayAxes || !displayIndexMap || !rawMap || !sourceAxes) return;
 
       const newValue = parseFloat(value);
       if (isNaN(newValue)) {
@@ -913,10 +913,10 @@ export default function EcuTuningAssistant() {
       if (currentDef && sourceAxes) {
           try {
               const axisValues = {
-                  x_calc: (displayAxes.x.calculated[colIndex] as number) || 0,
-                  y_calc: (displayAxes.y.calculated[rowIndex] as number) || 0,
-                  x_raw: displayAxes.x.raw[colIndex] || 0,
-                  y_raw: displayAxes.y.raw[rowIndex] || 0,
+                  x_calc: (sourceAxes.x.calculated[workingColIndex] as number) || 0,
+                  y_calc: (sourceAxes.y.calculated[workingRowIndex] as number) || 0,
+                  x_raw: sourceAxes.x.raw[workingColIndex] || 0,
+                  y_raw: sourceAxes.y.raw[workingRowIndex] || 0,
                   z: 0,
               };
               const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
@@ -1003,10 +1003,10 @@ export default function EcuTuningAssistant() {
                 
                 try {
                     const axisValues = {
-                        x_calc: (displayAxes.x.calculated[c] as number) || 0,
-                        y_calc: (displayAxes.y.calculated[r] as number) || 0,
-                        x_raw: displayAxes.x.raw[c] || 0,
-                        y_raw: displayAxes.y.raw[r] || 0,
+                        x_calc: (sourceAxes.x.calculated[workingColIndex] as number) || 0,
+                        y_calc: (sourceAxes.y.calculated[workingRowIndex] as number) || 0,
+                        x_raw: sourceAxes.x.raw[workingColIndex] || 0,
+                        y_raw: sourceAxes.y.raw[workingRowIndex] || 0,
                         z: 0
                     };
                     const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
