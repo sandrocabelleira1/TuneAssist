@@ -72,7 +72,7 @@ const findMapsFlow = ai.defineFlow(
   async (input) => {
     const { output } = await prompt(input);
     if (!output) {
-      return { maps: [], analysis: "A IA devolveu uma resposta inesperada. Por favor, tente novamente." };
+      throw new Error("A IA devolveu uma resposta inesperada. Por favor, tente novamente.");
     }
     return output;
   }

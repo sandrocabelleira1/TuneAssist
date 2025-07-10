@@ -29,6 +29,10 @@ function handleAiError(error: unknown, context: string): { success: false; error
         return { success: false, error: 'A equação para um dos eixos é inválida. Apenas a variável "X" pode ser usada em equações de eixo. Por favor, corrija a definição XDF.' };
     }
     
+    if (errorMessage.includes('unexpected response')) {
+      return { success: false, error: `Ocorreu um erro de rede ou servidor (${context}). Por favor, tente novamente.` };
+    }
+
     return { success: false, error: `Ocorreu um erro inesperado (${context}): ${errorMessage}` };
 }
 
@@ -37,6 +41,9 @@ export async function validateMapType(input: ValidateMapTypeInput): Promise<{ su
   try {
     const validatedInput = ValidateMapTypeInputSchema.parse(input);
     const result = await validateMapTypeFlow(validatedInput);
+    if (!result) {
+        throw new Error('A IA devolveu uma resposta vazia.');
+    }
     return { success: true, data: result };
   } catch (error) {
     return handleAiError(error, 'validação do mapa');
@@ -47,6 +54,9 @@ export async function findPotentialMaps(input: FindMapsInput): Promise<{ success
   try {
     const validatedInput = FindMapsInputSchema.parse(input);
     const result = await findMapsFlow(validatedInput);
+    if (!result) {
+        throw new Error('A IA devolveu uma resposta vazia.');
+    }
     return { success: true, data: result };
   } catch (error) {
     return handleAiError(error, 'procura de mapas');
@@ -57,6 +67,9 @@ export async function explainMap(input: ExplainMapInput): Promise<{ success: boo
   try {
     const validatedInput = ExplainMapInputSchema.parse(input);
     const result = await explainMapFlow(validatedInput);
+     if (!result) {
+        throw new Error('A IA devolveu uma resposta vazia.');
+    }
     return { success: true, data: result };
   } catch (error) {
     return handleAiError(error, 'geração de explicação');
@@ -67,6 +80,9 @@ export async function generateSpeech(text: TextToSpeechInput): Promise<{ success
   try {
     const validatedInput = TextToSpeechInputSchema.parse(text);
     const result = await generateSpeechFlow(validatedInput);
+     if (!result) {
+        throw new Error('A IA devolveu uma resposta vazia.');
+    }
     return { success: true, data: result };
   } catch (error) {
     return handleAiError(error, 'geração de áudio');
