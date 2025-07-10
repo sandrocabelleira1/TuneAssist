@@ -89,7 +89,7 @@ function getAttr(element: Element | null, ...names: string[]): string | null {
 function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axisType: 'y' | 'x'): AxisDefinition {
     if (!axisNode) return null;
 
-    const defaultLabel = axisType === 'y' ? 'RPM' : 'Carga';
+    const defaultLabel = axisType === 'y' ? 'RPM' : 'Posição da Borboleta';
 
     const localCountNode = findNode(axisNode, 'indexcount', 'INDEXCOUNT');
     let count = localCountNode ? parseInt(localCountNode.textContent || '0', 10) : 0;
@@ -376,7 +376,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       // --- Robust Axis Handling & Inference ---
       const defaultYDataSize = 2; // RPM is usually 16-bit
-      const defaultXDataSize = 2; // Load/TPS also often 16-bit
+      const defaultXDataSize = 2; // Posição da Borboleta also often 16-bit
       const inferredXAddr = address - (colsCount * (xAxisDef?.dataSize || defaultXDataSize));
       const inferredYAddr = inferredXAddr - (rowsCount * (yAxisDef?.dataSize || defaultYDataSize));
 
@@ -414,7 +414,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
               isBigEndian: xAxisDef?.isBigEndian ?? false,
               equation: (xAxisDef?.equation && xAxisDef.equation !== 'X') ? xAxisDef.equation : 'X / 10.23',
               equationVar: xAxisDef?.equationVar || 'X',
-              label: xAxisDef?.label || 'Carga',
+              label: xAxisDef?.label || 'Posição da Borboleta',
           } as AxisDefinition; // Type assertion
           if (xAxisDef.address !== null && wasMissing) {
               console.warn(`Definição do eixo X em falta para "${originalName}". A inferir um substituto com endereço 0x${xAxisDef.address?.toString(16)}.`);

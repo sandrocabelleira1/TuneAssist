@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -589,6 +587,8 @@ export default function EcuTuningAssistant() {
             xAxis: numericXAxis,
             yAxis: numericYAxis,
             equation: definition.equation,
+            brand: activeXdfBrand,
+            model: motorcycleModel,
         });
 
         if (result.success && result.data) {
@@ -629,7 +629,7 @@ export default function EcuTuningAssistant() {
                         correctedAxes: {
                             x: correctedXAxisPreview.calculated,
                             y: correctedYAxisPreview.calculated,
-                            xLabel: newDefinition.xAxisDef?.label || 'Carga',
+                            xLabel: newDefinition.xAxisDef?.label || 'Posição da Borboleta',
                             yLabel: newDefinition.yAxisDef?.label || 'RPM'
                         },
                         newDefinition,
@@ -649,7 +649,7 @@ export default function EcuTuningAssistant() {
             addLog(`A análise automática do mapa falhou: ${result.error}`, 'error');
             setMapValidationStatus('error');
         }
-    }, [binFile, addLog]);
+    }, [binFile, addLog, activeXdfBrand, motorcycleModel]);
 
     const handleMapSelect = (name: string) => {
         if (!binFile || !name) return;
@@ -674,7 +674,7 @@ export default function EcuTuningAssistant() {
             const mapAxes = {
               x: axisXData,
               y: axisYData,
-              xLabel: definition.xAxisDef?.label || 'Carga',
+              xLabel: definition.xAxisDef?.label || 'Posição da Borboleta',
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
             
@@ -727,7 +727,7 @@ export default function EcuTuningAssistant() {
             const newAxesState = {
               x: newX,
               y: newY,
-              xLabel: newDefinition.xAxisDef?.label || 'Carga',
+              xLabel: newDefinition.xAxisDef?.label || 'Posição da Borboleta',
               yLabel: newDefinition.yAxisDef?.label || 'RPM',
             };
 
@@ -1086,7 +1086,7 @@ export default function EcuTuningAssistant() {
             const newSourceAxes = {
                 x: correctedXAxis,
                 y: correctedYAxis,
-                xLabel: newDefinition.xAxisDef?.label || 'Carga',
+                xLabel: newDefinition.xAxisDef?.label || 'Posição da Borboleta',
                 yLabel: newDefinition.yAxisDef?.label || 'RPM'
             };
 
@@ -1181,7 +1181,7 @@ export default function EcuTuningAssistant() {
                 
                 // Assumir defaults para os eixos - isto pode ser refinado mais tarde ou corrigido pelo utilizador/IA
                 const yAxisDataSize = 2; // RPM é geralmente 16-bit
-                const xAxisDataSize = 2; // Carga/TPS também é frequentemente 16-bit
+                const xAxisDataSize = 2; // Posição da Borboleta também é frequentemente 16-bit
                 const axesAreBigEndian = false;
 
                 // Inferir endereços de eixos assumindo que eles precedem os dados do mapa (padrão comum Y, X, Z)
@@ -1193,7 +1193,7 @@ export default function EcuTuningAssistant() {
 
                 // Sugerir equações padrão para tornar os dados imediatamente úteis
                 const yAxisEquation = 'X * 50';       // Sugere RPMs (ex: 200 * 50 = 10000 RPM)
-                const xAxisEquation = 'X / 10.23';    // Sugere Carga/TPS % (converte 0-1023 para 0-100)
+                const xAxisEquation = 'X / 10.23';    // Sugere Posição da Borboleta % (converte 0-1023 para 0-100)
 
                 return {
                     name: uniqueName,
@@ -1210,7 +1210,7 @@ export default function EcuTuningAssistant() {
                         isBigEndian: axesAreBigEndian, 
                         equation: xAxisAddress !== null ? xAxisEquation : 'X',
                         equationVar: 'X',
-                        label: 'Carga',
+                        label: 'Posição da Borboleta',
                         majorStride: 0, 
                         minorStride: 0,
                     },
@@ -1854,7 +1854,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                 axes: {
                     x: correctedXAxis.calculated,
                     y: correctedYAxis.calculated,
-                    xLabel: tempDefinition.xAxisDef?.label || 'Carga',
+                    xLabel: tempDefinition.xAxisDef?.label || 'Posição da Borboleta',
                     yLabel: tempDefinition.yAxisDef?.label || 'RPM',
                 }
             });

@@ -33,7 +33,7 @@ function handleAiError(error: unknown, context: string): { success: false; error
       return { success: false, error: `Ocorreu um erro de rede ou servidor (${context}). Por favor, tente novamente.` };
     }
 
-    if (errorMessage.includes('resposta vazia')) {
+    if (errorMessage.includes('resposta vazia') || errorMessage.includes('não conseguiu analisar') || errorMessage.includes('não conseguiu gerar')) {
       return { success: false, error: `A IA não conseguiu gerar uma resposta para ${context}. Por favor, tente novamente.` };
     }
 

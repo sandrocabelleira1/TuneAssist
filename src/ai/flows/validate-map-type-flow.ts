@@ -37,10 +37,9 @@ const prompt = ai.definePrompt({
 **Regras de Análise:**
 1.  **Valide os Eixos (X e Y):**
     -   Analise os valores nos eixos \`xAxis\` e \`yAxis\`.
-    -   Com base no nome do mapa e nos valores dos dados, determine o que cada eixo provavelmente representa (ex: RPM, Carga/TPS).
+    -   Com base no nome do mapa e nos valores dos dados, determine o que cada eixo provavelmente representa (ex: RPM, Posição da Borboleta/TPS, Pressão do Coletor/MAP).
     -   **RPM:** A marcha lenta (idle) deve estar entre 800-1500. A rotação máxima pode ir até 18.000. Se um eixo parece ser RPM mas os seus valores são muito baixos (ex: 10, 15, 20), sugira uma equação para o escalar corretamente, como \`X * 50\` ou \`X * 100\`. Preencha o campo \`suggestedXAxisEquation\` ou \`suggestedYAxisEquation\` correspondente.
-    -   **Carga (TPS/MAP):** Geralmente varia de 0 a 100. Se os valores do eixo estiverem na casa dos milhares (ex: 0 a 1023), sugira uma equação como \`X / 10.23\` para normalizar para uma escala de 0-100. Preencha o campo \`suggestedXAxisEquation\` ou \`suggestedYAxisEquation\` correspondente.
-    -   Se um eixo parecer correto, não sugira uma equação para ele (omita o campo).
+    -   **Posição da Borboleta (TPS):** Geralmente varia de 0 a 100%. Se os valores do eixo estiverem na casa dos milhares (ex: 0 a 1023), sugira uma equação como \`X / 10.23\` para normalizar para uma escala de 0-100. Preencha o campo \`suggestedXAxisEquation\` ou \`suggestedYAxisEquation\` correspondente.
 
 2.  **Analise os Dados (Eixo Z) com Base no Nome do Mapa:**
     -   **ETV (Acelerador):** Os valores devem ser 0-100. Se estiverem na casa dos milhares (ex: 0-65535), sugira a correção \`X / 655.35\` no campo \`suggestedEquation\`.
@@ -48,8 +47,8 @@ const prompt = ai.definePrompt({
     -   **Combustível (VE):** Os valores devem estar num intervalo razoável para Eficiência Volumétrica, geralmente entre 30 e 120. Se os valores estiverem fora deste intervalo, considere o que podem representar.
 
 3.  **Lógica Especial para Mapas de Combustível (Aplica-se ao Eixo Z):**
-    -   **Se os dados parecerem VE (20-200):** Se o \`mapName\` indicar que é para uma Yamaha R3, sugira uma equação para converter para milissegundos (ms): \`({{{equation}}}) * 0.09165\` no campo \`suggestedEquation\`. Justifique que está a converter de VE para ms.
-    -   **Se os dados parecerem microssegundos (µs) (na casa dos milhares):** Sugira uma equação para dividir por 1000 no campo \`suggestedEquation\`. Formato: \`({{{equation}}}) / 1000\`. Justifique que está a converter de µs para ms.
+    -   **Se a ECU for de uma Yamaha R3 (marca: 'Yamaha', modelo: 'R3') E o nome do mapa indicar que é um mapa de combustível:** Se os dados do mapa (eixo Z) parecerem ser Eficiência Volumétrica (VE, valores entre 20-200), sugira uma equação para converter de VE para milissegundos (ms): \`({{{equation}}}) * 0.09165\`. Justifique que está a converter de VE para ms especificamente para a R3.
+    -   **Para outras marcas ou se não for um mapa de combustível da R3:** Se os dados parecerem microssegundos (µs) (valores na casa dos milhares), sugira uma equação para dividir por 1000 no campo \`suggestedEquation\`. Formato: \`({{{equation}}}) / 1000\`. Justifique que está a converter de µs para ms.
 
 4.  **Justifique a sua Conclusão:** No campo \`reasoning\`, explique o seu raciocínio para todas as correções sugeridas de forma clara.
 
@@ -60,6 +59,8 @@ const prompt = ai.definePrompt({
 **Dados de Entrada:**
 mapName: {{{mapName}}}
 equation: {{{equation}}}
+brand: {{{brand}}}
+model: {{{model}}}
 mapData: {{{json mapData}}}
 xAxis: {{{json xAxis}}}
 yAxis: {{{json yAxis}}}
