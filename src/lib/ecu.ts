@@ -86,7 +86,7 @@ function getAttr(element: Element | null, ...names: string[]): string | null {
 }
 
 
-function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axisType: 'x' | 'y'): AxisDefinition {
+function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axisType: 'y' | 'x'): AxisDefinition {
     if (!axisNode) return null;
 
     const defaultLabel = axisType === 'y' ? 'RPM' : 'Carga';
@@ -194,13 +194,13 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     const minorStride = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10) / 8;
 
     // An axis must have a count, and if it's not static, it must have an address.
-    if (count === 0 || (addr === null || isNaN(addr))) {
-        // Return a partial definition if possible, the main parser will try to infer the rest.
-        return { 
-            address: (addr !== null && !isNaN(addr)) ? addr : null,
-            count, 
-            dataSize: dataSizeBits / 8, 
-            isBigEndian, 
+    if (count === 0 && (addr === null || isNaN(addr))) {
+         // Return a partial definition if count is missing. The main parser will try to infer it.
+         return {
+            address: addr,
+            count: 0,
+            dataSize: dataSizeBits / 8,
+            isBigEndian,
             equation,
             equationVar,
             majorStride,
@@ -529,7 +529,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
         const calculatedValue = equationFunc(rawValue, 0, 0, 0);
         calculatedData.push(calculatedValue);
     } catch (e) {
-        console.error(`Erro ao aplicar a equação de eixo "${axisDef.equation}" no valor raw ${rawValue}: ${e}. A utilizar o valor raw.`);
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        console.error(`Erro ao aplicar a equação de eixo "${axisDef.equation}" no valor raw ${rawValue}: ${errorMsg}. A utilizar o valor raw.`);
         calculatedData.push(rawValue);
     }
   }
