@@ -685,19 +685,29 @@ export default function EcuTuningAssistant() {
 
             const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation, reasoning } = result.data;
 
-            const validSuggestedEquation = isValidEquation(suggestedEquation) ? suggestedEquation : undefined;
             const validSuggestedXAxisEquation = isValidEquation(suggestedXAxisEquation) ? suggestedXAxisEquation : undefined;
             const validSuggestedYAxisEquation = isValidEquation(suggestedYAxisEquation) ? suggestedYAxisEquation : undefined;
 
-            const hasSuggestion = validSuggestedEquation || validSuggestedXAxisEquation || validSuggestedYAxisEquation;
+            // Per user feedback, only auto-apply corrections for X and Y axes.
+            const hasAxisSuggestion = validSuggestedXAxisEquation || validSuggestedYAxisEquation;
 
-            if (hasSuggestion) {
-                addLog(`IA encontrou correções para "${definition.name}". A aguardar aprovação.`, 'info');
+            if (hasAxisSuggestion) {
+                addLog(`IA encontrou correções de eixo para "${definition.name}". A aplicar automaticamente.`, 'info');
+                applyCorrectionAndReload(definition, {
+                    x: validSuggestedXAxisEquation,
+                    y: validSuggestedYAxisEquation,
+                });
+                // The applyCorrectionAndReload function will set the status to 'valid' or 'error'
+                return; 
+            }
+            
+            // Now, check for Z-axis suggestions, which should be presented to the user.
+            const validSuggestedEquation = isValidEquation(suggestedEquation) ? suggestedEquation : undefined;
+            if (validSuggestedEquation) {
+                addLog(`IA encontrou uma sugestão para os dados do mapa (Eixo Z) de "${definition.name}". A aguardar aprovação.`, 'info');
                  try {
                     const newDefinition = JSON.parse(JSON.stringify(definition));
                     if (validSuggestedEquation) newDefinition.equation = validSuggestedEquation;
-                    if (validSuggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = validSuggestedXAxisEquation;
-                    if (validSuggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = validSuggestedYAxisEquation;
 
                     const correctedXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
                     const correctedYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
@@ -725,7 +735,7 @@ export default function EcuTuningAssistant() {
             addLog(`A análise automática do mapa falhou: ${result.error}`, 'error');
             setMapValidationStatus('error');
         }
-    }, [binFile, addLog, activeXdfBrand, motorcycleModel]);
+    }, [binFile, addLog, activeXdfBrand, motorcycleModel, applyCorrectionAndReload]);
 
     const handleMapSelect = (name: string) => {
         if (!binFile || !name) return;
@@ -2079,4 +2089,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
 
