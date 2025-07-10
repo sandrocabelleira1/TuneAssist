@@ -389,7 +389,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
               count: rowsCount,
               dataSize: yAxisDef?.dataSize || defaultYDataSize,
               isBigEndian: yAxisDef?.isBigEndian ?? false,
-              equation: (yAxisDef?.equation && yAxisDef.equation !== 'X') ? yAxisDef.equation : 'X',
+              equation: (yAxisDef?.equation && yAxisDef.equation !== 'X') ? yAxisDef.equation : 'X * 50',
               equationVar: yAxisDef?.equationVar || 'X',
               label: yAxisDef?.label || 'RPM',
           } as AxisDefinition; // Type assertion
@@ -412,7 +412,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
               count: colsCount,
               dataSize: xAxisDef?.dataSize || defaultXDataSize,
               isBigEndian: xAxisDef?.isBigEndian ?? false,
-              equation: (xAxisDef?.equation && xAxisDef.equation !== 'X') ? xAxisDef.equation : 'X',
+              equation: (xAxisDef?.equation && xAxisDef.equation !== 'X') ? xAxisDef.equation : 'X / 10.23',
               equationVar: xAxisDef?.equationVar || 'X',
               label: xAxisDef?.label || 'Carga',
           } as AxisDefinition; // Type assertion
