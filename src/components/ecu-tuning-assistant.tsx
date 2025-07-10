@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder, AxisDataState } from '@/lib/types';
 import { parseXDF, readAndCalculateMapFromBin, readAxisFromBin, generateChecksum, bufferToHex, writeMapToBin, invertEquation } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps, explainMap, generateSpeech } from '@/app/actions';
-import { getHeatmapColor } from '@/lib/colors';
+import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -683,7 +683,7 @@ export default function EcuTuningAssistant() {
                 return validCharsRegex.test(eq);
             };
 
-            const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation } = result.data;
+            const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation, reasoning } = result.data;
 
             const validSuggestedEquation = isValidEquation(suggestedEquation) ? suggestedEquation : undefined;
             const validSuggestedXAxisEquation = isValidEquation(suggestedXAxisEquation) ? suggestedXAxisEquation : undefined;
@@ -692,12 +692,31 @@ export default function EcuTuningAssistant() {
             const hasSuggestion = validSuggestedEquation || validSuggestedXAxisEquation || validSuggestedYAxisEquation;
 
             if (hasSuggestion) {
-                addLog(`IA encontrou correções para "${definition.name}". A aplicar automaticamente...`, 'info');
-                applyCorrectionAndReload(definition, {
-                    x: validSuggestedXAxisEquation,
-                    y: validSuggestedYAxisEquation,
-                    z: validSuggestedEquation,
-                });
+                addLog(`IA encontrou correções para "${definition.name}". A aguardar aprovação.`, 'info');
+                 try {
+                    const newDefinition = JSON.parse(JSON.stringify(definition));
+                    if (validSuggestedEquation) newDefinition.equation = validSuggestedEquation;
+                    if (validSuggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = validSuggestedXAxisEquation;
+                    if (validSuggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = validSuggestedYAxisEquation;
+
+                    const correctedXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
+                    const correctedYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+                    const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxis, correctedYAxis);
+
+                    setAiSuggestion({
+                        reasoning,
+                        originalMap: mapData,
+                        correctedMap: correctedMap,
+                        originalAxes: { x: axes.x.calculated, y: axes.y.calculated, xLabel: axes.xLabel, yLabel: axes.yLabel },
+                        correctedAxes: { x: correctedXAxis.calculated, y: correctedYAxis.calculated, xLabel: newDefinition.xAxisDef.label, yLabel: newDefinition.yAxisDef.label },
+                        originalDefinition: definition,
+                        newDefinition,
+                    });
+                    setMapValidationStatus('suggestion');
+                 } catch (error) {
+                    addLog(`Erro ao gerar pré-visualização da correção: ${(error as Error).message}`, 'error');
+                    setMapValidationStatus('error');
+                 }
             } else {
                 setMapValidationStatus('valid');
                 addLog(`Análise da IA concluída para "${definition.name}": Nenhuma correção necessária.`, 'success');
@@ -706,7 +725,7 @@ export default function EcuTuningAssistant() {
             addLog(`A análise automática do mapa falhou: ${result.error}`, 'error');
             setMapValidationStatus('error');
         }
-    }, [binFile, addLog, activeXdfBrand, motorcycleModel, applyCorrectionAndReload]);
+    }, [binFile, addLog, activeXdfBrand, motorcycleModel]);
 
     const handleMapSelect = (name: string) => {
         if (!binFile || !name) return;
@@ -1624,6 +1643,14 @@ export default function EcuTuningAssistant() {
                                                     <TooltipContent>A IA tem uma sugestão de correção. Clique para ver.</TooltipContent>
                                                 </Tooltip>
                                             )}
+                                            {mapValidationStatus === 'error' && (
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                        <AlertCircle className="h-5 w-5 text-destructive" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>A análise da IA falhou. Verifique o log.</TooltipContent>
+                                                </Tooltip>
+                                            )}
                                         </CardTitle>
                                         <CardDescription>{selectedMapName || "Carregue os ficheiros e selecione um mapa para começar"}</CardDescription>
                                     </div>
@@ -2052,3 +2079,4 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
