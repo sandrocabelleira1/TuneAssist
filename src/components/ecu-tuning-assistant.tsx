@@ -396,25 +396,6 @@ export default function EcuTuningAssistant() {
                 } while (finalMapNames.has(newName));
             }
             finalMapNames.add(newName);
-            
-            const lowerName = newName.toLowerCase();
-            const isFuelMap = ['comb', 'fuel', 'injeção', 'injection'].some(kw => lowerName.includes(kw));
-            const isIgnitionMap = ['ign', 'ignition', 'avanço', 'spark', 'timing'].some(kw => lowerName.includes(kw));
-
-            // Heuristic for 16-bit Fuel maps (us -> ms)
-            if (isFuelMap && def.dataSize === 2 && def.equation.trim().toLowerCase() === 'x') {
-                const newDef = { ...def, name: newName, equation: '(X) / 1000' };
-                addLog(`Mapa de combustível de 16-bit "${newName}" detetado. A aplicar conversão automática de µs para ms.`, 'debug');
-                return newDef;
-            }
-            
-            // Heuristic for 8-bit Ignition maps
-            if (isIgnitionMap && def.dataSize === 1 && def.equation.trim().toLowerCase() === 'x') {
-                const newDef = { ...def, name: newName, equation: '(X - 128) / 2' };
-                addLog(`Mapa de ignição de 8-bit "${newName}" detetado. A aplicar conversão automática para graus (offset-based).`, 'debug');
-                return newDef;
-            }
-
             return { ...def, name: newName };
         });
 
@@ -461,12 +442,12 @@ export default function EcuTuningAssistant() {
         addLog('O estado da sessão foi reiniciado. As suas bibliotecas foram preservadas.', 'info');
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
             try {
                 const buffer = event.target?.result as ArrayBuffer;
                 if (type === 'bin') {
@@ -491,12 +472,26 @@ export default function EcuTuningAssistant() {
 
                 } else { // XDF
                     const text = new TextDecoder().decode(buffer);
-                    const definitions = parseXDF(text);
+                    let definitions = parseXDF(text);
                     if (definitions.length === 0) {
                         throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     }
-                    setXdfFile({ name: file.name, definitions });
                     const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
+                    
+                    // Automatically correct axes on XDF load
+                    if(binFile?.buffer) {
+                      addLog('A aplicar correções de eixo automáticas ao XDF...', 'info');
+                      const { correctedDefinitions, correctionsMade } = await autoCorrectAllAxes(definitions, binFile.buffer, brandValue, motorcycleModel);
+                      definitions = correctedDefinitions;
+                      if(correctionsMade > 0) {
+                        addLog(`IA aplicou ${correctionsMade} correções de eixo a todo o ficheiro XDF.`, 'success');
+                        toast({ title: "XDF Corrigido Automaticamente", description: `IA corrigiu ${correctionsMade} eixos.`});
+                      } else {
+                        addLog('Nenhuma correção de eixo automática foi necessária.', 'info');
+                      }
+                    }
+
+                    setXdfFile({ name: file.name, definitions });
                     setActiveXdfBrand(brandValue);
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
 
@@ -527,23 +522,36 @@ export default function EcuTuningAssistant() {
         reader.readAsArrayBuffer(file);
     };
     
-    const handleSelectXdfFromLibrary = (name: string) => {
+    const handleSelectXdfFromLibrary = async (name: string) => {
         if (!name || !xdfLibrary[name]) return;
         
         const xdfData = xdfLibrary[name];
         if (!xdfData) return;
         try {
-            const definitions = parseXDF(xdfData.content);
+            let definitions = parseXDF(xdfData.content);
             if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
             
             setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
             setSelectedCells(new Set());
             setMapValidationStatus('idle');
 
+            const brandValue = xdfData.brand || '';
+            if(binFile?.buffer) {
+              addLog('A aplicar correções de eixo automáticas ao XDF da biblioteca...', 'info');
+              const { correctedDefinitions, correctionsMade } = await autoCorrectAllAxes(definitions, binFile.buffer, brandValue, motorcycleModel);
+              definitions = correctedDefinitions;
+              if(correctionsMade > 0) {
+                addLog(`IA aplicou ${correctionsMade} correções de eixo a todo o ficheiro XDF.`, 'success');
+                toast({ title: "XDF Corrigido Automaticamente", description: `IA corrigiu ${correctionsMade} eixos.`});
+              } else {
+                addLog('Nenhuma correção de eixo automática foi necessária.', 'info');
+              }
+            }
+
             setXdfFile({ name, definitions });
             setSelectedXdfFromLibrary(name);
-            setActiveXdfBrand(xdfData.brand || '');
-            addLog(`XDF "${name}" ${xdfData.brand ? `(Marca: ${xdfData.brand}) `: ''}carregado da biblioteca.`, 'success');
+            setActiveXdfBrand(brandValue);
+            addLog(`XDF "${name}" ${brandValue ? `(Marca: ${brandValue}) `: ''}carregado da biblioteca.`, 'success');
         } catch (error) {
             const msg = `Erro ao carregar ${name} da biblioteca: ${(error as Error).message}`;
             addLog(msg, 'error');
@@ -565,38 +573,29 @@ export default function EcuTuningAssistant() {
 
     const applyCorrectionAndReload = useCallback((
       originalDefinition: XDFDefinition,
-      corrections: { x?: string, y?: string, z?: string }
+      corrections: { z?: string }
     ) => {
         if (!binFile) return;
 
         const newDefinition = JSON.parse(JSON.stringify(originalDefinition)) as XDFDefinition;
-        let appliedCorrectionsLog = [];
-
-        if (corrections.x && newDefinition.xAxisDef) {
-            newDefinition.xAxisDef.equation = corrections.x;
-            appliedCorrectionsLog.push("Eixo X");
-        }
-        if (corrections.y && newDefinition.yAxisDef) {
-            newDefinition.yAxisDef.equation = corrections.y;
-            appliedCorrectionsLog.push("Eixo Y");
-        }
+        
         if (corrections.z) {
             newDefinition.equation = corrections.z;
-            appliedCorrectionsLog.push("Dados do Mapa (Z)");
-        }
-
-        if (appliedCorrectionsLog.length === 0) {
-            addLog("Nenhuma correção foi aplicada.", "debug");
+        } else {
+            addLog("Nenhuma correção Z foi aplicada.", "debug");
             return;
         }
 
         try {
-            const correctedXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-            const correctedYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxis, correctedYAxis);
+            // Axes are assumed to be correct already from the global correction step
+            const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
+            const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+
+            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis);
+            
             const newSourceAxes = {
-                x: correctedXAxis,
-                y: correctedYAxis,
+                x: currentXAxis,
+                y: currentYAxis,
                 xLabel: newDefinition.xAxisDef?.label || 'Posição da Borboleta',
                 yLabel: newDefinition.yAxisDef?.label || 'RPM'
             };
@@ -632,7 +631,7 @@ export default function EcuTuningAssistant() {
             });
             
             setMapRenderKey(p => p + 1);
-            const logMessage = `IA aplicou correções automáticas a: ${appliedCorrectionsLog.join(', ')}.`;
+            const logMessage = `IA aplicou a sugestão de correção aos dados do mapa (Eixo Z).`;
             addLog(logMessage, 'success');
             toast({ title: 'Mapa Corrigido Automaticamente', description: logMessage });
             setMapValidationStatus('valid');
@@ -644,20 +643,59 @@ export default function EcuTuningAssistant() {
         }
     }, [binFile, xdfFile, addLog, toast]);
 
-    const runAutoValidation = useCallback(async (
+    // New function to globally correct axes when an XDF is loaded.
+    const autoCorrectAllAxes = async (definitions: XDFDefinition[], binBuffer: ArrayBuffer, brand: string, model: string) => {
+      let correctionsMade = 0;
+      const correctedDefinitions = [...definitions];
+
+      for (let i = 0; i < correctedDefinitions.length; i++) {
+        const def = correctedDefinitions[i];
+        
+        // This is a simplified check. A more robust solution might involve AI.
+        // For now, we check for common patterns needing correction.
+        let corrected = false;
+        
+        // Check Y-axis (RPM)
+        if (def.yAxisDef && def.yAxisDef.address !== null && def.yAxisDef.equation.trim().toLowerCase() === 'x') {
+            const tempYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
+            const avgY = tempYAxis.calculated.reduce((acc, v) => acc + (typeof v === 'number' ? v : 0), 0) / tempYAxis.calculated.length;
+            if (avgY > 0 && avgY < 300) { // Likely needs scaling for RPM
+              def.yAxisDef.equation = 'X * 50';
+              correctionsMade++;
+              corrected = true;
+            }
+        }
+
+        // Check X-axis (TPS)
+        if (def.xAxisDef && def.xAxisDef.address !== null && def.xAxisDef.equation.trim().toLowerCase() === 'x') {
+            const tempXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
+            const maxX = Math.max(...tempXAxis.calculated.map(v => typeof v === 'number' ? v : 0));
+            if (maxX > 1000) { // Likely needs scaling for TPS
+              def.xAxisDef.equation = 'X / 10.23';
+              correctionsMade++;
+              corrected = true;
+            }
+        }
+        if (corrected) {
+          correctedDefinitions[i] = def;
+        }
+      }
+      return { correctedDefinitions, correctionsMade };
+    };
+
+    const runZAxisValidation = useCallback(async (
         definition: XDFDefinition, 
         mapData: MapData, 
         axes: { x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string }
     ) => {
-        if (!binFile) return;
         setMapValidationStatus('loading');
-        addLog(`A iniciar a análise automática para "${definition.name}"...`, 'debug');
+        addLog(`A iniciar a análise do eixo Z para "${definition.name}"...`, 'debug');
 
         const numericXAxis = axes.x.calculated.filter(v => typeof v === 'number') as number[];
         const numericYAxis = axes.y.calculated.filter(v => typeof v === 'number') as number[];
 
         if(numericXAxis.length !== axes.x.calculated.length || numericYAxis.length !== axes.y.calculated.length) {
-            addLog('A validação de mapa requer eixos puramente numéricos.', 'error');
+            addLog('A validação do mapa requer eixos puramente numéricos.', 'error');
             setMapValidationStatus('error');
             return;
         }
@@ -676,66 +714,47 @@ export default function EcuTuningAssistant() {
             const isValidEquation = (eq: string | undefined): eq is string => {
                 if (!eq) return false;
                 const lowerEq = eq.toLowerCase().trim();
-                if (lowerEq === 'string' || lowerEq.includes('sem alteração') || lowerEq.includes('nenhuma')) {
-                    return false;
-                }
-                const validCharsRegex = /^[a-zA-Z0-9_()+\-*/.\s]+$/;
-                return validCharsRegex.test(eq);
+                return !(lowerEq === 'string' || lowerEq.includes('sem alteração') || lowerEq.includes('nenhuma'));
             };
 
-            const { suggestedEquation, suggestedXAxisEquation, suggestedYAxisEquation, reasoning } = result.data;
-
-            const validSuggestedXAxisEquation = isValidEquation(suggestedXAxisEquation) ? suggestedXAxisEquation : undefined;
-            const validSuggestedYAxisEquation = isValidEquation(suggestedYAxisEquation) ? suggestedYAxisEquation : undefined;
-
-            // Per user feedback, only auto-apply corrections for X and Y axes.
-            const hasAxisSuggestion = validSuggestedXAxisEquation || validSuggestedYAxisEquation;
-
-            if (hasAxisSuggestion) {
-                addLog(`IA encontrou correções de eixo para "${definition.name}". A aplicar automaticamente.`, 'info');
-                applyCorrectionAndReload(definition, {
-                    x: validSuggestedXAxisEquation,
-                    y: validSuggestedYAxisEquation,
-                });
-                // The applyCorrectionAndReload function will set the status to 'valid' or 'error'
-                return; 
-            }
-            
-            // Now, check for Z-axis suggestions, which should be presented to the user.
+            const { suggestedEquation, reasoning } = result.data;
             const validSuggestedEquation = isValidEquation(suggestedEquation) ? suggestedEquation : undefined;
+            
             if (validSuggestedEquation) {
                 addLog(`IA encontrou uma sugestão para os dados do mapa (Eixo Z) de "${definition.name}". A aguardar aprovação.`, 'info');
                  try {
-                    const newDefinition = JSON.parse(JSON.stringify(definition));
-                    if (validSuggestedEquation) newDefinition.equation = validSuggestedEquation;
+                    if(!binFile?.buffer) throw new Error("O ficheiro BIN não está carregado.");
 
-                    const correctedXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-                    const correctedYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-                    const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxis, correctedYAxis);
+                    const newDefinition = JSON.parse(JSON.stringify(definition));
+                    newDefinition.equation = validSuggestedEquation;
+
+                    const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
+                    const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+                    const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis);
 
                     setAiSuggestion({
                         reasoning,
                         originalMap: mapData,
                         correctedMap: correctedMap,
                         originalAxes: { x: axes.x.calculated, y: axes.y.calculated, xLabel: axes.xLabel, yLabel: axes.yLabel },
-                        correctedAxes: { x: correctedXAxis.calculated, y: correctedYAxis.calculated, xLabel: newDefinition.xAxisDef.label, yLabel: newDefinition.yAxisDef.label },
+                        correctedAxes: { x: currentXAxis.calculated, y: currentYAxis.calculated, xLabel: newDefinition.xAxisDef.label, yLabel: newDefinition.yAxisDef.label },
                         originalDefinition: definition,
                         newDefinition,
                     });
                     setMapValidationStatus('suggestion');
                  } catch (error) {
-                    addLog(`Erro ao gerar pré-visualização da correção: ${(error as Error).message}`, 'error');
+                    addLog(`Erro ao gerar pré-visualização da correção Z: ${(error as Error).message}`, 'error');
                     setMapValidationStatus('error');
                  }
             } else {
                 setMapValidationStatus('valid');
-                addLog(`Análise da IA concluída para "${definition.name}": Nenhuma correção necessária.`, 'success');
+                addLog(`Análise da IA para o eixo Z de "${definition.name}" concluída: Nenhuma correção necessária.`, 'success');
             }
         } else {
-            addLog(`A análise automática do mapa falhou: ${result.error}`, 'error');
+            addLog(`A análise do eixo Z falhou: ${result.error}`, 'error');
             setMapValidationStatus('error');
         }
-    }, [binFile, addLog, activeXdfBrand, motorcycleModel, applyCorrectionAndReload]);
+    }, [binFile, addLog, activeXdfBrand, motorcycleModel]);
 
     const handleMapSelect = (name: string) => {
         if (!binFile || !name) return;
@@ -781,7 +800,8 @@ export default function EcuTuningAssistant() {
             setMapRenderKey(p => p + 1);
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
             
-            runAutoValidation(definition, calculatedMap, mapAxes);
+            // Run validation for the Z-axis only, now that axes are pre-corrected.
+            runZAxisValidation(definition, calculatedMap, mapAxes);
 
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
@@ -856,7 +876,7 @@ export default function EcuTuningAssistant() {
             toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
             
             // Re-run validation after manual changes
-            runAutoValidation(newDefinition, newMapData, newAxesState);
+            runZAxisValidation(newDefinition, newMapData, newAxesState);
 
         } catch (error) {
             const msg = `Erro ao recalcular o mapa com as novas equações: ${(error as Error).message}`;
@@ -1134,31 +1154,16 @@ export default function EcuTuningAssistant() {
             return;
         }
 
-        runAutoValidation(currentDef, displayMap, displayAxes);
+        runZAxisValidation(currentDef, displayMap, displayAxes);
     };
     
-    const handleAcceptSuggestion = (correctionsToApply: { x: boolean; y: boolean; z: boolean; }) => {
-        if (!aiSuggestion || !binFile || !selectedMapName) return;
-
-        const originalDefinition = aiSuggestion.originalDefinition;
-        const suggestedDefinition = aiSuggestion.newDefinition;
-        const corrections: { x?: string, y?: string, z?: string } = {};
-
-        if (correctionsToApply.x && suggestedDefinition.xAxisDef?.equation) {
-            corrections.x = suggestedDefinition.xAxisDef.equation;
-        }
-        if (correctionsToApply.y && suggestedDefinition.yAxisDef?.equation) {
-            corrections.y = suggestedDefinition.yAxisDef.equation;
-        }
-        if (correctionsToApply.z && suggestedDefinition.equation) {
-            corrections.z = suggestedDefinition.equation;
-        }
-
-        if (Object.keys(corrections).length > 0) {
-            applyCorrectionAndReload(originalDefinition, corrections);
-        } else {
-            addLog("Nenhuma correção foi selecionada para ser aplicada.", "info");
-        }
+    const handleAcceptSuggestion = () => {
+        if (!aiSuggestion) return;
+        
+        // Only Z-axis corrections are presented as suggestions now.
+        applyCorrectionAndReload(aiSuggestion.originalDefinition, {
+            z: aiSuggestion.newDefinition.equation,
+        });
         
         setIsSuggestionModalOpen(false);
         setAiSuggestion(null);
@@ -1590,7 +1595,7 @@ export default function EcuTuningAssistant() {
                                         </Button>
                                          <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || mapValidationStatus === 'loading'}>
                                             {mapValidationStatus === 'loading' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                                            {mapValidationStatus === 'suggestion' ? 'Ver Sugestão de Correção' : 'Analisar Mapa Novamente'}
+                                            {mapValidationStatus === 'suggestion' ? 'Ver Sugestão de Correção' : 'Analisar Eixo Z Novamente'}
                                         </Button>
                                         <Button variant="outline" className="w-full" onClick={handleExplainMap} disabled={!displayMap || isExplaining}>
                                             {isExplaining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <AudioLines className="mr-2 h-4 w-4" />}
@@ -1650,7 +1655,7 @@ export default function EcuTuningAssistant() {
                                                             <Sparkles className="h-5 w-5" />
                                                         </Button>
                                                     </TooltipTrigger>
-                                                    <TooltipContent>A IA tem uma sugestão de correção. Clique para ver.</TooltipContent>
+                                                    <TooltipContent>A IA tem uma sugestão de correção para o eixo Z. Clique para ver.</TooltipContent>
                                                 </Tooltip>
                                             )}
                                             {mapValidationStatus === 'error' && (
@@ -1727,7 +1732,7 @@ export default function EcuTuningAssistant() {
                                         <Button size="sm" variant="outline" onClick={() => handleQuickEdit('subtract')}>- Subtrair</Button>
                                         <Button size="sm" variant="outline" onClick={() => handleQuickEdit('add')}>+ Adicionar</Button>
                                         <p className="text-xs text-muted-foreground ml-2">
-                                            {selectedCells.size > 0 ? `${selectedCells.size} células selecionadas` : 'Todas as células'}
+                                            {selectedCells.size > 0 ? `${selectedCells.size} células selecionadas` : 'todas as células'}
                                         </p>
                                     </div>
                                     <Button onClick={handleSaveModifiedBin} disabled={!binFile || !workingMap}>
@@ -1844,67 +1849,10 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentDefinition }: {
     );
 }
 
-function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept, binBuffer, mapRenderKey }: { open: boolean, onOpenChange: (open: boolean) => void, suggestion: AISuggestion | null, onAccept: (corrections: { x: boolean; y: boolean; z: boolean; }) => void, binBuffer: ArrayBuffer | null, mapRenderKey: number }) {
-    const [correctionsToApply, setCorrectionsToApply] = useState({ x: true, y: true, z: true });
-    const [preview, setPreview] = useState<{ map: MapData; axes: { x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } } | null>(null);
-
-    useEffect(() => {
-        if (open && suggestion) {
-            const initialCorrections = {
-                x: suggestion.newDefinition.xAxisDef?.equation !== suggestion.originalDefinition.xAxisDef?.equation,
-                y: suggestion.newDefinition.yAxisDef?.equation !== suggestion.originalDefinition.yAxisDef?.equation,
-                z: !!suggestion.newDefinition.equation && suggestion.newDefinition.equation !== suggestion.originalDefinition.equation,
-            };
-            setCorrectionsToApply(initialCorrections);
-        } else {
-          setPreview(null);
-        }
-    }, [open, suggestion]);
-
-    useEffect(() => {
-        if (!open || !suggestion || !binBuffer) {
-            if (open) setPreview(null);
-            return;
-        }
-
-        try {
-            const tempDefinition = JSON.parse(JSON.stringify(suggestion.originalDefinition));
-
-            if (correctionsToApply.x && suggestion.newDefinition.xAxisDef?.equation) {
-                tempDefinition.xAxisDef.equation = suggestion.newDefinition.xAxisDef.equation;
-            }
-            if (correctionsToApply.y && suggestion.newDefinition.yAxisDef?.equation) {
-                tempDefinition.yAxisDef.equation = suggestion.newDefinition.yAxisDef.equation;
-            }
-            if (correctionsToApply.z && suggestion.newDefinition.equation) {
-                tempDefinition.equation = suggestion.newDefinition.equation;
-            }
-            
-            const correctedXAxis = readAxisFromBin(binBuffer, tempDefinition.xAxisDef);
-            const correctedYAxis = readAxisFromBin(binBuffer, tempDefinition.yAxisDef);
-            const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binBuffer, tempDefinition, correctedXAxis, correctedYAxis);
-
-            setPreview({
-                map: correctedMap,
-                axes: {
-                    x: correctedXAxis.calculated,
-                    y: correctedYAxis.calculated,
-                    xLabel: tempDefinition.xAxisDef?.label || 'Posição da Borboleta',
-                    yLabel: tempDefinition.yAxisDef?.label || 'RPM',
-                }
-            });
-        } catch (error) {
-            console.error("Error generating correction preview", error);
-            setPreview(null);
-        }
-
-    }, [open, correctionsToApply, suggestion, binBuffer]);
-
+function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept, binBuffer, mapRenderKey }: { open: boolean, onOpenChange: (open: boolean) => void, suggestion: AISuggestion | null, onAccept: () => void, binBuffer: ArrayBuffer | null, mapRenderKey: number }) {
     if (!suggestion) return null;
 
     const { originalDefinition, newDefinition, reasoning } = suggestion;
-    const hasXCorrection = newDefinition.xAxisDef?.equation !== originalDefinition.xAxisDef?.equation;
-    const hasYCorrection = newDefinition.yAxisDef?.equation !== originalDefinition.yAxisDef?.equation;
     const hasZCorrection = !!newDefinition.equation && newDefinition.equation !== originalDefinition.equation;
 
     return (
@@ -1913,10 +1861,10 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <GitCompareArrows className="text-primary"/>
-                        Sugestão de Correção da IA
+                        Sugestão de Correção para o Eixo Z
                     </DialogTitle>
                     <DialogDescription>
-                         A IA detetou um problema. Selecione as correções para pré-visualizar e aplicar.
+                         A IA analisou os dados do mapa (Eixo Z) e sugere uma melhoria.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -1926,7 +1874,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                             <h3 className="font-semibold mb-2 text-center">Original</h3>
                             <div className="h-[400px] overflow-auto border rounded-md">
                               <MapTable
-                                key={mapRenderKey + '-orig'}
+                                key={mapRenderKey + '-orig-sugg'}
                                 mapData={suggestion.originalMap}
                                 xAxis={suggestion.originalAxes.x}
                                 yAxis={suggestion.originalAxes.y}
@@ -1944,30 +1892,24 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                             </div>
                         </div>
                         <div>
-                            <h3 className="font-semibold mb-2 text-center">Pré-visualização (com correções selecionadas)</h3>
+                            <h3 className="font-semibold mb-2 text-center">Pré-visualização da Sugestão</h3>
                             <div className="h-[400px] overflow-auto border rounded-md">
-                               {preview ? (
-                                 <MapTable
-                                    key={mapRenderKey + '-prev'}
-                                    mapData={preview.map}
-                                    xAxis={preview.axes.x}
-                                    yAxis={preview.axes.y}
-                                    xAxisLabel={preview.axes.xLabel}
-                                    yLabel={preview.axes.yLabel}
-                                    mapName={suggestion.newDefinition.name}
-                                    isEditable={false}
-                                    onSortAxis={() => {}}
-                                    onSortByFirstColumn={() => {}}
-                                    onResetSort={() => {}}
-                                    onCellChange={() => {}}
-                                    selectedCells={new Set()}
-                                    onCellSelect={() => {}}
-                                 />
-                               ) : (
-                                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                                    A gerar pré-visualização...
-                                 </div>
-                               )}
+                               <MapTable
+                                  key={mapRenderKey + '-prev-sugg'}
+                                  mapData={suggestion.correctedMap}
+                                  xAxis={suggestion.correctedAxes.x}
+                                  yAxis={suggestion.correctedAxes.y}
+                                  xAxisLabel={suggestion.correctedAxes.xLabel}
+                                  yAxisLabel={suggestion.correctedAxes.yLabel}
+                                  mapName={suggestion.newDefinition.name}
+                                  isEditable={false}
+                                  onSortAxis={() => {}}
+                                  onSortByFirstColumn={() => {}}
+                                  onResetSort={() => {}}
+                                  onCellChange={() => {}}
+                                  selectedCells={new Set()}
+                                  onCellSelect={() => {}}
+                               />
                             </div>
                         </div>
                     </div>
@@ -1977,63 +1919,24 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                             <h3 className="text-sm font-semibold text-muted-foreground">Justificação da IA:</h3>
                             <p className="text-sm p-3 bg-muted rounded-md border">{reasoning}</p>
                         </div>
-
-                        <Separator />
-
-                        <div className="space-y-4">
-                            <h3 className="text-lg font-semibold">Comandos (Selecione para pré-visualizar e aplicar)</h3>
-                            
-                            {hasXCorrection && newDefinition.xAxisDef && originalDefinition.xAxisDef && (
-                                <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
-                                    <Checkbox id="corr_x" className="mt-1" checked={correctionsToApply.x} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, x: !!checked}))} />
-                                    <div className="grid gap-1.5 leading-none">
-                                        <label htmlFor="corr_x" className="text-sm font-medium">Corrigir Eixo X ({originalDefinition.xAxisDef.label})</label>
-                                        <div className="text-xs space-y-1">
-                                            <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.xAxisDef.equation}</code></p>
-                                            <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.xAxisDef.equation}</code></p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {hasYCorrection && newDefinition.yAxisDef && originalDefinition.yAxisDef && (
-                                <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
-                                    <Checkbox id="corr_y" className="mt-1" checked={correctionsToApply.y} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, y: !!checked}))} />
-                                    <div className="grid gap-1.5 leading-none">
-                                        <label htmlFor="corr_y" className="text-sm font-medium">Corrigir Eixo Y ({originalDefinition.yAxisDef.label})</label>
-                                        <div className="text-xs space-y-1">
-                                            <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.yAxisDef.equation}</code></p>
-                                            <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.yAxisDef.equation}</code></p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                            
-                            {hasZCorrection && (
-                                 <div className="flex items-start space-x-4 p-3 rounded-lg border bg-card hover:bg-muted/50">
-                                    <Checkbox id="corr_z" className="mt-1" checked={correctionsToApply.z} onCheckedChange={(checked) => setCorrectionsToApply(p => ({...p, z: !!checked}))} />
-                                    <div className="grid gap-1.5 leading-none">
-                                        <label htmlFor="corr_z" className="text-sm font-medium">Corrigir Dados do Mapa (Eixo Z)</label>
-                                        <div className="text-xs space-y-1">
-                                            <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.equation}</code></p>
-                                            <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {!(hasXCorrection || hasYCorrection || hasZCorrection) && (
-                                <p className="text-sm text-center text-muted-foreground p-4">Nenhuma nova equação foi sugerida, mas a IA forneceu a sua análise.</p>
-                            )}
-                        </div>
+                        
+                        {hasZCorrection && (
+                           <div className="p-3 rounded-lg border bg-card">
+                              <p className="text-sm font-medium">Alteração da Equação do Eixo Z</p>
+                               <div className="text-xs space-y-1 mt-1">
+                                  <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.equation}</code></p>
+                                  <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
+                              </div>
+                           </div>
+                        )}
                     </div>
                 </div>
 
                 <DialogFooter className="mt-auto pt-4 border-t shrink-0">
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Rejeitar</Button>
-                    <Button onClick={() => onAccept(correctionsToApply)} disabled={!correctionsToApply.x && !correctionsToApply.y && !correctionsToApply.z}>
+                    <Button onClick={onAccept} disabled={!hasZCorrection}>
                         <CheckCircle className="mr-2"/>
-                        Aplicar Correções Selecionadas
+                        Aplicar Correção
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -2089,5 +1992,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-
