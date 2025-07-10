@@ -442,6 +442,39 @@ export default function EcuTuningAssistant() {
         addLog('O estado da sessão foi reiniciado. As suas bibliotecas foram preservadas.', 'info');
     };
 
+    // New function to programmatically correct axes when an XDF is loaded.
+    const autoCorrectAllAxes = (definitions: XDFDefinition[], binBuffer: ArrayBuffer) => {
+      let correctionsMade = 0;
+      const correctedDefinitions = JSON.parse(JSON.stringify(definitions));
+
+      for (const def of correctedDefinitions) {
+        let corrected = false;
+        
+        // Check Y-axis (RPM)
+        if (def.yAxisDef && def.yAxisDef.address !== null && def.yAxisDef.equation.trim().toLowerCase() === 'x') {
+            const tempYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
+            const avgY = tempYAxis.raw.reduce((acc, v) => acc + (typeof v === 'number' ? v : 0), 0) / tempYAxis.raw.length;
+            if (avgY > 0 && avgY < 300) { // Likely needs scaling for RPM
+              def.yAxisDef.equation = 'X * 50';
+              correctionsMade++;
+              corrected = true;
+            }
+        }
+
+        // Check X-axis (TPS)
+        if (def.xAxisDef && def.xAxisDef.address !== null && def.xAxisDef.equation.trim().toLowerCase() === 'x') {
+            const tempXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
+            const maxX = Math.max(...tempXAxis.raw.map(v => typeof v === 'number' ? v : 0));
+            if (maxX > 1000) { // Likely 0-1023 range, needs scaling for TPS
+              def.xAxisDef.equation = 'X / 10.23';
+              correctionsMade++;
+              corrected = true;
+            }
+        }
+      }
+      return { correctedDefinitions, correctionsMade };
+    };
+
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -478,16 +511,16 @@ export default function EcuTuningAssistant() {
                     }
                     const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
                     
-                    // Automatically correct axes on XDF load
+                    // Programmatically correct axes on XDF load
                     if(binFile?.buffer) {
-                      addLog('A aplicar correções de eixo automáticas ao XDF...', 'info');
-                      const { correctedDefinitions, correctionsMade } = await autoCorrectAllAxes(definitions, binFile.buffer, brandValue, motorcycleModel);
+                      addLog('A aplicar correções de eixo programáticas ao XDF...', 'info');
+                      const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions, binFile.buffer);
                       definitions = correctedDefinitions;
                       if(correctionsMade > 0) {
-                        addLog(`IA aplicou ${correctionsMade} correções de eixo a todo o ficheiro XDF.`, 'success');
-                        toast({ title: "XDF Corrigido Automaticamente", description: `IA corrigiu ${correctionsMade} eixos.`});
+                        addLog(`${correctionsMade} correções de eixo aplicadas a todo o ficheiro XDF.`, 'success');
+                        toast({ title: "XDF Corrigido Automaticamente", description: `${correctionsMade} eixos foram corrigidos com equações padrão.`});
                       } else {
-                        addLog('Nenhuma correção de eixo automática foi necessária.', 'info');
+                        addLog('Nenhuma correção de eixo programática foi necessária.', 'info');
                       }
                     }
 
@@ -537,14 +570,14 @@ export default function EcuTuningAssistant() {
 
             const brandValue = xdfData.brand || '';
             if(binFile?.buffer) {
-              addLog('A aplicar correções de eixo automáticas ao XDF da biblioteca...', 'info');
-              const { correctedDefinitions, correctionsMade } = await autoCorrectAllAxes(definitions, binFile.buffer, brandValue, motorcycleModel);
+              addLog('A aplicar correções de eixo programáticas ao XDF da biblioteca...', 'info');
+              const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions, binFile.buffer);
               definitions = correctedDefinitions;
               if(correctionsMade > 0) {
-                addLog(`IA aplicou ${correctionsMade} correções de eixo a todo o ficheiro XDF.`, 'success');
-                toast({ title: "XDF Corrigido Automaticamente", description: `IA corrigiu ${correctionsMade} eixos.`});
+                addLog(`${correctionsMade} correções de eixo aplicadas a todo o ficheiro XDF.`, 'success');
+                toast({ title: "XDF Corrigido Automaticamente", description: `${correctionsMade} eixos foram corrigidos com equações padrão.`});
               } else {
-                addLog('Nenhuma correção de eixo automática foi necessária.', 'info');
+                addLog('Nenhuma correção de eixo programática foi necessária.', 'info');
               }
             }
 
@@ -571,23 +604,17 @@ export default function EcuTuningAssistant() {
         toast({ title: 'Biblioteca Limpa', description: 'A sua biblioteca de ficheiros XDF foi removida.' });
     }
 
-    const applyCorrectionAndReload = useCallback((
+    const applyZAxisCorrectionAndReload = useCallback((
       originalDefinition: XDFDefinition,
-      corrections: { z?: string }
+      zEquation: string
     ) => {
         if (!binFile) return;
 
         const newDefinition = JSON.parse(JSON.stringify(originalDefinition)) as XDFDefinition;
+        newDefinition.equation = zEquation;
         
-        if (corrections.z) {
-            newDefinition.equation = corrections.z;
-        } else {
-            addLog("Nenhuma correção Z foi aplicada.", "debug");
-            return;
-        }
-
         try {
-            // Axes are assumed to be correct already from the global correction step
+            // Axes are assumed to be correct already from the global programmatic step
             const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
             const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
 
@@ -633,7 +660,7 @@ export default function EcuTuningAssistant() {
             setMapRenderKey(p => p + 1);
             const logMessage = `IA aplicou a sugestão de correção aos dados do mapa (Eixo Z).`;
             addLog(logMessage, 'success');
-            toast({ title: 'Mapa Corrigido Automaticamente', description: logMessage });
+            toast({ title: 'Mapa Corrigido', description: logMessage });
             setMapValidationStatus('valid');
 
         } catch (error) {
@@ -642,46 +669,6 @@ export default function EcuTuningAssistant() {
             setMapValidationStatus('error');
         }
     }, [binFile, xdfFile, addLog, toast]);
-
-    // New function to globally correct axes when an XDF is loaded.
-    const autoCorrectAllAxes = async (definitions: XDFDefinition[], binBuffer: ArrayBuffer, brand: string, model: string) => {
-      let correctionsMade = 0;
-      const correctedDefinitions = [...definitions];
-
-      for (let i = 0; i < correctedDefinitions.length; i++) {
-        const def = correctedDefinitions[i];
-        
-        // This is a simplified check. A more robust solution might involve AI.
-        // For now, we check for common patterns needing correction.
-        let corrected = false;
-        
-        // Check Y-axis (RPM)
-        if (def.yAxisDef && def.yAxisDef.address !== null && def.yAxisDef.equation.trim().toLowerCase() === 'x') {
-            const tempYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
-            const avgY = tempYAxis.calculated.reduce((acc, v) => acc + (typeof v === 'number' ? v : 0), 0) / tempYAxis.calculated.length;
-            if (avgY > 0 && avgY < 300) { // Likely needs scaling for RPM
-              def.yAxisDef.equation = 'X * 50';
-              correctionsMade++;
-              corrected = true;
-            }
-        }
-
-        // Check X-axis (TPS)
-        if (def.xAxisDef && def.xAxisDef.address !== null && def.xAxisDef.equation.trim().toLowerCase() === 'x') {
-            const tempXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
-            const maxX = Math.max(...tempXAxis.calculated.map(v => typeof v === 'number' ? v : 0));
-            if (maxX > 1000) { // Likely needs scaling for TPS
-              def.xAxisDef.equation = 'X / 10.23';
-              correctionsMade++;
-              corrected = true;
-            }
-        }
-        if (corrected) {
-          correctedDefinitions[i] = def;
-        }
-      }
-      return { correctedDefinitions, correctionsMade };
-    };
 
     const runZAxisValidation = useCallback(async (
         definition: XDFDefinition, 
@@ -800,7 +787,7 @@ export default function EcuTuningAssistant() {
             setMapRenderKey(p => p + 1);
             addLog(`Mapa carregado com sucesso: ${name}`, 'success');
             
-            // Run validation for the Z-axis only, now that axes are pre-corrected.
+            // Now, run the AI validation for the Z-axis only.
             runZAxisValidation(definition, calculatedMap, mapAxes);
 
         } catch (error) {
@@ -1160,10 +1147,10 @@ export default function EcuTuningAssistant() {
     const handleAcceptSuggestion = () => {
         if (!aiSuggestion) return;
         
-        // Only Z-axis corrections are presented as suggestions now.
-        applyCorrectionAndReload(aiSuggestion.originalDefinition, {
-            z: aiSuggestion.newDefinition.equation,
-        });
+        applyZAxisCorrectionAndReload(
+            aiSuggestion.originalDefinition, 
+            aiSuggestion.newDefinition.equation
+        );
         
         setIsSuggestionModalOpen(false);
         setAiSuggestion(null);
@@ -1582,7 +1569,7 @@ export default function EcuTuningAssistant() {
                                     </p>
                                     <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!displayMap}>
                                         <GitCompareArrows className="mr-2 h-4 w-4" />
-                                        Corrigir Equações
+                                        Corrigir Equações Man.
                                     </Button>
                                 </div>
 
@@ -1595,7 +1582,7 @@ export default function EcuTuningAssistant() {
                                         </Button>
                                          <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || mapValidationStatus === 'loading'}>
                                             {mapValidationStatus === 'loading' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                                            {mapValidationStatus === 'suggestion' ? 'Ver Sugestão de Correção' : 'Analisar Eixo Z Novamente'}
+                                            {mapValidationStatus === 'suggestion' ? 'Ver Sugestão de Correção (Eixo Z)' : 'Analisar Eixo Z'}
                                         </Button>
                                         <Button variant="outline" className="w-full" onClick={handleExplainMap} disabled={!displayMap || isExplaining}>
                                             {isExplaining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <AudioLines className="mr-2 h-4 w-4" />}
