@@ -563,6 +563,87 @@ export default function EcuTuningAssistant() {
         toast({ title: 'Biblioteca Limpa', description: 'A sua biblioteca de ficheiros XDF foi removida.' });
     }
 
+    const applyCorrectionAndReload = useCallback((
+      originalDefinition: XDFDefinition,
+      corrections: { x?: string, y?: string, z?: string }
+    ) => {
+        if (!binFile) return;
+
+        const newDefinition = JSON.parse(JSON.stringify(originalDefinition)) as XDFDefinition;
+        let appliedCorrectionsLog = [];
+
+        if (corrections.x && newDefinition.xAxisDef) {
+            newDefinition.xAxisDef.equation = corrections.x;
+            appliedCorrectionsLog.push("Eixo X");
+        }
+        if (corrections.y && newDefinition.yAxisDef) {
+            newDefinition.yAxisDef.equation = corrections.y;
+            appliedCorrectionsLog.push("Eixo Y");
+        }
+        if (corrections.z) {
+            newDefinition.equation = corrections.z;
+            appliedCorrectionsLog.push("Dados do Mapa (Z)");
+        }
+
+        if (appliedCorrectionsLog.length === 0) {
+            addLog("Nenhuma correção foi aplicada.", "debug");
+            return;
+        }
+
+        try {
+            const correctedXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
+            const correctedYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxis, correctedYAxis);
+            const newSourceAxes = {
+                x: correctedXAxis,
+                y: correctedYAxis,
+                xLabel: newDefinition.xAxisDef?.label || 'Posição da Borboleta',
+                yLabel: newDefinition.yAxisDef?.label || 'RPM'
+            };
+
+            if (newDefinition.isPotential) {
+                setPotentialMapsDb(prev => ({
+                    ...prev,
+                    [binFile.checksum]: (prev[binFile.checksum] || []).map(pMap => 
+                        pMap.address === newDefinition.address ? newDefinition : pMap
+                    ),
+                }));
+            } else if (xdfFile) {
+                const newDefinitions = xdfFile.definitions.map(def => 
+                    def.name === newDefinition.name ? newDefinition : def
+                );
+                setXdfFile({ ...xdfFile, definitions: newDefinitions });
+            }
+
+            setWorkingMap(correctedMap);
+            setRawMap(correctedRawMap);
+            setDisplayMap(correctedMap);
+            setSourceAxes(newSourceAxes);
+            setDisplayAxes(newSourceAxes);
+            setAudioUrl(null);
+            setSelectedCells(new Set());
+            setOriginalSortOrder({
+              x: newSourceAxes.x.calculated.map((value, index) => ({ value, index })),
+              y: newSourceAxes.y.calculated.map((value, index) => ({ value, index })),
+            });
+            setDisplayIndexMap({
+              x: newSourceAxes.x.calculated.map((_, i) => i),
+              y: newSourceAxes.y.calculated.map((_, i) => i),
+            });
+            
+            setMapRenderKey(p => p + 1);
+            const logMessage = `IA aplicou correções automáticas a: ${appliedCorrectionsLog.join(', ')}.`;
+            addLog(logMessage, 'success');
+            toast({ title: 'Mapa Corrigido Automaticamente', description: logMessage });
+            setMapValidationStatus('valid');
+
+        } catch (error) {
+            addLog(`Erro ao aplicar a sugestão da IA: ${(error as Error).message}`, 'error');
+            toast({ variant: 'destructive', title: 'Erro ao Aplicar Correção', description: 'Não foi possível recalcular o mapa com a nova equação.' });
+            setMapValidationStatus('error');
+        }
+    }, [binFile, xdfFile, addLog, toast]);
+
     const runAutoValidation = useCallback(async (
         definition: XDFDefinition, 
         mapData: MapData, 
@@ -611,36 +692,12 @@ export default function EcuTuningAssistant() {
             const hasSuggestion = validSuggestedEquation || validSuggestedXAxisEquation || validSuggestedYAxisEquation;
 
             if (hasSuggestion) {
-                 try {
-                    const newDefinition = JSON.parse(JSON.stringify(definition)) as XDFDefinition;
-                    if (validSuggestedEquation) newDefinition.equation = validSuggestedEquation;
-                    if (validSuggestedXAxisEquation && newDefinition.xAxisDef) newDefinition.xAxisDef.equation = validSuggestedXAxisEquation;
-                    if (validSuggestedYAxisEquation && newDefinition.yAxisDef) newDefinition.yAxisDef.equation = validSuggestedYAxisEquation;
-
-                    const correctedXAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-                    const correctedYAxisPreview = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-                    const { calculatedMap: correctedMapPreview } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxisPreview, correctedYAxisPreview);
-                    
-                    setAiSuggestion({
-                        reasoning: result.data.reasoning,
-                        originalMap: mapData,
-                        originalAxes: { x: axes.x.calculated, y: axes.y.calculated, xLabel: axes.xLabel, yLabel: axes.yLabel },
-                        correctedMap: correctedMapPreview,
-                        correctedAxes: {
-                            x: correctedXAxisPreview.calculated,
-                            y: correctedYAxisPreview.calculated,
-                            xLabel: newDefinition.xAxisDef?.label || 'Posição da Borboleta',
-                            yLabel: newDefinition.yAxisDef?.label || 'RPM'
-                        },
-                        newDefinition,
-                        originalDefinition: JSON.parse(JSON.stringify(definition)),
-                    });
-                    setMapValidationStatus('suggestion');
-                    addLog(`A IA encontrou uma sugestão de melhoria para "${definition.name}".`, 'info');
-                } catch (error) {
-                    addLog(`Erro ao gerar a pré-visualização da IA: ${(error as Error).message}`, 'error');
-                    setMapValidationStatus('error');
-                }
+                addLog(`IA encontrou correções para "${definition.name}". A aplicar automaticamente...`, 'info');
+                applyCorrectionAndReload(definition, {
+                    x: validSuggestedXAxisEquation,
+                    y: validSuggestedYAxisEquation,
+                    z: validSuggestedEquation,
+                });
             } else {
                 setMapValidationStatus('valid');
                 addLog(`Análise da IA concluída para "${definition.name}": Nenhuma correção necessária.`, 'success');
@@ -649,7 +706,7 @@ export default function EcuTuningAssistant() {
             addLog(`A análise automática do mapa falhou: ${result.error}`, 'error');
             setMapValidationStatus('error');
         }
-    }, [binFile, addLog, activeXdfBrand, motorcycleModel]);
+    }, [binFile, addLog, activeXdfBrand, motorcycleModel, applyCorrectionAndReload]);
 
     const handleMapSelect = (name: string) => {
         if (!binFile || !name) return;
@@ -1054,87 +1111,28 @@ export default function EcuTuningAssistant() {
     const handleAcceptSuggestion = (correctionsToApply: { x: boolean; y: boolean; z: boolean; }) => {
         if (!aiSuggestion || !binFile || !selectedMapName) return;
 
-        const newDefinition = JSON.parse(JSON.stringify(aiSuggestion.originalDefinition)) as XDFDefinition;
+        const originalDefinition = aiSuggestion.originalDefinition;
         const suggestedDefinition = aiSuggestion.newDefinition;
-        let appliedCorrectionsLog = [];
+        const corrections: { x?: string, y?: string, z?: string } = {};
 
-        if (correctionsToApply.x && newDefinition.xAxisDef && suggestedDefinition.xAxisDef?.equation) {
-            newDefinition.xAxisDef.equation = suggestedDefinition.xAxisDef.equation;
-            appliedCorrectionsLog.push("Eixo X");
+        if (correctionsToApply.x && suggestedDefinition.xAxisDef?.equation) {
+            corrections.x = suggestedDefinition.xAxisDef.equation;
         }
-        if (correctionsToApply.y && newDefinition.yAxisDef && suggestedDefinition.yAxisDef?.equation) {
-            newDefinition.yAxisDef.equation = suggestedDefinition.yAxisDef.equation;
-            appliedCorrectionsLog.push("Eixo Y");
+        if (correctionsToApply.y && suggestedDefinition.yAxisDef?.equation) {
+            corrections.y = suggestedDefinition.yAxisDef.equation;
         }
         if (correctionsToApply.z && suggestedDefinition.equation) {
-            newDefinition.equation = suggestedDefinition.equation;
-            appliedCorrectionsLog.push("Dados do Mapa (Z)");
+            corrections.z = suggestedDefinition.equation;
         }
 
-
-        if (appliedCorrectionsLog.length === 0) {
+        if (Object.keys(corrections).length > 0) {
+            applyCorrectionAndReload(originalDefinition, corrections);
+        } else {
             addLog("Nenhuma correção foi selecionada para ser aplicada.", "info");
-            setIsSuggestionModalOpen(false);
-            setAiSuggestion(null);
-            return;
         }
-
-        try {
-            const correctedXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-            const correctedYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, correctedXAxis, correctedYAxis);
-            const newSourceAxes = {
-                x: correctedXAxis,
-                y: correctedYAxis,
-                xLabel: newDefinition.xAxisDef?.label || 'Posição da Borboleta',
-                yLabel: newDefinition.yAxisDef?.label || 'RPM'
-            };
-
-            if (newDefinition.isPotential) {
-                setPotentialMapsDb(prev => ({
-                    ...prev,
-                    [binFile.checksum]: (prev[binFile.checksum] || []).map(pMap => 
-                        pMap.address === newDefinition.address ? newDefinition : pMap
-                    ),
-                }));
-                 addLog(`Correções da IA guardadas para o mapa potencial "${selectedMapName}".`, 'success');
-            } else if (xdfFile) {
-                const newDefinitions = xdfFile.definitions.map(def => 
-                    def.name === selectedMapName ? newDefinition : def
-                );
-                setXdfFile({ ...xdfFile, definitions: newDefinitions });
-                 addLog(`Correções da IA aplicadas à definição XDF para "${selectedMapName}".`, 'success');
-            }
-
-            setWorkingMap(correctedMap);
-            setRawMap(correctedRawMap);
-            setDisplayMap(correctedMap);
-            setSourceAxes(newSourceAxes);
-            setDisplayAxes(newSourceAxes);
-            setAudioUrl(null);
-            setSelectedCells(new Set());
-            setOriginalSortOrder({
-              x: newSourceAxes.x.calculated.map((value, index) => ({ value, index })),
-              y: newSourceAxes.y.calculated.map((value, index) => ({ value, index })),
-            });
-            setDisplayIndexMap({
-              x: newSourceAxes.x.calculated.map((_, i) => i),
-              y: newSourceAxes.y.calculated.map((_, i) => i),
-            });
-            
-            setMapRenderKey(p => p + 1);
-            toast({ title: 'Correções Aplicadas', description: `O mapa foi atualizado com as sugestões selecionadas.` });
-            
-            // The map is now considered 'valid' after applying corrections
-            setMapValidationStatus('valid');
-
-        } catch (error) {
-            addLog(`Erro ao aplicar a sugestão da IA: ${(error as Error).message}`, 'error');
-            toast({ variant: 'destructive', title: 'Erro ao Aplicar Correção', description: 'Não foi possível recalcular o mapa com a nova equação.' });
-        } finally {
-            setIsSuggestionModalOpen(false);
-            setAiSuggestion(null);
-        }
+        
+        setIsSuggestionModalOpen(false);
+        setAiSuggestion(null);
     };
 
     const handleScanForMaps = async () => {
