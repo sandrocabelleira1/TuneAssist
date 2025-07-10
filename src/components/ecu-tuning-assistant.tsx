@@ -748,7 +748,59 @@ export default function EcuTuningAssistant() {
         }
     }, [binFile, addLog, activeXdfBrand, motorcycleModel]);
 
-    const handleMapSelect = (name: string) => {
+    const handleSortAxis = useCallback((axis: 'x' | 'y', currentMap: MapData, currentAxes: { x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string }, currentIndexMap: { x: number[], y: number[] }) => {
+        const axisToSort = currentAxes[axis];
+    
+        const sortedAxisWithIndices = axisToSort.calculated
+            .map((value, index) => ({
+                calc: value,
+                raw: axisToSort.raw[index],
+                originalIndex: currentIndexMap[axis][index], // Sort based on the current index map
+            }))
+            .sort((a, b) => {
+                const valA = a.calc;
+                const valB = b.calc;
+                if (typeof valA === 'number' && typeof valB === 'number') {
+                    return valA - valB;
+                }
+                return String(valA).localeCompare(String(valB));
+            });
+    
+        const newSortedCalculated = sortedAxisWithIndices.map(item => item.calc);
+        const newSortedRaw = sortedAxisWithIndices.map(item => item.raw);
+        const newIndexMap = sortedAxisWithIndices.map(item => item.originalIndex);
+    
+        let newSortedMap: MapData;
+    
+        if (axis === 'y') { // Sorting rows (Y-axis of the table, which corresponds to the 'y' axis in state)
+            const reorderedMap = newIndexMap.map(originalRowIndex => {
+                const sourceIndex = displayIndexMap!.y.indexOf(originalRowIndex);
+                return currentMap[sourceIndex];
+            });
+            newSortedMap = reorderedMap;
+        } else { // Sorting columns (X-axis of the table, which corresponds to the 'x' axis in state)
+            newSortedMap = currentMap.map(row => {
+                return newIndexMap.map(originalColIndex => {
+                    const sourceIndex = displayIndexMap!.x.indexOf(originalColIndex);
+                    return row[sourceIndex];
+                });
+            });
+        }
+    
+        return {
+            newMap: newSortedMap,
+            newAxes: {
+                ...currentAxes,
+                [axis]: { calculated: newSortedCalculated, raw: newSortedRaw },
+            },
+            newIndexMap: {
+                ...currentIndexMap,
+                [axis]: newIndexMap
+            }
+        };
+    }, [displayIndexMap]);
+
+    const handleMapSelect = useCallback((name: string) => {
         if (!binFile || !name) return;
         
         const definition = availableMaps.find(d => d.name === name);
@@ -768,39 +820,53 @@ export default function EcuTuningAssistant() {
             const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef);
             const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData);
 
-            const mapAxes = {
+            let currentMap = JSON.parse(JSON.stringify(calculatedMap));
+            let currentAxes = {
               x: axisXData,
               y: axisYData,
               xLabel: definition.xAxisDef?.label || 'Posição da Borboleta',
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
-            
-            setWorkingMap(calculatedMap);
+            let currentIndexMap = {
+              x: axisXData.calculated.map((_, i) => i),
+              y: axisYData.calculated.map((_, i) => i),
+            };
+
+            setWorkingMap(currentMap);
             setRawMap(newRawMap);
-            setDisplayMap(JSON.parse(JSON.stringify(calculatedMap)));
-            setSourceAxes(mapAxes);
-            setDisplayAxes(mapAxes);
-            setOriginalSortOrder({
-              x: mapAxes.x.calculated.map((value, index) => ({ value, index })),
-              y: mapAxes.y.calculated.map((value, index) => ({ value, index })),
+            setSourceAxes(currentAxes);
+             setOriginalSortOrder({
+              x: currentAxes.x.calculated.map((value, index) => ({ value, index })),
+              y: currentAxes.y.calculated.map((value, index) => ({ value, index })),
             });
-            setDisplayIndexMap({
-              x: mapAxes.x.calculated.map((_, i) => i),
-              y: mapAxes.y.calculated.map((_, i) => i),
-            });
+            
+            // --- Auto-sort on load ---
+            addLog(`Mapa carregado: ${name}. A organizar eixos...`, 'info');
+
+            // 1. Sort Y-axis (RPM)
+            const { newMap: mapAfterYSort, newAxes: axesAfterYSort, newIndexMap: indexMapAfterYSort } = handleSortAxis('y', currentMap, currentAxes, currentIndexMap);
+            
+            // 2. Sort X-axis (TPS) using the result of the Y-sort
+            const { newMap: mapAfterXSort, newAxes: axesAfterXSort, newIndexMap: indexMapAfterXSort } = handleSortAxis('x', mapAfterYSort, axesAfterYSort, indexMapAfterYSort);
+
+            // 3. Set the final sorted state
+            setDisplayMap(mapAfterXSort);
+            setDisplayAxes(axesAfterXSort);
+            setDisplayIndexMap(indexMapAfterXSort);
+            
+            addLog(`Eixos para "${name}" organizados com sucesso.`, 'success');
             
             setMapRenderKey(p => p + 1);
-            addLog(`Mapa carregado com sucesso: ${name}`, 'success');
             
             // Now, run the AI validation for the Z-axis only.
-            runZAxisValidation(definition, calculatedMap, mapAxes);
+            runZAxisValidation(definition, calculatedMap, currentAxes); // Validate with original data
 
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Leitura do Mapa", description: msg });
         }
-    };
+    }, [binFile, availableMaps, addLog, toast, runZAxisValidation, handleSortAxis]);
     
     const handleConfirmAxes = (data: { xEquation: string, yEquation: string, zEquation: string }) => {
         if (!selectedMapName || !binFile) return;
@@ -877,48 +943,14 @@ export default function EcuTuningAssistant() {
         }
     };
 
-    const handleSortAxis = (axis: 'x' | 'y') => {
-        if (!workingMap || !sourceAxes || !originalSortOrder || !displayAxes) return;
+    const triggerSortAxis = (axis: 'x' | 'y') => {
+        if (!displayMap || !displayAxes || !displayIndexMap) return;
     
-        const axisToSort = displayAxes[axis];
-    
-        const sortedAxisWithIndices = axisToSort.calculated
-            .map((value, index) => ({
-                calc: value,
-                raw: axisToSort.raw[index],
-                originalIndex: index,
-            }))
-            .sort((a, b) => {
-                const valA = a.calc;
-                const valB = b.calc;
-                if (typeof valA === 'number' && typeof valB === 'number') {
-                    return valA - valB;
-                }
-                return String(valA).localeCompare(String(valB));
-            });
-    
-        const newSortedCalculated = sortedAxisWithIndices.map(item => item.calc);
-        const newSortedRaw = sortedAxisWithIndices.map(item => item.raw);
-        const newIndexMap = sortedAxisWithIndices.map(item => item.originalIndex);
-    
-        let newSortedMap: MapData;
-    
-        if (axis === 'y') { // Sorting rows
-            newSortedMap = newIndexMap.map(originalRowIndex => displayMap![originalRowIndex]);
-            setDisplayIndexMap(prev => ({ ...(prev!), y: newIndexMap }));
-        } else { // Sorting columns
-            newSortedMap = displayMap!.map(row => newIndexMap.map(originalColIndex => row[originalColIndex]));
-            setDisplayIndexMap(prev => ({ ...(prev!), x: newIndexMap }));
-        }
-    
-        setDisplayAxes(prev => ({
-            ...prev!,
-            [axis]: {
-                calculated: newSortedCalculated,
-                raw: newSortedRaw,
-            },
-        }));
-        setDisplayMap(newSortedMap);
+        const { newMap, newAxes, newIndexMap } = handleSortAxis(axis, displayMap, displayAxes, displayIndexMap);
+        
+        setDisplayMap(newMap);
+        setDisplayAxes(newAxes);
+        setDisplayIndexMap(newIndexMap);
         setSelectedCells(new Set());
         setMapRenderKey(k => k + 1);
         addLog(`Eixo ${axis === 'x' ? displayAxes.xLabel : displayAxes.yLabel} ordenado.`, 'info');
@@ -1679,7 +1711,7 @@ export default function EcuTuningAssistant() {
                                                 xAxisLabel={displayAxes.xLabel} 
                                                 yAxisLabel={displayAxes.yLabel}
                                                 mapName={selectedMapName}
-                                                onSortAxis={handleSortAxis}
+                                                onSortAxis={triggerSortAxis}
                                                 onSortByFirstColumn={handleSortByFirstColumn}
                                                 onResetSort={handleResetSort}
                                                 onCellChange={handleCellChange}
