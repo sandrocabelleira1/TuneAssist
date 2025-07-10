@@ -421,26 +421,31 @@ export default function EcuTuningAssistant() {
     }, [binFile, xdfFile, potentialMapsDb, addLog, toast, selectedMapName]);
 
 
-    const resetState = () => {
-        setBinFile(null); setXdfFile(null); setSelectedMapName('');
-        setRawMap(null); setWorkingMap(null); setSourceAxes(null);
-        setDisplayMap(null); setDisplayAxes(null);
+    const resetState = useCallback(() => {
+        setBinFile(null); 
+        setXdfFile(null); 
+        setSelectedMapName('');
+        setRawMap(null); 
+        setWorkingMap(null); 
+        setSourceAxes(null);
+        setDisplayMap(null); 
+        setDisplayAxes(null);
         setOriginalSortOrder(null);
         setDisplayIndexMap(null);
         setMapValidationStatus('idle');
         setAiSuggestion(null);
         setSelectedXdfFromLibrary('');
         setActiveXdfBrand('');
-        setSelectedBrandForNewXdf('no-brand');
         setAvailableMaps([]);
         setAudioUrl(null);
         setSelectedCells(new Set());
         setQuickEditValue('');
+        setLogs([]);
 
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
         addLog('O estado da sessão foi reiniciado. As suas bibliotecas foram preservadas.', 'info');
-    };
+    }, [addLog]);
 
     // New function to programmatically correct axes when an XDF is loaded.
     const autoCorrectAllAxes = (definitions: XDFDefinition[], binBuffer: ArrayBuffer) => {
@@ -1887,7 +1892,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   xAxis={suggestion.correctedAxes.x}
                                   yAxis={suggestion.correctedAxes.y}
                                   xAxisLabel={suggestion.correctedAxes.xLabel}
-                                  yAxisLabel={suggestion.correctedAxes.yLabel}
+                                  yLabel={suggestion.correctedAxes.yLabel}
                                   mapName={suggestion.newDefinition.name}
                                   isEditable={false}
                                   onSortAxis={() => {}}
