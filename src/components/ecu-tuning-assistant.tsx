@@ -453,27 +453,30 @@ export default function EcuTuningAssistant() {
       const correctedDefinitions = JSON.parse(JSON.stringify(definitions));
 
       for (const def of correctedDefinitions) {
-        let corrected = false;
         
         // Check Y-axis (RPM)
-        if (def.yAxisDef && def.yAxisDef.address !== null && def.yAxisDef.equation.trim().toLowerCase() === 'x') {
+        if (def.yAxisDef && def.yAxisDef.address !== null) {
             const tempYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
-            const avgY = tempYAxis.raw.reduce((acc, v) => acc + (typeof v === 'number' ? v : 0), 0) / tempYAxis.raw.length;
-            if (avgY > 0 && avgY < 300) { // Likely needs scaling for RPM
+            const numericValues = tempYAxis.calculated.filter(v => typeof v === 'number') as number[];
+            const avgY = numericValues.reduce((acc, v) => acc + v, 0) / (numericValues.length || 1);
+            
+            // If the axis has not been corrected (average value is low) apply the standard correction.
+            if (avgY > 0 && avgY < 500) { 
               def.yAxisDef.equation = 'X * 50';
               correctionsMade++;
-              corrected = true;
             }
         }
 
         // Check X-axis (TPS)
-        if (def.xAxisDef && def.xAxisDef.address !== null && def.xAxisDef.equation.trim().toLowerCase() === 'x') {
+        if (def.xAxisDef && def.xAxisDef.address !== null) {
             const tempXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
-            const maxX = Math.max(...tempXAxis.raw.map(v => typeof v === 'number' ? v : 0));
-            if (maxX > 1000) { // Likely 0-1023 range, needs scaling for TPS
+            const numericValues = tempXAxis.calculated.filter(v => typeof v === 'number') as number[];
+            const maxX = Math.max(...numericValues);
+            
+            // If the axis has not been corrected (max value is high) apply the standard correction.
+            if (maxX > 150) { 
               def.xAxisDef.equation = 'X / 10.23';
               correctionsMade++;
-              corrected = true;
             }
         }
       }
