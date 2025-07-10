@@ -1,5 +1,3 @@
-
-
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -414,7 +412,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
               count: colsCount,
               dataSize: xAxisDef?.dataSize || defaultXDataSize,
               isBigEndian: xAxisDef?.isBigEndian ?? false,
-              equation: (xAxisDef?.equation && xAxisDef.equation !== 'X') ? xAxisDef.equation : '(X / 10.23) * 0.994 + 0.6',
+              equation: (xAxisDef?.equation && xAxisDef.equation !== 'X') ? xAxisDef.equation : 'X / 10.23',
               equationVar: xAxisDef?.equationVar || 'X',
               label: xAxisDef?.label || 'Carga',
           } as AxisDefinition; // Type assertion
@@ -816,4 +814,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
