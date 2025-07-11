@@ -1495,10 +1495,22 @@ export default function EcuTuningAssistant() {
             // logContainer.scrollTop = logContainer.scrollHeight;
         }
     }, [logs]);
-
-    const transposedMapFor2DView = useMemo(() => {
+    
+    // Transpose the map for 2D table and line plot view
+    const transposedMap = useMemo(() => {
         if (!displayMap || displayMap.length === 0 || displayMap[0].length === 0) return null;
-        return displayMap;
+        
+        const rows = displayMap.length;
+        const cols = displayMap[0].length;
+        const transposed = Array(cols).fill(0).map(() => Array(rows).fill(null));
+        
+        for(let i=0; i<rows; i++){
+            for(let j=0; j<cols; j++){
+                transposed[j][i] = displayMap[i][j];
+            }
+        }
+        
+        return transposed;
     }, [displayMap]);
 
     return (
@@ -1744,7 +1756,7 @@ export default function EcuTuningAssistant() {
                                             />
                                         </TabsContent>
                                         <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden">
-                                            {transposedMapFor2DView ? (
+                                            {transposedMap ? (
                                                 <>
                                                     <div className="p-2 flex items-center gap-2">
                                                         <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
@@ -1762,7 +1774,7 @@ export default function EcuTuningAssistant() {
                                                     <div className="flex-1 relative">
                                                         <LinePlot2D
                                                             key={`${mapRenderKey}-slice-${plotSliceIndex}`}
-                                                            mapData={transposedMapFor2DView}
+                                                            mapData={transposedMap}
                                                             xAxis={displayAxes.x}
                                                             yAxis={displayAxes.y}
                                                             xAxisLabel={displayAxes.xLabel}

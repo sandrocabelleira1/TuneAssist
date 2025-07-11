@@ -15,7 +15,7 @@ import type { MapData } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 
 interface LinePlot2DProps {
-  mapData: MapData; // This is now expected to be transposed: [cols x rows] (XxY)
+  mapData: MapData; // This is now expected to be transposed: [X-axis cols x Y-axis rows]
   xAxis: (string | number)[];
   yAxis: (string | number)[];
   xAxisLabel: string;
@@ -33,40 +33,22 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // mapData is now expected to be transposed: [X-axis cols x Y-axis rows]
-    // The data for the line chart is the Z value at each X-axis point.
-    // We select a "row" from the transposed map, which corresponds to a "column" in the original map.
-    // The `sliceIndex` corresponds to the Y-axis value we want to plot.
-    
-    // In the main component, the data is (YxX). We transpose it to (XxY) for this component.
-    // So, a "row" here (mapData[sliceIndex]) is actually a column from the original data.
-    // Wait, the main component now sends transposedMapFor2DView which is [cols x rows].
-    // And sliceIndex refers to a Y-axis value (a row in the original table).
-    // This means sliceIndex is an index for a ROW in the ORIGINAL data.
-    // In the transposed data, a row is a COLUMN. This is confusing.
-
-    // Let's simplify. `mapData` is now `transposedMapFor2DView`, which is `cols x rows`.
-    // The selector lets us pick a `yAxis` value, which corresponds to `sliceIndex`.
+    // mapData is transposed: [X-axis cols x Y-axis rows]
+    // The selector `sliceIndex` corresponds to an index of the `yAxis` array (a row in the original table).
     // We want to plot the Z values for that Y against all X values.
-    // The original map was `rows x cols` (Y x X).
-    // The transposed map is `cols x rows` (X x Y).
-    // To get the data for the Y-axis value at `sliceIndex`, we need to get the `sliceIndex`-th element from each *column* of the transposed map.
-    // This is equivalent to getting the `sliceIndex`-th *row* of the original map.
-
-    // The data received `mapData` is already transposed (cols x rows).
-    // The selector `sliceIndex` corresponds to an index of the `yAxis` array.
-    // We need to plot `z` vs `x` for a fixed `y`.
-    // The original, untransposed data would be `displayMap[sliceIndex]`.
+    // In the transposed map, the data for a specific Y (row) is now a column.
     
-    // Let's assume the data is NOT transposed when it arrives here. `mapData` should be the original `displayMap`.
-    // This component will then handle what it needs.
+    // However, the `sliceIndex` corresponds to the Y-axis, which has `yAxis.length` items.
+    // The number of columns in the transposed map is `yAxis.length`.
+    // So, `mapData[some_x_index][sliceIndex]` gives the Z value for a given X and the selected Y.
 
-    if (!mapData || sliceIndex < 0 || sliceIndex >= mapData.length) {
+    if (!mapData || mapData.length === 0 || mapData[0].length <= sliceIndex) {
         return null;
     }
     
-    // Get the specific row from the map data (YxX)
-    const slice = mapData[sliceIndex];
+    // Get the specific row from the original map, which is now a column in the transposed map.
+    // We can iterate through the xAxis and pick the z-value for the selected sliceIndex.
+    const slice = mapData.map(col => col[sliceIndex]);
     if (!slice) return null;
 
     return xAxis.map((xVal, index) => ({
