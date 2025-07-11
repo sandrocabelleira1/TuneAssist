@@ -31,11 +31,14 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    if (!mapData || sliceIndex < 0 || sliceIndex >= mapData.length) {
-      return null;
+    if (!mapData || sliceIndex < 0 || sliceIndex >= (mapData[0]?.length || 0)) {
+        return null;
     }
-
-    const slice = mapData[sliceIndex];
+    
+    // The data is transposed for table view (Y becomes rows, X becomes columns).
+    // The line plot needs a vertical slice of this transposed data.
+    // So, for a given Y-axis slice (sliceIndex), we take the value from each row at that column index.
+    const slice = mapData.map(row => row[sliceIndex]);
     if (!slice) return null;
 
     return xAxis.map((xVal, index) => ({
