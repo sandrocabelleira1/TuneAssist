@@ -15,10 +15,11 @@ import type { MapData } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 
 interface LinePlot2DProps {
-  mapData: MapData; // This is expected to be transposed: [Y-axis rows x X-axis cols]
+  mapData: MapData; // Expects original orientation: Y-axis rows, X-axis cols
   xAxis: (string | number)[];
   yAxis: (string | number)[];
   xAxisLabel: string;
+  yAxisLabel: string;
   sliceIndex: number;
   onDataChange: (colIndex: number, newValue: number) => void;
 }
@@ -27,24 +28,26 @@ export default function LinePlot2D({
   mapData,
   xAxis,
   yAxis,
+  yAxisLabel,
   sliceIndex,
   xAxisLabel,
   onDataChange,
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // The mapData is now transposed, so each row in mapData corresponds to a Y-axis value (RPM).
-    // The sliceIndex directly corresponds to the row we want to plot.
+    // mapData is Y x X. sliceIndex corresponds to the row (Y-axis value) we want to plot.
     if (!mapData || sliceIndex < 0 || sliceIndex >= mapData.length) {
-        return null;
+      return null;
     }
     
+    // Get the specific row of Z-values for the selected Y-axis slice
     const dataForYSlice = mapData[sliceIndex];
 
     if (!dataForYSlice || dataForYSlice.length !== xAxis.length) {
       return null;
     }
     
+    // Combine the X-axis values with the corresponding Z-values from the selected slice
     return xAxis.map((xVal, index) => ({
       x: typeof xVal === 'number' ? xVal.toFixed(1) : String(xVal),
       z: dataForYSlice[index],
@@ -100,7 +103,7 @@ export default function LinePlot2D({
         <Line
           type="monotone"
           dataKey="z"
-          name={`Valor (linha ${yAxis[sliceIndex]})`}
+          name={`Valor (${yAxisLabel} ${yAxis[sliceIndex]})`}
           stroke="hsl(var(--primary))"
           strokeWidth={2}
           activeDot={{ r: 8 }}

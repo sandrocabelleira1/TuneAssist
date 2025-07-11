@@ -1495,24 +1495,6 @@ export default function EcuTuningAssistant() {
             // logContainer.scrollTop = logContainer.scrollHeight;
         }
     }, [logs]);
-    
-    // Transpose the map for 2D line plot view
-    const transposedMap = useMemo(() => {
-        if (!displayMap || displayMap.length === 0 || displayMap[0].length === 0) {
-            return null;
-        }
-
-        const rows = displayMap.length;
-        const cols = displayMap[0].length;
-        const transposed = Array(cols).fill(null).map(() => Array(rows).fill(null));
-
-        for (let i = 0; i < rows; i++) {
-            for (let j = 0; j < cols; j++) {
-                transposed[j][i] = displayMap[i][j];
-            }
-        }
-        return transposed;
-    }, [displayMap]);
 
     return (
         <TooltipProvider>
@@ -1757,39 +1739,33 @@ export default function EcuTuningAssistant() {
                                             />
                                         </TabsContent>
                                         <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden">
-                                            {transposedMap ? (
-                                                <>
-                                                    <div className="p-2 flex items-center gap-2">
-                                                        <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
-                                                        <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
-                                                            <SelectTrigger id="plot-slice-selector" className="w-[120px]">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {displayAxes.y.map((yVal, index) => (
-                                                                    <SelectItem key={index} value={String(index)}>{String(yVal)}</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div className="flex-1 relative">
-                                                        <LinePlot2D
-                                                            key={`${mapRenderKey}-slice-${plotSliceIndex}`}
-                                                            mapData={transposedMap}
-                                                            xAxis={displayAxes.x}
-                                                            yAxis={displayAxes.y}
-                                                            xAxisLabel={displayAxes.xLabel}
-                                                            sliceIndex={plotSliceIndex}
-                                                            onDataChange={() => {}} // Placeholder for now
-                                                        />
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
-                                                    <AlertCircle className="mx-auto h-12 w-12" />
-                                                    <p className="mt-4 font-semibold">Dados de Gráfico Indisponíveis</p>
+                                            <>
+                                                <div className="p-2 flex items-center gap-2">
+                                                    <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
+                                                    <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
+                                                        <SelectTrigger id="plot-slice-selector" className="w-[120px]">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {displayAxes.y.map((yVal, index) => (
+                                                                <SelectItem key={index} value={String(index)}>{String(yVal)}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
                                                 </div>
-                                            )}
+                                                <div className="flex-1 relative">
+                                                    <LinePlot2D
+                                                        key={`${mapRenderKey}-slice-${plotSliceIndex}`}
+                                                        mapData={displayMap}
+                                                        xAxis={displayAxes.x}
+                                                        yAxis={displayAxes.y}
+                                                        yAxisLabel={displayAxes.yLabel}
+                                                        xAxisLabel={displayAxes.xLabel}
+                                                        sliceIndex={plotSliceIndex}
+                                                        onDataChange={() => {}} // Placeholder for now
+                                                    />
+                                                </div>
+                                            </>
                                         </TabsContent>
                                         <TabsContent value="3d" className="flex-1 data-[state=inactive]:hidden">
                                             <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
