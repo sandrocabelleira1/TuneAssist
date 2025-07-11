@@ -36,28 +36,30 @@ export default function LinePlot2D({
     
   const plotData = useMemo(() => {
     // 1. Validate inputs
-    if (!mapData || !xAxis || !yAxis || sliceIndex < 0 || sliceIndex >= mapData.length) {
+    if (!mapData || !xAxis || sliceIndex < 0 || sliceIndex >= mapData.length) {
+      console.error("Chart Error: Missing or invalid mapData, xAxis, or sliceIndex.");
       return null;
     }
     
     // 2. Extract the correct slice of Z-values for the selected Y-axis row
-    const dataForYSlice = mapData[sliceIndex];
+    const zValuesForSlice = mapData[sliceIndex];
 
     // 3. More validation
-    if (!dataForYSlice || dataForYSlice.length !== xAxis.length) {
+    if (!zValuesForSlice || zValuesForSlice.length !== xAxis.length) {
       console.error("Chart Error: Mismatch between X-axis length and data row length.");
       return null;
     }
     
-    // 4. Combine X-axis values with the corresponding Z-values from the selected slice
+    // 4. Combine X-axis values (TPS) with the corresponding Z-values from the selected slice (RPM).
+    // This creates the array of {x, z} points needed for the chart.
     const combinedData = xAxis.map((xVal, index) => {
-      const zVal = dataForYSlice[index];
+      const zVal = zValuesForSlice[index];
       
       // Ensure zVal is a number or null for the chart to render correctly
       const finalZ = typeof zVal === 'number' && isFinite(zVal) ? zVal : null;
 
-      // Format X-axis value for display
-      const finalX = typeof xVal === 'number' ? Math.round(xVal) : String(xVal);
+      // Ensure X-axis value is a number for the chart to plot correctly
+      const finalX = typeof xVal === 'number' && isFinite(xVal) ? xVal : 0;
 
       return {
         x: finalX,
@@ -67,7 +69,7 @@ export default function LinePlot2D({
 
     return combinedData;
 
-  }, [mapData, xAxis, yAxis, sliceIndex]);
+  }, [mapData, xAxis, sliceIndex]);
 
 
   if (!plotData) {
@@ -95,16 +97,18 @@ export default function LinePlot2D({
       >
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
         <XAxis 
+            type="number"
             dataKey="x" 
             name={xAxisLabel}
             label={{ value: xAxisLabel, position: 'insideBottom', offset: -10 }}
             stroke="hsl(var(--foreground))"
             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+            domain={['dataMin', 'dataMax']}
         />
         <YAxis 
             stroke="hsl(var(--foreground))"
             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-            domain={['dataMin', 'dataMax']}
+            domain={['auto', 'auto']}
             allowDataOverflow
         />
         <Tooltip
@@ -112,6 +116,7 @@ export default function LinePlot2D({
             backgroundColor: 'hsl(var(--background))',
             borderColor: 'hsl(var(--border))',
           }}
+          labelFormatter={(label) => `${xAxisLabel}: ${label}`}
         />
         <Legend wrapperStyle={{paddingTop: '20px'}}/>
         <Line
