@@ -753,7 +753,8 @@ export default function EcuTuningAssistant() {
 
     const handleSortAxis = useCallback((axis: 'x' | 'y', currentMap: MapData, currentAxes: { x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string }, currentIndexMap: { x: number[], y: number[] }) => {
         const axisToSort = currentAxes[axis];
-    
+        if (!axisToSort) return null;
+
         const sortedAxisWithIndices = axisToSort.calculated
             .map((value, index) => ({
                 calc: value,
@@ -777,14 +778,16 @@ export default function EcuTuningAssistant() {
     
         if (axis === 'y') { // Sorting rows (Y-axis of the table, which corresponds to the 'y' axis in state)
             const reorderedMap = newIndexMap.map(originalRowIndex => {
-                const sourceIndex = displayIndexMap!.y.indexOf(originalRowIndex);
+                const sourceIndex = displayIndexMap?.y.indexOf(originalRowIndex);
+                if (sourceIndex === undefined || sourceIndex === -1) return new Array(currentMap[0]?.length || 0).fill(null);
                 return currentMap[sourceIndex];
             });
             newSortedMap = reorderedMap;
         } else { // Sorting columns (X-axis of the table, which corresponds to the 'x' axis in state)
             newSortedMap = currentMap.map(row => {
                 return newIndexMap.map(originalColIndex => {
-                    const sourceIndex = displayIndexMap!.x.indexOf(originalColIndex);
+                    const sourceIndex = displayIndexMap?.x.indexOf(originalColIndex);
+                    if (sourceIndex === undefined || sourceIndex === -1) return null;
                     return row[sourceIndex];
                 });
             });
@@ -831,26 +834,48 @@ export default function EcuTuningAssistant() {
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
             let currentIndexMap = {
-              x: axisXData.calculated.map((_, i) => i),
-              y: axisYData.calculated.map((_, i) => i),
+              x: axisXData?.calculated.map((_, i) => i) || [],
+              y: axisYData?.calculated.map((_, i) => i) || [],
             };
 
             setWorkingMap(currentMap);
             setRawMap(newRawMap);
             setSourceAxes(currentAxes);
              setOriginalSortOrder({
-              x: currentAxes.x.calculated.map((value, index) => ({ value, index })),
-              y: currentAxes.y.calculated.map((value, index) => ({ value, index })),
+              x: currentAxes.x?.calculated.map((value, index) => ({ value, index })) || [],
+              y: currentAxes.y?.calculated.map((value, index) => ({ value, index })) || [],
             });
             
             // --- Auto-sort on load ---
             addLog(`Mapa carregado: ${name}. A organizar eixos...`, 'info');
 
+            let mapAfterYSort = currentMap;
+            let axesAfterYSort = currentAxes;
+            let indexMapAfterYSort = currentIndexMap;
+            
             // 1. Sort Y-axis (RPM)
-            const { newMap: mapAfterYSort, newAxes: axesAfterYSort, newIndexMap: indexMapAfterYSort } = handleSortAxis('y', currentMap, currentAxes, currentIndexMap);
+            if (currentAxes.y?.calculated.length > 0) {
+              const ySortResult = handleSortAxis('y', currentMap, currentAxes, currentIndexMap);
+              if (ySortResult) {
+                mapAfterYSort = ySortResult.newMap;
+                axesAfterYSort = ySortResult.newAxes;
+                indexMapAfterYSort = ySortResult.newIndexMap;
+              }
+            }
+            
+            let mapAfterXSort = mapAfterYSort;
+            let axesAfterXSort = axesAfterYSort;
+            let indexMapAfterXSort = indexMapAfterYSort;
             
             // 2. Sort X-axis (TPS) using the result of the Y-sort
-            const { newMap: mapAfterXSort, newAxes: axesAfterXSort, newIndexMap: indexMapAfterXSort } = handleSortAxis('x', mapAfterYSort, axesAfterYSort, indexMapAfterYSort);
+            if (currentAxes.x?.calculated.length > 0) {
+              const xSortResult = handleSortAxis('x', mapAfterYSort, axesAfterYSort, indexMapAfterYSort);
+              if (xSortResult) {
+                  mapAfterXSort = xSortResult.newMap;
+                  axesAfterXSort = xSortResult.newAxes;
+                  indexMapAfterXSort = xSortResult.newIndexMap;
+              }
+            }
 
             // 3. Set the final sorted state
             setDisplayMap(mapAfterXSort);
@@ -949,7 +974,10 @@ export default function EcuTuningAssistant() {
     const triggerSortAxis = (axis: 'x' | 'y') => {
         if (!displayMap || !displayAxes || !displayIndexMap) return;
     
-        const { newMap, newAxes, newIndexMap } = handleSortAxis(axis, displayMap, displayAxes, displayIndexMap);
+        const sortResult = handleSortAxis(axis, displayMap, displayAxes, displayIndexMap);
+        if (!sortResult) return;
+
+        const { newMap, newAxes, newIndexMap } = sortResult;
         
         setDisplayMap(newMap);
         setDisplayAxes(newAxes);

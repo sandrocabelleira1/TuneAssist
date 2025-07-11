@@ -458,7 +458,10 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): AxisDataState {
-  if (!axisDef) return { raw: [], calculated: [] };
+  // Always return a valid state object to prevent crashes.
+  const defaultState: AxisDataState = { raw: [], calculated: [] };
+  
+  if (!axisDef) return defaultState;
 
   if (axisDef.staticLabels && axisDef.staticLabels.length > 0) {
       if (axisDef.staticLabels.length !== axisDef.count) {
