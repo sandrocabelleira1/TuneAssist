@@ -128,6 +128,14 @@ function MapTable({
     return Math.round(val);
   };
 
+  const transposedMap = useMemo(() => {
+    if (!mapData || mapData.length === 0) return [];
+    return mapData[0].map((_, colIndex) => mapData.map(row => row[colIndex]));
+  }, [mapData]);
+
+  if (!mapData || mapData.length === 0) {
+    return null;
+  }
 
   return (
     <div className="overflow-auto relative h-full">
@@ -185,7 +193,7 @@ function MapTable({
                  {yAxisFormatter(y)}
               </td>
               {xAxis.map((_x, xi) => {
-                const cellValue = mapData[yi]?.[xi];
+                const cellValue = transposedMap[xi]?.[yi];
                 const isSelected = selectedCells.has(`${yi}-${xi}`);
                 return (
                   <td 
@@ -242,7 +250,6 @@ export default function EcuTuningAssistant() {
     const [workingMap, setWorkingMap] = useState<MapData | null>(null);
     const [sourceAxes, setSourceAxes] = useState<{ x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string } | null>(null);
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
-    const [transposedMap, setTransposedMap] = useState<MapData | null>(null);
     const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
     const [displayIndexMap, setDisplayIndexMap] = useState<{ x: number[], y: number[] } | null>(null);
@@ -406,7 +413,6 @@ export default function EcuTuningAssistant() {
         if (selectedMapName && !uniqueCombinedMaps.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
             setDisplayMap(null);
-            setTransposedMap(null);
             setDisplayAxes(null);
         }
 
@@ -432,7 +438,6 @@ export default function EcuTuningAssistant() {
         setWorkingMap(null); 
         setSourceAxes(null);
         setDisplayMap(null); 
-        setTransposedMap(null);
         setDisplayAxes(null);
         setOriginalSortOrder(null);
         setDisplayIndexMap(null);
@@ -484,7 +489,6 @@ export default function EcuTuningAssistant() {
                     setXdfFile(null); 
                     setSelectedMapName('');
                     setDisplayMap(null);
-                    setTransposedMap(null);
                     setDisplayAxes(null);
                     setRawMap(null);
                     setAvailableMaps([]);
@@ -555,7 +559,7 @@ export default function EcuTuningAssistant() {
             let definitions = parseXDF(xdfData.content);
             if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
             
-            setSelectedMapName(''); setDisplayMap(null); setTransposedMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
+            setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
             setSelectedCells(new Set());
             setMapValidationStatus('idle');
             setPlotSliceIndex(0);
@@ -629,9 +633,6 @@ export default function EcuTuningAssistant() {
             setWorkingMap(correctedMap);
             setRawMap(correctedRawMap);
             setDisplayMap(correctedMap);
-            
-            const newTransposed = correctedMap[0]?.map((_, colIndex) => correctedMap.map(row => row[colIndex])) || [];
-            setTransposedMap(newTransposed);
             
             setSourceAxes(newSourceAxes);
             const displayableAxes = {
@@ -830,7 +831,6 @@ export default function EcuTuningAssistant() {
             if (!currentAxes.x || !currentAxes.y) {
               addLog(`A definição do mapa "${name}" está em falta ou tem um eixo inválido. Não é possível carregar.`, 'error');
               setDisplayMap(null);
-              setTransposedMap(null);
               setDisplayAxes(null);
               return;
             }
@@ -885,11 +885,6 @@ export default function EcuTuningAssistant() {
             }
 
             setDisplayMap(mapAfterXSort);
-            
-            // Centralized transposition for all visual components
-            const newTransposed = mapAfterXSort[0]?.map((_, colIndex) => mapAfterXSort.map(row => row[colIndex])) || [];
-            setTransposedMap(newTransposed);
-            
             setDisplayAxes(axesAfterXSort);
             setDisplayIndexMap(indexMapAfterXSort);
             
@@ -904,7 +899,6 @@ export default function EcuTuningAssistant() {
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Leitura do Mapa", description: msg });
             setDisplayMap(null);
-            setTransposedMap(null);
             setDisplayAxes(null);
         }
     }, [binFile, availableMaps, addLog, toast, runZAxisValidation, handleSortAxis]);
@@ -963,9 +957,6 @@ export default function EcuTuningAssistant() {
             setRawMap(newRawMap);
             setDisplayMap(newMapData);
             
-            const newTransposed = newMapData[0]?.map((_, colIndex) => newMapData.map(row => row[colIndex])) || [];
-            setTransposedMap(newTransposed);
-            
             setSourceAxes(newAxesState);
             const displayableAxes = {
                 x: newAxesState.x.calculated,
@@ -1009,10 +1000,6 @@ export default function EcuTuningAssistant() {
         const { newMap, newAxes, newIndexMap } = sortResult;
         
         setDisplayMap(newMap);
-        
-        const newTransposed = newMap[0]?.map((_, colIndex) => newMap.map(row => row[colIndex])) || [];
-        setTransposedMap(newTransposed);
-
         setDisplayAxes(newAxes);
         setDisplayIndexMap(newIndexMap);
         setSelectedCells(new Set());
@@ -1044,8 +1031,6 @@ export default function EcuTuningAssistant() {
         const newYIndexMap = sortable.map(item => item.originalIndex);
     
         setDisplayMap(newSortedMap);
-        const newTransposed = newSortedMap[0]?.map((_, colIndex) => newSortedMap.map(row => row[colIndex])) || [];
-        setTransposedMap(newTransposed);
 
         setDisplayAxes(prev => {
             if (!prev) return null;
@@ -1066,8 +1051,6 @@ export default function EcuTuningAssistant() {
     const handleResetSort = () => {
         if (workingMap && sourceAxes) {
             setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
-            const newTransposed = workingMap[0]?.map((_, colIndex) => workingMap.map(row => row[colIndex])) || [];
-            setTransposedMap(newTransposed);
             
             const displayableAxes = {
                 x: sourceAxes.x.calculated,
@@ -1113,9 +1096,6 @@ export default function EcuTuningAssistant() {
       const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
       newDisplayMap[rowIndex][colIndex] = newValue;
       setDisplayMap(newDisplayMap);
-
-      const newTransposed = newDisplayMap[0]?.map((_, cIdx) => newDisplayMap.map(row => row[cIdx])) || [];
-      setTransposedMap(newTransposed);
 
       setAudioUrl(null);
       setMapValidationStatus('idle'); // Any manual change invalidates the last validation
@@ -1239,9 +1219,6 @@ export default function EcuTuningAssistant() {
             setWorkingMap(newWorkingMap);
             setRawMap(newRawMap);
             setDisplayMap(newDisplayMap);
-
-            const newTransposed = newDisplayMap[0]?.map((_, cIdx) => newDisplayMap.map(row => row[cIdx])) || [];
-            setTransposedMap(newTransposed);
 
             setAudioUrl(null);
             setMapValidationStatus('idle'); // Any manual change invalidates the last validation
@@ -1567,6 +1544,10 @@ export default function EcuTuningAssistant() {
         }
     }, [logs]);
 
+    const transposedMapFor2DView = useMemo(() => {
+        if (!displayMap || displayMap.length === 0) return null;
+        return displayMap[0].map((_, colIndex) => displayMap.map(row => row[colIndex]));
+    }, [displayMap]);
 
     return (
         <TooltipProvider>
@@ -1785,7 +1766,7 @@ export default function EcuTuningAssistant() {
                                 </div>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0">
-                                {displayMap && transposedMap && displayAxes ? (
+                                {displayMap && displayAxes ? (
                                     <Tabs defaultValue="2d" className="flex-1 flex flex-col">
                                         <TabsList className="mb-2">
                                             <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Visualização 2D</TabsTrigger>
@@ -1795,7 +1776,7 @@ export default function EcuTuningAssistant() {
                                         <TabsContent value="2d" forceMount className="flex-1 relative data-[state=inactive]:hidden">
                                             <MapTable
                                                 key={mapRenderKey}
-                                                mapData={transposedMap || []} 
+                                                mapData={displayMap || []} 
                                                 xAxis={displayAxes.x} 
                                                 yAxis={displayAxes.y} 
                                                 xAxisLabel={displayAxes.xLabel} 
@@ -1811,30 +1792,39 @@ export default function EcuTuningAssistant() {
                                             />
                                         </TabsContent>
                                         <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden">
-                                            <div className="p-2 flex items-center gap-2">
-                                                <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
-                                                <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
-                                                    <SelectTrigger id="plot-slice-selector" className="w-[120px]">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {displayAxes.y.map((yVal, index) => (
-                                                            <SelectItem key={index} value={String(index)}>{String(yVal)}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="flex-1 relative">
-                                                <LinePlot2D
-                                                    key={`${mapRenderKey}-slice-${plotSliceIndex}`}
-                                                    mapData={transposedMap}
-                                                    xAxis={displayAxes.x}
-                                                    yAxis={displayAxes.y}
-                                                    xAxisLabel={displayAxes.xLabel}
-                                                    sliceIndex={plotSliceIndex}
-                                                    onDataChange={() => {}} // Placeholder for now
-                                                />
-                                            </div>
+                                            {transposedMapFor2DView ? (
+                                                <>
+                                                    <div className="p-2 flex items-center gap-2">
+                                                        <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
+                                                        <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
+                                                            <SelectTrigger id="plot-slice-selector" className="w-[120px]">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {displayAxes.y.map((yVal, index) => (
+                                                                    <SelectItem key={index} value={String(index)}>{String(yVal)}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="flex-1 relative">
+                                                        <LinePlot2D
+                                                            key={`${mapRenderKey}-slice-${plotSliceIndex}`}
+                                                            mapData={transposedMapFor2DView}
+                                                            xAxis={displayAxes.x}
+                                                            yAxis={displayAxes.y}
+                                                            xAxisLabel={displayAxes.xLabel}
+                                                            sliceIndex={plotSliceIndex}
+                                                            onDataChange={() => {}} // Placeholder for now
+                                                        />
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
+                                                    <AlertCircle className="mx-auto h-12 w-12" />
+                                                    <p className="mt-4 font-semibold">Dados de Gráfico Indisponíveis</p>
+                                                </div>
+                                            )}
                                         </TabsContent>
                                         <TabsContent value="3d" className="flex-1 data-[state=inactive]:hidden">
                                             <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>

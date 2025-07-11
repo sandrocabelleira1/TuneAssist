@@ -17,8 +17,8 @@ interface SurfacePlot3DProps {
 export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel }: SurfacePlot3DProps) {
   const plotData = useMemo(() => {
     // A 3D surface plot requires numeric axes.
-    const isXNumeric = yAxis.every(v => typeof v === 'number' && isFinite(v));
-    const isYNumeric = xAxis.every(v => typeof v === 'number' && isFinite(v));
+    const isXNumeric = xAxis.every(v => typeof v === 'number' && isFinite(v));
+    const isYNumeric = yAxis.every(v => typeof v === 'number' && isFinite(v));
 
     if (!isXNumeric || !isYNumeric) {
       return null;
@@ -30,8 +30,8 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     );
 
     return {
-      x: yAxis, // yAxis is the horizontal axis in the table, so it's the x for the plot
-      y: xAxis, // xAxis is the vertical axis in the table, so it's the y for the plot
+      x: xAxis,
+      y: yAxis,
       z: sanitizedZ,
     };
   }, [mapData, xAxis, yAxis]);
@@ -73,8 +73,8 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     plot_bgcolor: 'transparent',
     font: { color: 'hsl(var(--foreground))' },
     scene: {
-      xaxis: { title: yAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
-      yaxis: { title: xAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+      xaxis: { title: xAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+      yaxis: { title: yAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
       zaxis: { title: 'Valor', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
       camera: { eye: {x: 1.8, y: -1.8, z: 1.2} }
     },
