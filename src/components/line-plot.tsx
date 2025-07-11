@@ -15,7 +15,7 @@ import type { MapData } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 
 interface LinePlot2DProps {
-  mapData: MapData; // Expects original orientation: Y-axis rows, X-axis cols
+  mapData: MapData;
   xAxis: (string | number)[];
   yAxis: (string | number)[];
   xAxisLabel: string;
@@ -54,9 +54,8 @@ export default function LinePlot2D({
     
     // 3. Combine X-axis values with the corresponding Z-values from the selected slice.
     // This creates the array of {x, z} points needed for the chart.
-    const combinedData = zValuesForSlice.map((zVal, index) => {
-      // Ensure we don't read beyond the bounds of the xAxis array
-      const xVal = xAxis[index];
+    const combinedData = xAxis.map((xVal, index) => {
+      const zVal = zValuesForSlice[index];
 
       // Ensure zVal is a number or null for the chart to render correctly
       const finalZ = typeof zVal === 'number' && isFinite(zVal) ? zVal : null;
@@ -88,6 +87,8 @@ export default function LinePlot2D({
   }
 
   const selectedYValue = yAxis && yAxis[sliceIndex] !== undefined ? yAxis[sliceIndex] : '';
+  const formattedYValue = typeof selectedYValue === 'number' ? selectedYValue.toFixed(0) : selectedYValue;
+
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -127,7 +128,7 @@ export default function LinePlot2D({
         <Line
           type="monotone"
           dataKey="z"
-          name={`Valor (${yAxisLabel} ${selectedYValue})`}
+          name={`Valor (${yAxisLabel}: ${formattedYValue})`}
           stroke="hsl(var(--primary))"
           strokeWidth={2}
           activeDot={{ r: 8 }}
