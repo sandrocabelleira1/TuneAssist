@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -458,10 +459,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): AxisDataState {
-  // Always return a valid state object to prevent crashes.
-  const defaultState: AxisDataState = { raw: [], calculated: [] };
-  
-  if (!axisDef) return defaultState;
+  const emptyState: AxisDataState = { raw: [], calculated: [] };
+  if (!axisDef) return emptyState;
 
   if (axisDef.staticLabels && axisDef.staticLabels.length > 0) {
       if (axisDef.staticLabels.length !== axisDef.count) {
@@ -471,9 +470,9 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       const raw = calculated.map((_, i) => i); // Generate dummy raw values for static labels
       return { raw, calculated };
   }
-
-  if (axisDef.address === null) {
-      const calculated = Array.from({ length: axisDef.count }, (_, i) => i + 1);
+  
+  if (axisDef.address === null || isNaN(axisDef.address) || axisDefDef.count === 0) {
+      const calculated = Array.from({ length: axisDef.count || 0 }, (_, i) => i + 1);
       const raw = calculated.map(v => typeof v === 'number' ? v : 0); // Raw is same as calculated if no address
       return { raw, calculated };
   }
@@ -817,3 +816,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    

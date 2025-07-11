@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -827,23 +828,27 @@ export default function EcuTuningAssistant() {
             const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData);
 
             let currentMap = JSON.parse(JSON.stringify(calculatedMap));
-            let currentAxes = {
+            
+            // This is the robust way to create the axes state, always ensuring it's a valid object.
+            const currentAxes = {
               x: axisXData,
               y: axisYData,
               xLabel: definition.xAxisDef?.label || 'Posição da Borboleta',
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
+
             let currentIndexMap = {
-              x: axisXData?.calculated.map((_, i) => i) || [],
-              y: axisYData?.calculated.map((_, i) => i) || [],
+              x: axisXData.calculated.map((_, i) => i),
+              y: axisYData.calculated.map((_, i) => i),
             };
 
             setWorkingMap(currentMap);
             setRawMap(newRawMap);
             setSourceAxes(currentAxes);
-             setOriginalSortOrder({
-              x: currentAxes.x?.calculated.map((value, index) => ({ value, index })) || [],
-              y: currentAxes.y?.calculated.map((value, index) => ({ value, index })) || [],
+
+            setOriginalSortOrder({
+              x: currentAxes.x.calculated.map((value, index) => ({ value, index })),
+              y: currentAxes.y.calculated.map((value, index) => ({ value, index })),
             });
             
             // --- Auto-sort on load ---
@@ -887,12 +892,16 @@ export default function EcuTuningAssistant() {
             setMapRenderKey(p => p + 1);
             
             // Now, run the AI validation for the Z-axis only.
-            runZAxisValidation(definition, calculatedMap, currentAxes); // Validate with original data
+            if (currentAxes) {
+               runZAxisValidation(definition, calculatedMap, currentAxes); // Validate with original (unsorted) data
+            }
 
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Leitura do Mapa", description: msg });
+            setDisplayMap(null);
+            setDisplayAxes(null);
         }
     }, [binFile, availableMaps, addLog, toast, runZAxisValidation, handleSortAxis]);
     
@@ -2054,3 +2063,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+    
