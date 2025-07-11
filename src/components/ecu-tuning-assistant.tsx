@@ -1498,18 +1498,19 @@ export default function EcuTuningAssistant() {
     
     // Transpose the map for 2D line plot view
     const transposedMap = useMemo(() => {
-        if (!displayMap || displayMap.length === 0 || displayMap[0].length === 0) return null;
-        
+        if (!displayMap || displayMap.length === 0 || displayMap[0].length === 0) {
+            return null;
+        }
+
         const rows = displayMap.length;
         const cols = displayMap[0].length;
-        const transposed = Array(cols).fill(0).map(() => Array(rows).fill(null));
-        
-        for(let j=0; j<cols; j++){ // Iterate over columns
-            for(let i=0; i<rows; i++){ // Iterate over rows
+        const transposed = Array(cols).fill(null).map(() => Array(rows).fill(null));
+
+        for (let i = 0; i < rows; i++) {
+            for (let j = 0; j < cols; j++) {
                 transposed[j][i] = displayMap[i][j];
             }
         }
-        
         return transposed;
     }, [displayMap]);
 

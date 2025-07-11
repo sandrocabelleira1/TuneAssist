@@ -33,28 +33,24 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // mapData is now correctly transposed: [col][row]
-    // The selector `sliceIndex` corresponds to a row in the original map (an item from yAxis).
-    // In the transposed map, a row of data corresponds to all Z values for a single X value.
-    // A column of data corresponds to all Z values for a single Y value (which is what we want to plot).
-
+    // In the transposed map, a column of data corresponds to all Z values for a single Y value (which is what we want to plot).
     if (!mapData || mapData.length === 0 || mapData[0].length <= sliceIndex) {
         return null;
     }
     
-    // We want the data for a specific Y-axis slice. In the transposed map, this is a column.
-    // So we iterate through the columns (which represent X-axis points) and get the value at sliceIndex (which represents the Y-axis point).
+    // The selector `sliceIndex` corresponds to a row in the original map (an item from yAxis).
+    // In the transposed map, a row of data corresponds to all Z values for a single X value.
     const dataForYSlice = mapData.map(column => column[sliceIndex]);
     
     return xAxis.map((xVal, index) => ({
-      x: typeof xVal === 'number' ? xVal : String(xVal),
+      x: typeof xVal === 'number' ? xVal.toFixed(1) : String(xVal),
       z: dataForYSlice[index],
     }));
 
-  }, [mapData, xAxis, yAxis, sliceIndex]);
+  }, [mapData, xAxis, sliceIndex]);
 
 
-  if (!plotData) {
+  if (!plotData || plotData.some(p => p.z === undefined || p.z === null)) {
     return (
       <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
         <div>
@@ -101,11 +97,12 @@ export default function LinePlot2D({
         <Line
           type="monotone"
           dataKey="z"
-          name="Valor"
+          name={`Valor (linha ${yAxis[sliceIndex]})`}
           stroke="hsl(var(--primary))"
           strokeWidth={2}
           activeDot={{ r: 8 }}
           dot={{ r: 4 }}
+          connectNulls={false}
         />
       </LineChart>
     </ResponsiveContainer>
