@@ -101,7 +101,6 @@ export default function LinePlot2D({
             label={{ value: xAxisLabel, position: 'insideBottom', offset: -10 }}
             stroke="hsl(var(--foreground))"
             tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-            domain={['dataMin', 'dataMax']}
             allowDuplicatedCategory={true}
         />
         <YAxis 
