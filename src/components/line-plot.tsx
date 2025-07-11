@@ -35,28 +35,42 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // mapData is Y x X. sliceIndex corresponds to the row (Y-axis value) we want to plot.
-    if (!mapData || sliceIndex < 0 || sliceIndex >= mapData.length) {
+    // 1. Validate inputs
+    if (!mapData || !xAxis || !yAxis || sliceIndex < 0 || sliceIndex >= mapData.length) {
       return null;
     }
     
-    // Get the specific row of Z-values for the selected Y-axis slice
+    // 2. Extract the correct slice of Z-values for the selected Y-axis row
     const dataForYSlice = mapData[sliceIndex];
 
+    // 3. More validation
     if (!dataForYSlice || dataForYSlice.length !== xAxis.length) {
+      console.error("Chart Error: Mismatch between X-axis length and data row length.");
       return null;
     }
     
-    // Combine the X-axis values with the corresponding Z-values from the selected slice
-    return xAxis.map((xVal, index) => ({
-      x: typeof xVal === 'number' ? xVal.toFixed(1) : String(xVal),
-      z: dataForYSlice[index],
-    }));
+    // 4. Combine X-axis values with the corresponding Z-values from the selected slice
+    const combinedData = xAxis.map((xVal, index) => {
+      const zVal = dataForYSlice[index];
+      
+      // Ensure zVal is a number or null for the chart to render correctly
+      const finalZ = typeof zVal === 'number' && isFinite(zVal) ? zVal : null;
 
-  }, [mapData, xAxis, sliceIndex]);
+      // Format X-axis value for display
+      const finalX = typeof xVal === 'number' ? Math.round(xVal) : String(xVal);
+
+      return {
+        x: finalX,
+        z: finalZ,
+      };
+    });
+
+    return combinedData;
+
+  }, [mapData, xAxis, yAxis, sliceIndex]);
 
 
-  if (!plotData || plotData.some(p => p.z === undefined)) {
+  if (!plotData) {
     return (
       <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
         <div>
