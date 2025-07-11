@@ -129,7 +129,7 @@ function MapTable({
   };
 
   const transposedMap = useMemo(() => {
-    if (!mapData || mapData.length === 0) return [];
+    if (!mapData || mapData.length === 0 || mapData[0].length === 0) return [];
     return mapData[0].map((_, colIndex) => mapData.map(row => row[colIndex]));
   }, [mapData]);
 
@@ -849,7 +849,7 @@ export default function EcuTuningAssistant() {
               y: currentAxes.y.calculated.map((value, index) => ({ value, index })),
             });
             
-            addLog(`Mapa carregado: ${name}. A organizar eixos...`, 'info');
+            addLog(`Mapa carregado: ${name}.`, 'info');
             
             let displayableAxes = {
                 x: currentAxes.x.calculated,
@@ -858,37 +858,9 @@ export default function EcuTuningAssistant() {
                 yLabel: currentAxes.yLabel,
             };
 
-            let mapAfterYSort = currentMap;
-            let axesAfterYSort = displayableAxes;
-            let indexMapAfterYSort = currentIndexMap;
-            
-            if (displayableAxes.y?.length > 0) {
-              const ySortResult = handleSortAxis('y', currentMap, displayableAxes, currentIndexMap);
-              if (ySortResult) {
-                mapAfterYSort = ySortResult.newMap;
-                axesAfterYSort = ySortResult.newAxes;
-                indexMapAfterYSort = ySortResult.newIndexMap;
-              }
-            }
-            
-            let mapAfterXSort = mapAfterYSort;
-            let axesAfterXSort = axesAfterYSort;
-            let indexMapAfterXSort = indexMapAfterYSort;
-            
-            if (axesAfterXSort.x?.length > 0) {
-              const xSortResult = handleSortAxis('x', mapAfterYSort, axesAfterXSort, indexMapAfterXSort);
-              if (xSortResult) {
-                  mapAfterXSort = xSortResult.newMap;
-                  axesAfterXSort = xSortResult.newAxes;
-                  indexMapAfterXSort = xSortResult.newIndexMap;
-              }
-            }
-
-            setDisplayMap(mapAfterXSort);
-            setDisplayAxes(axesAfterXSort);
-            setDisplayIndexMap(indexMapAfterXSort);
-            
-            addLog(`Eixos para "${name}" organizados com sucesso.`, 'success');
+            setDisplayMap(currentMap);
+            setDisplayAxes(displayableAxes);
+            setDisplayIndexMap(currentIndexMap);
             
             setMapRenderKey(p => p + 1);
             
@@ -1545,7 +1517,7 @@ export default function EcuTuningAssistant() {
     }, [logs]);
 
     const transposedMapFor2DView = useMemo(() => {
-        if (!displayMap || displayMap.length === 0) return null;
+        if (!displayMap || displayMap.length === 0 || displayMap[0].length === 0) return null;
         return displayMap[0].map((_, colIndex) => displayMap.map(row => row[colIndex]));
     }, [displayMap]);
 

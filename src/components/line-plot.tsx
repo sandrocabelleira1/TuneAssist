@@ -39,10 +39,12 @@ export default function LinePlot2D({
         return null;
     }
     
+    // The data for the line chart is the Z value at each X-axis point for that slice.
+    // mapData is now [rows x cols] (YxX)
+    // We need the data for a specific Y-axis index (sliceIndex) across all X-axis points.
     const slice = mapData[sliceIndex];
     if (!slice) return null;
 
-    // The data for the line chart is the Z value at each X-axis point for that slice.
     return xAxis.map((xVal, index) => ({
       x: typeof xVal === 'number' ? xVal : String(xVal),
       z: slice[index],
