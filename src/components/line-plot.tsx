@@ -27,8 +27,8 @@ export default function LinePlot2D({
   mapData,
   xAxis,
   yAxis,
-  xAxisLabel,
   sliceIndex,
+  xAxisLabel,
   onDataChange,
 }: LinePlot2DProps) {
     
@@ -38,7 +38,6 @@ export default function LinePlot2D({
         return null;
     }
     
-    // The slice is now a complete row from the transposed map, which represents the Z values for one Y-axis value.
     const slice = mapData[sliceIndex];
     if (!slice) return null;
 

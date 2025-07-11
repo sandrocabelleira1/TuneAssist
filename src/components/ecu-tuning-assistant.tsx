@@ -458,7 +458,7 @@ export default function EcuTuningAssistant() {
       for (const def of correctedDefinitions) {
           // Force Y-Axis (Vertical) to be RPM
           if (def.yAxisDef) {
-              def.yAxisDef.equation = 'X * 50';
+              def.yAxisDef.equation = 'X * 100';
               def.yAxisDef.label = 'RPM';
           }
           
@@ -1331,10 +1331,10 @@ export default function EcuTuningAssistant() {
                 const inferredYAxisAddr = inferredXAxisAddr - (rows * yAxisDataSize);
 
                 const yAxisAddress = inferredYAxisAddr >= 0 ? inferredYAxisAddr : null;
-                const xAxisAddress = yAxisAddress !== null && inferredXAddr >= 0 ? inferredXAddr : null;
+                const xAxisAddress = yAxisAddress !== null && inferredXAxisAddr >= 0 ? inferredXAxisAddr : null;
 
                 // Sugerir equações padrão para tornar os dados imediatamente úteis
-                const yAxisEquation = 'X * 50';       // Sugere RPMs (ex: 200 * 50 = 10000 RPM)
+                const yAxisEquation = 'X * 100';      // Sugere RPMs (ex: 100 * 100 = 10000 RPM)
                 const xAxisEquation = 'X / 10.23';    // Sugere Posição da Borboleta % (converte 0-1023 para 0-100)
 
                 return {
