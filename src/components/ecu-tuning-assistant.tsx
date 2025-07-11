@@ -21,10 +21,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save, Pencil, AudioLines, Pause } from 'lucide-react';
+import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save, Pencil, AudioLines, Pause, LineChart } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
+import LinePlot2D from '@/components/line-plot';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -263,6 +264,9 @@ export default function EcuTuningAssistant() {
     const [quickEditType, setQuickEditType] = useState<'percent' | 'unit'>('percent');
     const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
 
+    // 2D Plot state
+    const [plotSliceIndex, setPlotSliceIndex] = useState(0);
+
     // AI state
     const [isScanning, setIsScanning] = useState(false);
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
@@ -443,6 +447,7 @@ export default function EcuTuningAssistant() {
         setSelectedCells(new Set());
         setQuickEditValue('');
         setLogs([]);
+        setPlotSliceIndex(0);
 
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
@@ -490,6 +495,7 @@ export default function EcuTuningAssistant() {
                     setAudioUrl(null);
                     setSelectedCells(new Set());
                     setMapValidationStatus('idle');
+                    setPlotSliceIndex(0);
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
@@ -508,16 +514,14 @@ export default function EcuTuningAssistant() {
                     }
                     const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
                     
-                    if(binFile?.buffer) {
-                      addLog('A aplicar correções de eixo universais ao XDF...', 'info');
-                      const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
-                      if(correctionsMade > 0) {
+                    addLog('A aplicar correções de eixo universais ao XDF...', 'info');
+                    const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
+                    if(correctionsMade > 0) {
                         definitions = correctedDefinitions;
                         addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
                         toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
-                      } else {
+                    } else {
                         addLog('Nenhuma correção de eixo foi aplicada (sem definições de eixo encontradas).', 'info');
-                      }
                     }
 
                     setXdfFile({ name: file.name, definitions });
@@ -563,18 +567,18 @@ export default function EcuTuningAssistant() {
             setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
             setSelectedCells(new Set());
             setMapValidationStatus('idle');
+            setPlotSliceIndex(0);
 
             const brandValue = xdfData.brand || '';
-            if(binFile?.buffer) {
-              addLog('A aplicar correções de eixo universais ao XDF da biblioteca...', 'info');
-              const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
-              if(correctionsMade > 0) {
-                definitions = correctedDefinitions;
-                addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
-                toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
-              } else {
-                addLog('Nenhuma correção de eixo foi aplicada (sem definições de eixo encontradas).', 'info');
-              }
+            
+            addLog('A aplicar correções de eixo universais ao XDF da biblioteca...', 'info');
+            const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
+            if(correctionsMade > 0) {
+              definitions = correctedDefinitions;
+              addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
+              toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
+            } else {
+              addLog('Nenhuma correção de eixo foi aplicada (sem definições de eixo encontradas).', 'info');
             }
 
             setXdfFile({ name, definitions });
@@ -643,6 +647,7 @@ export default function EcuTuningAssistant() {
             setDisplayAxes(newSourceAxes);
             setAudioUrl(null);
             setSelectedCells(new Set());
+            setPlotSliceIndex(0);
             setOriginalSortOrder({
               x: newSourceAxes.x.calculated.map((value, index) => ({ value, index })),
               y: newSourceAxes.y.calculated.map((value, index) => ({ value, index })),
@@ -807,6 +812,7 @@ export default function EcuTuningAssistant() {
         setSelectedMapName(name);
         setAudioUrl(null);
         setSelectedCells(new Set());
+        setPlotSliceIndex(0);
 
         try {
             const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef);
@@ -868,7 +874,7 @@ export default function EcuTuningAssistant() {
             let indexMapAfterXSort = indexMapAfterYSort;
             
             if (currentAxes.x?.calculated.length > 0) {
-              const xSortResult = handleSortAxis('x', mapAfterYSort, axesAfterYSort, indexMapAfterYSort);
+              const xSortResult = handleSortAxis('x', mapAfterYSort, axesAfterYSort, indexMapAfterXSort);
               if (xSortResult) {
                   mapAfterXSort = xSortResult.newMap;
                   axesAfterXSort = xSortResult.newAxes;
@@ -952,6 +958,7 @@ export default function EcuTuningAssistant() {
             setDisplayAxes(newAxesState);
             setAudioUrl(null);
             setSelectedCells(new Set());
+            setPlotSliceIndex(0);
             setOriginalSortOrder({
               x: newX.calculated.map((value, index) => ({ value, index })),
               y: newY.calculated.map((value, index) => ({ value, index })),
@@ -1742,6 +1749,7 @@ export default function EcuTuningAssistant() {
                                     <Tabs defaultValue="2d" className="flex-1 flex flex-col">
                                         <TabsList className="mb-2">
                                             <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Visualização 2D</TabsTrigger>
+                                            <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
                                             <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Visualização 3D</TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="2d" forceMount className="flex-1 relative data-[state=inactive]:hidden">
@@ -1761,6 +1769,31 @@ export default function EcuTuningAssistant() {
                                                 selectedCells={selectedCells}
                                                 onCellSelect={handleCellSelect}
                                             />
+                                        </TabsContent>
+                                        <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden">
+                                            <div className="p-2 flex items-center gap-2">
+                                                <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
+                                                <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
+                                                    <SelectTrigger id="plot-slice-selector" className="w-[120px]">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {displayAxes.y.calculated.map((yVal, index) => (
+                                                            <SelectItem key={index} value={String(index)}>{String(yVal)}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="flex-1 relative">
+                                                <LinePlot2D
+                                                    key={`${mapRenderKey}-slice-${plotSliceIndex}`}
+                                                    mapData={displayMap}
+                                                    xAxis={displayAxes.x.calculated}
+                                                    xAxisLabel={displayAxes.xLabel}
+                                                    sliceIndex={plotSliceIndex}
+                                                    onDataChange={() => {}} // Placeholder for now
+                                                />
+                                            </div>
                                         </TabsContent>
                                         <TabsContent value="3d" className="flex-1 data-[state=inactive]:hidden">
                                             <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
@@ -2058,5 +2091,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-    
