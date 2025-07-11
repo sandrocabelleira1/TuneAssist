@@ -364,11 +364,11 @@ export default function EcuTuningAssistant() {
                 let isInvalid = false;
                 const mapEndAddr = def.address + (def.rows * def.cols * def.dataSize);
                 if (mapEndAddr > binSize || def.address < 0) { isInvalid = true; }
-                if (!isInvalid && def.xAxisDef?.address !== null) {
+                if (!isInvalid && def.xAxisDef?.address !== null && def.xAxisDef?.address !== undefined) {
                     const axisEndAddr = def.xAxisDef.address + (def.xAxisDef.count * def.xAxisDef.dataSize);
                     if (axisEndAddr > binSize || def.xAxisDef.address < 0) { isInvalid = true; }
                 }
-                if (!isInvalid && def.yAxisDef?.address !== null) {
+                if (!isInvalid && def.yAxisDef?.address !== null && def.yAxisDef?.address !== undefined) {
                     const axisEndAddr = def.yAxisDef.address + (def.yAxisDef.count * def.yAxisDef.dataSize);
                     if (axisEndAddr > binSize || def.yAxisDef.address < 0) { isInvalid = true; }
                 }
@@ -450,31 +450,25 @@ export default function EcuTuningAssistant() {
     }, [addLog]);
 
     const autoCorrectAllAxes = useCallback((definitions: XDFDefinition[]) => {
+      const correctedDefinitions = JSON.parse(JSON.stringify(definitions)) as XDFDefinition[];
       let correctionsMade = 0;
-      const correctedDefinitions = JSON.parse(JSON.stringify(definitions));
       
-      const rpmKeywords = ['rpm', 'rotaç', 'motor'];
-      const tpsKeywords = ['tps', 'borboleta', 'posição', 'throttle'];
-      const mainMapKeywords = ['igni', 'avan', 'spark', 'comb', 'fuel', 'inj', 'tps', 'etv'];
-
       for (const def of correctedDefinitions) {
-        // Skip if it's not a primary map we want to auto-correct
-        if (!mainMapKeywords.some(kw => def.name.toLowerCase().includes(kw))) {
-          continue;
-        }
-        
-        // --- Y-axis (RPM) Correction ---
-        if (def.yAxisDef && rpmKeywords.some(kw => def.yAxisDef.label.toLowerCase().includes(kw))) {
-          def.yAxisDef.equation = 'X * 50';
-          correctionsMade++;
-        }
-
-        // --- X-axis (TPS) Correction ---
-        if (def.xAxisDef && tpsKeywords.some(kw => def.xAxisDef.label.toLowerCase().includes(kw))) {
-          def.xAxisDef.equation = 'X / 10.23';
-          correctionsMade++;
-        }
+          // Force Y-Axis (RPM) correction
+          if (def.yAxisDef) {
+              def.yAxisDef.equation = 'X * 50';
+              def.yAxisDef.label = 'RPM';
+              correctionsMade++;
+          }
+          
+          // Force X-Axis (TPS) correction
+          if (def.xAxisDef) {
+              def.xAxisDef.equation = 'X / 10.23';
+              def.xAxisDef.label = 'Posição da Borboleta';
+              correctionsMade++;
+          }
       }
+      
       return { correctedDefinitions, correctionsMade };
     }, []);
 
@@ -515,14 +509,14 @@ export default function EcuTuningAssistant() {
                     const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
                     
                     if(binFile?.buffer) {
-                      addLog('A aplicar correções de eixo programáticas ao XDF...', 'info');
+                      addLog('A aplicar correções de eixo universais ao XDF...', 'info');
                       const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
                       if(correctionsMade > 0) {
                         definitions = correctedDefinitions;
-                        addLog(`${correctionsMade} correções de eixo aplicadas a todo o ficheiro XDF.`, 'success');
-                        toast({ title: "XDF Corrigido Automaticamente", description: `${correctionsMade} eixos foram corrigidos com equações padrão.`});
+                        addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
+                        toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
                       } else {
-                        addLog('Nenhuma correção de eixo programática foi necessária.', 'info');
+                        addLog('Nenhuma correção de eixo foi aplicada (sem definições de eixo encontradas).', 'info');
                       }
                     }
 
@@ -572,14 +566,14 @@ export default function EcuTuningAssistant() {
 
             const brandValue = xdfData.brand || '';
             if(binFile?.buffer) {
-              addLog('A aplicar correções de eixo programáticas ao XDF da biblioteca...', 'info');
+              addLog('A aplicar correções de eixo universais ao XDF da biblioteca...', 'info');
               const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
               if(correctionsMade > 0) {
                 definitions = correctedDefinitions;
-                addLog(`${correctionsMade} correções de eixo aplicadas a todo o ficheiro XDF.`, 'success');
-                toast({ title: "XDF Corrigido Automaticamente", description: `${correctionsMade} eixos foram corrigidos com equações padrão.`});
+                addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
+                toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
               } else {
-                addLog('Nenhuma correção de eixo programática foi necessária.', 'info');
+                addLog('Nenhuma correção de eixo foi aplicada (sem definições de eixo encontradas).', 'info');
               }
             }
 
