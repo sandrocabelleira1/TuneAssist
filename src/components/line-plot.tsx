@@ -17,6 +17,7 @@ import { AlertCircle } from 'lucide-react';
 interface LinePlot2DProps {
   mapData: MapData;
   xAxis: (string | number)[];
+  yAxis: (string | number)[];
   xAxisLabel: string;
   sliceIndex: number;
   onDataChange: (colIndex: number, newValue: number) => void;
@@ -25,6 +26,7 @@ interface LinePlot2DProps {
 export default function LinePlot2D({
   mapData,
   xAxis,
+  yAxis,
   xAxisLabel,
   sliceIndex,
   onDataChange,

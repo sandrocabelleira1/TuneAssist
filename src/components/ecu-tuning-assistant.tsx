@@ -1808,6 +1808,7 @@ export default function EcuTuningAssistant() {
                                                     key={`${mapRenderKey}-slice-${plotSliceIndex}`}
                                                     mapData={displayMap}
                                                     xAxis={displayAxes.x}
+                                                    yAxis={displayAxes.y}
                                                     xAxisLabel={displayAxes.xLabel}
                                                     sliceIndex={plotSliceIndex}
                                                     onDataChange={() => {}} // Placeholder for now
@@ -1997,7 +1998,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 xAxis={suggestion.originalAxes.x}
                                 yAxis={suggestion.originalAxes.y}
                                 xAxisLabel={suggestion.originalAxes.xLabel}
-                                yLabel={suggestion.originalAxes.yLabel}
+                                yAxisLabel={suggestion.originalAxes.yLabel}
                                 mapName={suggestion.originalDefinition.name}
                                 isEditable={false}
                                 onSortAxis={() => {}}
@@ -2018,7 +2019,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   xAxis={suggestion.correctedAxes.x}
                                   yAxis={suggestion.correctedAxes.y}
                                   xAxisLabel={suggestion.correctedAxes.xLabel}
-                                  yLabel={suggestion.correctedAxes.yLabel}
+                                  yAxisLabel={suggestion.correctedAxes.yLabel}
                                   mapName={suggestion.newDefinition.name}
                                   isEditable={false}
                                   onSortAxis={() => {}}
