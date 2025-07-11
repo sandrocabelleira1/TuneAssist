@@ -449,42 +449,45 @@ export default function EcuTuningAssistant() {
         addLog('O estado da sessão foi reiniciado. As suas bibliotecas foram preservadas.', 'info');
     }, [addLog]);
 
-    // New function to programmatically correct axes when an XDF is loaded.
-    const autoCorrectAllAxes = (definitions: XDFDefinition[], binBuffer: ArrayBuffer) => {
+    const autoCorrectAllAxes = useCallback((definitions: XDFDefinition[], binBuffer: ArrayBuffer) => {
       let correctionsMade = 0;
       const correctedDefinitions = JSON.parse(JSON.stringify(definitions));
 
       for (const def of correctedDefinitions) {
+        if (!def.yAxisDef || !def.xAxisDef) continue;
         
-        // Check Y-axis (RPM)
-        if (def.yAxisDef && def.yAxisDef.address !== null) {
+        // --- Y-axis (RPM) Correction ---
+        try {
             const tempYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
-            const numericValues = tempYAxis.calculated.filter(v => typeof v === 'number') as number[];
-            const avgY = numericValues.reduce((acc, v) => acc + v, 0) / (numericValues.length || 1);
-            
-            // If the axis average value is low (e.g. not yet scaled by X*50), apply the standard correction.
-            // A threshold of 500 is chosen, as average RPM is usually in the thousands.
-            if (avgY > 0 && avgY < 500) { 
-              def.yAxisDef.equation = 'X * 50';
-              correctionsMade++;
+            const numericYValues = tempYAxis.calculated.filter(v => typeof v === 'number') as number[];
+            if (numericYValues.length > 0) {
+              const avgY = numericYValues.reduce((acc, v) => acc + v, 0) / numericYValues.length;
+              if (avgY > 0 && avgY < 500) { 
+                def.yAxisDef.equation = 'X * 50';
+                correctionsMade++;
+              }
             }
+        } catch (e) {
+            addLog(`Não foi possível pré-processar o eixo Y para "${def.name}" para correção automática. A ignorar.`, 'debug');
         }
 
-        // Check X-axis (TPS)
-        if (def.xAxisDef && def.xAxisDef.address !== null) {
+        // --- X-axis (TPS) Correction ---
+        try {
             const tempXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
-            const numericValues = tempXAxis.calculated.filter(v => typeof v === 'number') as number[];
-            const maxX = Math.max(...numericValues);
-            
-            // If the axis max value is high (e.g. 0-1023 range), apply standard correction to get 0-100 %.
-            if (maxX > 150) { 
-              def.xAxisDef.equation = 'X / 10.23';
-              correctionsMade++;
+            const numericXValues = tempXAxis.calculated.filter(v => typeof v === 'number') as number[];
+            if (numericXValues.length > 0) {
+                const maxX = Math.max(...numericXValues);
+                if (maxX > 150) { 
+                  def.xAxisDef.equation = 'X / 10.23';
+                  correctionsMade++;
+                }
             }
+        } catch (e) {
+            addLog(`Não foi possível pré-processar o eixo X para "${def.name}" para correção automática. A ignorar.`, 'debug');
         }
       }
       return { correctedDefinitions, correctionsMade };
-    };
+    }, [addLog]);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
@@ -522,12 +525,11 @@ export default function EcuTuningAssistant() {
                     }
                     const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
                     
-                    // Programmatically correct axes on XDF load
                     if(binFile?.buffer) {
                       addLog('A aplicar correções de eixo programáticas ao XDF...', 'info');
                       const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions, binFile.buffer);
-                      definitions = correctedDefinitions;
                       if(correctionsMade > 0) {
+                        definitions = correctedDefinitions;
                         addLog(`${correctionsMade} correções de eixo aplicadas a todo o ficheiro XDF.`, 'success');
                         toast({ title: "XDF Corrigido Automaticamente", description: `${correctionsMade} eixos foram corrigidos com equações padrão.`});
                       } else {
@@ -583,8 +585,8 @@ export default function EcuTuningAssistant() {
             if(binFile?.buffer) {
               addLog('A aplicar correções de eixo programáticas ao XDF da biblioteca...', 'info');
               const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions, binFile.buffer);
-              definitions = correctedDefinitions;
               if(correctionsMade > 0) {
+                definitions = correctedDefinitions;
                 addLog(`${correctionsMade} correções de eixo aplicadas a todo o ficheiro XDF.`, 'success');
                 toast({ title: "XDF Corrigido Automaticamente", description: `${correctionsMade} eixos foram corrigidos com equações padrão.`});
               } else {
@@ -625,7 +627,6 @@ export default function EcuTuningAssistant() {
         newDefinition.equation = zEquation;
         
         try {
-            // Axes are assumed to be correct already from the global programmatic step
             const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
             const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
 
@@ -831,7 +832,6 @@ export default function EcuTuningAssistant() {
 
             let currentMap = JSON.parse(JSON.stringify(calculatedMap));
             
-            // This is the robust way to create the axes state, always ensuring it's a valid object.
             const currentAxes = {
               x: axisXData,
               y: axisYData,
@@ -839,7 +839,6 @@ export default function EcuTuningAssistant() {
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
 
-            // This ensures we always have a valid object to work with, even if an axis is empty.
             if (!currentAxes.x || !currentAxes.y) {
               addLog(`A definição do mapa "${name}" está em falta ou tem um eixo inválido. Não é possível carregar.`, 'error');
               setDisplayMap(null);
@@ -861,14 +860,12 @@ export default function EcuTuningAssistant() {
               y: currentAxes.y.calculated.map((value, index) => ({ value, index })),
             });
             
-            // --- Auto-sort on load ---
             addLog(`Mapa carregado: ${name}. A organizar eixos...`, 'info');
 
             let mapAfterYSort = currentMap;
             let axesAfterYSort = currentAxes;
             let indexMapAfterYSort = currentIndexMap;
             
-            // 1. Sort Y-axis (RPM)
             if (currentAxes.y?.calculated.length > 0) {
               const ySortResult = handleSortAxis('y', currentMap, currentAxes, currentIndexMap);
               if (ySortResult) {
@@ -882,7 +879,6 @@ export default function EcuTuningAssistant() {
             let axesAfterXSort = axesAfterYSort;
             let indexMapAfterXSort = indexMapAfterYSort;
             
-            // 2. Sort X-axis (TPS) using the result of the Y-sort
             if (currentAxes.x?.calculated.length > 0) {
               const xSortResult = handleSortAxis('x', mapAfterYSort, axesAfterYSort, indexMapAfterYSort);
               if (xSortResult) {
@@ -892,7 +888,6 @@ export default function EcuTuningAssistant() {
               }
             }
 
-            // 3. Set the final sorted state
             setDisplayMap(mapAfterXSort);
             setDisplayAxes(axesAfterXSort);
             setDisplayIndexMap(indexMapAfterXSort);
@@ -901,8 +896,7 @@ export default function EcuTuningAssistant() {
             
             setMapRenderKey(p => p + 1);
             
-            // Now, run the AI validation for the Z-axis only.
-            runZAxisValidation(definition, calculatedMap, currentAxes); // Validate with original (unsorted) data
+            runZAxisValidation(definition, calculatedMap, currentAxes);
 
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
