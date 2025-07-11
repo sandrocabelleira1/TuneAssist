@@ -515,13 +515,13 @@ export default function EcuTuningAssistant() {
                     const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
                     
                     addLog('A aplicar correções de eixo universais ao XDF...', 'info');
-                    definitions = autoCorrectAllAxes(definitions);
+                    const correctedDefinitions = autoCorrectAllAxes(definitions);
                     addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
                     toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
 
-                    setXdfFile({ name: file.name, definitions });
+                    setXdfFile({ name: file.name, definitions: correctedDefinitions });
                     setActiveXdfBrand(brandValue);
-                    addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
+                    addLog(`Ficheiro XDF carregado: ${file.name} com ${correctedDefinitions.length} mapas.`, 'success');
 
                     try {
                         const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text, brand: brandValue }};
@@ -567,11 +567,11 @@ export default function EcuTuningAssistant() {
             const brandValue = xdfData.brand || '';
             
             addLog('A aplicar correções de eixo universais ao XDF da biblioteca...', 'info');
-            definitions = autoCorrectAllAxes(definitions);
+            const correctedDefinitions = autoCorrectAllAxes(definitions);
             addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
             toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
 
-            setXdfFile({ name, definitions });
+            setXdfFile({ name, definitions: correctedDefinitions });
             setSelectedXdfFromLibrary(name);
             setActiveXdfBrand(brandValue);
             addLog(`XDF "${name}" ${brandValue ? `(Marca: ${brandValue}) `: ''}carregado da biblioteca.`, 'success');
