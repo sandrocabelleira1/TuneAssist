@@ -460,7 +460,7 @@ export default function EcuTuningAssistant() {
             const numericValues = tempYAxis.calculated.filter(v => typeof v === 'number') as number[];
             const avgY = numericValues.reduce((acc, v) => acc + v, 0) / (numericValues.length || 1);
             
-            // If the axis has not been corrected (average value is low) apply the standard correction.
+            // If the axis average value is low (not yet scaled), apply the standard correction.
             if (avgY > 0 && avgY < 500) { 
               def.yAxisDef.equation = 'X * 50';
               correctionsMade++;
@@ -473,7 +473,7 @@ export default function EcuTuningAssistant() {
             const numericValues = tempXAxis.calculated.filter(v => typeof v === 'number') as number[];
             const maxX = Math.max(...numericValues);
             
-            // If the axis has not been corrected (max value is high) apply the standard correction.
+            // If the axis max value is high (not yet scaled to %), apply standard correction.
             if (maxX > 150) { 
               def.xAxisDef.equation = 'X / 10.23';
               correctionsMade++;
@@ -984,14 +984,20 @@ export default function EcuTuningAssistant() {
         const newYIndexMap = sortable.map(item => item.originalIndex);
     
         setDisplayMap(newSortedMap);
-        setDisplayAxes(prev => ({
-            ...prev!,
-            y: {
-                calculated: newSortedYCalc,
-                raw: newSortedYRaw
-            },
-        }));
-        setDisplayIndexMap(prev => ({...(prev!), y: newYIndexMap }));
+        setDisplayAxes(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              y: {
+                  calculated: newSortedYCalc,
+                  raw: newSortedYRaw
+              },
+            }
+        });
+        setDisplayIndexMap(prev => {
+            if (!prev) return null;
+            return {...prev, y: newYIndexMap }
+        });
         setSelectedCells(new Set());
         setMapRenderKey(p => p + 1);
         addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
@@ -1399,9 +1405,10 @@ export default function EcuTuningAssistant() {
             const xdfMapIndex = xdfFile.definitions.findIndex(m => m.name === oldName);
             if (xdfMapIndex > -1) {
                 setXdfFile(prev => {
-                    const newDefinitions = [...prev!.definitions];
+                    if (!prev) return prev;
+                    const newDefinitions = [...prev.definitions];
                     newDefinitions[xdfMapIndex] = { ...newDefinitions[xdfMapIndex], name: trimmedNewName };
-                    return { ...prev!, definitions: newDefinitions };
+                    return { ...prev, definitions: newDefinitions };
                 });
                 mapUpdated = true;
             }
