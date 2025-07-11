@@ -471,7 +471,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       return { raw, calculated };
   }
   
-  if (axisDef.address === null || isNaN(axisDef.address) || axisDefDef.count === 0) {
+  if (axisDef.address === null || isNaN(axisDef.address) || axisDef.count === 0) {
       const calculated = Array.from({ length: axisDef.count || 0 }, (_, i) => i + 1);
       const raw = calculated.map(v => typeof v === 'number' ? v : 0); // Raw is same as calculated if no address
       return { raw, calculated };

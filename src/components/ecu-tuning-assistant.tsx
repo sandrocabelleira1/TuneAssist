@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -461,7 +462,8 @@ export default function EcuTuningAssistant() {
             const numericValues = tempYAxis.calculated.filter(v => typeof v === 'number') as number[];
             const avgY = numericValues.reduce((acc, v) => acc + v, 0) / (numericValues.length || 1);
             
-            // If the axis average value is low (not yet scaled), apply the standard correction.
+            // If the axis average value is low (e.g. not yet scaled by X*50), apply the standard correction.
+            // A threshold of 500 is chosen, as average RPM is usually in the thousands.
             if (avgY > 0 && avgY < 500) { 
               def.yAxisDef.equation = 'X * 50';
               correctionsMade++;
@@ -474,7 +476,7 @@ export default function EcuTuningAssistant() {
             const numericValues = tempXAxis.calculated.filter(v => typeof v === 'number') as number[];
             const maxX = Math.max(...numericValues);
             
-            // If the axis max value is high (not yet scaled to %), apply standard correction.
+            // If the axis max value is high (e.g. 0-1023 range), apply standard correction to get 0-100 %.
             if (maxX > 150) { 
               def.xAxisDef.equation = 'X / 10.23';
               correctionsMade++;
@@ -837,6 +839,14 @@ export default function EcuTuningAssistant() {
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
 
+            // This ensures we always have a valid object to work with, even if an axis is empty.
+            if (!currentAxes.x || !currentAxes.y) {
+              addLog(`A definição do mapa "${name}" está em falta ou tem um eixo inválido. Não é possível carregar.`, 'error');
+              setDisplayMap(null);
+              setDisplayAxes(null);
+              return;
+            }
+
             let currentIndexMap = {
               x: axisXData.calculated.map((_, i) => i),
               y: axisYData.calculated.map((_, i) => i),
@@ -892,9 +902,7 @@ export default function EcuTuningAssistant() {
             setMapRenderKey(p => p + 1);
             
             // Now, run the AI validation for the Z-axis only.
-            if (currentAxes) {
-               runZAxisValidation(definition, calculatedMap, currentAxes); // Validate with original (unsorted) data
-            }
+            runZAxisValidation(definition, calculatedMap, currentAxes); // Validate with original (unsorted) data
 
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
