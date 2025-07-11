@@ -449,45 +449,34 @@ export default function EcuTuningAssistant() {
         addLog('O estado da sessão foi reiniciado. As suas bibliotecas foram preservadas.', 'info');
     }, [addLog]);
 
-    const autoCorrectAllAxes = useCallback((definitions: XDFDefinition[], binBuffer: ArrayBuffer) => {
+    const autoCorrectAllAxes = useCallback((definitions: XDFDefinition[]) => {
       let correctionsMade = 0;
       const correctedDefinitions = JSON.parse(JSON.stringify(definitions));
+      
+      const rpmKeywords = ['rpm', 'rotaç', 'motor'];
+      const tpsKeywords = ['tps', 'borboleta', 'posição', 'throttle'];
+      const mainMapKeywords = ['igni', 'avan', 'spark', 'comb', 'fuel', 'inj', 'tps', 'etv'];
 
       for (const def of correctedDefinitions) {
-        if (!def.yAxisDef || !def.xAxisDef) continue;
+        // Skip if it's not a primary map we want to auto-correct
+        if (!mainMapKeywords.some(kw => def.name.toLowerCase().includes(kw))) {
+          continue;
+        }
         
         // --- Y-axis (RPM) Correction ---
-        try {
-            const tempYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
-            const numericYValues = tempYAxis.calculated.filter(v => typeof v === 'number') as number[];
-            if (numericYValues.length > 0) {
-              const avgY = numericYValues.reduce((acc, v) => acc + v, 0) / numericYValues.length;
-              if (avgY > 0 && avgY < 500) { 
-                def.yAxisDef.equation = 'X * 50';
-                correctionsMade++;
-              }
-            }
-        } catch (e) {
-            addLog(`Não foi possível pré-processar o eixo Y para "${def.name}" para correção automática. A ignorar.`, 'debug');
+        if (def.yAxisDef && rpmKeywords.some(kw => def.yAxisDef.label.toLowerCase().includes(kw))) {
+          def.yAxisDef.equation = 'X * 50';
+          correctionsMade++;
         }
 
         // --- X-axis (TPS) Correction ---
-        try {
-            const tempXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
-            const numericXValues = tempXAxis.calculated.filter(v => typeof v === 'number') as number[];
-            if (numericXValues.length > 0) {
-                const maxX = Math.max(...numericXValues);
-                if (maxX > 150) { 
-                  def.xAxisDef.equation = 'X / 10.23';
-                  correctionsMade++;
-                }
-            }
-        } catch (e) {
-            addLog(`Não foi possível pré-processar o eixo X para "${def.name}" para correção automática. A ignorar.`, 'debug');
+        if (def.xAxisDef && tpsKeywords.some(kw => def.xAxisDef.label.toLowerCase().includes(kw))) {
+          def.xAxisDef.equation = 'X / 10.23';
+          correctionsMade++;
         }
       }
       return { correctedDefinitions, correctionsMade };
-    }, [addLog]);
+    }, []);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
@@ -527,7 +516,7 @@ export default function EcuTuningAssistant() {
                     
                     if(binFile?.buffer) {
                       addLog('A aplicar correções de eixo programáticas ao XDF...', 'info');
-                      const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions, binFile.buffer);
+                      const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
                       if(correctionsMade > 0) {
                         definitions = correctedDefinitions;
                         addLog(`${correctionsMade} correções de eixo aplicadas a todo o ficheiro XDF.`, 'success');
@@ -584,7 +573,7 @@ export default function EcuTuningAssistant() {
             const brandValue = xdfData.brand || '';
             if(binFile?.buffer) {
               addLog('A aplicar correções de eixo programáticas ao XDF da biblioteca...', 'info');
-              const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions, binFile.buffer);
+              const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
               if(correctionsMade > 0) {
                 definitions = correctedDefinitions;
                 addLog(`${correctionsMade} correções de eixo aplicadas a todo o ficheiro XDF.`, 'success');
@@ -828,6 +817,11 @@ export default function EcuTuningAssistant() {
         try {
             const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef);
             const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef);
+
+            if (!axisXData || !axisYData) {
+                throw new Error("Não foi possível ler os dados do eixo do ficheiro BIN.");
+            }
+
             const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData);
 
             let currentMap = JSON.parse(JSON.stringify(calculatedMap));
@@ -925,6 +919,11 @@ export default function EcuTuningAssistant() {
 
             const newX = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
             const newY = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+
+            if (!newX || !newY) {
+                throw new Error("Não foi possível ler os eixos com as novas equações.");
+            }
+            
             const { calculatedMap: newMapData, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, newX, newY);
 
             const newAxesState = {
