@@ -1,4 +1,5 @@
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -90,7 +91,7 @@ function getAttr(element: Element | null, ...names: string[]): string | null {
 function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axisType: 'y' | 'x'): AxisDefinition {
     if (!axisNode) return null;
 
-    const defaultLabel = axisType === 'y' ? 'RPM' : 'Posição da Borboleta';
+    const defaultLabel = axisType === 'y' ? 'RPM' : 'TPS';
 
     const localCountNode = findNode(axisNode, 'indexcount', 'INDEXCOUNT');
     let count = localCountNode ? parseInt(localCountNode.textContent || '0', 10) : 0;
@@ -99,62 +100,14 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         findNode(axisNode, 'units', 'UNITS')?.textContent ||
         findNode(axisNode, 'title', 'TITLE')?.textContent ||
         ''
-    ).trim();
+    ).trim() || defaultLabel;
 
-    const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
-    const embedType = getAttr(embedInfoNode, 'type');
-    const isLinked = embedType === '3';
-    
     const mathNode = findNode(axisNode, 'math', 'MATH');
     const equation = getAttr(mathNode || axisNode, 'equation', 'Equation') || 'X';
     const varNode = findNode(mathNode || axisNode, 'VAR', 'var');
     const equationVar = getAttr(varNode, 'id') || 'X';
 
-
-    // --- Case 1: Linked Axis ---
-    // If the axis is linked to another table's Z-axis data.
-    if (isLinked && embedInfoNode) {
-        const linkId = getAttr(embedInfoNode, 'linkobjid');
-        const linkedTable = linkId ? tableMap.get(linkId) : null;
-        
-        const linkedZAxis = findNode(linkedTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
-        if (linkedZAxis) {
-            const sourceEmbeddedData = findNode(linkedZAxis, 'embeddeddata', 'EMBEDDEDDATA');
-            if (sourceEmbeddedData) {
-                const sourceAddrStr = getAttr(sourceEmbeddedData, 'mmedaddress');
-                const sourceAddr = sourceAddrStr ? parseInt(sourceAddrStr, 16) : null;
-                const sourceDataSizeBitsStr = getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '8';
-                const sourceDataSize = parseInt(sourceDataSizeBitsStr, 10) / 8;
-                const sourceIsBigEndian = getAttr(sourceEmbeddedData, 'bigendian') === '1';
-
-                const sourceMajorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
-                const sourceMinorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
-
-                const linkedRows = parseInt(getAttr(sourceEmbeddedData, 'mmedrowcount') || '0');
-                const linkedCols = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || '0');
-                // The count for a 1D axis linked to a 2D map is the maximum of its dimensions.
-                const sourceCount = Math.max(linkedRows, linkedCols);
-
-                if (sourceAddr !== null && !isNaN(sourceAddr)) {
-                    return {
-                        address: sourceAddr,
-                        // Use the local count if specified, otherwise use the inferred count from the linked map.
-                        count: count > 0 ? count : sourceCount,
-                        dataSize: sourceDataSize,
-                        isBigEndian: sourceIsBigEndian,
-                        // IMPORTANT: For linked axes, the math comes from the AXIS itself, not the linked data.
-                        equation: equation,
-                        equationVar: equationVar,
-                        majorStride: sourceMajorStride,
-                        minorStride: sourceMinorStride,
-                        label: localLabel || defaultLabel,
-                    };
-                }
-            }
-        }
-    }
-
-    // --- Case 2: Static Labels ---
+    // --- Case 1: Static Labels ---
     // The axis values are defined directly in the XDF as <label> tags. No BIN reading needed.
     const labelNodes = findNodes(axisNode, 'label');
     if (labelNodes.length > 0) {
@@ -170,7 +123,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
             return { 
                 staticLabels, 
                 count: finalCount, 
-                label: localLabel || defaultLabel, 
+                label: localLabel, 
                 equation: 'X', 
                 equationVar: 'X', 
                 majorStride: 0, 
@@ -181,45 +134,81 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
             };
         }
     }
-
-    // --- Case 3: Directly Addressed Data ---
-    // The axis data is at a specific address in the BIN file.
+    
+    // --- Case 2: Data stored in BIN file (most common) ---
+    // The data source can be <embeddeddata> or <embedinfo>
     const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-    const addrStr = getAttr(embeddedData, 'mmedaddress');
-    const addr = addrStr ? parseInt(addrStr, 16) : null;
-    const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits') || findNode(embedInfoNode || axisNode, 'data_size', 'DATA_SIZE')?.textContent || '8';
-    const dataSizeBits = parseInt(dataSizeBitsStr, 10);
-    const isBigEndian = getAttr(embeddedData, 'bigendian') === '1';
-
-    const majorStride = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
-    const minorStride = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10) / 8;
-
-    // An axis must have a count, and if it's not static, it must have an address.
-    if (count === 0 && (addr === null || isNaN(addr))) {
-         // Return a partial definition if count is missing. The main parser will try to infer it.
-         return {
-            address: addr,
-            count: 0,
-            dataSize: dataSizeBits / 8,
-            isBigEndian,
-            equation,
-            equationVar,
-            majorStride,
-            minorStride,
-            label: localLabel || defaultLabel,
+    const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
+    
+    const sourceNode = embeddedData || embedInfoNode;
+    if (!sourceNode) {
+        // Cannot determine data source, return a minimal definition
+        return {
+            address: null, count: count, dataSize: 1, isBigEndian: false,
+            equation, equationVar, label: localLabel, majorStride: 0, minorStride: 0
         };
+    }
+
+    const addrStr = getAttr(sourceNode, 'mmedaddress', 'address');
+    const addr = addrStr ? parseInt(addrStr, 16) : null;
+    
+    const dataSizeBitsStr = getAttr(sourceNode, 'mmedelementsizebits', 'datasize');
+    const dataSizeNode = findNode(sourceNode, 'data_size'); // Another possible location for data size
+    const dataSize = parseInt(dataSizeBitsStr || dataSizeNode?.textContent || '8', 10) / 8;
+
+    const isBigEndian = getAttr(sourceNode, 'bigendian') === '1';
+    
+    const majorStride = parseInt(getAttr(sourceNode, 'mmedmajorstridebits', 'major_stride') || '0', 10) / 8;
+    const minorStride = parseInt(getAttr(sourceNode, 'mmedminorstridebits', 'minor_stride') || '0', 10) / 8;
+
+    // --- Special Case: Linked Axis ---
+    const embedType = getAttr(embedInfoNode, 'type');
+    if (embedType === '3' && embedInfoNode) {
+        const linkId = getAttr(embedInfoNode, 'linkobjid');
+        const linkedTable = linkId ? tableMap.get(linkId) : null;
+        
+        const linkedZAxis = findNode(linkedTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
+        if (linkedZAxis) {
+            const sourceEmbeddedData = findNode(linkedZAxis, 'embeddeddata', 'EMBEDDEDDATA');
+            if (sourceEmbeddedData) {
+                const sourceAddrStr = getAttr(sourceEmbeddedData, 'mmedaddress');
+                const sourceAddr = sourceAddrStr ? parseInt(sourceAddrStr, 16) : null;
+                const sourceDataSize = parseInt(getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '8', 10) / 8;
+                const sourceIsBigEndian = getAttr(sourceEmbeddedData, 'bigendian') === '1';
+                const sourceMajorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
+                const sourceMinorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
+
+                const linkedRows = parseInt(getAttr(sourceEmbeddedData, 'mmedrowcount') || '0');
+                const linkedCols = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || '0');
+                const sourceCount = Math.max(linkedRows, linkedCols);
+
+                if (sourceAddr !== null && !isNaN(sourceAddr)) {
+                    return {
+                        address: sourceAddr,
+                        count: count > 0 ? count : sourceCount,
+                        dataSize: sourceDataSize,
+                        isBigEndian: sourceIsBigEndian,
+                        equation: equation, // Math from this axis, not the linked one
+                        equationVar: equationVar,
+                        majorStride: sourceMajorStride,
+                        minorStride: sourceMinorStride,
+                        label: localLabel,
+                    };
+                }
+            }
+        }
     }
 
     return { 
         address: addr,
         count, 
-        dataSize: dataSizeBits / 8, 
+        dataSize, 
         isBigEndian, 
         equation,
         equationVar,
         majorStride,
         minorStride,
-        label: localLabel || defaultLabel,
+        label: localLabel,
     };
 }
 
@@ -390,7 +379,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
               count: rowsCount,
               dataSize: yAxisDef?.dataSize || defaultYDataSize,
               isBigEndian: yAxisDef?.isBigEndian ?? false,
-              equation: (yAxisDef?.equation && yAxisDef.equation !== 'X') ? yAxisDef.equation : 'X * 50',
+              equation: (yAxisDef?.equation && yAxisDef.equation !== 'X') ? yAxisDef.equation : 'X',
               equationVar: yAxisDef?.equationVar || 'X',
               label: yAxisDef?.label || 'RPM',
           } as AxisDefinition; // Type assertion
@@ -413,9 +402,9 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
               count: colsCount,
               dataSize: xAxisDef?.dataSize || defaultXDataSize,
               isBigEndian: xAxisDef?.isBigEndian ?? false,
-              equation: (xAxisDef?.equation && xAxisDef.equation !== 'X') ? xAxisDef.equation : 'X / 10.23',
+              equation: (xAxisDef?.equation && xAxisDef.equation !== 'X') ? xAxisDef.equation : 'X',
               equationVar: xAxisDef?.equationVar || 'X',
-              label: xAxisDef?.label || 'Posição da Borboleta',
+              label: xAxisDef?.label || 'TPS',
           } as AxisDefinition; // Type assertion
           if (xAxisDef.address !== null && wasMissing) {
               console.warn(`Definição do eixo X em falta para "${originalName}". A inferir um substituto com endereço 0x${xAxisDef.address?.toString(16)}.`);
@@ -463,16 +452,18 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
   if (!axisDef) return emptyState;
 
   if (axisDef.staticLabels && axisDef.staticLabels.length > 0) {
-      if (axisDef.staticLabels.length !== axisDef.count) {
+      if (axisDef.count > 0 && axisDef.staticLabels.length !== axisDef.count) {
           console.warn(`O número de etiquetas estáticas (${axisDef.staticLabels.length}) não corresponde à contagem do eixo (${axisDef.count}).`);
       }
-      const calculated = axisDef.staticLabels.slice(0, axisDef.count);
+      const finalCount = axisDef.count > 0 ? axisDef.count : axisDef.staticLabels.length;
+      const calculated = axisDef.staticLabels.slice(0, finalCount);
       const raw = calculated.map((_, i) => i); // Generate dummy raw values for static labels
       return { raw, calculated };
   }
   
-  if (axisDef.address === null || isNaN(axisDef.address) || axisDef.count === 0) {
-      const calculated = Array.from({ length: axisDef.count || 0 }, (_, i) => i + 1);
+  const count = axisDef.count || 0;
+  if (axisDef.address === null || isNaN(axisDef.address) || count === 0) {
+      const calculated = Array.from({ length: count }, (_, i) => i + 1);
       const raw = calculated.map(v => typeof v === 'number' ? v : 0); // Raw is same as calculated if no address
       return { raw, calculated };
   }
@@ -506,11 +497,11 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       stride = axisDef.dataSize;
   }
 
-  for (let i = 0; i < axisDef.count; i++) {
+  for (let i = 0; i < count; i++) {
     const offset = axisDef.address + (i * stride);
     if (offset + axisDef.dataSize > view.byteLength) {
         console.error(`Leitura do eixo fora dos limites. Endereço: ${axisDef.address}, Offset: ${offset}. O eixo pode estar incompleto.`);
-        while(calculatedData.length < axisDef.count) {
+        while(calculatedData.length < count) {
           rawData.push(NaN);
           calculatedData.push(NaN);
         }
