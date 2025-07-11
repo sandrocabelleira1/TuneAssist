@@ -15,7 +15,7 @@ import type { MapData } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 
 interface LinePlot2DProps {
-  mapData: MapData; // This is expected to be transposed: [X-axis cols x Y-axis rows]
+  mapData: MapData; // This is expected to be transposed: [Y-axis rows x X-axis cols]
   xAxis: (string | number)[];
   yAxis: (string | number)[];
   xAxisLabel: string;
@@ -33,14 +33,17 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // In the transposed map, a column of data corresponds to all Z values for a single Y value (which is what we want to plot).
-    if (!mapData || mapData.length === 0 || mapData[0].length <= sliceIndex) {
+    // The mapData is now transposed, so each row in mapData corresponds to a Y-axis value (RPM).
+    // The sliceIndex directly corresponds to the row we want to plot.
+    if (!mapData || sliceIndex < 0 || sliceIndex >= mapData.length) {
         return null;
     }
     
-    // The selector `sliceIndex` corresponds to a row in the original map (an item from yAxis).
-    // In the transposed map, a row of data corresponds to all Z values for a single X value.
-    const dataForYSlice = mapData.map(column => column[sliceIndex]);
+    const dataForYSlice = mapData[sliceIndex];
+
+    if (!dataForYSlice || dataForYSlice.length !== xAxis.length) {
+      return null;
+    }
     
     return xAxis.map((xVal, index) => ({
       x: typeof xVal === 'number' ? xVal.toFixed(1) : String(xVal),
@@ -50,7 +53,7 @@ export default function LinePlot2D({
   }, [mapData, xAxis, sliceIndex]);
 
 
-  if (!plotData || plotData.some(p => p.z === undefined || p.z === null)) {
+  if (!plotData || plotData.some(p => p.z === undefined)) {
     return (
       <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
         <div>
