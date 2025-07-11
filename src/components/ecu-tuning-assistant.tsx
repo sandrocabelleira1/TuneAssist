@@ -1331,7 +1331,7 @@ export default function EcuTuningAssistant() {
                 const inferredYAxisAddr = inferredXAxisAddr - (rows * yAxisDataSize);
 
                 const yAxisAddress = inferredYAxisAddr >= 0 ? inferredYAxisAddr : null;
-                const xAxisAddress = yAxisAddress !== null && inferredXAxisAddr >= 0 ? inferredXAxisAddr : null;
+                const xAxisAddress = yAxisAddress !== null && inferredXAddr >= 0 ? inferredXAddr : null;
 
                 // Sugerir equações padrão para tornar os dados imediatamente úteis
                 const yAxisEquation = 'X * 50';       // Sugere RPMs (ex: 200 * 50 = 10000 RPM)
@@ -1785,7 +1785,7 @@ export default function EcuTuningAssistant() {
                                 </div>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0">
-                                {displayMap && displayAxes ? (
+                                {displayMap && transposedMap && displayAxes ? (
                                     <Tabs defaultValue="2d" className="flex-1 flex flex-col">
                                         <TabsList className="mb-2">
                                             <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Visualização 2D</TabsTrigger>
@@ -1827,7 +1827,7 @@ export default function EcuTuningAssistant() {
                                             <div className="flex-1 relative">
                                                 <LinePlot2D
                                                     key={`${mapRenderKey}-slice-${plotSliceIndex}`}
-                                                    mapData={displayMap}
+                                                    mapData={transposedMap}
                                                     xAxis={displayAxes.x}
                                                     yAxis={displayAxes.y}
                                                     xAxisLabel={displayAxes.xLabel}

@@ -33,23 +33,22 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // mapData is expected to be in [rows x cols] format (e.g., Y-axis x X-axis)
-    // sliceIndex corresponds to the selected row index (a specific Y-axis value).
+    // mapData is now expected to be transposed: [Y-axis (RPM) rows x X-axis (TPS) cols]
     if (!mapData || sliceIndex < 0 || sliceIndex >= mapData.length) {
         return null;
     }
     
-    // Get the correct row of data for the selected Y-axis slice.
+    // The slice is now a complete row from the transposed map, which represents the Z values for one Y-axis value.
     const slice = mapData[sliceIndex];
     if (!slice) return null;
 
-    // The data for the line chart is the value (z) at each X-axis point for that slice.
+    // The data for the line chart is the Z value at each X-axis point for that slice.
     return xAxis.map((xVal, index) => ({
-      x: typeof xVal === 'number' ? xVal : String(xVal),
-      z: slice[index],
+      x: typeof xVal === 'number' ? xVal : String(xVal), // TPS or similar for X-axis
+      z: slice[index], // Z-value from the selected row
     }));
 
-  }, [mapData, xAxis, sliceIndex]);
+  }, [mapData, xAxis, yAxis, sliceIndex]);
 
 
   if (!plotData) {
