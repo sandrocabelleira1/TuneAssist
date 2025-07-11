@@ -1747,9 +1747,10 @@ export default function EcuTuningAssistant() {
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            {displayAxes.y.map((yVal, index) => (
-                                                                <SelectItem key={index} value={String(index)}>{String(yVal)}</SelectItem>
-                                                            ))}
+                                                            {displayAxes.y.map((yVal, index) => {
+                                                                const formattedY = typeof yVal === 'number' ? yVal.toFixed(0) : yVal;
+                                                                return <SelectItem key={index} value={String(index)}>{String(formattedY)}</SelectItem>
+                                                            })}
                                                         </SelectContent>
                                                     </Select>
                                                 </div>

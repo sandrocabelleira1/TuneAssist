@@ -35,28 +35,29 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // Basic validation to prevent crashes
+    // 1. Rigorous validation
     if (
       !mapData || !xAxis || !yAxis ||
+      typeof sliceIndex !== 'number' ||
       sliceIndex < 0 || sliceIndex >= mapData.length || sliceIndex >= yAxis.length
     ) {
       return null;
     }
     
-    // Get the specific row of Z-axis data for the selected Y-axis slice (e.g., for a specific RPM)
+    // 2. Safely get the specific row of Z-axis data for the selected Y-axis slice (e.g., for a specific RPM)
     const zValuesForSlice = mapData[sliceIndex];
 
-    // Ensure the data row and the X-axis have the same number of points
+    // 3. Ensure the data row and the X-axis have the same number of points
     if (!zValuesForSlice || zValuesForSlice.length !== xAxis.length) {
       return null;
     }
     
-    // Combine the X-axis values with the corresponding Z-axis values
+    // 4. Combine the X-axis values with the corresponding Z-axis values safely
     const combinedData = xAxis.map((xVal, index) => {
       const zVal = zValuesForSlice[index];
       
       return {
-        x: xVal, // The value for the X-axis (e.g., TPS)
+        x: xVal, // The value for the X-axis (e.g., TPS), can be number or string
         z: typeof zVal === 'number' && isFinite(zVal) ? zVal : null, // The value for the Z-axis (the map value)
       };
     });
