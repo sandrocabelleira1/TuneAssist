@@ -35,30 +35,29 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
+    // Basic validation to prevent crashes
     if (
       !mapData || !xAxis || !yAxis ||
       sliceIndex < 0 || sliceIndex >= mapData.length || sliceIndex >= yAxis.length
     ) {
-      console.error("Chart Error: Missing or invalid mapData, xAxis, yAxis or sliceIndex.");
       return null;
     }
     
+    // Get the specific row of Z-axis data for the selected Y-axis slice (e.g., for a specific RPM)
     const zValuesForSlice = mapData[sliceIndex];
 
+    // Ensure the data row and the X-axis have the same number of points
     if (!zValuesForSlice || zValuesForSlice.length !== xAxis.length) {
-      console.error(`Chart Error: Mismatch between X-axis length (${xAxis.length}) and data row length (${zValuesForSlice?.length}).`);
       return null;
     }
     
+    // Combine the X-axis values with the corresponding Z-axis values
     const combinedData = xAxis.map((xVal, index) => {
       const zVal = zValuesForSlice[index];
-      // Ensure zVal is a number or null for the chart to render correctly
-      const finalZ = typeof zVal === 'number' && isFinite(zVal) ? zVal : null;
       
-      // We pass xVal directly, Recharts can handle categories (strings) or numbers.
       return {
-        x: xVal,
-        z: finalZ,
+        x: xVal, // The value for the X-axis (e.g., TPS)
+        z: typeof zVal === 'number' && isFinite(zVal) ? zVal : null, // The value for the Z-axis (the map value)
       };
     });
 
@@ -79,7 +78,7 @@ export default function LinePlot2D({
     );
   }
 
-  const selectedYValue = yAxis && yAxis[sliceIndex] !== undefined ? yAxis[sliceIndex] : '';
+  const selectedYValue = yAxis[sliceIndex];
   const formattedYValue = typeof selectedYValue === 'number' ? selectedYValue.toFixed(0) : selectedYValue;
 
 
@@ -96,7 +95,6 @@ export default function LinePlot2D({
       >
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
         <XAxis 
-            type={xAxis.every(v => typeof v === 'number') ? 'number' : 'category'}
             dataKey="x" 
             name={xAxisLabel}
             label={{ value: xAxisLabel, position: 'insideBottom', offset: -10 }}
