@@ -35,14 +35,10 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // 1. Validate inputs rigorously
+    // 1. Rigorous validation
     if (
-      !mapData ||
-      !xAxis ||
-      !yAxis ||
-      sliceIndex < 0 ||
-      sliceIndex >= mapData.length ||
-      sliceIndex >= yAxis.length
+      !mapData || !xAxis || !yAxis ||
+      sliceIndex < 0 || sliceIndex >= mapData.length || sliceIndex >= yAxis.length
     ) {
       console.error("Chart Error: Missing or invalid mapData, xAxis, yAxis or sliceIndex.");
       return null;
@@ -51,20 +47,20 @@ export default function LinePlot2D({
     // 2. Extract the correct slice of Z-values for the selected Y-axis row
     const zValuesForSlice = mapData[sliceIndex];
 
-    // 3. More validation
     if (!zValuesForSlice || zValuesForSlice.length !== xAxis.length) {
-      console.error("Chart Error: Mismatch between X-axis length and data row length.");
+      console.error(`Chart Error: Mismatch between X-axis length (${xAxis.length}) and data row length (${zValuesForSlice?.length}).`);
       return null;
     }
     
-    // 4. Combine X-axis values with the corresponding Z-values from the selected slice.
+    // 3. Combine X-axis values with the corresponding Z-values from the selected slice.
     // This creates the array of {x, z} points needed for the chart.
-    const combinedData = xAxis.map((xVal, index) => {
-      const zVal = zValuesForSlice[index];
-      
+    const combinedData = zValuesForSlice.map((zVal, index) => {
+      // Ensure we don't read beyond the bounds of the xAxis array
+      const xVal = xAxis[index];
+
       // Ensure zVal is a number or null for the chart to render correctly
       const finalZ = typeof zVal === 'number' && isFinite(zVal) ? zVal : null;
-
+      
       // Ensure X-axis value is a number for the chart to plot correctly
       const finalX = typeof xVal === 'number' && isFinite(xVal) ? xVal : 0;
 
