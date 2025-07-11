@@ -118,11 +118,6 @@ function MapTable({
     return { min: minVal, max: maxVal };
   }, [mapData]);
 
-  const transposedData = yAxis[0] !== undefined ? mapData[0]?.map((_, colIndex) => mapData.map(row => row[colIndex])) : [];
-
-  const displayYAxis = xAxis; 
-  const displayXAxis = yAxis; 
-  
   const yAxisFormatter = (val: string | number) => {
     if (typeof val !== 'number') return val;
     return val.toFixed(1);
@@ -176,35 +171,35 @@ function MapTable({
                   )}
               </div>
             </th>
-            {displayYAxis.map((y, i) => (
-              <th key={`head-y-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
-                {xAxisFormatter(y)}
+            {xAxis.map((x, i) => (
+              <th key={`head-x-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
+                {xAxisFormatter(x)}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {displayXAxis.map((x, xi) => (
-            <tr key={`row-${xi}`}>
+          {yAxis.map((y, yi) => (
+            <tr key={`row-${yi}`}>
               <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">
-                 {yAxisFormatter(x)}
+                 {yAxisFormatter(y)}
               </td>
-              {displayYAxis.map((_y, yi) => {
-                const cellValue = transposedData[yi]?.[xi];
-                const isSelected = selectedCells.has(`${xi}-${yi}`);
+              {xAxis.map((_x, xi) => {
+                const cellValue = mapData[yi]?.[xi];
+                const isSelected = selectedCells.has(`${yi}-${xi}`);
                 return (
                   <td 
-                    key={`cell-container-${xi}-${yi}`}
+                    key={`cell-container-${yi}-${xi}`}
                     className={cn(
                         "p-0 border border-border text-center relative",
                         isSelected && "ring-2 ring-primary ring-inset z-10"
                     )}
                     style={{ backgroundColor: getHeatmapColor(cellValue, min, max) }}
-                    onClick={(e) => isEditable && onCellSelect(xi, yi, e.ctrlKey || e.metaKey)}
+                    onClick={(e) => isEditable && onCellSelect(yi, xi, e.ctrlKey || e.metaKey)}
                   >
                     <EditableMapCell
                       value={cellValue}
-                      onCellChange={(value) => onCellChange(xi, yi, value)}
+                      onCellChange={(value) => onCellChange(yi, xi, value)}
                       isEditable={isEditable}
                       valueFormat={valueFormat}
                     />
@@ -247,6 +242,7 @@ export default function EcuTuningAssistant() {
     const [workingMap, setWorkingMap] = useState<MapData | null>(null);
     const [sourceAxes, setSourceAxes] = useState<{ x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string } | null>(null);
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
+    const [transposedMap, setTransposedMap] = useState<MapData | null>(null);
     const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
     const [displayIndexMap, setDisplayIndexMap] = useState<{ x: number[], y: number[] } | null>(null);
@@ -410,6 +406,7 @@ export default function EcuTuningAssistant() {
         if (selectedMapName && !uniqueCombinedMaps.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
             setDisplayMap(null);
+            setTransposedMap(null);
             setDisplayAxes(null);
         }
 
@@ -435,6 +432,7 @@ export default function EcuTuningAssistant() {
         setWorkingMap(null); 
         setSourceAxes(null);
         setDisplayMap(null); 
+        setTransposedMap(null);
         setDisplayAxes(null);
         setOriginalSortOrder(null);
         setDisplayIndexMap(null);
@@ -456,25 +454,22 @@ export default function EcuTuningAssistant() {
 
     const autoCorrectAllAxes = useCallback((definitions: XDFDefinition[]) => {
       const correctedDefinitions = JSON.parse(JSON.stringify(definitions)) as XDFDefinition[];
-      let correctionsMade = 0;
       
       for (const def of correctedDefinitions) {
-          // Force Y-Axis (RPM) correction
+          // Force Y-Axis (Vertical) to be RPM
           if (def.yAxisDef) {
               def.yAxisDef.equation = 'X * 50';
               def.yAxisDef.label = 'RPM';
-              correctionsMade++;
           }
           
-          // Force X-Axis (TPS) correction
+          // Force X-Axis (Horizontal) to be TPS
           if (def.xAxisDef) {
               def.xAxisDef.equation = 'X / 10.23';
               def.xAxisDef.label = 'Posição da Borboleta';
-              correctionsMade++;
           }
       }
       
-      return { correctedDefinitions, correctionsMade };
+      return correctedDefinitions;
     }, []);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
@@ -489,6 +484,7 @@ export default function EcuTuningAssistant() {
                     setXdfFile(null); 
                     setSelectedMapName('');
                     setDisplayMap(null);
+                    setTransposedMap(null);
                     setDisplayAxes(null);
                     setRawMap(null);
                     setAvailableMaps([]);
@@ -515,14 +511,9 @@ export default function EcuTuningAssistant() {
                     const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
                     
                     addLog('A aplicar correções de eixo universais ao XDF...', 'info');
-                    const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
-                    if(correctionsMade > 0) {
-                        definitions = correctedDefinitions;
-                        addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
-                        toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
-                    } else {
-                        addLog('Nenhuma correção de eixo foi aplicada (sem definições de eixo encontradas).', 'info');
-                    }
+                    definitions = autoCorrectAllAxes(definitions);
+                    addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
+                    toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
 
                     setXdfFile({ name: file.name, definitions });
                     setActiveXdfBrand(brandValue);
@@ -564,7 +555,7 @@ export default function EcuTuningAssistant() {
             let definitions = parseXDF(xdfData.content);
             if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
             
-            setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
+            setSelectedMapName(''); setDisplayMap(null); setTransposedMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
             setSelectedCells(new Set());
             setMapValidationStatus('idle');
             setPlotSliceIndex(0);
@@ -572,14 +563,9 @@ export default function EcuTuningAssistant() {
             const brandValue = xdfData.brand || '';
             
             addLog('A aplicar correções de eixo universais ao XDF da biblioteca...', 'info');
-            const { correctedDefinitions, correctionsMade } = autoCorrectAllAxes(definitions);
-            if(correctionsMade > 0) {
-              definitions = correctedDefinitions;
-              addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
-              toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
-            } else {
-              addLog('Nenhuma correção de eixo foi aplicada (sem definições de eixo encontradas).', 'info');
-            }
+            definitions = autoCorrectAllAxes(definitions);
+            addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
+            toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
 
             setXdfFile({ name, definitions });
             setSelectedXdfFromLibrary(name);
@@ -643,6 +629,10 @@ export default function EcuTuningAssistant() {
             setWorkingMap(correctedMap);
             setRawMap(correctedRawMap);
             setDisplayMap(correctedMap);
+            
+            const newTransposed = correctedMap[0]?.map((_, colIndex) => correctedMap.map(row => row[colIndex])) || [];
+            setTransposedMap(newTransposed);
+            
             setSourceAxes(newSourceAxes);
             const displayableAxes = {
                 x: newSourceAxes.x.calculated,
@@ -840,6 +830,7 @@ export default function EcuTuningAssistant() {
             if (!currentAxes.x || !currentAxes.y) {
               addLog(`A definição do mapa "${name}" está em falta ou tem um eixo inválido. Não é possível carregar.`, 'error');
               setDisplayMap(null);
+              setTransposedMap(null);
               setDisplayAxes(null);
               return;
             }
@@ -894,6 +885,11 @@ export default function EcuTuningAssistant() {
             }
 
             setDisplayMap(mapAfterXSort);
+            
+            // Centralized transposition for all visual components
+            const newTransposed = mapAfterXSort[0]?.map((_, colIndex) => mapAfterXSort.map(row => row[colIndex])) || [];
+            setTransposedMap(newTransposed);
+            
             setDisplayAxes(axesAfterXSort);
             setDisplayIndexMap(indexMapAfterXSort);
             
@@ -908,6 +904,7 @@ export default function EcuTuningAssistant() {
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Leitura do Mapa", description: msg });
             setDisplayMap(null);
+            setTransposedMap(null);
             setDisplayAxes(null);
         }
     }, [binFile, availableMaps, addLog, toast, runZAxisValidation, handleSortAxis]);
@@ -965,6 +962,10 @@ export default function EcuTuningAssistant() {
             setWorkingMap(newMapData);
             setRawMap(newRawMap);
             setDisplayMap(newMapData);
+            
+            const newTransposed = newMapData[0]?.map((_, colIndex) => newMapData.map(row => row[colIndex])) || [];
+            setTransposedMap(newTransposed);
+            
             setSourceAxes(newAxesState);
             const displayableAxes = {
                 x: newAxesState.x.calculated,
@@ -1008,6 +1009,10 @@ export default function EcuTuningAssistant() {
         const { newMap, newAxes, newIndexMap } = sortResult;
         
         setDisplayMap(newMap);
+        
+        const newTransposed = newMap[0]?.map((_, colIndex) => newMap.map(row => row[colIndex])) || [];
+        setTransposedMap(newTransposed);
+
         setDisplayAxes(newAxes);
         setDisplayIndexMap(newIndexMap);
         setSelectedCells(new Set());
@@ -1039,6 +1044,9 @@ export default function EcuTuningAssistant() {
         const newYIndexMap = sortable.map(item => item.originalIndex);
     
         setDisplayMap(newSortedMap);
+        const newTransposed = newSortedMap[0]?.map((_, colIndex) => newSortedMap.map(row => row[colIndex])) || [];
+        setTransposedMap(newTransposed);
+
         setDisplayAxes(prev => {
             if (!prev) return null;
             return {
@@ -1058,6 +1066,9 @@ export default function EcuTuningAssistant() {
     const handleResetSort = () => {
         if (workingMap && sourceAxes) {
             setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
+            const newTransposed = workingMap[0]?.map((_, colIndex) => workingMap.map(row => row[colIndex])) || [];
+            setTransposedMap(newTransposed);
+            
             const displayableAxes = {
                 x: sourceAxes.x.calculated,
                 y: sourceAxes.y.calculated,
@@ -1102,6 +1113,10 @@ export default function EcuTuningAssistant() {
       const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
       newDisplayMap[rowIndex][colIndex] = newValue;
       setDisplayMap(newDisplayMap);
+
+      const newTransposed = newDisplayMap[0]?.map((_, cIdx) => newDisplayMap.map(row => row[cIdx])) || [];
+      setTransposedMap(newTransposed);
+
       setAudioUrl(null);
       setMapValidationStatus('idle'); // Any manual change invalidates the last validation
       
@@ -1224,6 +1239,10 @@ export default function EcuTuningAssistant() {
             setWorkingMap(newWorkingMap);
             setRawMap(newRawMap);
             setDisplayMap(newDisplayMap);
+
+            const newTransposed = newDisplayMap[0]?.map((_, cIdx) => newDisplayMap.map(row => row[cIdx])) || [];
+            setTransposedMap(newTransposed);
+
             setAudioUrl(null);
             setMapValidationStatus('idle'); // Any manual change invalidates the last validation
             
@@ -1499,9 +1518,11 @@ export default function EcuTuningAssistant() {
         setAudioUrl(null);
 
         try {
+            // The table shows Y-axis (RPM) as rows and X-axis (TPS) as columns.
+            // But the AI expects X/Y to match the labels. We pass the correct axes.
             const explanationResult = await explainMap({
                 mapName: selectedMapName,
-                mapData: displayMap,
+                mapData: displayMap, // displayMap is Y x X
                 xAxis: displayAxes.x,
                 yAxis: displayAxes.y,
                 xAxisLabel: displayAxes.xLabel,
@@ -1774,7 +1795,7 @@ export default function EcuTuningAssistant() {
                                         <TabsContent value="2d" forceMount className="flex-1 relative data-[state=inactive]:hidden">
                                             <MapTable
                                                 key={mapRenderKey}
-                                                mapData={displayMap} 
+                                                mapData={transposedMap || []} 
                                                 xAxis={displayAxes.x} 
                                                 yAxis={displayAxes.y} 
                                                 xAxisLabel={displayAxes.xLabel} 

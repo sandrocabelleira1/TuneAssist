@@ -33,8 +33,8 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // The table shows Y-axis (RPM) as rows and X-axis (TPS) as columns.
-    // sliceIndex corresponds to the selected row index from the displayMap.
+    // mapData is expected to be in [rows x cols] format (e.g., Y-axis x X-axis)
+    // sliceIndex corresponds to the selected row index (a specific Y-axis value).
     if (!mapData || sliceIndex < 0 || sliceIndex >= mapData.length) {
         return null;
     }
@@ -43,6 +43,7 @@ export default function LinePlot2D({
     const slice = mapData[sliceIndex];
     if (!slice) return null;
 
+    // The data for the line chart is the value (z) at each X-axis point for that slice.
     return xAxis.map((xVal, index) => ({
       x: typeof xVal === 'number' ? xVal : String(xVal),
       z: slice[index],
