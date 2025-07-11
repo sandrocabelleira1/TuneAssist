@@ -1738,7 +1738,7 @@ export default function EcuTuningAssistant() {
                                                 onCellSelect={handleCellSelect}
                                             />
                                         </TabsContent>
-                                        <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden">
+                                        <TabsContent value="plot-2d" forceMount className="flex-1 flex flex-col data-[state=inactive]:hidden">
                                             <>
                                                 <div className="p-2 flex items-center gap-2">
                                                     <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
