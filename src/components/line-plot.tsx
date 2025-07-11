@@ -35,9 +35,16 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // 1. Validate inputs
-    if (!mapData || !xAxis || sliceIndex < 0 || sliceIndex >= mapData.length) {
-      console.error("Chart Error: Missing or invalid mapData, xAxis, or sliceIndex.");
+    // 1. Validate inputs rigorously
+    if (
+      !mapData ||
+      !xAxis ||
+      !yAxis ||
+      sliceIndex < 0 ||
+      sliceIndex >= mapData.length ||
+      sliceIndex >= yAxis.length
+    ) {
+      console.error("Chart Error: Missing or invalid mapData, xAxis, yAxis or sliceIndex.");
       return null;
     }
     
@@ -50,7 +57,7 @@ export default function LinePlot2D({
       return null;
     }
     
-    // 4. Combine X-axis values (TPS) with the corresponding Z-values from the selected slice (RPM).
+    // 4. Combine X-axis values with the corresponding Z-values from the selected slice.
     // This creates the array of {x, z} points needed for the chart.
     const combinedData = xAxis.map((xVal, index) => {
       const zVal = zValuesForSlice[index];
@@ -69,7 +76,7 @@ export default function LinePlot2D({
 
     return combinedData;
 
-  }, [mapData, xAxis, sliceIndex]);
+  }, [mapData, xAxis, yAxis, sliceIndex]);
 
 
   if (!plotData) {
@@ -83,6 +90,8 @@ export default function LinePlot2D({
       </div>
     );
   }
+
+  const selectedYValue = yAxis && yAxis[sliceIndex] !== undefined ? yAxis[sliceIndex] : '';
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -122,7 +131,7 @@ export default function LinePlot2D({
         <Line
           type="monotone"
           dataKey="z"
-          name={`Valor (${yAxisLabel} ${yAxis[sliceIndex]})`}
+          name={`Valor (${yAxisLabel} ${selectedYValue})`}
           stroke="hsl(var(--primary))"
           strokeWidth={2}
           activeDot={{ r: 8 }}
