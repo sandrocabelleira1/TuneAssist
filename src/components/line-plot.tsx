@@ -15,7 +15,7 @@ import type { MapData } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 
 interface LinePlot2DProps {
-  mapData: MapData; // This is now expected to be transposed: [X-axis cols x Y-axis rows]
+  mapData: MapData; // This is expected to be transposed: [X-axis cols x Y-axis rows]
   xAxis: (string | number)[];
   yAxis: (string | number)[];
   xAxisLabel: string;
@@ -33,27 +33,22 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
     
   const plotData = useMemo(() => {
-    // mapData is transposed: [X-axis cols x Y-axis rows]
-    // The selector `sliceIndex` corresponds to an index of the `yAxis` array (a row in the original table).
-    // We want to plot the Z values for that Y against all X values.
-    // In the transposed map, the data for a specific Y (row) is now a column.
-    
-    // However, the `sliceIndex` corresponds to the Y-axis, which has `yAxis.length` items.
-    // The number of columns in the transposed map is `yAxis.length`.
-    // So, `mapData[some_x_index][sliceIndex]` gives the Z value for a given X and the selected Y.
+    // mapData is now correctly transposed: [col][row]
+    // The selector `sliceIndex` corresponds to a row in the original map (an item from yAxis).
+    // In the transposed map, a row of data corresponds to all Z values for a single X value.
+    // A column of data corresponds to all Z values for a single Y value (which is what we want to plot).
 
     if (!mapData || mapData.length === 0 || mapData[0].length <= sliceIndex) {
         return null;
     }
     
-    // Get the specific row from the original map, which is now a column in the transposed map.
-    // We can iterate through the xAxis and pick the z-value for the selected sliceIndex.
-    const slice = mapData.map(col => col[sliceIndex]);
-    if (!slice) return null;
-
+    // We want the data for a specific Y-axis slice. In the transposed map, this is a column.
+    // So we iterate through the columns (which represent X-axis points) and get the value at sliceIndex (which represents the Y-axis point).
+    const dataForYSlice = mapData.map(column => column[sliceIndex]);
+    
     return xAxis.map((xVal, index) => ({
       x: typeof xVal === 'number' ? xVal : String(xVal),
-      z: slice[index],
+      z: dataForYSlice[index],
     }));
 
   }, [mapData, xAxis, yAxis, sliceIndex]);

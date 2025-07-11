@@ -1496,7 +1496,7 @@ export default function EcuTuningAssistant() {
         }
     }, [logs]);
     
-    // Transpose the map for 2D table and line plot view
+    // Transpose the map for 2D line plot view
     const transposedMap = useMemo(() => {
         if (!displayMap || displayMap.length === 0 || displayMap[0].length === 0) return null;
         
@@ -1504,8 +1504,8 @@ export default function EcuTuningAssistant() {
         const cols = displayMap[0].length;
         const transposed = Array(cols).fill(0).map(() => Array(rows).fill(null));
         
-        for(let i=0; i<rows; i++){
-            for(let j=0; j<cols; j++){
+        for(let j=0; j<cols; j++){ // Iterate over columns
+            for(let i=0; i<rows; i++){ // Iterate over rows
                 transposed[j][i] = displayMap[i][j];
             }
         }
@@ -1733,9 +1733,9 @@ export default function EcuTuningAssistant() {
                                 {displayMap && displayAxes ? (
                                     <Tabs defaultValue="2d" className="flex-1 flex flex-col">
                                         <TabsList className="mb-2">
-                                            <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Visualização 2D</TabsTrigger>
+                                            <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
                                             <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
-                                            <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Visualização 3D</TabsTrigger>
+                                            <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
                                         </TabsList>
                                         <TabsContent value="2d" forceMount className="flex-1 relative data-[state=inactive]:hidden">
                                             <MapTable
