@@ -63,11 +63,16 @@ const explainMapFlow = ai.defineFlow(
     outputSchema: ExplainMapOutputSchema,
   },
   async (input) => {
-    const { output } = await prompt(input);
-    if (!output) {
-      throw new Error("A IA não conseguiu gerar uma explicação para o mapa.");
+    try {
+        const { output } = await prompt(input);
+        if (!output) {
+            throw new Error("A IA não conseguiu gerar uma explicação para o mapa.");
+        }
+        return output;
+    } catch (error) {
+        // Re-throw to be caught by the action's error handler
+        throw new Error(error instanceof Error ? error.message : String(error));
     }
-    return output;
   }
 );
 
