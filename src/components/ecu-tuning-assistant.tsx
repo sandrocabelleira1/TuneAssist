@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -128,11 +126,6 @@ function MapTable({
     return Math.round(val);
   };
 
-  const transposedMap = useMemo(() => {
-    if (!mapData || mapData.length === 0 || mapData[0].length === 0) return [];
-    return mapData[0].map((_, colIndex) => mapData.map(row => row[colIndex]));
-  }, [mapData]);
-
   if (!mapData || mapData.length === 0) {
     return null;
   }
@@ -192,8 +185,7 @@ function MapTable({
               <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">
                  {yAxisFormatter(y)}
               </td>
-              {xAxis.map((_x, xi) => {
-                const cellValue = transposedMap[xi]?.[yi];
+              {mapData[yi]?.map((cellValue, xi) => {
                 const isSelected = selectedCells.has(`${yi}-${xi}`);
                 return (
                   <td 
@@ -457,7 +449,8 @@ export default function EcuTuningAssistant() {
         addLog('O estado da sessão foi reiniciado. As suas bibliotecas foram preservadas.', 'info');
     }, [addLog]);
 
-    const autoCorrectAllAxes = useCallback((definitions: XDFDefinition[]) => {
+    const autoCorrectAllAxes = useCallback((definitions: XDFDefinition[]): XDFDefinition[] => {
+      // Create a deep copy to avoid modifying the original array from the state directly
       const correctedDefinitions = JSON.parse(JSON.stringify(definitions)) as XDFDefinition[];
       
       for (const def of correctedDefinitions) {
@@ -763,14 +756,14 @@ export default function EcuTuningAssistant() {
     
         let newSortedMap: MapData;
     
-        if (axis === 'y') { // Sorting rows (Y-axis of the table, which corresponds to the 'y' axis in state)
+        if (axis === 'y') { // Sorting rows (Y-axis of the table)
             const reorderedMap = newIndexMap.map(originalRowIndex => {
                 const sourceIndex = displayIndexMap?.y.indexOf(originalRowIndex);
                 if (sourceIndex === undefined || sourceIndex === -1) return new Array(currentMap[0]?.length || 0).fill(null);
                 return currentMap[sourceIndex];
             });
             newSortedMap = reorderedMap;
-        } else { // Sorting columns (X-axis of the table, which corresponds to the 'x' axis in state)
+        } else { // Sorting columns (X-axis of the table)
             newSortedMap = currentMap.map(row => {
                 return newIndexMap.map(originalColIndex => {
                     const sourceIndex = displayIndexMap?.x.indexOf(originalColIndex);
@@ -818,8 +811,6 @@ export default function EcuTuningAssistant() {
             }
 
             const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData);
-
-            let currentMap = JSON.parse(JSON.stringify(calculatedMap));
             
             const currentAxes = {
               x: axisXData,
@@ -828,19 +819,7 @@ export default function EcuTuningAssistant() {
               yLabel: definition.yAxisDef?.label || 'RPM',
             };
 
-            if (!currentAxes.x || !currentAxes.y) {
-              addLog(`A definição do mapa "${name}" está em falta ou tem um eixo inválido. Não é possível carregar.`, 'error');
-              setDisplayMap(null);
-              setDisplayAxes(null);
-              return;
-            }
-
-            let currentIndexMap = {
-              x: axisXData.calculated.map((_, i) => i),
-              y: axisYData.calculated.map((_, i) => i),
-            };
-
-            setWorkingMap(currentMap);
+            setWorkingMap(calculatedMap);
             setRawMap(newRawMap);
             setSourceAxes(currentAxes);
 
@@ -851,16 +830,17 @@ export default function EcuTuningAssistant() {
             
             addLog(`Mapa carregado: ${name}.`, 'info');
             
-            let displayableAxes = {
+            setDisplayMap(calculatedMap);
+            setDisplayAxes({
                 x: currentAxes.x.calculated,
                 y: currentAxes.y.calculated,
                 xLabel: currentAxes.xLabel,
                 yLabel: currentAxes.yLabel,
-            };
-
-            setDisplayMap(currentMap);
-            setDisplayAxes(displayableAxes);
-            setDisplayIndexMap(currentIndexMap);
+            });
+            setDisplayIndexMap({
+              x: axisXData.calculated.map((_, i) => i),
+              y: axisYData.calculated.map((_, i) => i),
+            });
             
             setMapRenderKey(p => p + 1);
             
@@ -873,7 +853,7 @@ export default function EcuTuningAssistant() {
             setDisplayMap(null);
             setDisplayAxes(null);
         }
-    }, [binFile, availableMaps, addLog, toast, runZAxisValidation, handleSortAxis]);
+    }, [binFile, availableMaps, addLog, toast, runZAxisValidation]);
     
     const handleConfirmAxes = (data: { xEquation: string, yEquation: string, zEquation: string }) => {
         if (!selectedMapName || !binFile) return;
@@ -1000,7 +980,7 @@ export default function EcuTuningAssistant() {
     
         const newSortedMap = sortable.map(item => displayMap[item.originalIndex]);
         const newSortedY = sortable.map(item => displayAxes.y[item.originalIndex]);
-        const newYIndexMap = sortable.map(item => item.originalIndex);
+        const newYIndexMap = sortable.map(item => displayIndexMap!.y[item.originalIndex]);
     
         setDisplayMap(newSortedMap);
 
@@ -1018,7 +998,7 @@ export default function EcuTuningAssistant() {
         setSelectedCells(new Set());
         setMapRenderKey(p => p + 1);
         addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
-    }, [displayMap, displayAxes, addLog]);
+    }, [displayMap, displayAxes, displayIndexMap, addLog]);
     
     const handleResetSort = () => {
         if (workingMap && sourceAxes) {
@@ -1518,7 +1498,7 @@ export default function EcuTuningAssistant() {
 
     const transposedMapFor2DView = useMemo(() => {
         if (!displayMap || displayMap.length === 0 || displayMap[0].length === 0) return null;
-        return displayMap[0].map((_, colIndex) => displayMap.map(row => row[colIndex]));
+        return displayMap;
     }, [displayMap]);
 
     return (

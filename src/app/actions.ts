@@ -29,6 +29,7 @@ function handleAiError(error: unknown, context: string): { success: false; error
         return { success: false, error: 'A equação para um dos eixos é inválida. Apenas a variável "X" pode ser usada em equações de eixo. Por favor, corrija a definição XDF.' };
     }
     
+    // Catch generic network/server errors more robustly
     if (lowerErrorMessage.includes('unexpected response') || lowerErrorMessage.includes('failed to fetch')) {
       return { success: false, error: `Ocorreu um erro de rede ou servidor (${context}). Por favor, tente novamente.` };
     }
