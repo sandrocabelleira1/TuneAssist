@@ -23,9 +23,13 @@ import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight,
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
-import LinePlot2D from '@/components/line-plot';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
+    ssr: false,
+    loading: () => <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>,
+});
+
+const LinePlot2D = dynamic(() => import('@/components/line-plot'), {
     ssr: false,
     loading: () => <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>,
 });
@@ -1717,7 +1721,6 @@ export default function EcuTuningAssistant() {
                                 {displayMap && displayAxes ? (
                                     <Tabs defaultValue="2d" className="flex-1 flex flex-col" onValueChange={(value) => {
                                         if (value === 'plot-2d') {
-                                            // Force a re-render of the plot when its tab is selected
                                             setPlotRenderKey(Math.random());
                                         }
                                     }}>
@@ -1744,7 +1747,7 @@ export default function EcuTuningAssistant() {
                                                 onCellSelect={handleCellSelect}
                                             />
                                         </TabsContent>
-                                        <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden">
+                                        <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden" forceMount>
                                             <>
                                                 <div className="p-2 flex items-center gap-2">
                                                     <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>

@@ -1,18 +1,10 @@
 'use client';
 
-import React, { useMemo, useRef, useState, useEffect } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
+import React, { useMemo } from 'react';
+import Plot from 'react-plotly.js';
+import type { PlotlyProps } from 'react-plotly.js';
 import type { MapData } from '@/lib/types';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 interface LinePlot2DProps {
   mapData: MapData;
@@ -42,79 +34,77 @@ export default function LinePlot2D({
     ) {
       return null;
     }
-    
-    const zValuesForSlice = mapData[sliceIndex];
-    
-    return xAxis.map((xVal, index) => {
-      const zVal = zValuesForSlice[index];
-      return {
-        x: xVal,
-        z: (typeof zVal === 'number' && isFinite(zVal)) ? zVal : null,
-      };
-    });
 
+    const yData = mapData[sliceIndex].map(val => (typeof val === 'number' && isFinite(val) ? val : null));
+    const xData = xAxis;
+
+    return {
+      x: xData,
+      y: yData,
+    };
   }, [mapData, xAxis, yAxis, sliceIndex]);
 
+
+  if (!plotData) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
+        <div>
+          <AlertCircle className="mx-auto h-12 w-12" />
+          <p className="mt-4 font-semibold">Dados de Gráfico Indisponíveis</p>
+          <p className="text-sm">Selecione uma linha válida para visualizar no gráfico.</p>
+        </div>
+      </div>
+    );
+  }
+  
   const selectedYValue = yAxis[sliceIndex];
   const formattedYValue = typeof selectedYValue === 'number' ? selectedYValue.toFixed(0) : selectedYValue;
 
+  const data: PlotlyProps['data'] = [{
+    x: plotData.x,
+    y: plotData.y,
+    type: 'scatter',
+    mode: 'lines+markers',
+    name: `Valor (${yAxisLabel}: ${formattedYValue})`,
+    marker: { color: 'hsl(var(--primary))' },
+    line: { color: 'hsl(var(--primary))', width: 2 },
+    connectgaps: true,
+  }];
+
+  const layout: PlotlyProps['layout'] = {
+    autosize: true,
+    paper_bgcolor: 'transparent',
+    plot_bgcolor: 'transparent',
+    font: { color: 'hsl(var(--foreground))' },
+    xaxis: {
+      title: xAxisLabel,
+      color: 'hsl(var(--foreground))',
+      gridcolor: 'hsl(var(--border))',
+    },
+    yaxis: {
+      title: 'Valor (Z)',
+      color: 'hsl(var(--foreground))',
+      gridcolor: 'hsl(var(--border))',
+    },
+    legend: {
+      orientation: 'h',
+      yanchor: 'bottom',
+      y: 1.02,
+      xanchor: 'right',
+      x: 1,
+    },
+    margin: { l: 50, r: 20, b: 50, t: 20 },
+  };
+
   return (
     <div className="h-full w-full">
-      {!plotData ? (
-        <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
-          <div>
-            <AlertCircle className="mx-auto h-12 w-12" />
-            <p className="mt-4 font-semibold">Dados de Gráfico Indisponíveis</p>
-            <p className="text-sm">Selecione uma linha válida para visualizar no gráfico.</p>
-          </div>
-        </div>
-      ) : (
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={plotData}
-            margin={{
-              top: 5,
-              right: 30,
-              left: 20,
-              bottom: 20,
-            }}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis 
-                dataKey="x" 
-                name={xAxisLabel}
-                label={{ value: xAxisLabel, position: 'insideBottom', offset: -10 }}
-                stroke="hsl(var(--foreground))"
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                allowDuplicatedCategory={true}
-            />
-            <YAxis 
-                stroke="hsl(var(--foreground))"
-                tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                domain={['auto', 'auto']}
-                allowDataOverflow
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: 'hsl(var(--background))',
-                borderColor: 'hsl(var(--border))',
-              }}
-              labelFormatter={(label) => `${xAxisLabel}: ${label}`}
-            />
-            <Legend wrapperStyle={{paddingTop: '20px'}}/>
-            <Line
-              type="monotone"
-              dataKey="z"
-              name={`Valor (${yAxisLabel}: ${formattedYValue})`}
-              stroke="hsl(var(--primary))"
-              strokeWidth={2}
-              activeDot={{ r: 8 }}
-              dot={{ r: 4 }}
-              connectNulls={true}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      )}
+      <Plot
+        data={data}
+        layout={layout}
+        useResizeHandler
+        className="h-full w-full"
+        config={{ responsive: true, displaylogo: false }}
+      />
     </div>
   );
 }
