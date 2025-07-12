@@ -6,14 +6,12 @@ export function useOnScreen(ref: RefObject<Element>): boolean {
   const [isIntersecting, setIntersecting] = useState(false);
 
   useEffect(() => {
-    // Ensure this only runs in the browser
     if (typeof window === 'undefined' || !window.IntersectionObserver) {
       return;
     }
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        // Update our state when observer callback fires
         setIntersecting(entry.isIntersecting);
       },
       {
@@ -26,12 +24,13 @@ export function useOnScreen(ref: RefObject<Element>): boolean {
       observer.observe(currentRef);
     }
 
+    // Cleanup function to unobserve the element when the component unmounts
     return () => {
       if(currentRef) {
         observer.unobserve(currentRef);
       }
     };
-  }, [ref]); // Re-run effect only when ref changes
+  }, [ref]); 
 
   return isIntersecting;
 }
