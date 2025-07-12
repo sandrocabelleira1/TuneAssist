@@ -7,18 +7,14 @@ export function useOnScreen(ref: RefObject<Element>): boolean {
 
   useEffect(() => {
     // Ensure this only runs in the browser
-    if (typeof window === 'undefined' || !window.IntersectionObserver || !ref.current) {
+    if (typeof window === 'undefined' || !window.IntersectionObserver) {
       return;
     }
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         // Update our state when observer callback fires
-        if (entry.isIntersecting) {
-            setIntersecting(true);
-            // We only need to know once that it's visible, so we can disconnect.
-            observer.disconnect();
-        }
+        setIntersecting(entry.isIntersecting);
       },
       {
         rootMargin: '0px',
