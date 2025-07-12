@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import {
   LineChart,
   Line,
@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { MapData } from '@/lib/types';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 interface LinePlot2DProps {
   mapData: MapData;
@@ -31,43 +31,33 @@ export default function LinePlot2D({
   yAxisLabel,
   sliceIndex,
   xAxisLabel,
-  onDataChange,
 }: LinePlot2DProps) {
 
   const plotData = useMemo(() => {
-    // 1. Rigorous validation: Ensure all data exists and the selected slice is valid.
     if (
       !mapData || !xAxis || !yAxis ||
-      typeof sliceIndex !== 'number' ||
-      sliceIndex < 0 || sliceIndex >= mapData.length || sliceIndex >= yAxis.length
+      sliceIndex < 0 || sliceIndex >= mapData.length ||
+      !mapData[sliceIndex]
     ) {
-      console.error("LinePlot2D: Invalid data or sliceIndex.", { sliceIndex, mapData, xAxis, yAxis });
       return null;
     }
     
-    // 2. Safely get the specific row of Z-axis data for the selected Y-axis slice (e.g., for a specific RPM).
     const zValuesForSlice = mapData[sliceIndex];
 
-    // 3. Ensure the data row and the X-axis have the same number of points.
-    if (!zValuesForSlice || zValuesForSlice.length !== xAxis.length) {
-      console.error("LinePlot2D: Mismatch between xAxis length and z-values length for the selected slice.", { xAxisLen: xAxis.length, zValuesLen: zValuesForSlice?.length });
+    if (zValuesForSlice.length !== xAxis.length) {
+      console.error("LinePlot2D: Mismatch between xAxis length and z-values length for the selected slice.");
       return null;
     }
     
-    // 4. Combine the X-axis values with the corresponding Z-axis values.
-    // This is the core logic: creating pairs of {x, z} for the plot.
-    const combinedData = xAxis.map((xVal, index) => {
+    return xAxis.map((xVal, index) => {
       const zVal = zValuesForSlice[index];
       return {
-        x: xVal, // The value for the X-axis (e.g., TPS)
-        z: (typeof zVal === 'number' && isFinite(zVal)) ? zVal : null, // The value for the Z-axis (the map value), ensuring it's a number or null.
+        x: xVal,
+        z: (typeof zVal === 'number' && isFinite(zVal)) ? zVal : null,
       };
     });
 
-    return combinedData;
-
   }, [mapData, xAxis, yAxis, sliceIndex]);
-
 
   if (!plotData) {
     return (
