@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { MapData } from '@/lib/types';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 interface LinePlot2DProps {
   mapData: MapData;
@@ -33,7 +33,18 @@ export default function LinePlot2D({
   xAxisLabel,
   onDataChange,
 }: LinePlot2DProps) {
-    
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // Add a small delay to ensure the tab content is fully rendered and has dimensions
+    // before the chart tries to render. This fixes the chart not appearing.
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [sliceIndex]); // Re-run this effect if the slice changes
+
   const plotData = useMemo(() => {
     // 1. Rigorous validation: Ensure all data exists and the selected slice is valid.
     if (
@@ -84,6 +95,16 @@ export default function LinePlot2D({
   const selectedYValue = yAxis[sliceIndex];
   const formattedYValue = typeof selectedYValue === 'number' ? selectedYValue.toFixed(0) : selectedYValue;
 
+  if (!isReady) {
+    return (
+        <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
+            <div>
+                <Loader2 className="mx-auto h-12 w-12 animate-spin" />
+                <p className="mt-4 font-semibold">A carregar gráfico...</p>
+            </div>
+        </div>
+    );
+  }
 
   return (
     <ResponsiveContainer width="100%" height="100%">
