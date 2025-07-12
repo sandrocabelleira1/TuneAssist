@@ -1720,7 +1720,7 @@ export default function EcuTuningAssistant() {
                                             <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
                                             <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
                                         </TabsList>
-                                        <TabsContent value="2d" forceMount className="flex-1 relative data-[state=inactive]:hidden">
+                                        <TabsContent value="2d" className="flex-1 relative data-[state=inactive]:hidden">
                                             <MapTable
                                                 key={mapRenderKey}
                                                 mapData={displayMap || []} 
