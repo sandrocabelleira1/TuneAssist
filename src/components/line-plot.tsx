@@ -125,7 +125,7 @@ export default function LinePlot2D({
           strokeWidth={2}
           activeDot={{ r: 8 }}
           dot={{ r: 4 }}
-          connectNulls={false}
+          connectNulls={true}
         />
       </LineChart>
     </ResponsiveContainer>
