@@ -261,6 +261,7 @@ export default function EcuTuningAssistant() {
 
     // 2D Plot state
     const [plotSliceIndex, setPlotSliceIndex] = useState(0);
+    const [plotRenderKey, setPlotRenderKey] = useState(0); // Key to force re-render
 
     // AI state
     const [isScanning, setIsScanning] = useState(false);
@@ -1714,7 +1715,12 @@ export default function EcuTuningAssistant() {
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0">
                                 {displayMap && displayAxes ? (
-                                    <Tabs defaultValue="2d" className="flex-1 flex flex-col">
+                                    <Tabs defaultValue="2d" className="flex-1 flex flex-col" onValueChange={(value) => {
+                                        if (value === 'plot-2d') {
+                                            // Force a re-render of the plot when its tab is selected
+                                            setPlotRenderKey(Math.random());
+                                        }
+                                    }}>
                                         <TabsList className="mb-2">
                                             <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
                                             <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
@@ -1738,7 +1744,7 @@ export default function EcuTuningAssistant() {
                                                 onCellSelect={handleCellSelect}
                                             />
                                         </TabsContent>
-                                        <TabsContent value="plot-2d" forceMount className="flex-1 flex flex-col data-[state=inactive]:hidden">
+                                        <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden">
                                             <>
                                                 <div className="p-2 flex items-center gap-2">
                                                     <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
@@ -1756,7 +1762,7 @@ export default function EcuTuningAssistant() {
                                                 </div>
                                                 <div className="flex-1 relative">
                                                     <LinePlot2D
-                                                        key={`${mapRenderKey}-slice-${plotSliceIndex}`}
+                                                        key={`${plotRenderKey}-${plotSliceIndex}`}
                                                         mapData={displayMap}
                                                         xAxis={displayAxes.x}
                                                         yAxis={displayAxes.y}

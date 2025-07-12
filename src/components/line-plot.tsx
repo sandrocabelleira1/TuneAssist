@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -13,7 +13,6 @@ import {
 } from 'recharts';
 import type { MapData } from '@/lib/types';
 import { AlertCircle, Loader2 } from 'lucide-react';
-import { useOnScreen } from '@/hooks/use-on-screen';
 
 interface LinePlot2DProps {
   mapData: MapData;
@@ -33,24 +32,18 @@ export default function LinePlot2D({
   sliceIndex,
   xAxisLabel,
 }: LinePlot2DProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const isVisible = useOnScreen(ref);
 
   const plotData = useMemo(() => {
     if (
       !mapData || !xAxis || !yAxis ||
       sliceIndex < 0 || sliceIndex >= mapData.length ||
-      !mapData[sliceIndex]
+      !mapData[sliceIndex] ||
+      xAxis.length !== mapData[sliceIndex].length
     ) {
       return null;
     }
     
     const zValuesForSlice = mapData[sliceIndex];
-
-    if (zValuesForSlice.length !== xAxis.length) {
-      console.error("LinePlot2D: Mismatch between xAxis length and z-values length for the selected slice.");
-      return null;
-    }
     
     return xAxis.map((xVal, index) => {
       const zVal = zValuesForSlice[index];
@@ -66,12 +59,8 @@ export default function LinePlot2D({
   const formattedYValue = typeof selectedYValue === 'number' ? selectedYValue.toFixed(0) : selectedYValue;
 
   return (
-    <div ref={ref} className="h-full w-full">
-      {!isVisible ? (
-        <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin" />
-        </div>
-      ) : !plotData ? (
+    <div className="h-full w-full">
+      {!plotData ? (
         <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
           <div>
             <AlertCircle className="mx-auto h-12 w-12" />
