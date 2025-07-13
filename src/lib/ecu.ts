@@ -1,5 +1,6 @@
 
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -349,6 +350,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       const rowsCount = isTransposed ? cols : rows;
       const colsCount = isTransposed ? rows : cols;
+
+      // Correctly swap axis IDs if transposed
       const yAxisId = isTransposed ? 'x' : 'y';
       const xAxisId = isTransposed ? 'y' : 'x';
 
