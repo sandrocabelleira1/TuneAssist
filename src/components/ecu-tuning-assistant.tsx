@@ -164,7 +164,7 @@ function MapTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
-            <th className="sticky top-0 left-0 z-20 bg-muted p-1 border border-border text-muted-foreground text-left min-w-[120px]">
+            <th className="sticky top-0 left-0 z-30 bg-muted p-1 border border-border text-muted-foreground text-left min-w-[120px]">
                 <div className="flex items-center justify-between h-full">
                     <div className="flex flex-col justify-center space-y-0.5 px-2">
                         <div className="font-semibold text-foreground truncate" title={definition.name}>
@@ -218,7 +218,7 @@ function MapTable({
                 </div>
             </th>
             {xAxis.map((x, i) => (
-              <th key={`head-x-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
+              <th key={`head-x-${i}`} className="sticky top-0 z-20 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
                 {xAxisFormatter(x)}
               </th>
             ))}
@@ -227,7 +227,7 @@ function MapTable({
         <tbody>
           {yAxis.map((y, yi) => (
             <tr key={`row-${yi}`}>
-              <td className="sticky left-0 z-10 bg-muted p-1 border border-border font-semibold text-center">
+              <td className="sticky left-0 z-20 bg-muted p-1 border border-border font-semibold text-center">
                  {yAxisFormatter(y)}
               </td>
               {mapData[yi]?.map((cellValue, xi) => {
@@ -1626,8 +1626,8 @@ export default function EcuTuningAssistant() {
                     </h1>
                     <p className="text-lg text-muted-foreground mt-2 absolute top-full">Assistente de Afinação de ECU Potenciado por IA</p>
                 </header>
-
-                <div className="flex flex-row gap-0">
+                
+                <div className="flex flex-row">
                     <div style={{ width: `${sidebarWidth}px` }} className="shrink-0">
                         <Card className="h-auto md:h-[calc(100vh-3rem)] md:overflow-y-auto">
                             <CardHeader>
@@ -1795,7 +1795,7 @@ export default function EcuTuningAssistant() {
                         onMouseDown={handleMouseDown}
                         className="w-2 cursor-col-resize flex-shrink-0 bg-transparent hover:bg-primary/20 transition-colors"
                     ></div>
-                    
+
                     <div className="flex-1 min-w-0">
                         <Card>
                              <CardHeader>
