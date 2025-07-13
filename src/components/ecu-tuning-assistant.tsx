@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -163,7 +162,7 @@ function MapTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
-            <th className="sticky top-0 left-0 z-30 bg-muted p-1 border border-border text-muted-foreground text-left min-w-[120px]">
+            <th className="sticky top-0 left-0 z-30 bg-muted p-1 border border-border text-muted-foreground text-left">
                 <div className="flex items-center justify-between h-full">
                     <div className="flex flex-col justify-center space-y-0.5 px-2">
                         <div className="font-semibold text-foreground truncate" title={definition.name}>
@@ -1528,7 +1527,7 @@ export default function EcuTuningAssistant() {
                 xAxis: displayAxes.x,
                 yAxis: displayAxes.y,
                 xAxisLabel: displayAxes.xLabel,
-                yAxisLabel: displayAxes.yLabel
+                yLabel: displayAxes.yLabel
             });
 
             if (!explanationResult.success || !explanationResult.data?.explanation) {
@@ -1576,7 +1575,7 @@ export default function EcuTuningAssistant() {
 
     return (
         <TooltipProvider>
-            <div className="max-w-screen-2xl mx-auto">
+            <div className="">
                 <audio ref={audioRef} src={audioUrl ?? undefined} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} />
                 <header className="text-center mb-8 flex items-center justify-center relative">
                     <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
