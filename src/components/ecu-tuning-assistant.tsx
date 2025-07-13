@@ -82,9 +82,7 @@ function MapTable({
   mapData,
   xAxis,
   yAxis,
-  xAxisLabel,
-  yAxisLabel,
-  mapName,
+  definition,
   onSortAxis,
   onSortByFirstColumn,
   onResetSort,
@@ -97,9 +95,7 @@ function MapTable({
   mapData: MapData;
   xAxis: (string | number)[];
   yAxis: (string | number)[];
-  xAxisLabel: string;
-  yAxisLabel: string;
-  mapName: string;
+  definition: XDFDefinition | undefined;
   onSortAxis: (axis: 'x' | 'y') => void;
   onSortByFirstColumn: () => void;
   onResetSort: () => void;
@@ -131,9 +127,14 @@ function MapTable({
     return Math.round(val);
   };
 
-  if (!mapData || mapData.length === 0) {
+  if (!mapData || mapData.length === 0 || !definition) {
     return null;
   }
+  
+  const Address = ({ addr }: { addr: number | null | undefined }) => {
+    if (addr === null || addr === undefined) return null;
+    return <span className="ml-1 font-mono text-xs text-muted-foreground">(0x{addr.toString(16).toUpperCase()})</span>;
+  };
 
   return (
     <div className="overflow-auto relative h-full">
@@ -143,9 +144,9 @@ function MapTable({
             <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-muted-foreground text-left min-w-[120px]">
               <div className="flex justify-between items-start">
                   <div>
-                      <div className="font-semibold text-xs">Valores (Z): <span className="font-normal text-foreground">{mapName}</span></div>
-                      <div className="font-semibold text-xs">Vertical (Y): <span className="font-normal text-foreground">{yAxisLabel}</span></div>
-                      <div className="font-semibold text-xs">Horizontal (X): <span className="font-normal text-foreground">{xAxisLabel}</span></div>
+                      <div className="font-semibold text-xs">Valores (Z): <span className="font-normal text-foreground">{definition.name}</span><Address addr={definition.address} /></div>
+                      <div className="font-semibold text-xs">Vertical (Y): <span className="font-normal text-foreground">{definition.yAxisDef?.label}</span><Address addr={definition.yAxisDef?.address} /></div>
+                      <div className="font-semibold text-xs">Horizontal (X): <span className="font-normal text-foreground">{definition.xAxisDef?.label}</span><Address addr={definition.xAxisDef?.address} /></div>
                   </div>
                   {isEditable && (
                      <div className="flex items-center gap-1">
@@ -1751,9 +1752,7 @@ export default function EcuTuningAssistant() {
                                                 mapData={displayMap || []} 
                                                 xAxis={displayAxes.x} 
                                                 yAxis={displayAxes.y} 
-                                                xAxisLabel={displayAxes.xLabel} 
-                                                yAxisLabel={displayAxes.yLabel}
-                                                mapName={selectedMapName}
+                                                definition={selectedMapDefinition}
                                                 onSortAxis={triggerSortAxis}
                                                 onSortByFirstColumn={handleSortByFirstColumn}
                                                 onResetSort={handleResetSort}
@@ -1787,7 +1786,6 @@ export default function EcuTuningAssistant() {
                                                     yAxisLabel={displayAxes.yLabel}
                                                     xAxisLabel={displayAxes.xLabel}
                                                     sliceIndex={plotSliceIndex}
-                                                    onDataChange={() => {}}
                                                 />
                                             </div>
                                         </TabsContent>
@@ -1973,9 +1971,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 mapData={suggestion.originalMap}
                                 xAxis={suggestion.originalAxes.x}
                                 yAxis={suggestion.originalAxes.y}
-                                xAxisLabel={suggestion.originalAxes.xLabel}
-                                yAxisLabel={suggestion.originalAxes.yLabel}
-                                mapName={suggestion.originalDefinition.name}
+                                definition={suggestion.originalDefinition}
                                 isEditable={false}
                                 onSortAxis={() => {}}
                                 onSortByFirstColumn={() => {}}
@@ -1994,9 +1990,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   mapData={suggestion.correctedMap}
                                   xAxis={suggestion.correctedAxes.x}
                                   yAxis={suggestion.correctedAxes.y}
-                                  xAxisLabel={suggestion.correctedAxes.xLabel}
-                                  yAxisLabel={suggestion.correctedAxes.yLabel}
-                                  mapName={suggestion.newDefinition.name}
+                                  definition={suggestion.newDefinition}
                                   isEditable={false}
                                   onSortAxis={() => {}}
                                   onSortByFirstColumn={() => {}}
