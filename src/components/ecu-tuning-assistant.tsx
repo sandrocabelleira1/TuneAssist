@@ -163,54 +163,58 @@ function MapTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
-            <th className="sticky top-0 left-0 z-20 bg-muted p-1 border border-border text-muted-foreground text-left min-w-[120px]">
-              <div className="flex justify-between items-center w-full">
-                  <div className="text-xs space-y-0.5">
-                      <div className="font-semibold text-foreground truncate">{definition.name}<Address addr={definition.address} /></div>
-                      <div>
-                          <span className="font-semibold">Y:</span> {definition.yAxisDef?.label}<Address addr={definition.yAxisDef?.address} /> | <span className="font-semibold">X:</span> {definition.xAxisDef?.label}<Address addr={definition.xAxisDef?.address} />
-                      </div>
-                  </div>
-                 <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                    <div className="flex items-center space-x-2">
-                      <Label htmlFor="view-mode-switch" className="text-xs">Hex</Label>
-                      <Switch 
-                        id="view-mode-switch"
-                        className="h-4 w-8 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-4"
-                        checked={viewMode === 'raw'}
-                        onCheckedChange={onViewModeChange}
-                      />
+             <th className="sticky top-0 left-0 z-20 bg-muted p-1 border border-border text-muted-foreground text-left min-w-[120px]">
+                <div className="flex items-center justify-between h-full">
+                    <div className="flex flex-col justify-center space-y-0.5 px-2">
+                        <div className="font-semibold text-foreground truncate" title={definition.name}>
+                            Z: {definition.name}<Address addr={definition.address} />
+                        </div>
+                        <div className="text-muted-foreground truncate" title={`${definition.yAxisDef?.label} | ${definition.xAxisDef?.label}`}>
+                            <span className="font-semibold">Y:</span> {definition.yAxisDef?.label}<Address addr={definition.yAxisDef?.address} />
+                            <span className="mx-2">|</span>
+                            <span className="font-semibold">X:</span> {definition.xAxisDef?.label}<Address addr={definition.xAxisDef?.address} />
+                        </div>
                     </div>
-                    {isEditable && (
-                       <div className="flex items-center gap-1 border-l pl-2">
-                         <Tooltip>
-                             <TooltipTrigger asChild>
-                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
-                             </TooltipTrigger>
-                             <TooltipContent>Ordenar o eixo Y e alinhar os dados das linhas em conformidade.</TooltipContent>
-                         </Tooltip>
-                         <Tooltip>
-                             <TooltipTrigger asChild>
-                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('x')}><ArrowUpNarrowWide className="h-4 w-4 rotate-90" /></Button>
-                             </TooltipTrigger>
-                             <TooltipContent>Ordenar o eixo X e alinhar os dados das colunas em conformidade.</TooltipContent>
-                         </Tooltip>
-                          <Tooltip>
-                             <TooltipTrigger asChild>
-                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onSortByFirstColumn}><ArrowDownAZ className="h-4 w-4" /></Button>
-                             </TooltipTrigger>
-                             <TooltipContent><p>Ordenar linhas pelos valores da 1ª coluna (Z)</p></TooltipContent>
-                         </Tooltip>
-                         <Tooltip>
-                             <TooltipTrigger asChild>
-                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onResetSort}><Undo2 className="h-4 w-4" /></Button>
-                             </TooltipTrigger>
-                             <TooltipContent><p>Restaurar ordem original</p></TooltipContent>
-                         </Tooltip>
-                      </div>
-                    )}
-                 </div>
-              </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-4 border-l pl-2 pr-1">
+                        <div className="flex items-center space-x-1">
+                            <Label htmlFor="view-mode-switch" className="text-xs">Hex</Label>
+                            <Switch 
+                                id="view-mode-switch"
+                                className="h-4 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3.5"
+                                checked={viewMode === 'raw'}
+                                onCheckedChange={onViewModeChange}
+                            />
+                        </div>
+                        {isEditable && (
+                            <div className="flex items-center gap-0.5">
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Ordenar o eixo Y e alinhar os dados das linhas em conformidade.</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('x')}><ArrowUpNarrowWide className="h-4 w-4 rotate-90" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Ordenar o eixo X e alinhar os dados das colunas em conformidade.</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onSortByFirstColumn}><ArrowDownAZ className="h-4 w-4" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Ordenar linhas pelos valores da 1ª coluna (Z)</p></TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onResetSort}><Undo2 className="h-4 w-4" /></Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Restaurar ordem original</p></TooltipContent>
+                                </Tooltip>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </th>
             {xAxis.map((x, i) => (
               <th key={`head-x-${i}`} className="sticky top-0 z-10 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
@@ -1852,7 +1856,7 @@ export default function EcuTuningAssistant() {
                                                     xAxis={displayAxes.x}
                                                     yAxis={displayAxes.y}
                                                     yAxisLabel={displayAxes.yLabel}
-                                                    xAxisLabel={displayAxes.xLabel}
+                                                    xAxisLabel={displayAxes.xAxisLabel}
                                                     sliceIndex={plotSliceIndex}
                                                     onDataChange={() => {}}
                                                 />
