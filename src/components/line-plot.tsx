@@ -21,8 +21,8 @@ export default function LinePlot2D({
   xAxis,
   yAxis,
   yAxisLabel,
-  sliceIndex,
   xAxisLabel,
+  sliceIndex,
 }: LinePlot2DProps) {
 
   const plotData = useMemo(() => {
