@@ -1803,7 +1803,7 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent className="flex flex-1 flex-col">
+                            <CardContent>
                                 {displayMap && displayAxes ? (
                                     <Tabs defaultValue="2d" onValueChange={(value) => {
                                         if (value === 'plot-2d') {
