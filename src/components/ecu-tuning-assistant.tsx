@@ -320,11 +320,6 @@ export default function EcuTuningAssistant() {
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
 
-    // Resizable panel state
-    const [sidebarWidth, setSidebarWidth] = useState(400);
-    const [isResizing, setIsResizing] = useState(false);
-
-
     // Modal state
     const [isAxesModalOpen, setIsAxesModalOpen] = useState(false);
     const [isXdfErrorModalOpen, setIsXdfErrorModalOpen] = useState(false);
@@ -384,10 +379,6 @@ export default function EcuTuningAssistant() {
                 setPotentialMapsDb(JSON.parse(savedPotentialMaps));
                 addLog('Biblioteca de mapas potenciais carregada.', 'debug');
             }
-            const savedSidebarWidth = localStorage.getItem('sidebarWidth');
-            if (savedSidebarWidth) {
-                setSidebarWidth(JSON.parse(savedSidebarWidth));
-            }
         } catch (error) {
             console.error("Failed to load from localStorage", error);
             addLog('Não foi possível carregar dados do armazenamento local.', 'error');
@@ -399,12 +390,11 @@ export default function EcuTuningAssistant() {
         try {
             if (Object.keys(xdfLibrary).length > 0) localStorage.setItem('xdfLibrary', JSON.stringify(xdfLibrary));
             if (Object.keys(potentialMapsDb).length > 0) localStorage.setItem('potentialMapsLibrary', JSON.stringify(potentialMapsDb));
-            localStorage.setItem('sidebarWidth', JSON.stringify(sidebarWidth));
         } catch (error) {
             console.error("Failed to save to localStorage", error);
             addLog('Não foi possível guardar dados no armazenamento local.', 'error');
         }
-    }, [xdfLibrary, potentialMapsDb, sidebarWidth]);
+    }, [xdfLibrary, potentialMapsDb]);
 
     // Rebuild available maps when files or potential maps DB changes
     useEffect(() => {
@@ -1567,39 +1557,6 @@ export default function EcuTuningAssistant() {
         }
     };
 
-    // Resizing logic
-    const handleMouseDown = (e: React.MouseEvent) => {
-        e.preventDefault();
-        setIsResizing(true);
-    };
-
-    const handleMouseUp = useCallback(() => {
-        setIsResizing(false);
-    }, []);
-
-    const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (isResizing) {
-            const newWidth = e.clientX;
-            // Set min and max width for the sidebar
-            if (newWidth > 250 && newWidth < 800) {
-                setSidebarWidth(newWidth);
-            }
-        }
-    }, [isResizing]);
-
-    useEffect(() => {
-        if (isResizing) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-        } else {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        }
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [isResizing, handleMouseMove, handleMouseUp]);
 
     useEffect(() => {
         if (audioUrl && audioRef.current) {
@@ -1630,10 +1587,9 @@ export default function EcuTuningAssistant() {
                     <p className="text-lg text-muted-foreground mt-2 absolute top-full">Assistente de Afinação de ECU Potenciado por IA</p>
                 </header>
 
-                <div className="flex w-full">
-                    {/* Control Panel */}
-                    <aside style={{ width: `${sidebarWidth}px` }} className="flex-shrink-0">
-                        <Card className="sticky top-6 h-[calc(100vh-3rem)] overflow-y-auto">
+                <div className="flex flex-col md:flex-row gap-6">
+                    <div className="w-full md:w-[400px] shrink-0">
+                        <Card className="sticky top-6 h-auto md:h-[calc(100vh-3rem)] md:overflow-y-auto">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><Settings className="w-6 h-6"/>Painel de Controlo</CardTitle>
                             </CardHeader>
@@ -1793,20 +1749,9 @@ export default function EcuTuningAssistant() {
                                 </div>
                             </CardContent>
                         </Card>
-                    </aside>
-                    
-                    <div 
-                        onMouseDown={handleMouseDown}
-                        className={cn(
-                            "w-2 flex-shrink-0 cursor-col-resize group",
-                             isResizing && "bg-primary/20"
-                        )}
-                    >
-                         <div className={cn("w-0.5 h-full bg-border group-hover:bg-primary transition-colors", isResizing && "bg-primary")}></div>
                     </div>
-
-                    {/* Map View */}
-                    <main className="flex-1 min-w-0">
+                    
+                    <div className="flex-1">
                         <Card>
                              <CardHeader>
                                 <div className="flex items-center justify-between">
@@ -1962,7 +1907,7 @@ export default function EcuTuningAssistant() {
                                 </CardFooter>
                             )}
                         </Card>
-                    </main>
+                    </div>
                 </div>
                 
                 {/* Modals */}
