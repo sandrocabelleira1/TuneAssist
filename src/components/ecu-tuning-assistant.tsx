@@ -36,20 +36,34 @@ const LinePlot2D = dynamic(() => import('@/components/line-plot'), {
 });
 
 
-function EditableMapCell({ value: initialValue, onCellChange, isEditable, valueFormat }: { value: number | null, onCellChange: (value: string) => void, isEditable: boolean, valueFormat: 'integer' | 'decimal' }) {
+function EditableMapCell({ value: initialValue, valueFormat, isEditable, onCellChange, rawValue, viewMode, dataSize }: { 
+    value: number | null, 
+    onCellChange: (value: string) => void, 
+    isEditable: boolean, 
+    valueFormat: 'integer' | 'decimal', 
+    rawValue: number | null, 
+    viewMode: 'calculated' | 'raw',
+    dataSize: number
+}) {
   const formatValue = useCallback((val: number | null) => {
+    if (viewMode === 'raw') {
+        if (val === null || isNaN(val)) return '';
+        if (dataSize === 1) return val.toString(16).toUpperCase().padStart(2, '0');
+        return val.toString(16).toUpperCase().padStart(4, '0');
+    }
+
     if (val === null || isNaN(val)) return '';
     if (valueFormat === 'integer') {
       return Math.round(val).toString();
     }
     return String(Number(val.toFixed(3)));
-  }, [valueFormat]);
+  }, [valueFormat, viewMode, dataSize]);
     
-  const [value, setValue] = useState(formatValue(initialValue));
+  const [value, setValue] = useState(formatValue(viewMode === 'raw' ? rawValue : initialValue));
 
   useEffect(() => {
-    setValue(formatValue(initialValue));
-  }, [initialValue, formatValue]);
+    setValue(formatValue(viewMode === 'raw' ? rawValue : initialValue));
+  }, [initialValue, rawValue, viewMode, formatValue]);
   
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     if (isEditable) {
@@ -61,6 +75,8 @@ function EditableMapCell({ value: initialValue, onCellChange, isEditable, valueF
       setValue(e.target.value);
   }
 
+  const effectiveIsEditable = isEditable && viewMode === 'calculated';
+
   return (
     <Input
       type="text"
@@ -68,10 +84,10 @@ function EditableMapCell({ value: initialValue, onCellChange, isEditable, valueF
       value={value}
       onChange={handleChange}
       onBlur={handleBlur}
-      readOnly={!isEditable}
+      readOnly={!effectiveIsEditable}
       className={cn(
           "w-[60px] h-8 p-0 text-center bg-transparent border-none rounded-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-background/80",
-          !isEditable && "cursor-default focus-visible:ring-0"
+          !effectiveIsEditable && "cursor-default focus-visible:ring-0"
       )}
     />
   );
@@ -80,6 +96,7 @@ function EditableMapCell({ value: initialValue, onCellChange, isEditable, valueF
 
 function MapTable({
   mapData,
+  rawMapData,
   xAxis,
   yAxis,
   definition,
@@ -91,8 +108,11 @@ function MapTable({
   valueFormat = 'decimal',
   selectedCells,
   onCellSelect,
+  viewMode,
+  onViewModeChange,
 }: {
   mapData: MapData;
+  rawMapData: MapData;
   xAxis: (string | number)[];
   yAxis: (string | number)[];
   definition: XDFDefinition | undefined;
@@ -104,6 +124,8 @@ function MapTable({
   valueFormat?: 'integer' | 'decimal';
   selectedCells: Set<string>;
   onCellSelect: (rowIndex: number, colIndex: number, isCtrlOrCmd: boolean) => void;
+  viewMode: 'calculated' | 'raw';
+  onViewModeChange: (isRaw: boolean) => void;
 }) {
   const { min, max } = useMemo(() => {
     let minVal = Infinity;
@@ -148,34 +170,44 @@ function MapTable({
                       <div className="font-semibold text-xs">Vertical (Y): <span className="font-normal text-foreground">{definition.yAxisDef?.label}</span><Address addr={definition.yAxisDef?.address} /></div>
                       <div className="font-semibold text-xs">Horizontal (X): <span className="font-normal text-foreground">{definition.xAxisDef?.label}</span><Address addr={definition.xAxisDef?.address} /></div>
                   </div>
-                  {isEditable && (
-                     <div className="flex items-center gap-1">
-                       <Tooltip>
-                           <TooltipTrigger asChild>
-                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
-                           </TooltipTrigger>
-                           <TooltipContent>Ordenar o eixo Y e alinhar os dados das linhas em conformidade.</TooltipContent>
-                       </Tooltip>
-                       <Tooltip>
-                           <TooltipTrigger asChild>
-                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('x')}><ArrowUpNarrowWide className="h-4 w-4 rotate-90" /></Button>
-                           </TooltipTrigger>
-                           <TooltipContent>Ordenar o eixo X e alinhar os dados das colunas em conformidade.</TooltipContent>
-                       </Tooltip>
-                        <Tooltip>
-                           <TooltipTrigger asChild>
-                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onSortByFirstColumn}><ArrowDownAZ className="h-4 w-4" /></Button>
-                           </TooltipTrigger>
-                           <TooltipContent><p>Ordenar linhas pelos valores da 1ª coluna (Z)</p></TooltipContent>
-                       </Tooltip>
-                       <Tooltip>
-                           <TooltipTrigger asChild>
-                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onResetSort}><Undo2 className="h-4 w-4" /></Button>
-                           </TooltipTrigger>
-                           <TooltipContent><p>Restaurar ordem original</p></TooltipContent>
-                       </Tooltip>
+                 <div className="flex items-center gap-2">
+                    <div className="flex items-center space-x-2">
+                      <Label htmlFor="view-mode-switch" className="text-xs">Ver Hex</Label>
+                      <Switch 
+                        id="view-mode-switch"
+                        checked={viewMode === 'raw'}
+                        onCheckedChange={onViewModeChange}
+                      />
                     </div>
-                  )}
+                    {isEditable && (
+                       <div className="flex items-center gap-1 border-l pl-2">
+                         <Tooltip>
+                             <TooltipTrigger asChild>
+                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
+                             </TooltipTrigger>
+                             <TooltipContent>Ordenar o eixo Y e alinhar os dados das linhas em conformidade.</TooltipContent>
+                         </Tooltip>
+                         <Tooltip>
+                             <TooltipTrigger asChild>
+                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('x')}><ArrowUpNarrowWide className="h-4 w-4 rotate-90" /></Button>
+                             </TooltipTrigger>
+                             <TooltipContent>Ordenar o eixo X e alinhar os dados das colunas em conformidade.</TooltipContent>
+                         </Tooltip>
+                          <Tooltip>
+                             <TooltipTrigger asChild>
+                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onSortByFirstColumn}><ArrowDownAZ className="h-4 w-4" /></Button>
+                             </TooltipTrigger>
+                             <TooltipContent><p>Ordenar linhas pelos valores da 1ª coluna (Z)</p></TooltipContent>
+                         </Tooltip>
+                         <Tooltip>
+                             <TooltipTrigger asChild>
+                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onResetSort}><Undo2 className="h-4 w-4" /></Button>
+                             </TooltipTrigger>
+                             <TooltipContent><p>Restaurar ordem original</p></TooltipContent>
+                         </Tooltip>
+                      </div>
+                    )}
+                 </div>
               </div>
             </th>
             {xAxis.map((x, i) => (
@@ -205,9 +237,12 @@ function MapTable({
                   >
                     <EditableMapCell
                       value={cellValue}
+                      rawValue={rawMapData?.[yi]?.[xi] ?? null}
                       onCellChange={(value) => onCellChange(yi, xi, value)}
                       isEditable={isEditable}
                       valueFormat={valueFormat}
+                      viewMode={viewMode}
+                      dataSize={definition.dataSize}
                     />
                   </td>
                 );
@@ -248,10 +283,12 @@ export default function EcuTuningAssistant() {
     const [workingMap, setWorkingMap] = useState<MapData | null>(null);
     const [sourceAxes, setSourceAxes] = useState<{ x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string } | null>(null);
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
+    const [displayRawMap, setDisplayRawMap] = useState<MapData | null>(null);
     const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
     const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
     const [displayIndexMap, setDisplayIndexMap] = useState<{ x: number[], y: number[] } | null>(null);
     const [mapRenderKey, setMapRenderKey] = useState(0);
+    const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
 
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [potentialMapsDb, setPotentialMapsDb] = useState<Record<string, XDFDefinition[]>>({});
@@ -412,6 +449,7 @@ export default function EcuTuningAssistant() {
         if (selectedMapName && !uniqueCombinedMaps.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
             setDisplayMap(null);
+            setDisplayRawMap(null);
             setDisplayAxes(null);
         }
 
@@ -437,6 +475,7 @@ export default function EcuTuningAssistant() {
         setWorkingMap(null); 
         setSourceAxes(null);
         setDisplayMap(null); 
+        setDisplayRawMap(null);
         setDisplayAxes(null);
         setOriginalSortOrder(null);
         setDisplayIndexMap(null);
@@ -489,6 +528,7 @@ export default function EcuTuningAssistant() {
                     setXdfFile(null); 
                     setSelectedMapName('');
                     setDisplayMap(null);
+                    setDisplayRawMap(null);
                     setDisplayAxes(null);
                     setRawMap(null);
                     setAvailableMaps([]);
@@ -559,7 +599,7 @@ export default function EcuTuningAssistant() {
             let definitions = parseXDF(xdfData.content);
             if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
             
-            setSelectedMapName(''); setDisplayMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
+            setSelectedMapName(''); setDisplayMap(null); setDisplayRawMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
             setSelectedCells(new Set());
             setMapValidationStatus('idle');
             setPlotSliceIndex(0);
@@ -633,6 +673,7 @@ export default function EcuTuningAssistant() {
             setWorkingMap(correctedMap);
             setRawMap(correctedRawMap);
             setDisplayMap(correctedMap);
+            setDisplayRawMap(correctedRawMap);
             
             setSourceAxes(newSourceAxes);
             const displayableAxes = {
@@ -740,7 +781,7 @@ export default function EcuTuningAssistant() {
         }
     }, [binFile, addLog, activeXdfBrand, motorcycleModel]);
 
-    const handleSortAxis = useCallback((axis: 'x' | 'y', currentMap: MapData, currentAxes: { x: (string|number)[], y: (string|number)[] }, currentIndexMap: { x: number[], y: number[] }) => {
+    const handleSortAxis = useCallback((axis: 'x' | 'y', currentMap: MapData, currentRawMap: MapData, currentAxes: { x: (string|number)[], y: (string|number)[] }, currentIndexMap: { x: number[], y: number[] }) => {
         const axisToSort = currentAxes[axis];
         if (!axisToSort) return null;
 
@@ -762,6 +803,7 @@ export default function EcuTuningAssistant() {
         const newIndexMap = sortedAxisWithIndices.map(item => item.originalIndex);
     
         let newSortedMap: MapData;
+        let newSortedRawMap: MapData;
     
         if (axis === 'y') { // Sorting rows (Y-axis of the table)
             const reorderedMap = newIndexMap.map(originalRowIndex => {
@@ -769,9 +811,22 @@ export default function EcuTuningAssistant() {
                 if (sourceIndex === undefined || sourceIndex === -1) return new Array(currentMap[0]?.length || 0).fill(null);
                 return currentMap[sourceIndex];
             });
+            const reorderedRawMap = newIndexMap.map(originalRowIndex => {
+                const sourceIndex = displayIndexMap?.y.indexOf(originalRowIndex);
+                if (sourceIndex === undefined || sourceIndex === -1) return new Array(currentRawMap[0]?.length || 0).fill(null);
+                return currentRawMap[sourceIndex];
+            });
             newSortedMap = reorderedMap;
+            newSortedRawMap = reorderedRawMap;
         } else { // Sorting columns (X-axis of the table)
             newSortedMap = currentMap.map(row => {
+                return newIndexMap.map(originalColIndex => {
+                    const sourceIndex = displayIndexMap?.x.indexOf(originalColIndex);
+                    if (sourceIndex === undefined || sourceIndex === -1) return null;
+                    return row[sourceIndex];
+                });
+            });
+            newSortedRawMap = currentRawMap.map(row => {
                 return newIndexMap.map(originalColIndex => {
                     const sourceIndex = displayIndexMap?.x.indexOf(originalColIndex);
                     if (sourceIndex === undefined || sourceIndex === -1) return null;
@@ -782,6 +837,7 @@ export default function EcuTuningAssistant() {
     
         return {
             newMap: newSortedMap,
+            newRawMap: newSortedRawMap,
             newAxes: {
                 ...currentAxes,
                 [axis]: newSortedCalculated,
@@ -838,6 +894,7 @@ export default function EcuTuningAssistant() {
             addLog(`Mapa carregado: ${name}.`, 'info');
             
             setDisplayMap(calculatedMap);
+            setDisplayRawMap(newRawMap);
             setDisplayAxes({
                 x: currentAxes.x.calculated,
                 y: currentAxes.y.calculated,
@@ -858,6 +915,7 @@ export default function EcuTuningAssistant() {
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Leitura do Mapa", description: msg });
             setDisplayMap(null);
+            setDisplayRawMap(null);
             setDisplayAxes(null);
         }
     }, [binFile, availableMaps, addLog, toast, runZAxisValidation]);
@@ -915,6 +973,7 @@ export default function EcuTuningAssistant() {
             setWorkingMap(newMapData);
             setRawMap(newRawMap);
             setDisplayMap(newMapData);
+            setDisplayRawMap(newRawMap);
             
             setSourceAxes(newAxesState);
             const displayableAxes = {
@@ -951,14 +1010,15 @@ export default function EcuTuningAssistant() {
     };
 
     const triggerSortAxis = (axis: 'x' | 'y') => {
-        if (!displayMap || !displayAxes || !displayIndexMap) return;
+        if (!displayMap || !displayAxes || !displayIndexMap || !displayRawMap) return;
     
-        const sortResult = handleSortAxis(axis, displayMap, displayAxes, displayIndexMap);
+        const sortResult = handleSortAxis(axis, displayMap, displayRawMap, displayAxes, displayIndexMap);
         if (!sortResult) return;
 
-        const { newMap, newAxes, newIndexMap } = sortResult;
+        const { newMap, newRawMap, newAxes, newIndexMap } = sortResult;
         
         setDisplayMap(newMap);
+        setDisplayRawMap(newRawMap);
         setDisplayAxes(newAxes);
         setDisplayIndexMap(newIndexMap);
         setSelectedCells(new Set());
@@ -967,7 +1027,7 @@ export default function EcuTuningAssistant() {
     };
 
     const handleSortByFirstColumn = useCallback(() => {
-        if (!displayMap || !displayAxes) return;
+        if (!displayMap || !displayAxes || !displayRawMap) return;
     
         const sortable = displayMap.map((row, index) => ({
             value: row[0],
@@ -986,10 +1046,12 @@ export default function EcuTuningAssistant() {
         });
     
         const newSortedMap = sortable.map(item => displayMap[item.originalIndex]);
+        const newSortedRawMap = sortable.map(item => displayRawMap[item.originalIndex]);
         const newSortedY = sortable.map(item => displayAxes.y[item.originalIndex]);
         const newYIndexMap = sortable.map(item => displayIndexMap!.y[item.originalIndex]);
     
         setDisplayMap(newSortedMap);
+        setDisplayRawMap(newSortedRawMap);
 
         setDisplayAxes(prev => {
             if (!prev) return null;
@@ -1005,11 +1067,12 @@ export default function EcuTuningAssistant() {
         setSelectedCells(new Set());
         setMapRenderKey(p => p + 1);
         addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
-    }, [displayMap, displayAxes, displayIndexMap, addLog]);
+    }, [displayMap, displayAxes, displayRawMap, displayIndexMap, addLog]);
     
     const handleResetSort = () => {
-        if (workingMap && sourceAxes) {
+        if (workingMap && rawMap && sourceAxes) {
             setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
+            setDisplayRawMap(JSON.parse(JSON.stringify(rawMap)));
             
             const displayableAxes = {
                 x: sourceAxes.x.calculated,
@@ -1074,6 +1137,12 @@ export default function EcuTuningAssistant() {
               const newRawMap = JSON.parse(JSON.stringify(rawMap));
               newRawMap[workingRowIndex][workingColIndex] = newRawValue;
               setRawMap(newRawMap);
+
+              // Update display raw map if it exists
+              const newDisplayRawMap = JSON.parse(JSON.stringify(displayRawMap));
+              newDisplayRawMap[rowIndex][colIndex] = newRawValue;
+              setDisplayRawMap(newDisplayRawMap);
+
           } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
               addLog(`Não foi possível calcular o valor raw para a célula [${rowIndex}, ${colIndex}]: ${msg}`, 'error');
@@ -1102,7 +1171,7 @@ export default function EcuTuningAssistant() {
 
     const handleQuickEdit = (operation: 'add' | 'subtract') => {
         const value = parseFloat(quickEditValue);
-        if (isNaN(value) || !workingMap || !rawMap || !displayMap || !displayAxes || !sourceAxes || !displayIndexMap) {
+        if (isNaN(value) || !workingMap || !rawMap || !displayMap || !displayRawMap || !displayAxes || !sourceAxes || !displayIndexMap) {
             addLog("Valor de edição rápida inválido ou nenhum mapa carregado.", "error");
             return;
         }
@@ -1116,6 +1185,7 @@ export default function EcuTuningAssistant() {
         const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
         const newRawMap = JSON.parse(JSON.stringify(rawMap));
         const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
+        const newDisplayRawMap = JSON.parse(JSON.stringify(displayRawMap));
         let changesMade = 0;
         const hasSelection = selectedCells.size > 0;
 
@@ -1165,6 +1235,7 @@ export default function EcuTuningAssistant() {
                     newRawMap[workingRowIndex][workingColIndex] = newRawValue;
                     newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
                     newDisplayMap[r][c] = newCalculatedValue;
+                    newDisplayRawMap[r][c] = newRawValue;
                     changesMade++;
 
                 } catch (e) {
@@ -1178,6 +1249,7 @@ export default function EcuTuningAssistant() {
             setWorkingMap(newWorkingMap);
             setRawMap(newRawMap);
             setDisplayMap(newDisplayMap);
+            setDisplayRawMap(newDisplayRawMap);
 
             setAudioUrl(null);
             setMapValidationStatus('idle'); // Any manual change invalidates the last validation
@@ -1257,17 +1329,8 @@ export default function EcuTuningAssistant() {
                 const rows = pMap.rows;
                 const cols = pMap.cols;
                 
-                // Assumir defaults para os eixos - isto pode ser refinado mais tarde ou corrigido pelo utilizador/IA
-                const yAxisDataSize = 2; // RPM é geralmente 16-bit
-                const xAxisDataSize = 2; // Posição da Borboleta também é frequentemente 16-bit
-                const axesAreBigEndian = false;
-
-                // Inferir endereços de eixos assumindo que eles precedem os dados do mapa (padrão comum Y, X, Z)
-                const inferredXAxisAddr = zAddr - (cols * xAxisDataSize);
-                const inferredYAxisAddr = inferredXAxisAddr - (rows * yAxisDataSize);
-
-                const yAxisAddress = inferredYAxisAddr >= 0 ? inferredYAxisAddr : null;
-                const xAxisAddress = yAxisAddress !== null && inferredXAxisAddr >= 0 ? inferredXAxisAddr : null;
+                const yAxisAddress = null; // Cannot infer reliably
+                const xAxisAddress = null; // Cannot infer reliably
 
                 // Sugerir equações padrão para tornar os dados imediatamente úteis
                 const yAxisEquation = 'X * 100';      // Sugere RPMs (ex: 100 * 100 = 10000 RPM)
@@ -1284,9 +1347,9 @@ export default function EcuTuningAssistant() {
                     xAxisDef: { 
                         address: xAxisAddress, 
                         count: cols, 
-                        dataSize: xAxisDataSize, 
-                        isBigEndian: axesAreBigEndian, 
-                        equation: xAxisAddress !== null ? xAxisEquation : 'X',
+                        dataSize: 2, 
+                        isBigEndian: false, 
+                        equation: xAxisEquation,
                         equationVar: 'X',
                         label: 'Posição da Borboleta',
                         majorStride: 0, 
@@ -1295,9 +1358,9 @@ export default function EcuTuningAssistant() {
                     yAxisDef: { 
                         address: yAxisAddress, 
                         count: rows, 
-                        dataSize: yAxisDataSize, 
-                        isBigEndian: axesAreBigEndian, 
-                        equation: yAxisAddress !== null ? yAxisEquation : 'X',
+                        dataSize: 2, 
+                        isBigEndian: false, 
+                        equation: yAxisEquation,
                         equationVar: 'X',
                         label: 'RPM',
                         majorStride: 0, 
@@ -1750,6 +1813,7 @@ export default function EcuTuningAssistant() {
                                             <MapTable
                                                 key={mapRenderKey}
                                                 mapData={displayMap || []} 
+                                                rawMapData={displayRawMap || []}
                                                 xAxis={displayAxes.x} 
                                                 yAxis={displayAxes.y} 
                                                 definition={selectedMapDefinition}
@@ -1760,6 +1824,8 @@ export default function EcuTuningAssistant() {
                                                 valueFormat={valueFormat}
                                                 selectedCells={selectedCells}
                                                 onCellSelect={handleCellSelect}
+                                                viewMode={mapViewMode}
+                                                onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
                                             />
                                         </TabsContent>
                                         <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden">
@@ -1813,8 +1879,9 @@ export default function EcuTuningAssistant() {
                                             placeholder="Valor"
                                             value={quickEditValue}
                                             onChange={(e) => setQuickEditValue(e.target.value)}
+                                            disabled={mapViewMode === 'raw'}
                                         />
-                                        <Select value={quickEditType} onValueChange={(v: 'percent' | 'unit') => setQuickEditType(v)}>
+                                        <Select value={quickEditType} onValueChange={(v: 'percent' | 'unit') => setQuickEditType(v)} disabled={mapViewMode === 'raw'}>
                                             <SelectTrigger className="w-[100px] h-9">
                                                 <SelectValue />
                                             </SelectTrigger>
@@ -1823,8 +1890,8 @@ export default function EcuTuningAssistant() {
                                                 <SelectItem value="unit">Unid.</SelectItem>
                                             </SelectContent>
                                         </Select>
-                                        <Button size="sm" variant="outline" onClick={() => handleQuickEdit('subtract')}>- Subtrair</Button>
-                                        <Button size="sm" variant="outline" onClick={() => handleQuickEdit('add')}>+ Adicionar</Button>
+                                        <Button size="sm" variant="outline" onClick={() => handleQuickEdit('subtract')} disabled={mapViewMode === 'raw'}>- Subtrair</Button>
+                                        <Button size="sm" variant="outline" onClick={() => handleQuickEdit('add')} disabled={mapViewMode === 'raw'}>+ Adicionar</Button>
                                         <p className="text-xs text-muted-foreground ml-2">
                                             {selectedCells.size > 0 ? `${selectedCells.size} células selecionadas` : 'todas as células'}
                                         </p>
@@ -1970,6 +2037,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                               <MapTable
                                 key={mapRenderKey + '-orig-sugg'}
                                 mapData={suggestion.originalMap}
+                                rawMapData={suggestion.originalMap}
                                 xAxis={suggestion.originalAxes.x}
                                 yAxis={suggestion.originalAxes.y}
                                 definition={suggestion.originalDefinition}
@@ -1980,6 +2048,8 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 onCellChange={() => {}}
                                 selectedCells={new Set()}
                                 onCellSelect={() => {}}
+                                viewMode="calculated"
+                                onViewModeChange={() => {}}
                               />
                             </div>
                         </div>
@@ -1989,6 +2059,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                <MapTable
                                   key={mapRenderKey + '-prev-sugg'}
                                   mapData={suggestion.correctedMap}
+                                  rawMapData={suggestion.correctedMap}
                                   xAxis={suggestion.correctedAxes.x}
                                   yAxis={suggestion.correctedAxes.y}
                                   definition={suggestion.newDefinition}
@@ -1999,6 +2070,8 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   onCellChange={() => {}}
                                   selectedCells={new Set()}
                                   onCellSelect={() => {}}
+                                  viewMode="calculated"
+                                  onViewModeChange={() => {}}
                                />
                             </div>
                         </div>
