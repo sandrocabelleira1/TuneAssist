@@ -1,6 +1,7 @@
 
 
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -367,55 +368,32 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
       const equationVar = getAttr(varNode, 'id') || 'X';
 
-      // --- Robust Axis Handling & Inference ---
-      const defaultYDataSize = 2; // RPM is usually 16-bit
-      const defaultXDataSize = 2; // Posição da Borboleta also often 16-bit
-      const inferredXAddr = address - (colsCount * (xAxisDef?.dataSize || defaultXDataSize));
-      const inferredYAddr = inferredXAddr - (rowsCount * (yAxisDef?.dataSize || defaultYDataSize));
-
-      // If Y-axis is missing or incomplete, try to infer it.
-      if (!yAxisDef || (yAxisDef.address === null && !yAxisDef.staticLabels)) {
-          const wasMissing = !yAxisDef;
+      // --- Robust Axis Handling & Validation ---
+      
+      // If an axis is missing, we create a placeholder but do NOT infer an address.
+      if (!yAxisDef) {
           yAxisDef = {
-              ...(yAxisDef || {} as Partial<AxisDefinition>),
-              address: inferredYAddr >= 0 ? inferredYAddr : null,
-              count: rowsCount,
-              dataSize: yAxisDef?.dataSize || defaultYDataSize,
-              isBigEndian: yAxisDef?.isBigEndian ?? false,
-              equation: (yAxisDef?.equation && yAxisDef.equation !== 'X') ? yAxisDef.equation : 'X',
-              equationVar: yAxisDef?.equationVar || 'X',
-              label: yAxisDef?.label || 'RPM',
-          } as AxisDefinition; // Type assertion
-          if(yAxisDef.address !== null && wasMissing) {
-              console.warn(`Definição do eixo Y em falta para "${originalName}". A inferir um substituto com endereço 0x${yAxisDef.address?.toString(16)}.`);
-          }
-      } else if (yAxisDef.count === 0) { // If count was explicitly 0 or missing, set it.
-          yAxisDef.count = rowsCount;
-      } else if (yAxisDef.count !== rowsCount) {
+              address: null, count: rowsCount, dataSize: 2, isBigEndian: false,
+              equation: 'X', equationVar: 'X', label: 'RPM (Inferido)', majorStride: 0, minorStride: 0
+          };
+          console.warn(`Definição do eixo Y em falta para "${originalName}". Foi criado um substituto sem endereço.`);
+      } else if (yAxisDef.count !== rowsCount && yAxisDef.count > 0) {
           console.warn(`A contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rowsCount}). A ajustar para corresponder.`);
           yAxisDef.count = rowsCount;
+      } else if (yAxisDef.count === 0) {
+           yAxisDef.count = rowsCount;
       }
-      
-      // If X-axis is missing or incomplete, try to infer it.
-      if (!xAxisDef || (xAxisDef.address === null && !xAxisDef.staticLabels)) {
-          const wasMissing = !xAxisDef;
-           xAxisDef = {
-              ...(xAxisDef || {} as Partial<AxisDefinition>),
-              address: inferredXAddr >= 0 ? inferredXAddr : null,
-              count: colsCount,
-              dataSize: xAxisDef?.dataSize || defaultXDataSize,
-              isBigEndian: xAxisDef?.isBigEndian ?? false,
-              equation: (xAxisDef?.equation && xAxisDef.equation !== 'X') ? xAxisDef.equation : 'X',
-              equationVar: xAxisDef?.equationVar || 'X',
-              label: xAxisDef?.label || 'TPS',
-          } as AxisDefinition; // Type assertion
-          if (xAxisDef.address !== null && wasMissing) {
-              console.warn(`Definição do eixo X em falta para "${originalName}". A inferir um substituto com endereço 0x${xAxisDef.address?.toString(16)}.`);
-          }
-      } else if (xAxisDef.count === 0) { // If count was explicitly 0 or missing, set it.
-          xAxisDef.count = colsCount;
-      } else if (xAxisDef.count !== colsCount) {
+
+      if (!xAxisDef) {
+          xAxisDef = {
+              address: null, count: colsCount, dataSize: 2, isBigEndian: false,
+              equation: 'X', equationVar: 'X', label: 'TPS (Inferido)', majorStride: 0, minorStride: 0
+          };
+          console.warn(`Definição do eixo X em falta para "${originalName}". Foi criado um substituto sem endereço.`);
+      } else if (xAxisDef.count !== colsCount && xAxisDef.count > 0) {
           console.warn(`A contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${colsCount}). A ajustar para corresponder.`);
+          xAxisDef.count = colsCount;
+      } else if (xAxisDef.count === 0) {
           xAxisDef.count = colsCount;
       }
 
@@ -810,3 +788,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
