@@ -3,6 +3,7 @@
 
 
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -795,5 +796,6 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
 
