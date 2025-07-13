@@ -226,7 +226,7 @@ function MapTable({
         <tbody>
           {yAxis.map((y, yi) => (
             <tr key={`row-${yi}`}>
-              <td className="sticky left-0 z-20 bg-muted p-1 border border-border font-semibold text-center w-[80px]">
+              <td className="sticky left-0 z-20 bg-muted p-1 border border-border font-semibold text-center min-w-[60px] w-[60px]">
                  {yAxisFormatter(y)}
               </td>
               {mapData[yi]?.map((cellValue, xi) => {
@@ -2157,4 +2157,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
