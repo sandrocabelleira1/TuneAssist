@@ -2,6 +2,7 @@
 
 
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -324,14 +325,20 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           continue;
       }
       
+      // Get the Z address with correct priority.
+      // 1. From the table's 'address' attribute (most common and authoritative).
+      // 2. Fallback to the z-axis's 'mmedaddress' attribute.
+      const tableAddressStr = getAttr(table, 'address');
       const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-      if (!zAddressStr) {
-          console.warn(`A tabela "${originalName}" foi ignorada: o eixo Z não tem endereço (mmedaddress).`);
+      const finalAddressStr = tableAddressStr || zAddressStr;
+
+      if (!finalAddressStr) {
+          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar o endereço do mapa principal (nem em 'table[address]' nem em 'zaxis[mmedaddress]').`);
           continue;
       }
 
       // Basic Z-axis properties.
-      const address = parseInt(zAddressStr, 16);
+      const address = parseInt(finalAddressStr, 16);
       const rows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
       const cols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
@@ -788,4 +795,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
