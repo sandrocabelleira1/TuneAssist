@@ -1786,6 +1786,7 @@ export default function EcuTuningAssistant() {
                                                     yAxisLabel={displayAxes.yLabel}
                                                     xAxisLabel={displayAxes.xLabel}
                                                     sliceIndex={plotSliceIndex}
+                                                    onDataChange={() => {}}
                                                 />
                                             </div>
                                         </TabsContent>
