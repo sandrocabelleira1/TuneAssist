@@ -163,7 +163,7 @@ function MapTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
-             <th className="sticky top-0 left-0 z-20 bg-muted p-1 border border-border text-muted-foreground text-left min-w-[120px]">
+            <th className="sticky top-0 left-0 z-20 bg-muted p-1 border border-border text-muted-foreground text-left min-w-[120px]">
                 <div className="flex items-center justify-between h-full">
                     <div className="flex flex-col justify-center space-y-0.5 px-2">
                         <div className="font-semibold text-foreground truncate" title={definition.name}>
@@ -1803,7 +1803,7 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="flex flex-1 flex-col">
                                 {displayMap && displayAxes ? (
                                     <Tabs defaultValue="2d" onValueChange={(value) => {
                                         if (value === 'plot-2d') {
@@ -2161,5 +2161,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-    
