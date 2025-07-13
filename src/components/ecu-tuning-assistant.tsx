@@ -1785,7 +1785,7 @@ export default function EcuTuningAssistant() {
                                                     xAxis={displayAxes.x}
                                                     yAxis={displayAxes.y}
                                                     yAxisLabel={displayAxes.yLabel}
-                                                    xAxisLabel={xAxisLabel}
+                                                    xAxisLabel={displayAxes.xLabel}
                                                     sliceIndex={plotSliceIndex}
                                                     onDataChange={() => {}}
                                                 />
