@@ -81,7 +81,6 @@ function EditableMapCell({ value: initialValue, valueFormat, isEditable, onCellC
   return (
     <Input
       type="text"
-      inputMode={valueFormat === 'integer' ? 'numeric' : 'decimal'}
       value={value}
       onChange={handleChange}
       onBlur={handleBlur}
@@ -328,10 +327,6 @@ export default function EcuTuningAssistant() {
     const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
     const [mapToEdit, setMapToEdit] = useState<XDFDefinition | null>(null);
 
-    // Resizable sidebar state
-    const [sidebarWidth, setSidebarWidth] = useState(400);
-    const isResizing = useRef(false);
-
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -368,43 +363,6 @@ export default function EcuTuningAssistant() {
     const visibleLogs = useMemo(() => {
         return debugMode ? logs : logs.filter(log => log.type !== 'debug');
     }, [logs, debugMode]);
-
-
-    // Load sidebar width from localStorage
-    useEffect(() => {
-        const savedWidth = localStorage.getItem('sidebarWidth');
-        if (savedWidth) {
-            setSidebarWidth(parseInt(savedWidth, 10));
-        }
-    }, []);
-
-    // Resizing logic
-    const handleMouseDown = (e: React.MouseEvent) => {
-        e.preventDefault();
-        isResizing.current = true;
-        document.body.style.cursor = 'col-resize';
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    };
-
-    const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (isResizing.current) {
-            const newWidth = e.clientX;
-            // Set bounds for resizing
-            if (newWidth >= 300 && newWidth <= 800) {
-                setSidebarWidth(newWidth);
-            }
-        }
-    }, []);
-
-    const handleMouseUp = useCallback(() => {
-        isResizing.current = false;
-        document.body.style.cursor = 'default';
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        localStorage.setItem('sidebarWidth', String(sidebarWidth));
-    }, [sidebarWidth, handleMouseMove]);
-
 
     // Load custom data from localStorage on component mount
     useEffect(() => {
@@ -1627,8 +1585,8 @@ export default function EcuTuningAssistant() {
                     <p className="text-lg text-muted-foreground mt-2 absolute top-full">Assistente de Afinação de ECU Potenciado por IA</p>
                 </header>
                 
-                <div className="flex flex-row">
-                    <div style={{ width: `${sidebarWidth}px` }} className="shrink-0">
+                <div className="flex flex-col md:flex-row gap-4">
+                    <div className="md:w-[400px] shrink-0">
                         <Card className="h-auto md:h-[calc(100vh-3rem)] md:overflow-y-auto">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><Settings className="w-6 h-6"/>Painel de Controlo</CardTitle>
@@ -1791,12 +1749,7 @@ export default function EcuTuningAssistant() {
                         </Card>
                     </div>
 
-                    <div
-                        onMouseDown={handleMouseDown}
-                        className="w-2 cursor-col-resize flex-shrink-0 bg-transparent hover:bg-primary/20 transition-colors"
-                    ></div>
-
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1">
                         <Card>
                              <CardHeader>
                                 <div className="flex items-center justify-between">
