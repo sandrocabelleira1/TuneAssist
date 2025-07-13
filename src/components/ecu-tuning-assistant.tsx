@@ -163,18 +163,20 @@ function MapTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
-            <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-muted-foreground text-left min-w-[120px]">
-              <div className="flex justify-between items-start">
-                  <div>
-                      <div className="font-semibold text-xs">Valores (Z): <span className="font-normal text-foreground">{definition.name}</span><Address addr={definition.address} /></div>
-                      <div className="font-semibold text-xs">Vertical (Y): <span className="font-normal text-foreground">{definition.yAxisDef?.label}</span><Address addr={definition.yAxisDef?.address} /></div>
-                      <div className="font-semibold text-xs">Horizontal (X): <span className="font-normal text-foreground">{definition.xAxisDef?.label}</span><Address addr={definition.xAxisDef?.address} /></div>
+            <th className="sticky top-0 left-0 z-20 bg-muted p-1 border border-border text-muted-foreground text-left min-w-[120px]">
+              <div className="flex justify-between items-center w-full">
+                  <div className="text-xs space-y-0.5">
+                      <div className="font-semibold text-foreground truncate">{definition.name}<Address addr={definition.address} /></div>
+                      <div>
+                          <span className="font-semibold">Y:</span> {definition.yAxisDef?.label}<Address addr={definition.yAxisDef?.address} /> | <span className="font-semibold">X:</span> {definition.xAxisDef?.label}<Address addr={definition.xAxisDef?.address} />
+                      </div>
                   </div>
-                 <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2 flex-shrink-0 ml-4">
                     <div className="flex items-center space-x-2">
-                      <Label htmlFor="view-mode-switch" className="text-xs">Ver Hex</Label>
+                      <Label htmlFor="view-mode-switch" className="text-xs">Hex</Label>
                       <Switch 
                         id="view-mode-switch"
+                        className="h-4 w-8 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-4"
                         checked={viewMode === 'raw'}
                         onCheckedChange={onViewModeChange}
                       />
