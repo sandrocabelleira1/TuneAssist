@@ -159,7 +159,7 @@ function MapTable({
   };
 
   return (
-    <div className="overflow-auto relative h-full">
+    <div className="overflow-auto relative h-[65vh]">
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
@@ -1754,7 +1754,7 @@ export default function EcuTuningAssistant() {
 
                     {/* Map View */}
                     <main className="xl:col-span-9">
-                        <Card className="min-h-[85vh] flex flex-col">
+                        <Card>
                             <CardHeader>
                                 <div className="flex items-center justify-between">
                                     <div className="flex-1">
@@ -1803,9 +1803,9 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent className="flex-1 flex flex-col min-h-0">
+                            <CardContent>
                                 {displayMap && displayAxes ? (
-                                    <Tabs defaultValue="2d" className="flex-1 flex flex-col" onValueChange={(value) => {
+                                    <Tabs defaultValue="2d" onValueChange={(value) => {
                                         if (value === 'plot-2d') {
                                             setPlotRenderKey(Math.random());
                                         }
@@ -1815,7 +1815,7 @@ export default function EcuTuningAssistant() {
                                             <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
                                             <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
                                         </TabsList>
-                                        <TabsContent value="2d" className="flex-1 relative data-[state=inactive]:hidden">
+                                        <TabsContent value="2d">
                                             <MapTable
                                                 key={mapRenderKey}
                                                 mapData={displayMap || []} 
@@ -1834,7 +1834,7 @@ export default function EcuTuningAssistant() {
                                                 onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
                                             />
                                         </TabsContent>
-                                        <TabsContent value="plot-2d" className="flex-1 flex flex-col data-[state=inactive]:hidden">
+                                        <TabsContent value="plot-2d" className="h-[65vh]">
                                             <div className="p-2 flex items-center gap-2">
                                                 <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
                                                 <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
@@ -1862,12 +1862,12 @@ export default function EcuTuningAssistant() {
                                                 />
                                             </div>
                                         </TabsContent>
-                                        <TabsContent value="3d" className="flex-1 data-[state=inactive]:hidden">
+                                        <TabsContent value="3d" className="h-[65vh]">
                                             <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
                                         </TabsContent>
                                     </Tabs>
                                 ) : (
-                                    <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
+                                    <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-12">
                                         <FileUp className="w-16 h-16 mb-4"/>
                                         <p className="font-semibold">Nenhum mapa carregado</p>
                                         <p className="text-sm">Por favor carregue um ficheiro .BIN e procure por mapas ou carregue um .XDF.</p>
