@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -88,6 +89,7 @@ function EditableMapCell({ value: initialValue, valueFormat, isEditable, onCellC
           "w-[60px] h-8 p-0 text-center bg-transparent border-none rounded-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-background/80",
           !effectiveIsEditable && "cursor-default focus-visible:ring-0"
       )}
+      inputMode={!effectiveIsEditable ? 'none' : 'decimal'}
     />
   );
 }
@@ -225,7 +227,7 @@ function MapTable({
         <tbody>
           {yAxis.map((y, yi) => (
             <tr key={`row-${yi}`}>
-              <td className="sticky left-0 z-20 bg-muted p-1 border border-border font-semibold text-center min-w-[60px] w-[60px]">
+              <td className="sticky left-0 z-20 p-1 border border-border font-semibold text-center min-w-[60px] w-[60px]">
                  {yAxisFormatter(y)}
               </td>
               {mapData[yi]?.map((cellValue, xi) => {
@@ -1575,7 +1577,7 @@ export default function EcuTuningAssistant() {
 
     return (
         <TooltipProvider>
-            <div className="">
+            <div className="p-4 md:p-8">
                 <audio ref={audioRef} src={audioUrl ?? undefined} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} />
                 <header className="text-center mb-8 flex items-center justify-center relative">
                     <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
