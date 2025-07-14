@@ -26,6 +26,7 @@ export default function LinePlot2D({
   xAxisLabel,
   sliceIndex,
   className,
+  onDataChange, // Extract onDataChange so it's not in ...props
   ...props
 }: LinePlot2DProps) {
 
