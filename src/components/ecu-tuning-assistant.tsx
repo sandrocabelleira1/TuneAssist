@@ -2017,7 +2017,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 onCellChange={() => {}}
                                 selectedCells={new Set()}
                                 onCellSelect={() => {}}
-                                viewMode="calculated"
+                                viewMode={'calculated'}
                                 onViewModeChange={() => {}}
                               />
                             </div>
@@ -2039,7 +2039,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   onCellChange={() => {}}
                                   selectedCells={new Set()}
                                   onCellSelect={() => {}}
-                                  viewMode="calculated"
+                                  viewMode={'calculated'}
                                   onViewModeChange={() => {}}
                                />
                             </div>
