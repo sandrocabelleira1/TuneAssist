@@ -248,7 +248,7 @@ function MapTable({
                       onCellChange={(value) => onCellChange(yi, xi, value)}
                       isEditable={isEditable}
                       valueFormat={valueFormat}
-                      viewMode={viewMode}
+                      viewMode={mapViewMode}
                       dataSize={definition.dataSize}
                     />
                   </td>
@@ -1511,14 +1511,21 @@ export default function EcuTuningAssistant() {
     }, [logs]);
 
     const handleToggleEndianness = () => {
-        const newEndianSwappedState = !isEndianSwapped;
-        setIsEndianSwapped(newEndianSwappedState);
-        addLog(`Ordem de Bytes (Endian) invertida: ${newEndianSwappedState ? 'Ativado' : 'Desativado'}. A Recarregar o mapa.`, 'info');
-
-        // Reload the current map with the new endian setting, if a map is selected
-        if (selectedMapName) {
-            handleMapSelect(selectedMapName);
-        }
+        // This function ONLY toggles the display setting.
+        // It then re-triggers the map selection, which will re-read from the
+        // ORIGINAL binFile buffer, but apply the new display transformation.
+        setIsEndianSwapped(prevState => {
+            const newState = !prevState;
+            addLog(`Ordem de Bytes (Endian) alterada para: ${newState ? 'Invertida (Little-Endian Forçado)' : 'Padrão (do XDF)'}. A recarregar o mapa.`, 'info');
+            // Trigger map reload AFTER state has been updated.
+            // Using the functional form of setState ensures we use the NEW state.
+            if (selectedMapName) {
+                // This has to be deferred slightly to ensure the state update is processed
+                // before the map is reloaded with the new setting.
+                setTimeout(() => handleMapSelect(selectedMapName), 0);
+            }
+            return newState;
+        });
     };
 
 
@@ -2118,5 +2125,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-    
