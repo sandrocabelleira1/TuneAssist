@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -21,7 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save, Pencil, AudioLines, Pause, LineChart, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save, Pencil, AudioLines, Pause, LineChart, RefreshCw, Repeat } from 'lucide-react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
@@ -296,6 +294,7 @@ export default function EcuTuningAssistant() {
     const [displayIndexMap, setDisplayIndexMap] = useState<{ x: number[], y: number[] } | null>(null);
     const [mapRenderKey, setMapRenderKey] = useState(0);
     const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
+    const [isEndianSwapped, setIsEndianSwapped] = useState(false);
 
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [potentialMapsDb, setPotentialMapsDb] = useState<Record<string, XDFDefinition[]>>({});
@@ -493,6 +492,7 @@ export default function EcuTuningAssistant() {
         setQuickEditValue('');
         setLogs([]);
         setPlotSliceIndex(0);
+        setIsEndianSwapped(false);
 
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
@@ -519,6 +519,7 @@ export default function EcuTuningAssistant() {
                     setSelectedCells(new Set());
                     setMapValidationStatus('idle');
                     setPlotSliceIndex(0);
+                    setIsEndianSwapped(false);
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
@@ -581,6 +582,7 @@ export default function EcuTuningAssistant() {
             setSelectedCells(new Set());
             setMapValidationStatus('idle');
             setPlotSliceIndex(0);
+            setIsEndianSwapped(false);
 
             const brandValue = xdfData.brand || '';
             
@@ -617,10 +619,10 @@ export default function EcuTuningAssistant() {
         newDefinition.equation = zEquation;
         
         try {
-            const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-            const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+            const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef, isEndianSwapped);
+            const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef, isEndianSwapped);
 
-            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis);
+            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis, isEndianSwapped);
             
             const newSourceAxes = {
                 x: currentXAxis,
@@ -679,7 +681,7 @@ export default function EcuTuningAssistant() {
             toast({ variant: 'destructive', title: 'Erro ao Aplicar Correção', description: 'Não foi possível recalcular o mapa com a nova equação.' });
             setMapValidationStatus('error');
         }
-    }, [binFile, xdfFile, addLog, toast]);
+    }, [binFile, xdfFile, addLog, toast, isEndianSwapped]);
 
     const runZAxisValidation = useCallback(async (
         definition: XDFDefinition, 
@@ -726,9 +728,9 @@ export default function EcuTuningAssistant() {
                     const newDefinition = JSON.parse(JSON.stringify(definition));
                     newDefinition.equation = validSuggestedEquation;
 
-                    const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-                    const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-                    const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis);
+                    const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef, isEndianSwapped);
+                    const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef, isEndianSwapped);
+                    const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis, isEndianSwapped);
 
                     setAiSuggestion({
                         reasoning,
@@ -752,7 +754,7 @@ export default function EcuTuningAssistant() {
             addLog(`A análise do eixo Z falhou: ${result.error}`, 'error');
             setMapValidationStatus('error');
         }
-    }, [binFile, addLog, activeXdfBrand, motorcycleModel]);
+    }, [binFile, addLog, activeXdfBrand, motorcycleModel, isEndianSwapped]);
 
     const handleSortAxis = useCallback((axis: 'x' | 'y', currentMap: MapData, currentRawMap: MapData, currentAxes: { x: (string|number)[], y: (string|number)[] }, currentIndexMap: { x: number[], y: number[] }) => {
         const axisToSort = currentAxes[axis];
@@ -838,16 +840,17 @@ export default function EcuTuningAssistant() {
         setAudioUrl(null);
         setSelectedCells(new Set());
         setPlotSliceIndex(0);
+        setIsEndianSwapped(false);
 
         try {
-            const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef);
-            const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef);
+            const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef, false);
+            const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef, false);
 
             if (!axisXData || !axisYData) {
                 throw new Error("Não foi possível ler os dados do eixo do ficheiro BIN.");
             }
 
-            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData);
+            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData, false);
             
             const currentAxes = {
               x: axisXData,
@@ -910,14 +913,14 @@ export default function EcuTuningAssistant() {
             newDefinition.xAxisDef!.equation = data.xEquation;
             newDefinition.yAxisDef!.equation = data.yEquation;
 
-            const newX = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-            const newY = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+            const newX = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef, isEndianSwapped);
+            const newY = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef, isEndianSwapped);
 
             if (!newX || !newY) {
                 throw new Error("Não foi possível ler os eixos com as novas equações.");
             }
             
-            const { calculatedMap: newMapData, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, newX, newY);
+            const { calculatedMap: newMapData, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, newX, newY, isEndianSwapped);
 
             const newAxesState = {
               x: newX,
@@ -1355,7 +1358,7 @@ export default function EcuTuningAssistant() {
                 sourceAxes
             );
 
-            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, finalRawMap);
+            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, finalRawMap, isEndianSwapped);
             const newChecksum = generateChecksum(modifiedBuffer);
             
             addLog(`Modificação concluída. Novo checksum: ${newChecksum}`, 'success');
@@ -1505,6 +1508,17 @@ export default function EcuTuningAssistant() {
         }
     }, [logs]);
 
+    const handleToggleEndianness = () => {
+        const newEndianSwappedState = !isEndianSwapped;
+        setIsEndianSwapped(newEndianSwappedState);
+        addLog(`Ordem de Bytes (Endian) invertida: ${newEndianSwappedState ? 'Ativado' : 'Desativado'}. A Recarregar o mapa.`, 'info');
+        
+        // Reload the current map with the new endian setting
+        if (selectedMapName) {
+            handleMapSelect(selectedMapName);
+        }
+    };
+
     const selectedMapDefinition = useMemo(() => {
         return availableMaps.find(m => m.name === selectedMapName);
     }, [availableMaps, selectedMapName]);
@@ -1626,6 +1640,13 @@ export default function EcuTuningAssistant() {
                                                 <p>Editar Nome do Mapa</p></TooltipContent>
                                         </Tooltip>
                                     </div>
+                                    <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={!selectedMapName}>
+                                        <Repeat className="mr-2 h-4 w-4" />
+                                        Inverter Ordem de Bytes (Endian)
+                                    </Button>
+                                    {isEndianSwapped && (
+                                        <p className="text-xs text-center text-yellow-400">Inversão de bytes ATIVA.</p>
+                                    )}
                                 </div>
 
                                 <div className="space-y-2">
