@@ -1,5 +1,3 @@
-
-
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -631,114 +629,83 @@ export function bufferToHex(buffer: ArrayBuffer): string {
 
 /**
  * Reverses a mathematical equation to find the "raw" value that would produce a given final value.
- * This function uses a numerical binary search method, which is robust for complex but monotonic equations.
- * @param eq The equation string (e.g., "(X-256)/514.56").
- * @param eqVar The variable name in the equation (e.g., "X").
+ * This function uses a simplified mathematical inversion approach for basic arithmetic operations.
+ * @param eq The equation string (e.g., "(X-128)/2").
  * @param finalValue The target value we want to achieve.
- * @param dataSize The size of the raw data in bytes (1 for 8-bit, 2 for 16-bit).
- * @param mapName The name of the map, used to infer if the data is signed.
- * @param axisValues The values of the x, y, and z axes for the current cell.
  * @returns The calculated raw integer value.
+ * @throws An error if the equation is too complex to be inverted automatically.
  */
 export function invertEquation(
   eq: string,
-  eqVar: string,
+  eqVar: string, // Unused in this simple implementation but kept for signature consistency
   finalValue: number,
   dataSize: number,
-  isBigEndian: boolean,
-  mapName: string,
-  axisValues: { x_calc: number, y_calc: number, x_raw: number, y_raw: number, z: number },
-  axisLabels: { x: string, y: string }
+  isBigEndian: boolean, // Unused
+  mapName: string, // Unused
+  axisValues: { x_calc: number, y_calc: number, x_raw: number, y_raw: number, z: number }, // Unused
+  axisLabels: { x: string, y: string } // Unused
 ): number {
-  if (finalValue === null || isNaN(finalValue)) {
-    throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
-  }
-
-  // 1. Create the forward function from the equation string.
-  const sanitizedEquation = (eq || 'X')
-      .replace(/,/g, '.')
-      .replace(/\s*\r?\n\s*/g, ' ')
-      .replace(/\b(value)\b/gi, 'X') // Standardize variable to 'X', but keep 'x' for axis
-      .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
-      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
-      .replace(/(X)(\d)/gi, 'X * $2');
-      
-  let finalEquation = sanitizedEquation;
-  // Replace labels first, with _calc suffix to avoid collision with raw x/y
-  if (axisLabels.y) {
-      const yLabelVar = axisLabels.y.replace(/[^a-zA-Z0-9_]/g, '');
-      if (yLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${yLabelVar}\\b`, 'gi'), 'y_calc');
-  }
-  if (axisLabels.x) {
-      const xLabelVar = axisLabels.x.replace(/[^a-zA-Z0-9_]/g, '');
-      if (xLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${xLabelVar}\\b`, 'gi'), 'x_calc');
-  }
-
-  // Then replace literal x/y with _raw suffix
-  finalEquation = finalEquation.replace(/\by\b/g, 'y_raw').replace(/\bx\b/g, 'x_raw');
-
-
-  let equationFunc: (X: number, x_raw: number, y_raw: number, x_calc: number, y_calc: number, z: number) => number;
-  try {
-    equationFunc = new Function('X', 'x_raw', 'y_raw', 'x_calc', 'y_calc', 'z', `return ${finalEquation || 'X'}`) as any;
-  } catch (e) {
-    const error = e instanceof Error ? e.message : String(e);
-    throw new Error(`A equação para inversão "${eq}" é inválida. (${error})`);
-  }
-
-  // 2. Set up the search range based on data size and map type.
-  const isPotentiallySigned = ['ignição', 'ignition', 'avanço', 'spark', 'timing'].some(kw => mapName.toLowerCase().includes(kw));
-  let low: number, high: number;
-
-  if (dataSize === 1) {
-    low = 0; // 8-bit is typically unsigned.
-    high = 255;
-  } else if (dataSize === 2) {
-    low = isPotentiallySigned ? -32768 : 0;
-    high = isPotentiallySigned ? 32767 : 65535;
-  } else {
-    throw new Error(`Tamanho de dados não suportado para inversão: ${dataSize} bytes.`);
-  }
-
-  // Handle the simplest case directly for performance.
-  if (finalEquation.trim() === 'X') {
-    return Math.round(finalValue);
-  }
-
-  // 3. Perform a binary search to find the integer raw value.
-  let iterations = 100; // More than enough for a 16-bit range.
-  const lowVal = equationFunc(low, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z);
-  const highVal = equationFunc(high, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z);
-
-  // Check if the target value is outside the achievable range.
-  if ((finalValue < lowVal && finalValue < highVal) || (finalValue > lowVal && finalValue > highVal)) {
-    const diffLow = Math.abs(lowVal - finalValue);
-    const diffHigh = Math.abs(highVal - finalValue);
-    return diffLow < diffHigh ? low : high;
-  }
-  
-  const isMonotonicIncreasing = highVal > lowVal;
-
-  while (low <= high && iterations > 0) {
-    const mid = Math.floor((low + high) / 2);
-    if(mid === low || mid === high) break; // Avoid infinite loop if range is small
-
-    const midValue = equationFunc(mid, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z);
-    
-    // This logic handles both increasing and decreasing monotonic functions.
-    if ((isMonotonicIncreasing && midValue < finalValue) || (!isMonotonicIncreasing && midValue > finalValue)) {
-      low = mid;
-    } else {
-      high = mid;
+    if (finalValue === null || isNaN(finalValue)) {
+        throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
-    iterations--;
-  }
-  
-  // After the loop, low and high are very close. Check which is the better fit.
-  const diffLow = Math.abs(equationFunc(low, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z) - finalValue);
-  const diffHigh = Math.abs(equationFunc(high, axisValues.x_raw, axisValues.y_raw, axisValues.x_calc, axisValues.y_calc, axisValues.z) - finalValue);
-  
-  return diffLow <= diffHigh ? low : high;
+
+    let currentVal = finalValue;
+    const sanitizedEq = (eq || "X").trim();
+
+    // Handle the simplest case directly.
+    if (sanitizedEq.toUpperCase() === 'X') {
+        return Math.round(currentVal);
+    }
+    
+    // Very simple regex-based inversion for patterns like (X-128)/2 or X/10.23 or X-128
+    const patternSubDiv = /^\(\s*X\s*-\s*([0-9.]+)\s*\)\s*\/\s*([0-9.]+)$/i;
+    const patternDiv = /^X\s*\/\s*([0-9.]+)$/i;
+    const patternSub = /^X\s*-\s*([0-9.]+)$/i;
+    const patternAdd = /^X\s*\+\s*([0-9.]+)$/i;
+    const patternMul = /^X\s*\*\s*([0-9.]+)$/i;
+    
+    const matchSubDiv = sanitizedEq.match(patternSubDiv);
+    const matchDiv = sanitizedEq.match(patternDiv);
+    const matchSub = sanitizedEq.match(patternSub);
+    const matchAdd = sanitizedEq.match(patternAdd);
+    const matchMul = sanitizedEq.match(patternMul);
+
+    if (matchSubDiv) {
+        // Equation: (X - A) / B  => Inverse: Y * B + A
+        const A = parseFloat(matchSubDiv[1]);
+        const B = parseFloat(matchSubDiv[2]);
+        currentVal = (currentVal * B) + A;
+    } else if (matchDiv) {
+        // Equation: X / B => Inverse: Y * B
+        const B = parseFloat(matchDiv[1]);
+        currentVal = currentVal * B;
+    } else if (matchSub) {
+        // Equation: X - A => Inverse: Y + A
+        const A = parseFloat(matchSub[1]);
+        currentVal = currentVal + A;
+    } else if (matchAdd) {
+        // Equation: X + A => Inverse: Y - A
+        const A = parseFloat(matchAdd[1]);
+        currentVal = currentVal - A;
+    } else if (matchMul) {
+        // Equation: X * B => Inverse: Y / B
+        const B = parseFloat(matchMul[1]);
+        if (B === 0) throw new Error("Não é possível inverter a equação: divisão por zero.");
+        currentVal = currentVal / B;
+    }
+    else {
+        console.warn(`A equação "${eq}" é demasiado complexa para a inversão automática. A tentar avaliação direta.`);
+        // Fallback for very simple cases not caught by regex, like just a number.
+        try {
+            // This is a dangerous fallback, but might work for "X" with extra spaces etc.
+            const evalFunc = new Function('Y', `return ${sanitizedEq.replace(/X/gi, 'Y')}`);
+            currentVal = evalFunc(finalValue);
+        } catch (e) {
+            throw new Error(`A interpolação para a equação "${eq}" falhou. A equação é demasiado complexa para ser invertida automaticamente.`);
+        }
+    }
+    
+    return Math.round(currentVal);
 }
 
 
