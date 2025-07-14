@@ -1,5 +1,6 @@
 
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -164,8 +165,8 @@ function MapTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
-            <th className="sticky top-0 left-0 z-30 bg-muted p-1 border border-border text-muted-foreground text-left">
-                <div className="flex items-center justify-between h-full">
+            <th className="sticky top-0 left-0 z-30 bg-card p-1 border border-border text-muted-foreground text-left">
+                <div className="flex items-center space-x-2 h-full">
                     <div className="flex flex-col justify-center space-y-0.5 px-2">
                         <div className="font-semibold text-foreground truncate" title={definition.name}>
                             Z: {definition.name}<Address addr={definition.address} />
@@ -176,7 +177,7 @@ function MapTable({
                             <span className="font-semibold">X:</span> {definition.xAxisDef?.label}<Address addr={definition.xAxisDef?.address} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-4 border-l pl-2 pr-1">
+                    <div className="flex items-center gap-2 flex-shrink-0 border-l pl-2 pr-1">
                         <div className="flex items-center space-x-1">
                             <Label htmlFor="view-mode-switch" className="text-xs">Hex</Label>
                             <Switch 
@@ -218,7 +219,7 @@ function MapTable({
                 </div>
             </th>
             {xAxis.map((x, i) => (
-              <th key={`head-x-${i}`} className="sticky top-0 z-20 bg-muted p-1 border border-border font-semibold text-center min-w-[60px]">
+              <th key={`head-x-${i}`} className="sticky top-0 z-20 bg-card p-1 border border-border font-semibold text-center min-w-[60px]">
                 {xAxisFormatter(x)}
               </th>
             ))}
