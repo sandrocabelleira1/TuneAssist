@@ -1,6 +1,7 @@
 
 
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -496,7 +497,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     
     let rawValue;
     if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
-    else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, true);
+    else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, !axisDef.isBigEndian);
     else {
         rawData.push(NaN);
         calculatedData.push(NaN);
@@ -579,7 +580,7 @@ export function readAndCalculateMapFromBin(
       if (def.dataSize === 1) {
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          rawValue = view.getUint16(offset, true);
+          rawValue = view.getUint16(offset, !def.isBigEndian);
       } else {
           calculatedRow.push(null);
           rawRow.push(null);
@@ -645,62 +646,64 @@ export function invertEquation(
     if (finalValue === null || isNaN(finalValue)) {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
-    
-    // Normalize equation: uppercase, replace VALUE with X, handle commas.
-    let sanitizedEq = (eq || 'X').trim().toUpperCase().replace(/VALUE/g, 'X').replace(/,/g, '.');
-    if (sanitizedEq === 'X') {
-        return Math.round(finalValue);
-    }
 
-    // Check for multiple instances of X, which is too complex for this solver.
+    let sanitizedEq = (eq || 'X').trim().toUpperCase().replace(/VALUE/g, 'X').replace(/,/g, '.');
+
     if ((sanitizedEq.match(/X/g) || []).length > 1) {
         throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente (múltiplas ocorrências de X).`);
     }
-
-    // This is a simple, right-to-left parser for inverting simple arithmetic.
-    // It's not a full algebraic solver but handles common XDF patterns.
+    
+    // Replace axis variables for evaluation (not needed for inversion logic, but good practice if eq had them)
+    // This simple solver doesn't handle equations with other variables, but we prepare for it.
     let currentVal = finalValue;
-
-    // Remove all parentheses to simplify tokenization. This is a limitation but works for simple cases.
-    let flatEq = sanitizedEq.replace(/[()]/g, '');
-    const tokens = flatEq.split(/(\s+)/).filter(t => t.trim().length > 0);
-
-    // Find the position of 'X'.
-    const xIndex = tokens.indexOf('X');
+    
+    // Simplified parser. This is not a full algebraic solver.
+    // It works for common patterns like (X - 128) / 2 or X * 0.1
+    // It assumes X appears only once and is the primary variable.
+    
+    // Remove outer parentheses if they exist
+    if (sanitizedEq.startsWith('(') && sanitizedEq.endsWith(')')) {
+        sanitizedEq = sanitizedEq.substring(1, sanitizedEq.length - 1);
+    }
+    
+    // Tokenize by operators, keeping the operators.
+    const tokens = sanitizedEq.split(/([+\-*/])/).map(t => t.trim()).filter(t => t);
+    
+    // Find where X is.
+    const xIndex = tokens.findIndex(t => t.includes('X'));
     if (xIndex === -1) {
-        throw new Error(`A variável 'X' não foi encontrada na equação para inversão: "${eq}"`);
+      if (!isNaN(parseFloat(sanitizedEq))) {
+        return Math.round(finalValue); // Equation is just a number, something is wrong. Return final value.
+      }
+      throw new Error(`A variável 'X' não foi encontrada na equação para inversão: "${eq}"`);
     }
 
-    // Invert operations to the RIGHT of X.
-    // Example: X + 5 = 10  ->  currentVal becomes 10 - 5 = 5
-    for (let i = xIndex + 1; i < tokens.length; i += 2) {
-        const op = tokens[i];
-        const numToken = tokens[i + 1];
-        if (!numToken) continue;
-        const num = parseFloat(numToken);
-        if (isNaN(num)) throw new Error(`Token numérico inválido "${numToken}" na equação "${eq}"`);
+    // Process operations from right to left to invert them.
+    for (let i = tokens.length - 1; i > xIndex; i -= 2) {
+        const op = tokens[i - 1];
+        const num = parseFloat(tokens[i]);
 
+        if (isNaN(num)) throw new Error(`Token numérico inválido "${tokens[i]}" na equação "${eq}"`);
+        
         if (op === '+') currentVal -= num;
         else if (op === '-') currentVal += num;
         else if (op === '*') currentVal /= num;
         else if (op === '/') currentVal *= num;
     }
 
-    // Invert operations to the LEFT of X (in reverse order).
-    // Example: 10 - X = 5 -> currentVal becomes 10 - 5 = 5
-    for (let i = xIndex - 1; i >= 0; i -= 2) {
-        const op = tokens[i];
-        const numToken = tokens[i - 1];
-        if (!numToken) continue;
-        const num = parseFloat(numToken);
-        if (isNaN(num)) throw new Error(`Token numérico inválido "${numToken}" na equação "${eq}"`);
-        
-        if (op === '+') currentVal -= num;
-        else if (op === '-') currentVal = num - currentVal; // Special case: N - X
-        else if (op === '*') currentVal /= num;
-        else if (op === '/') currentVal = num / currentVal; // Special case: N / X
-    }
+    // Process operations from left to right up to X.
+    for (let i = 0; i < xIndex; i += 2) {
+        const num = parseFloat(tokens[i]);
+        const op = tokens[i + 1];
 
+        if (isNaN(num)) throw new Error(`Token numérico inválido "${tokens[i]}" na equação "${eq}"`);
+
+        if (op === '+') currentVal -= num;
+        else if (op === '-') currentVal = num - currentVal; // Invert for N - X
+        else if (op === '*') currentVal /= num;
+        else if (op === '/') currentVal = num / currentVal; // Invert for N / X
+    }
+    
     return Math.round(currentVal);
 }
 
@@ -739,7 +742,7 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), true);
+                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
@@ -750,6 +753,7 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
 
 
