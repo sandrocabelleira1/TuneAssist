@@ -1832,31 +1832,35 @@ export default function EcuTuningAssistant() {
                                             />
                                         </TabsContent>
                                         <TabsContent value="plot-2d" className="flex-1 flex flex-col min-h-0">
-                                            <div className="p-2 flex items-center gap-2">
-                                                <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
-                                                <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
-                                                    <SelectTrigger id="plot-slice-selector" className="w-[120px]">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {displayAxes.y.map((yVal, index) => {
-                                                            const formattedY = typeof yVal === 'number' ? yVal.toFixed(0) : yVal;
-                                                            return <SelectItem key={index} value={String(index)}>{String(formattedY)}</SelectItem>
-                                                        })}
-                                                    </SelectContent>
-                                                </Select>
+                                            <div className="flex flex-col flex-1 min-h-0">
+                                                <div className="p-2 flex items-center gap-2">
+                                                    <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
+                                                    <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
+                                                        <SelectTrigger id="plot-slice-selector" className="w-[120px]">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {displayAxes.y.map((yVal, index) => {
+                                                                const formattedY = typeof yVal === 'number' ? yVal.toFixed(0) : yVal;
+                                                                return <SelectItem key={index} value={String(index)}>{String(formattedY)}</SelectItem>
+                                                            })}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="flex-1 relative">
+                                                    <LinePlot2D
+                                                        key={plotRenderKey}
+                                                        mapData={displayMap}
+                                                        xAxis={displayAxes.x}
+                                                        yAxis={displayAxes.y}
+                                                        yAxisLabel={displayAxes.yLabel}
+                                                        xAxisLabel={displayAxes.xLabel}
+                                                        sliceIndex={plotSliceIndex}
+                                                        onDataChange={() => {}}
+                                                        className="absolute inset-0"
+                                                    />
+                                                </div>
                                             </div>
-                                            <LinePlot2D
-                                                key={plotRenderKey}
-                                                mapData={displayMap}
-                                                xAxis={displayAxes.x}
-                                                yAxis={displayAxes.y}
-                                                yAxisLabel={displayAxes.yLabel}
-                                                xAxisLabel={displayAxes.xLabel}
-                                                sliceIndex={plotSliceIndex}
-                                                onDataChange={() => {}}
-                                                className="flex-1 relative"
-                                            />
                                         </TabsContent>
                                         <TabsContent value="3d" className="flex-1">
                                             <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
