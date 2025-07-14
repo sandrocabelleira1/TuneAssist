@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -495,7 +496,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     if (axisDef.dataSize === 1) {
         rawValue = view.getUint8(offset);
     } else if (axisDef.dataSize === 2) {
-        rawValue = view.getUint16(offset, !axisDef.isBigEndian);
+        // Force little-endian read for 16-bit data, which is most common for ECUs.
+        rawValue = view.getUint16(offset, true);
     } else {
         rawData.push(NaN);
         calculatedData.push(NaN);
@@ -577,7 +579,8 @@ export function readAndCalculateMapFromBin(
       if (def.dataSize === 1) {
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          rawValue = view.getUint16(offset, !def.isBigEndian);
+          // Force little-endian read for 16-bit data, which is most common for ECUs.
+          rawValue = view.getUint16(offset, true);
       } else {
           calculatedRow.push(null);
           rawRow.push(null);
@@ -786,7 +789,8 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
+                     // Force little-endian write for 16-bit data to match reading.
+                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), true);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
