@@ -480,7 +480,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
       stride = axisDef.dataSize;
   }
 
-  const useLittleEndian = isEndianSwapped ? axisDef.isBigEndian : !axisDef.isBigEndian;
+  const useLittleEndian = isEndianSwapped ? !axisDef.isBigEndian : axisDef.isBigEndian;
 
   for (let i = 0; i < count; i++) {
     const offset = axisDef.address + (i * stride);
@@ -497,7 +497,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     if (axisDef.dataSize === 1) {
         rawValue = view.getUint8(offset);
     } else if (axisDef.dataSize === 2) {
-        rawValue = view.getUint16(offset, useLittleEndian);
+        rawValue = view.getUint16(offset, !useLittleEndian);
     } else {
         rawData.push(NaN);
         calculatedData.push(NaN);
@@ -564,7 +564,7 @@ export function readAndCalculateMapFromBin(
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
   const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
   
-  const useLittleEndian = isEndianSwapped ? def.isBigEndian : !def.isBigEndian;
+  const useLittleEndian = isEndianSwapped ? !def.isBigEndian : def.isBigEndian;
 
   for (let r = 0; r < def.rows; r++) {
     const calculatedRow: (number|null)[] = [];
@@ -582,7 +582,7 @@ export function readAndCalculateMapFromBin(
       if (def.dataSize === 1) {
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          rawValue = view.getUint16(offset, useLittleEndian);
+          rawValue = view.getUint16(offset, !useLittleEndian);
       } else {
           calculatedRow.push(null);
           rawRow.push(null);
@@ -773,7 +773,7 @@ export function writeMapToBin(
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
     const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
     
-    const useLittleEndian = isEndianSwapped ? def.isBigEndian : !def.isBigEndian;
+    const useLittleEndian = isEndianSwapped ? !def.isBigEndian : def.isBigEndian;
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
@@ -794,7 +794,7 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndian);
+                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !useLittleEndian);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
