@@ -648,59 +648,49 @@ export function invertEquation(
     if (sanitizedEq === 'X') {
         return Math.round(finalValue);
     }
-
+    
     if ((sanitizedEq.match(/X/g) || []).length > 1) {
         throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente (múltiplas ocorrências de X).`);
     }
 
     let currentVal = finalValue;
     
-    // Tokenize the equation into numbers, operators, and the variable 'X'
-    const tokens = sanitizedEq.match(/[0-9.]+|[+\-*/()]|X/g);
-    if (!tokens) {
-        throw new Error(`Não foi possível analisar a equação: "${eq}"`);
+    // This is a simple, right-to-left parser for inverting simple arithmetic.
+    // It's not a full algebraic solver, but handles common XDF patterns.
+    
+    // Remove all parentheses
+    sanitizedEq = sanitizedEq.replace(/[()]/g, '');
+    const tokens = sanitizedEq.split(' ').filter(t => t);
+    
+    let i = tokens.indexOf('X');
+    if (i === -1) {
+        throw new Error(`A variável 'X' não foi encontrada na equação para inversão: "${eq}"`);
     }
 
-    // This is a simplified RPN (Reverse Polish Notation) inverter.
-    // It works backwards from the final value.
-    // We process tokens from right to left, inverting operations.
-    for (let i = tokens.length - 1; i >= 0; i--) {
-        const token = tokens[i];
-        const nextToken = tokens[i-1];
-
-        if (token === ')') {
-            // Find matching parenthesis and skip to it
-            let balance = 1;
-            for (let j = i - 1; j >= 0; j--) {
-                if (tokens[j] === ')') balance++;
-                if (tokens[j] === '(') balance--;
-                if (balance === 0) {
-                    i = j; // Jump index to the matching parenthesis
-                    break;
-                }
-            }
-            continue;
-        }
-
-        if (token.match(/[0-9.]+/)) {
-            const number = parseFloat(token);
-            if (nextToken === '+') {
-                currentVal -= number;
-                i--; // Skip operator
-            } else if (nextToken === '-') {
-                currentVal += number;
-                i--; // Skip operator
-            } else if (nextToken === '*') {
-                if (number === 0) throw new Error("Não é possível inverter a equação: divisão por zero.");
-                currentVal /= number;
-                i--; // Skip operator
-            } else if (nextToken === '/') {
-                currentVal *= number;
-                i--; // Skip operator
-            }
-        }
+    // Process operations to the right of X (normal order)
+    for (let j = i + 1; j < tokens.length - 1; j += 2) {
+        const op = tokens[j];
+        const num = parseFloat(tokens[j+1]);
+        if (isNaN(num)) continue;
+        
+        if (op === '+') currentVal -= num;
+        else if (op === '-') currentVal += num;
+        else if (op === '*') currentVal /= num;
+        else if (op === '/') currentVal *= num;
     }
     
+    // Process operations to the left of X (reverse order)
+    for (let j = i - 1; j > 0; j -= 2) {
+        const op = tokens[j];
+        const num = parseFloat(tokens[j-1]);
+        if (isNaN(num)) continue;
+
+        if (op === '+') currentVal -= num;
+        else if (op === '-') currentVal = num - currentVal; // Special case for N - X
+        else if (op === '*') currentVal /= num;
+        else if (op === '/') currentVal = num / currentVal; // Special case for N / X
+    }
+
     return Math.round(currentVal);
 }
 
