@@ -644,51 +644,59 @@ export function invertEquation(
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
     
-    let sanitizedEq = (eq || 'X').trim().toUpperCase().replace(/VALUE/g, 'X');
+    // Normalize equation: uppercase, replace VALUE with X, handle commas.
+    let sanitizedEq = (eq || 'X').trim().toUpperCase().replace(/VALUE/g, 'X').replace(/,/g, '.');
     if (sanitizedEq === 'X') {
         return Math.round(finalValue);
     }
-    
+
+    // Check for multiple instances of X, which is too complex for this solver.
     if ((sanitizedEq.match(/X/g) || []).length > 1) {
         throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente (múltiplas ocorrências de X).`);
     }
 
-    let currentVal = finalValue;
-    
     // This is a simple, right-to-left parser for inverting simple arithmetic.
-    // It's not a full algebraic solver, but handles common XDF patterns.
-    
-    // Remove all parentheses
-    sanitizedEq = sanitizedEq.replace(/[()]/g, '');
-    const tokens = sanitizedEq.split(' ').filter(t => t);
-    
-    let i = tokens.indexOf('X');
-    if (i === -1) {
+    // It's not a full algebraic solver but handles common XDF patterns.
+    let currentVal = finalValue;
+
+    // Remove all parentheses to simplify tokenization. This is a limitation but works for simple cases.
+    let flatEq = sanitizedEq.replace(/[()]/g, '');
+    const tokens = flatEq.split(/(\s+)/).filter(t => t.trim().length > 0);
+
+    // Find the position of 'X'.
+    const xIndex = tokens.indexOf('X');
+    if (xIndex === -1) {
         throw new Error(`A variável 'X' não foi encontrada na equação para inversão: "${eq}"`);
     }
 
-    // Process operations to the right of X (normal order)
-    for (let j = i + 1; j < tokens.length - 1; j += 2) {
-        const op = tokens[j];
-        const num = parseFloat(tokens[j+1]);
-        if (isNaN(num)) continue;
-        
+    // Invert operations to the RIGHT of X.
+    // Example: X + 5 = 10  ->  currentVal becomes 10 - 5 = 5
+    for (let i = xIndex + 1; i < tokens.length; i += 2) {
+        const op = tokens[i];
+        const numToken = tokens[i + 1];
+        if (!numToken) continue;
+        const num = parseFloat(numToken);
+        if (isNaN(num)) throw new Error(`Token numérico inválido "${numToken}" na equação "${eq}"`);
+
         if (op === '+') currentVal -= num;
         else if (op === '-') currentVal += num;
         else if (op === '*') currentVal /= num;
         else if (op === '/') currentVal *= num;
     }
-    
-    // Process operations to the left of X (reverse order)
-    for (let j = i - 1; j > 0; j -= 2) {
-        const op = tokens[j];
-        const num = parseFloat(tokens[j-1]);
-        if (isNaN(num)) continue;
 
+    // Invert operations to the LEFT of X (in reverse order).
+    // Example: 10 - X = 5 -> currentVal becomes 10 - 5 = 5
+    for (let i = xIndex - 1; i >= 0; i -= 2) {
+        const op = tokens[i];
+        const numToken = tokens[i - 1];
+        if (!numToken) continue;
+        const num = parseFloat(numToken);
+        if (isNaN(num)) throw new Error(`Token numérico inválido "${numToken}" na equação "${eq}"`);
+        
         if (op === '+') currentVal -= num;
-        else if (op === '-') currentVal = num - currentVal; // Special case for N - X
+        else if (op === '-') currentVal = num - currentVal; // Special case: N - X
         else if (op === '*') currentVal /= num;
-        else if (op === '/') currentVal = num / currentVal; // Special case for N / X
+        else if (op === '/') currentVal = num / currentVal; // Special case: N / X
     }
 
     return Math.round(currentVal);
