@@ -1,8 +1,4 @@
 
-
-
-
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -163,7 +159,7 @@ function MapTable({
   };
 
   return (
-    <div className="overflow-auto relative h-[65vh]">
+    <div className="overflow-auto relative flex-1">
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
@@ -1754,7 +1750,7 @@ export default function EcuTuningAssistant() {
                     </div>
 
                     <div className="flex-1">
-                        <Card>
+                        <Card className="flex flex-col h-full">
                              <CardHeader>
                                 <div className="flex items-center justify-between">
                                     <div className="flex-1">
@@ -1803,9 +1799,9 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="flex-1 flex flex-col min-h-0">
                                 {displayMap && displayAxes ? (
-                                    <Tabs defaultValue="2d" onValueChange={(value) => {
+                                    <Tabs defaultValue="2d" className="flex-1 flex flex-col min-h-0" onValueChange={(value) => {
                                         if (value === 'plot-2d') {
                                             setPlotRenderKey(Math.random());
                                         }
@@ -1815,7 +1811,7 @@ export default function EcuTuningAssistant() {
                                             <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
                                             <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
                                         </TabsList>
-                                        <TabsContent value="2d">
+                                        <TabsContent value="2d" className="flex-1 flex flex-col min-h-0">
                                             <MapTable
                                                 key={mapRenderKey}
                                                 mapData={displayMap || []} 
@@ -1834,7 +1830,7 @@ export default function EcuTuningAssistant() {
                                                 onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
                                             />
                                         </TabsContent>
-                                        <TabsContent value="plot-2d" className="h-[65vh]">
+                                        <TabsContent value="plot-2d" className="flex-1 flex flex-col min-h-0">
                                             <div className="p-2 flex items-center gap-2">
                                                 <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
                                                 <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
@@ -1862,7 +1858,7 @@ export default function EcuTuningAssistant() {
                                                 />
                                             </div>
                                         </TabsContent>
-                                        <TabsContent value="3d" className="h-[65vh]">
+                                        <TabsContent value="3d" className="flex-1">
                                             <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
                                         </TabsContent>
                                     </Tabs>
