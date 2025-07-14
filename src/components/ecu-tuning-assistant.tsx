@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -840,17 +841,16 @@ export default function EcuTuningAssistant() {
         setAudioUrl(null);
         setSelectedCells(new Set());
         setPlotSliceIndex(0);
-        setIsEndianSwapped(false);
 
         try {
-            const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef, false);
-            const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef, false);
+            const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef, isEndianSwapped);
+            const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef, isEndianSwapped);
 
             if (!axisXData || !axisYData) {
                 throw new Error("Não foi possível ler os dados do eixo do ficheiro BIN.");
             }
 
-            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData, false);
+            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData, isEndianSwapped);
             
             const currentAxes = {
               x: axisXData,
@@ -895,7 +895,7 @@ export default function EcuTuningAssistant() {
             setDisplayRawMap(null);
             setDisplayAxes(null);
         }
-    }, [binFile, availableMaps, addLog, toast, runZAxisValidation]);
+    }, [binFile, availableMaps, addLog, toast, runZAxisValidation, isEndianSwapped]);
     
     const handleConfirmAxes = (data: { xEquation: string, yEquation: string, zEquation: string }) => {
         if (!selectedMapName || !binFile) return;
@@ -1355,7 +1355,8 @@ export default function EcuTuningAssistant() {
             const finalRawMap = recalculateRawMapFromCalculated(
                 workingMap,
                 definition,
-                sourceAxes
+                sourceAxes,
+                isEndianSwapped
             );
 
             const modifiedBuffer = writeMapToBin(binFile.buffer, definition, finalRawMap, isEndianSwapped);
@@ -1509,15 +1510,16 @@ export default function EcuTuningAssistant() {
     }, [logs]);
 
     const handleToggleEndianness = () => {
-        const newEndianSwappedState = !isEndianSwapped;
-        setIsEndianSwapped(newEndianSwappedState);
-        addLog(`Ordem de Bytes (Endian) invertida: ${newEndianSwappedState ? 'Ativado' : 'Desativado'}. A Recarregar o mapa.`, 'info');
-        
-        // Reload the current map with the new endian setting
-        if (selectedMapName) {
-            handleMapSelect(selectedMapName);
-        }
+      const newEndianSwappedState = !isEndianSwapped;
+      setIsEndianSwapped(newEndianSwappedState);
+      addLog(`Ordem de Bytes (Endian) invertida: ${newEndianSwappedState ? 'Ativado' : 'Desativado'}. A Recarregar o mapa.`, 'info');
+
+      // Reload the current map with the new endian setting, if a map is selected
+      if (selectedMapName) {
+        handleMapSelect(selectedMapName);
+      }
     };
+
 
     const selectedMapDefinition = useMemo(() => {
         return availableMaps.find(m => m.name === selectedMapName);
@@ -1806,8 +1808,8 @@ export default function EcuTuningAssistant() {
                                                     <LinePlot2D
                                                         key={plotRenderKey}
                                                         mapData={displayMap}
-                                                        xAxis={displayAxes.x}
-                                                        yAxis={displayAxes.y}
+                                                        xAxis={xAxis}
+                                                        yAxis={yAxis}
                                                         yAxisLabel={displayAxes.yLabel}
                                                         xAxisLabel={displayAxes.xLabel}
                                                         sliceIndex={plotSliceIndex}
