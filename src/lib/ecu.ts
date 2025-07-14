@@ -629,7 +629,7 @@ export function bufferToHex(buffer: ArrayBuffer): string {
 
 /**
  * Reverses a mathematical equation to find the "raw" value that would produce a given final value.
- * This function uses a simplified mathematical inversion approach for basic arithmetic operations.
+ * This is a more robust implementation that handles simple arithmetic.
  * @param eq The equation string (e.g., "(X-128)/2").
  * @param finalValue The target value we want to achieve.
  * @returns The calculated raw integer value.
@@ -637,9 +637,9 @@ export function bufferToHex(buffer: ArrayBuffer): string {
  */
 export function invertEquation(
   eq: string,
-  eqVar: string, // Unused in this simple implementation but kept for signature consistency
+  eqVar: string, // Unused, for signature consistency
   finalValue: number,
-  dataSize: number,
+  dataSize: number, // Unused
   isBigEndian: boolean, // Unused
   mapName: string, // Unused
   axisValues: { x_calc: number, y_calc: number, x_raw: number, y_raw: number, z: number }, // Unused
@@ -648,63 +648,76 @@ export function invertEquation(
     if (finalValue === null || isNaN(finalValue)) {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
-
+    
     let currentVal = finalValue;
-    const sanitizedEq = (eq || "X").trim();
+    // Sanitize the equation, standardize the variable to 'X'
+    let sanitizedEq = (eq || 'X').trim().toUpperCase().replace(/VALUE/g, 'X');
 
-    // Handle the simplest case directly.
-    if (sanitizedEq.toUpperCase() === 'X') {
+    // If equation is just 'X', return the value directly.
+    if (sanitizedEq === 'X') {
         return Math.round(currentVal);
     }
     
-    // Very simple regex-based inversion for patterns like (X-128)/2 or X/10.23 or X-128
-    const patternSubDiv = /^\(\s*X\s*-\s*([0-9.]+)\s*\)\s*\/\s*([0-9.]+)$/i;
-    const patternDiv = /^X\s*\/\s*([0-9.]+)$/i;
-    const patternSub = /^X\s*-\s*([0-9.]+)$/i;
-    const patternAdd = /^X\s*\+\s*([0-9.]+)$/i;
-    const patternMul = /^X\s*\*\s*([0-9.]+)$/i;
-    
-    const matchSubDiv = sanitizedEq.match(patternSubDiv);
-    const matchDiv = sanitizedEq.match(patternDiv);
-    const matchSub = sanitizedEq.match(patternSub);
-    const matchAdd = sanitizedEq.match(patternAdd);
-    const matchMul = sanitizedEq.match(patternMul);
+    // Iteratively "peel off" operations from the outside in.
+    // This is a simplified parser that works for common patterns.
+    while (sanitizedEq !== 'X') {
+        let changed = false;
 
-    if (matchSubDiv) {
-        // Equation: (X - A) / B  => Inverse: Y * B + A
-        const A = parseFloat(matchSubDiv[1]);
-        const B = parseFloat(matchSubDiv[2]);
-        currentVal = (currentVal * B) + A;
-    } else if (matchDiv) {
-        // Equation: X / B => Inverse: Y * B
-        const B = parseFloat(matchDiv[1]);
-        currentVal = currentVal * B;
-    } else if (matchSub) {
-        // Equation: X - A => Inverse: Y + A
-        const A = parseFloat(matchSub[1]);
-        currentVal = currentVal + A;
-    } else if (matchAdd) {
-        // Equation: X + A => Inverse: Y - A
-        const A = parseFloat(matchAdd[1]);
-        currentVal = currentVal - A;
-    } else if (matchMul) {
-        // Equation: X * B => Inverse: Y / B
-        const B = parseFloat(matchMul[1]);
-        if (B === 0) throw new Error("Não é possível inverter a equação: divisão por zero.");
-        currentVal = currentVal / B;
-    }
-    else {
-        console.warn(`A equação "${eq}" é demasiado complexa para a inversão automática. A tentar avaliação direta.`);
-        // Fallback for very simple cases not caught by regex, like just a number.
-        try {
-            // This is a dangerous fallback, but might work for "X" with extra spaces etc.
-            const evalFunc = new Function('Y', `return ${sanitizedEq.replace(/X/gi, 'Y')}`);
-            currentVal = evalFunc(finalValue);
-        } catch (e) {
-            throw new Error(`A interpolação para a equação "${eq}" falhou. A equação é demasiado complexa para ser invertida automaticamente.`);
+        // Pattern: ( ... )
+        const parenthesisMatch = sanitizedEq.match(/^\((.*)\)$/);
+        if (parenthesisMatch) {
+            sanitizedEq = parenthesisMatch[1];
+            changed = true;
+            continue; // Re-run the loop on the inner expression
+        }
+
+        // Pattern: ... / number
+        const divMatch = sanitizedEq.match(/^(.*)\s*\/\s*([0-9.]+)$/);
+        if (divMatch) {
+            const number = parseFloat(divMatch[2]);
+            currentVal *= number;
+            sanitizedEq = divMatch[1].trim();
+            changed = true;
+            continue;
+        }
+
+        // Pattern: ... * number
+        const mulMatch = sanitizedEq.match(/^(.*)\s*\*\s*([0-9.]+)$/);
+        if (mulMatch) {
+            const number = parseFloat(mulMatch[2]);
+            if (number === 0) throw new Error("Não é possível inverter a equação: divisão por zero.");
+            currentVal /= number;
+            sanitizedEq = mulMatch[1].trim();
+            changed = true;
+            continue;
+        }
+
+        // Pattern: ... - number
+        const subMatch = sanitizedEq.match(/^(.*)\s*-\s*([0-9.]+)$/);
+        if (subMatch) {
+            const number = parseFloat(subMatch[2]);
+            currentVal += number;
+            sanitizedEq = subMatch[1].trim();
+            changed = true;
+            continue;
+        }
+        
+        // Pattern: ... + number
+        const addMatch = sanitizedEq.match(/^(.*)\s*\+\s*([0-9.]+)$/);
+        if (addMatch) {
+            const number = parseFloat(addMatch[2]);
+            currentVal -= number;
+            sanitizedEq = addMatch[1].trim();
+            changed = true;
+            continue;
+        }
+
+        // If no pattern matched in this iteration, the equation is too complex.
+        if (!changed) {
+            throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente.`);
         }
     }
-    
+
     return Math.round(currentVal);
 }
 
