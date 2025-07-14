@@ -1,8 +1,5 @@
 
 
-
-
-
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -435,7 +432,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 }
 
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): AxisDataState {
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, endiannessOverride: 'little' | 'big' | null = null): AxisDataState {
   const emptyState: AxisDataState = { raw: [], calculated: [] };
   if (!axisDef) return emptyState;
 
@@ -485,6 +482,9 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       stride = axisDef.dataSize;
   }
 
+  const useLittleEndian = endiannessOverride ? endiannessOverride === 'little' : !axisDef.isBigEndian;
+
+
   for (let i = 0; i < count; i++) {
     const offset = axisDef.address + (i * stride);
     if (offset + axisDef.dataSize > view.byteLength) {
@@ -498,7 +498,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     
     let rawValue;
     if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
-    else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, !axisDef.isBigEndian);
+    else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
     else {
         rawData.push(NaN);
         calculatedData.push(NaN);
@@ -523,7 +523,8 @@ export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
     xAxis: AxisDataState,
-    yAxis: AxisDataState
+    yAxis: AxisDataState,
+    endiannessOverride: 'little' | 'big' | null = null
 ): { calculatedMap: MapData, rawMap: MapData } {
   if (!def || !binBuffer) return { calculatedMap: [], rawMap: [] };
 
@@ -564,6 +565,8 @@ export function readAndCalculateMapFromBin(
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
   const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
 
+  const useLittleEndian = endiannessOverride ? endiannessOverride === 'little' : !def.isBigEndian;
+
 
   for (let r = 0; r < def.rows; r++) {
     const calculatedRow: (number|null)[] = [];
@@ -581,7 +584,7 @@ export function readAndCalculateMapFromBin(
       if (def.dataSize === 1) {
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          rawValue = view.getUint16(offset, !def.isBigEndian);
+          rawValue = view.getUint16(offset, useLittleEndian);
       } else {
           calculatedRow.push(null);
           rawRow.push(null);
@@ -754,8 +757,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-
-
-
 
