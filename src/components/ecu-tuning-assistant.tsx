@@ -1,6 +1,7 @@
 
 
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -166,18 +167,18 @@ function MapTable({
         <thead>
           <tr className="bg-card">
             <th className="sticky top-0 left-0 z-30 bg-card p-1 border border-border text-muted-foreground text-left">
-                <div className="flex items-center space-x-2 h-full">
-                    <div className="flex flex-col justify-center space-y-0.5 px-2">
+                <div className="flex flex-col h-full space-y-1">
+                    <div className="flex flex-col justify-center">
                         <div className="font-semibold text-foreground truncate" title={definition.name}>
                             Z: {definition.name}<Address addr={definition.address} />
                         </div>
                         <div className="text-muted-foreground truncate" title={`${definition.yAxisDef?.label} | ${definition.xAxisDef?.label}`}>
                             <span className="font-semibold">Y:</span> {definition.yAxisDef?.label}<Address addr={definition.yAxisDef?.address} />
-                            <span className="mx-2">|</span>
+                            <span className="mx-1">|</span>
                             <span className="font-semibold">X:</span> {definition.xAxisDef?.label}<Address addr={definition.xAxisDef?.address} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 border-l pl-2 pr-1">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                         <div className="flex items-center space-x-1">
                             <Label htmlFor="view-mode-switch" className="text-xs">Hex</Label>
                             <Switch 
@@ -188,7 +189,7 @@ function MapTable({
                             />
                         </div>
                         {isEditable && (
-                            <div className="flex items-center gap-0.5">
+                            <div className="flex items-center">
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
@@ -228,7 +229,7 @@ function MapTable({
         <tbody>
           {yAxis.map((y, yi) => (
             <tr key={`row-${yi}`}>
-              <td className="sticky left-0 z-20 p-1 border border-border font-semibold text-center min-w-[60px] w-[60px]">
+              <td className="sticky left-0 z-20 p-1 border border-border bg-card font-semibold text-center min-w-[60px] w-[60px]">
                  {yAxisFormatter(y)}
               </td>
               {mapData[yi]?.map((cellValue, xi) => {
