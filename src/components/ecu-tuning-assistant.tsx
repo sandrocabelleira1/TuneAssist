@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -1510,14 +1511,14 @@ export default function EcuTuningAssistant() {
     }, [logs]);
 
     const handleToggleEndianness = () => {
-      const newEndianSwappedState = !isEndianSwapped;
-      setIsEndianSwapped(newEndianSwappedState);
-      addLog(`Ordem de Bytes (Endian) invertida: ${newEndianSwappedState ? 'Ativado' : 'Desativado'}. A Recarregar o mapa.`, 'info');
+        const newEndianSwappedState = !isEndianSwapped;
+        setIsEndianSwapped(newEndianSwappedState);
+        addLog(`Ordem de Bytes (Endian) invertida: ${newEndianSwappedState ? 'Ativado' : 'Desativado'}. A Recarregar o mapa.`, 'info');
 
-      // Reload the current map with the new endian setting, if a map is selected
-      if (selectedMapName) {
-        handleMapSelect(selectedMapName);
-      }
+        // Reload the current map with the new endian setting, if a map is selected
+        if (selectedMapName) {
+            handleMapSelect(selectedMapName);
+        }
     };
 
 
@@ -1808,8 +1809,8 @@ export default function EcuTuningAssistant() {
                                                     <LinePlot2D
                                                         key={plotRenderKey}
                                                         mapData={displayMap}
-                                                        xAxis={xAxis}
-                                                        yAxis={yAxis}
+                                                        xAxis={displayAxes.x}
+                                                        yAxis={displayAxes.y}
                                                         yAxisLabel={displayAxes.yLabel}
                                                         xAxisLabel={displayAxes.xLabel}
                                                         sliceIndex={plotSliceIndex}
@@ -2117,3 +2118,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+    
