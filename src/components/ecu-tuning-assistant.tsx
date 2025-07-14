@@ -499,27 +499,6 @@ export default function EcuTuningAssistant() {
         addLog('O estado da sessão foi reiniciado. As suas bibliotecas foram preservadas.', 'info');
     }, [addLog]);
 
-    const autoCorrectAllAxes = useCallback((definitions: XDFDefinition[]): XDFDefinition[] => {
-      // Create a deep copy to avoid modifying the original array from the state directly
-      const correctedDefinitions = JSON.parse(JSON.stringify(definitions)) as XDFDefinition[];
-      
-      for (const def of correctedDefinitions) {
-          // Force Y-Axis (Vertical) to be RPM
-          if (def.yAxisDef) {
-              def.yAxisDef.equation = 'X * 100';
-              def.yAxisDef.label = 'RPM';
-          }
-          
-          // Force X-Axis (Horizontal) to be TPS
-          if (def.xAxisDef) {
-              def.xAxisDef.equation = 'X / 10.23';
-              def.xAxisDef.label = 'Posição da Borboleta';
-          }
-      }
-      
-      return correctedDefinitions;
-    }, []);
-
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -558,14 +537,9 @@ export default function EcuTuningAssistant() {
                     }
                     const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
                     
-                    addLog('A aplicar correções de eixo universais ao XDF...', 'info');
-                    const correctedDefinitions = autoCorrectAllAxes(definitions);
-                    addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
-                    toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
-
-                    setXdfFile({ name: file.name, definitions: correctedDefinitions });
+                    setXdfFile({ name: file.name, definitions: definitions });
                     setActiveXdfBrand(brandValue);
-                    addLog(`Ficheiro XDF carregado: ${file.name} com ${correctedDefinitions.length} mapas.`, 'success');
+                    addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
 
                     try {
                         const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text, brand: brandValue }};
@@ -610,12 +584,7 @@ export default function EcuTuningAssistant() {
 
             const brandValue = xdfData.brand || '';
             
-            addLog('A aplicar correções de eixo universais ao XDF da biblioteca...', 'info');
-            const correctedDefinitions = autoCorrectAllAxes(definitions);
-            addLog(`Correções de eixo universais (RPM & TPS) aplicadas a todo o ficheiro XDF.`, 'success');
-            toast({ title: "XDF Corrigido", description: `Os eixos de todos os mapas foram padronizados para RPM e TPS.`});
-
-            setXdfFile({ name, definitions: correctedDefinitions });
+            setXdfFile({ name, definitions: definitions });
             setSelectedXdfFromLibrary(name);
             setActiveXdfBrand(brandValue);
             addLog(`XDF "${name}" ${brandValue ? `(Marca: ${brandValue}) `: ''}carregado da biblioteca.`, 'success');
