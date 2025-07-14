@@ -526,8 +526,6 @@ export function readAndCalculateMapFromBin(
   const calculatedMap: MapData = [];
   const rawMap: MapData = [];
   
-  const isPotentiallySignedMap = ['ignição', 'ignition', 'avanço', 'spark', 'timing'].some(kw => def.name.toLowerCase().includes(kw));
-
   const sanitizedEquation = (def.equation || 'X')
       .replace(/,/g, '.')
       .replace(/\s*\r?\n\s*/g, ' ')
@@ -578,11 +576,7 @@ export function readAndCalculateMapFromBin(
       if (def.dataSize === 1) {
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          if (isPotentiallySignedMap) {
-              rawValue = view.getInt16(offset, !def.isBigEndian);
-          } else {
-              rawValue = view.getUint16(offset, !def.isBigEndian);
-          }
+          rawValue = view.getUint16(offset, !def.isBigEndian);
       } else {
           calculatedRow.push(null);
           rawRow.push(null);
@@ -629,7 +623,7 @@ export function bufferToHex(buffer: ArrayBuffer): string {
 
 /**
  * Reverses a mathematical equation to find the "raw" value that would produce a given final value.
- * This is a more robust implementation that handles simple arithmetic.
+ * This is a robust implementation that handles simple arithmetic.
  * @param eq The equation string (e.g., "(X-128)/2").
  * @param finalValue The target value we want to achieve.
  * @returns The calculated raw integer value.
@@ -649,73 +643,88 @@ export function invertEquation(
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
     
-    let currentVal = finalValue;
     // Sanitize the equation, standardize the variable to 'X'
     let sanitizedEq = (eq || 'X').trim().toUpperCase().replace(/VALUE/g, 'X');
 
     // If equation is just 'X', return the value directly.
     if (sanitizedEq === 'X') {
-        return Math.round(currentVal);
+        return Math.round(finalValue);
     }
     
-    // Iteratively "peel off" operations from the outside in.
-    // This is a simplified parser that works for common patterns.
-    while (sanitizedEq !== 'X') {
-        let changed = false;
+    // Check for complex equations that cannot be inverted by this simple method
+    if ((sanitizedEq.match(/X/g) || []).length > 1) {
+        throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente (múltiplas ocorrências de X).`);
+    }
 
+    let currentVal = finalValue;
+    
+    // This is a simplified parser that "peels" operations from the outside in.
+    // It's not a full AST parser but works for common patterns like (X op num) op num...
+    const peel = (expr: string): string => {
+        let changedInPeel = false;
+        
         // Pattern: ( ... )
-        const parenthesisMatch = sanitizedEq.match(/^\((.*)\)$/);
+        const parenthesisMatch = expr.match(/^\((.*)\)$/);
         if (parenthesisMatch) {
-            sanitizedEq = parenthesisMatch[1];
-            changed = true;
-            continue; // Re-run the loop on the inner expression
+            expr = parenthesisMatch[1];
+            changedInPeel = true;
         }
 
         // Pattern: ... / number
-        const divMatch = sanitizedEq.match(/^(.*)\s*\/\s*([0-9.]+)$/);
+        const divMatch = expr.match(/^(.*)\s*\/\s*([0-9.]+)$/);
         if (divMatch) {
             const number = parseFloat(divMatch[2]);
             currentVal *= number;
-            sanitizedEq = divMatch[1].trim();
-            changed = true;
-            continue;
+            expr = divMatch[1].trim();
+            changedInPeel = true;
         }
 
         // Pattern: ... * number
-        const mulMatch = sanitizedEq.match(/^(.*)\s*\*\s*([0-9.]+)$/);
+        const mulMatch = expr.match(/^(.*)\s*\*\s*([0-9.]+)$/);
         if (mulMatch) {
             const number = parseFloat(mulMatch[2]);
             if (number === 0) throw new Error("Não é possível inverter a equação: divisão por zero.");
             currentVal /= number;
-            sanitizedEq = mulMatch[1].trim();
-            changed = true;
-            continue;
+            expr = mulMatch[1].trim();
+            changedInPeel = true;
         }
 
         // Pattern: ... - number
-        const subMatch = sanitizedEq.match(/^(.*)\s*-\s*([0-9.]+)$/);
+        const subMatch = expr.match(/^(.*)\s*-\s*([0-9.]+)$/);
         if (subMatch) {
             const number = parseFloat(subMatch[2]);
             currentVal += number;
-            sanitizedEq = subMatch[1].trim();
-            changed = true;
-            continue;
+            expr = subMatch[1].trim();
+            changedInPeel = true;
         }
         
         // Pattern: ... + number
-        const addMatch = sanitizedEq.match(/^(.*)\s*\+\s*([0-9.]+)$/);
+        const addMatch = expr.match(/^(.*)\s*\+\s*([0-9.]+)$/);
         if (addMatch) {
             const number = parseFloat(addMatch[2]);
             currentVal -= number;
-            sanitizedEq = addMatch[1].trim();
-            changed = true;
-            continue;
+            expr = addMatch[1].trim();
+            changedInPeel = true;
         }
 
-        // If no pattern matched in this iteration, the equation is too complex.
-        if (!changed) {
-            throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente.`);
+        if (!changedInPeel) {
+            // If no simple pattern matched, we might have something like "number op X"
+            // We can't handle this with simple regex peeling from the right.
+            // This is a limitation of this approach.
         }
+
+        return expr;
+    }
+
+    let lastEq = sanitizedEq;
+    while (sanitizedEq !== 'X') {
+        sanitizedEq = peel(sanitizedEq);
+
+        // If the expression didn't change, we're stuck in a loop.
+        if (sanitizedEq === lastEq) {
+            throw new Error(`A equação "${eq}" é demasiado complexa ou está num formato não suportado para ser invertida automaticamente.`);
+        }
+        lastEq = sanitizedEq;
     }
 
     return Math.round(currentVal);
@@ -737,8 +746,6 @@ export function writeMapToBin(
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
     const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
 
-    const isPotentiallySignedMap = ['ignição', 'ignition', 'avanço', 'spark', 'timing'].some(kw => def.name.toLowerCase().includes(kw));
-
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             const rawValue = rawMapData[r][c];
@@ -758,11 +765,7 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                     if (isPotentiallySignedMap) {
-                        view.setInt16(offset, Math.max(-32768, Math.min(32767, intValue)), !def.isBigEndian);
-                    } else {
-                        view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
-                    }
+                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
