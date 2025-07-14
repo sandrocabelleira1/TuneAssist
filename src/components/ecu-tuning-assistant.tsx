@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -788,10 +787,11 @@ export default function EcuTuningAssistant() {
         const axisToSort = currentAxes[axis];
         if (!axisToSort) return null;
 
+        // Sempre ordenar em ordem ascendente (menor para o maior)
         const sortedAxisWithIndices = axisToSort
             .map((value, index) => ({
                 calc: value,
-                originalIndex: currentIndexMap[axis][index], // Sort based on the current index map
+                originalIndex: currentIndexMap[axis][index],
             }))
             .sort((a, b) => {
                 const valA = a.calc;
@@ -808,7 +808,7 @@ export default function EcuTuningAssistant() {
         let newSortedMap: MapData;
         let newSortedRawMap: MapData;
     
-        if (axis === 'y') { // Sorting rows (Y-axis of the table)
+        if (axis === 'y') { // Sorting rows
             const reorderedMap = newIndexMap.map(originalRowIndex => {
                 const sourceIndex = displayIndexMap?.y.indexOf(originalRowIndex);
                 if (sourceIndex === undefined || sourceIndex === -1) return new Array(currentMap[0]?.length || 0).fill(null);
@@ -821,7 +821,7 @@ export default function EcuTuningAssistant() {
             });
             newSortedMap = reorderedMap;
             newSortedRawMap = reorderedRawMap;
-        } else { // Sorting columns (X-axis of the table)
+        } else { // Sorting columns
             newSortedMap = currentMap.map(row => {
                 return newIndexMap.map(originalColIndex => {
                     const sourceIndex = displayIndexMap?.x.indexOf(originalColIndex);
@@ -1030,47 +1030,47 @@ export default function EcuTuningAssistant() {
     };
 
     const handleSortByFirstColumn = useCallback(() => {
-        if (!displayMap || !displayAxes || !displayRawMap) return;
-    
+        if (!displayMap || !displayRawMap || !displayAxes) return;
+
+        // Create an array of rows with their original index to sort
         const sortable = displayMap.map((row, index) => ({
-            value: row[0],
-            originalIndex: index,
+            value: row[0],       // The value from the first Z column
+            originalIndex: index, // The original visual index
         }));
-    
+
+        // Sort based on the first column's value (Z-data)
         sortable.sort((a, b) => {
             const valA = a.value;
             const valB = b.value;
             if (valA === null) return 1;
             if (valB === null) return -1;
             if (typeof valA === 'number' && typeof valB === 'number') {
-                return valA - valB;
+                return valA - valB; // Ascending sort
             }
             return String(valA).localeCompare(String(valB));
         });
-    
+
+        // Create the new sorted map data by reordering the original rows
         const newSortedMap = sortable.map(item => displayMap[item.originalIndex]);
         const newSortedRawMap = sortable.map(item => displayRawMap[item.originalIndex]);
-        const newSortedY = sortable.map(item => displayAxes.y[item.originalIndex]);
-        const newYIndexMap = sortable.map(item => displayIndexMap!.y[item.originalIndex]);
-    
+
+        // IMPORTANT: Update only the map data, not the Y-axis labels.
+        // The displayAxes state remains unchanged.
         setDisplayMap(newSortedMap);
         setDisplayRawMap(newSortedRawMap);
 
-        setDisplayAxes(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              y: newSortedY,
-            }
-        });
+        // We do, however, need to update the Y index map so future operations know
+        // how the data rows have been shuffled relative to the *original* source data.
         setDisplayIndexMap(prev => {
             if (!prev) return null;
-            return {...prev, y: newYIndexMap }
+            const newYIndexMap = sortable.map(item => prev.y[item.originalIndex]);
+            return { ...prev, y: newYIndexMap };
         });
+
         setSelectedCells(new Set());
         setMapRenderKey(p => p + 1);
-        addLog(`Linhas ordenadas com base nos valores da primeira coluna (Z).`, 'info');
-    }, [displayMap, displayAxes, displayRawMap, displayIndexMap, addLog]);
+        addLog(`Linhas de dados ordenadas pela 1ª coluna (Z). Eixo Y permanece fixo.`, 'info');
+    }, [displayMap, displayRawMap, displayAxes, addLog]);
     
     const handleResetSort = () => {
         if (workingMap && rawMap && sourceAxes) {
@@ -1576,7 +1576,7 @@ export default function EcuTuningAssistant() {
 
     return (
         <TooltipProvider>
-            <div className="p-4 md:p-8">
+            <div className="flex flex-col h-screen">
                 <audio ref={audioRef} src={audioUrl ?? undefined} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} />
                 <header className="text-center mb-8 flex items-center justify-center relative">
                     <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
@@ -1585,13 +1585,13 @@ export default function EcuTuningAssistant() {
                     <p className="text-lg text-muted-foreground mt-2 absolute top-full">Assistente de Afinação de ECU Potenciado por IA</p>
                 </header>
                 
-                <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex flex-1 flex-col md:flex-row gap-4 min-h-0">
                     <div className="md:w-[400px] shrink-0">
-                        <Card className="h-auto md:h-[calc(100vh-3rem)] md:overflow-y-auto">
+                        <Card className="h-full">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><Settings className="w-6 h-6"/>Painel de Controlo</CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-6">
+                            <CardContent className="space-y-6 h-[calc(100%-76px)] overflow-y-auto">
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">1. Carregar Ficheiros</h3>
                                     <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}><FileUp className="mr-2"/> .BIN</Button>
@@ -1749,7 +1749,7 @@ export default function EcuTuningAssistant() {
                         </Card>
                     </div>
 
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                         <Card className="flex flex-col h-full">
                              <CardHeader>
                                 <div className="flex items-center justify-between">
