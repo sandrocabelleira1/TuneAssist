@@ -432,7 +432,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 }
 
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, endiannessOverride: 'little' | 'big' | null = null): AxisDataState {
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): AxisDataState {
   const emptyState: AxisDataState = { raw: [], calculated: [] };
   if (!axisDef) return emptyState;
 
@@ -482,8 +482,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
       stride = axisDef.dataSize;
   }
 
-  const useLittleEndian = endiannessOverride ? endiannessOverride === 'little' : !axisDef.isBigEndian;
-
+  const useLittleEndian = !axisDef.isBigEndian;
 
   for (let i = 0; i < count; i++) {
     const offset = axisDef.address + (i * stride);
@@ -523,8 +522,7 @@ export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
     xAxis: AxisDataState,
-    yAxis: AxisDataState,
-    endiannessOverride: 'little' | 'big' | null = null
+    yAxis: AxisDataState
 ): { calculatedMap: MapData, rawMap: MapData } {
   if (!def || !binBuffer) return { calculatedMap: [], rawMap: [] };
 
@@ -565,8 +563,7 @@ export function readAndCalculateMapFromBin(
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
   const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
 
-  const useLittleEndian = endiannessOverride ? endiannessOverride === 'little' : !def.isBigEndian;
-
+  const useLittleEndian = !def.isBigEndian;
 
   for (let r = 0; r < def.rows; r++) {
     const calculatedRow: (number|null)[] = [];
@@ -718,8 +715,7 @@ export function invertEquation(
 export function recalculateRawMapFromCalculated(
     calculatedMap: MapData,
     def: XDFDefinition,
-    sourceAxes: { x: AxisDataState, y: AxisDataState },
-    isBigEndian: boolean
+    sourceAxes: { x: AxisDataState, y: AxisDataState }
 ): MapData {
     const newRawMap: MapData = [];
 
@@ -775,6 +771,8 @@ export function writeMapToBin(
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
     const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
 
+    const useLittleEndian = !def.isBigEndian;
+
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             const rawValue = rawMapData[r][c];
@@ -794,7 +792,7 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
+                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndian);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
@@ -805,4 +803,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
