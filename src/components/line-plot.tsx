@@ -15,7 +15,6 @@ interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   xAxisLabel: string;
   yAxisLabel: string;
   sliceIndex: number;
-  onDataChange: (colIndex: number, newValue: number) => void;
 }
 
 export default function LinePlot2D({
@@ -26,7 +25,6 @@ export default function LinePlot2D({
   xAxisLabel,
   sliceIndex,
   className,
-  onDataChange, // Extract onDataChange so it's not in ...props
   ...props
 }: LinePlot2DProps) {
 

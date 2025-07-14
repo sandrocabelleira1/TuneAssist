@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -1137,7 +1138,7 @@ export default function EcuTuningAssistant() {
                   y_raw: sourceAxes.y.raw[workingRowIndex] || 0,
                   z: 0,
               };
-              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
+              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.isBigEndian, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
               const newRawMap = JSON.parse(JSON.stringify(rawMap));
               newRawMap[workingRowIndex][workingColIndex] = newRawValue;
               setRawMap(newRawMap);
@@ -1234,7 +1235,7 @@ export default function EcuTuningAssistant() {
                         y_raw: sourceAxes.y.raw[workingRowIndex] || 0,
                         z: 0
                     };
-                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
+                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.isBigEndian, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
 
                     newRawMap[workingRowIndex][workingColIndex] = newRawValue;
                     newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
@@ -1856,7 +1857,6 @@ export default function EcuTuningAssistant() {
                                                         yAxisLabel={displayAxes.yLabel}
                                                         xAxisLabel={displayAxes.xLabel}
                                                         sliceIndex={plotSliceIndex}
-                                                        onDataChange={() => {}}
                                                         className="absolute inset-0"
                                                     />
                                                 </div>

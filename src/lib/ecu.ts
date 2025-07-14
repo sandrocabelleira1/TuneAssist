@@ -495,7 +495,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     
     let rawValue;
     if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
-    else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, true);
+    else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, !axisDef.isBigEndian);
     else {
         rawData.push(NaN);
         calculatedData.push(NaN);
@@ -581,9 +581,9 @@ export function readAndCalculateMapFromBin(
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
           if (isPotentiallySignedMap) {
-              rawValue = view.getInt16(offset, true);
+              rawValue = view.getInt16(offset, !def.isBigEndian);
           } else {
-              rawValue = view.getUint16(offset, true);
+              rawValue = view.getUint16(offset, !def.isBigEndian);
           }
       } else {
           calculatedRow.push(null);
@@ -645,6 +645,7 @@ export function invertEquation(
   eqVar: string,
   finalValue: number,
   dataSize: number,
+  isBigEndian: boolean,
   mapName: string,
   axisValues: { x_calc: number, y_calc: number, x_raw: number, y_raw: number, z: number },
   axisLabels: { x: string, y: string }
@@ -778,9 +779,9 @@ export function writeMapToBin(
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
                      if (isPotentiallySignedMap) {
-                        view.setInt16(offset, Math.max(-32768, Math.min(32767, intValue)), true);
+                        view.setInt16(offset, Math.max(-32768, Math.min(32767, intValue)), !def.isBigEndian);
                     } else {
-                        view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), true);
+                        view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
                     }
                 }
             } catch (e) {
