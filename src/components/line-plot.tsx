@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo } from 'react';
@@ -5,8 +6,9 @@ import Plot from 'react-plotly.js';
 import type { PlotlyProps } from 'react-plotly.js';
 import type { MapData } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-interface LinePlot2DProps {
+interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   mapData: MapData;
   xAxis: (string | number)[];
   yAxis: (string | number)[];
@@ -23,6 +25,8 @@ export default function LinePlot2D({
   yAxisLabel,
   xAxisLabel,
   sliceIndex,
+  className,
+  ...props
 }: LinePlot2DProps) {
 
   const plotData = useMemo(() => {
@@ -97,7 +101,7 @@ export default function LinePlot2D({
   };
 
   return (
-    <div className="h-full w-full">
+    <div className={cn("h-full w-full", className)} {...props}>
       <Plot
         data={data}
         layout={layout}

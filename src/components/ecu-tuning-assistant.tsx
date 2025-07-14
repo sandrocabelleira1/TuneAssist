@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -162,7 +163,7 @@ function MapTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
-            <th className="sticky top-0 left-0 z-30 bg-card p-1 border border-border text-muted-foreground text-left">
+            <th className="sticky top-0 left-0 z-30 bg-card p-1 border border-border text-left">
                 <div className="flex flex-col h-full">
                     <div className="flex flex-col justify-center">
                         <div className="font-semibold text-foreground truncate" title={definition.name}>
@@ -1576,7 +1577,7 @@ export default function EcuTuningAssistant() {
 
     return (
         <TooltipProvider>
-            <div className="flex flex-col h-screen">
+            <div className="flex flex-col h-screen p-4">
                 <audio ref={audioRef} src={audioUrl ?? undefined} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} />
                 <header className="text-center mb-8 flex items-center justify-center relative">
                     <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
@@ -1845,18 +1846,17 @@ export default function EcuTuningAssistant() {
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-                                            <div className="flex-1 relative">
-                                                <LinePlot2D
-                                                    key={plotRenderKey}
-                                                    mapData={displayMap}
-                                                    xAxis={displayAxes.x}
-                                                    yAxis={displayAxes.y}
-                                                    yAxisLabel={displayAxes.yLabel}
-                                                    xAxisLabel={displayAxes.xLabel}
-                                                    sliceIndex={plotSliceIndex}
-                                                    onDataChange={() => {}}
-                                                />
-                                            </div>
+                                            <LinePlot2D
+                                                key={plotRenderKey}
+                                                mapData={displayMap}
+                                                xAxis={displayAxes.x}
+                                                yAxis={displayAxes.y}
+                                                yAxisLabel={displayAxes.yLabel}
+                                                xAxisLabel={displayAxes.xLabel}
+                                                sliceIndex={plotSliceIndex}
+                                                onDataChange={() => {}}
+                                                className="flex-1 relative"
+                                            />
                                         </TabsContent>
                                         <TabsContent value="3d" className="flex-1">
                                             <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
