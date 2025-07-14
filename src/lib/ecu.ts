@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -643,90 +644,63 @@ export function invertEquation(
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
     
-    // Sanitize the equation, standardize the variable to 'X'
     let sanitizedEq = (eq || 'X').trim().toUpperCase().replace(/VALUE/g, 'X');
-
-    // If equation is just 'X', return the value directly.
     if (sanitizedEq === 'X') {
         return Math.round(finalValue);
     }
-    
-    // Check for complex equations that cannot be inverted by this simple method
+
     if ((sanitizedEq.match(/X/g) || []).length > 1) {
         throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente (múltiplas ocorrências de X).`);
     }
 
     let currentVal = finalValue;
     
-    // This is a simplified parser that "peels" operations from the outside in.
-    // It's not a full AST parser but works for common patterns like (X op num) op num...
-    const peel = (expr: string): string => {
-        let changedInPeel = false;
-        
-        // Pattern: ( ... )
-        const parenthesisMatch = expr.match(/^\((.*)\)$/);
-        if (parenthesisMatch) {
-            expr = parenthesisMatch[1];
-            changedInPeel = true;
-        }
-
-        // Pattern: ... / number
-        const divMatch = expr.match(/^(.*)\s*\/\s*([0-9.]+)$/);
-        if (divMatch) {
-            const number = parseFloat(divMatch[2]);
-            currentVal *= number;
-            expr = divMatch[1].trim();
-            changedInPeel = true;
-        }
-
-        // Pattern: ... * number
-        const mulMatch = expr.match(/^(.*)\s*\*\s*([0-9.]+)$/);
-        if (mulMatch) {
-            const number = parseFloat(mulMatch[2]);
-            if (number === 0) throw new Error("Não é possível inverter a equação: divisão por zero.");
-            currentVal /= number;
-            expr = mulMatch[1].trim();
-            changedInPeel = true;
-        }
-
-        // Pattern: ... - number
-        const subMatch = expr.match(/^(.*)\s*-\s*([0-9.]+)$/);
-        if (subMatch) {
-            const number = parseFloat(subMatch[2]);
-            currentVal += number;
-            expr = subMatch[1].trim();
-            changedInPeel = true;
-        }
-        
-        // Pattern: ... + number
-        const addMatch = expr.match(/^(.*)\s*\+\s*([0-9.]+)$/);
-        if (addMatch) {
-            const number = parseFloat(addMatch[2]);
-            currentVal -= number;
-            expr = addMatch[1].trim();
-            changedInPeel = true;
-        }
-
-        if (!changedInPeel) {
-            // If no simple pattern matched, we might have something like "number op X"
-            // We can't handle this with simple regex peeling from the right.
-            // This is a limitation of this approach.
-        }
-
-        return expr;
+    // Tokenize the equation into numbers, operators, and the variable 'X'
+    const tokens = sanitizedEq.match(/[0-9.]+|[+\-*/()]|X/g);
+    if (!tokens) {
+        throw new Error(`Não foi possível analisar a equação: "${eq}"`);
     }
 
-    let lastEq = sanitizedEq;
-    while (sanitizedEq !== 'X') {
-        sanitizedEq = peel(sanitizedEq);
+    // This is a simplified RPN (Reverse Polish Notation) inverter.
+    // It works backwards from the final value.
+    // We process tokens from right to left, inverting operations.
+    for (let i = tokens.length - 1; i >= 0; i--) {
+        const token = tokens[i];
+        const nextToken = tokens[i-1];
 
-        // If the expression didn't change, we're stuck in a loop.
-        if (sanitizedEq === lastEq) {
-            throw new Error(`A equação "${eq}" é demasiado complexa ou está num formato não suportado para ser invertida automaticamente.`);
+        if (token === ')') {
+            // Find matching parenthesis and skip to it
+            let balance = 1;
+            for (let j = i - 1; j >= 0; j--) {
+                if (tokens[j] === ')') balance++;
+                if (tokens[j] === '(') balance--;
+                if (balance === 0) {
+                    i = j; // Jump index to the matching parenthesis
+                    break;
+                }
+            }
+            continue;
         }
-        lastEq = sanitizedEq;
-    }
 
+        if (token.match(/[0-9.]+/)) {
+            const number = parseFloat(token);
+            if (nextToken === '+') {
+                currentVal -= number;
+                i--; // Skip operator
+            } else if (nextToken === '-') {
+                currentVal += number;
+                i--; // Skip operator
+            } else if (nextToken === '*') {
+                if (number === 0) throw new Error("Não é possível inverter a equação: divisão por zero.");
+                currentVal /= number;
+                i--; // Skip operator
+            } else if (nextToken === '/') {
+                currentVal *= number;
+                i--; // Skip operator
+            }
+        }
+    }
+    
     return Math.round(currentVal);
 }
 
