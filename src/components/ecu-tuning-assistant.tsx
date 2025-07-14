@@ -2,6 +2,7 @@
 
 
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -167,7 +168,7 @@ function MapTable({
         <thead>
           <tr className="bg-card">
             <th className="sticky top-0 left-0 z-30 bg-card p-1 border border-border text-muted-foreground text-left">
-                <div className="flex flex-col h-full space-y-1">
+                <div className="flex flex-col h-full">
                     <div className="flex flex-col justify-center">
                         <div className="font-semibold text-foreground truncate" title={definition.name}>
                             Z: {definition.name}<Address addr={definition.address} />
@@ -178,8 +179,8 @@ function MapTable({
                             <span className="font-semibold">X:</span> {definition.xAxisDef?.label}<Address addr={definition.xAxisDef?.address} />
                         </div>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                        <div className="flex items-center space-x-1">
+                    <div className="flex items-center flex-shrink-0">
+                        <div className="flex items-center">
                             <Label htmlFor="view-mode-switch" className="text-xs">Hex</Label>
                             <Switch 
                                 id="view-mode-switch"
@@ -189,7 +190,7 @@ function MapTable({
                             />
                         </div>
                         {isEditable && (
-                            <div className="flex items-center">
+                           <>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
@@ -214,7 +215,7 @@ function MapTable({
                                     </TooltipTrigger>
                                     <TooltipContent><p>Restaurar ordem original</p></TooltipContent>
                                 </Tooltip>
-                            </div>
+                            </>
                         )}
                     </div>
                 </div>
