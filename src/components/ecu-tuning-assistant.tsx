@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -248,7 +247,7 @@ function MapTable({
                       onCellChange={(value) => onCellChange(yi, xi, value)}
                       isEditable={isEditable}
                       valueFormat={valueFormat}
-                      viewMode={mapViewMode}
+                      viewMode={viewMode}
                       dataSize={definition.dataSize}
                     />
                   </td>
@@ -2125,3 +2124,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+    
