@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -495,7 +496,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     if (axisDef.dataSize === 1) {
         rawValue = view.getUint8(offset);
     } else if (axisDef.dataSize === 2) {
-        // Force little-endian read
+        // Force little-endian read.
         rawValue = view.getUint16(offset, true);
     } else {
         rawData.push(NaN);
@@ -578,7 +579,7 @@ export function readAndCalculateMapFromBin(
       if (def.dataSize === 1) {
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          // Force little-endian read
+          // Force little-endian read.
           rawValue = view.getUint16(offset, true);
       } else {
           calculatedRow.push(null);
@@ -788,7 +789,7 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                     // Force little-endian write
+                     // Force little-endian write.
                      view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), true);
                 }
             } catch (e) {
