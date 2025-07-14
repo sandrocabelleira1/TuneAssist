@@ -4,7 +4,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder, AxisDataState } from '@/lib/types';
-import { parseXDF, readAndCalculateMapFromBin, readAxisFromBin, generateChecksum, bufferToHex, writeMapToBin, invertEquation } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBin, readAxisFromBin, generateChecksum, bufferToHex, writeMapToBin, invertEquation, recalculateRawMapFromCalculated } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps, explainMap, generateSpeech } from '@/app/actions';
 import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
@@ -1101,33 +1101,6 @@ export default function EcuTuningAssistant() {
 
       setAudioUrl(null);
       setMapValidationStatus('idle'); // Any manual change invalidates the last validation
-      
-      // Update the underlying raw value
-      const currentDef = availableMaps.find(d => d.name === selectedMapName);
-      if (currentDef && sourceAxes) {
-          try {
-              const axisValues = {
-                  x_calc: (sourceAxes.x.calculated[workingColIndex] as number) || 0,
-                  y_calc: (sourceAxes.y.calculated[workingRowIndex] as number) || 0,
-                  x_raw: sourceAxes.x.raw[workingColIndex] || 0,
-                  y_raw: sourceAxes.y.raw[workingRowIndex] || 0,
-                  z: 0,
-              };
-              const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newValue, currentDef.dataSize, currentDef.isBigEndian, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
-              const newRawMap = JSON.parse(JSON.stringify(rawMap));
-              newRawMap[workingRowIndex][workingColIndex] = newRawValue;
-              setRawMap(newRawMap);
-
-              // Update display raw map if it exists
-              const newDisplayRawMap = JSON.parse(JSON.stringify(displayRawMap));
-              newDisplayRawMap[rowIndex][colIndex] = newRawValue;
-              setDisplayRawMap(newDisplayRawMap);
-
-          } catch (e) {
-              const msg = e instanceof Error ? e.message : String(e);
-              addLog(`Não foi possível calcular o valor raw para a célula [${rowIndex}, ${colIndex}]: ${msg}`, 'error');
-          }
-      }
     };
 
     const handleCellSelect = useCallback((rowIndex: number, colIndex: number, isCtrlOrCmd: boolean) => {
@@ -1163,9 +1136,6 @@ export default function EcuTuningAssistant() {
         }
 
         const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
-        const newRawMap = JSON.parse(JSON.stringify(rawMap));
-        const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
-        const newDisplayRawMap = JSON.parse(JSON.stringify(displayRawMap));
         let changesMade = 0;
         const hasSelection = selectedCells.size > 0;
 
@@ -1202,34 +1172,21 @@ export default function EcuTuningAssistant() {
                     newCalculatedValue = currentCalculatedValue + changeAmount;
                 }
                 
-                try {
-                    const axisValues = {
-                        x_calc: (sourceAxes.x.calculated[workingColIndex] as number) || 0,
-                        y_calc: (sourceAxes.y.calculated[workingRowIndex] as number) || 0,
-                        x_raw: sourceAxes.x.raw[workingColIndex] || 0,
-                        y_raw: sourceAxes.y.raw[workingRowIndex] || 0,
-                        z: 0
-                    };
-                    const newRawValue = invertEquation(currentDef.equation, currentDef.equationVar, newCalculatedValue, currentDef.dataSize, currentDef.isBigEndian, currentDef.name, axisValues, { x: displayAxes.xLabel, y: displayAxes.yLabel });
-
-                    newRawMap[workingRowIndex][workingColIndex] = newRawValue;
-                    newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
-                    newDisplayMap[r][c] = newCalculatedValue;
-                    newDisplayRawMap[r][c] = newRawValue;
-                    changesMade++;
-
-                } catch (e) {
-                     const errorMsg = e instanceof Error ? e.message : "Erro desconhecido";
-                     addLog(`Não foi possível calcular o valor raw para a célula [${r}, ${c}]: ${errorMsg}`, 'error');
-                }
+                newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
+                changesMade++;
             }
         }
 
         if (changesMade > 0) {
             setWorkingMap(newWorkingMap);
-            setRawMap(newRawMap);
+            // We need to update the display map to reflect the changes.
+            // This is complex due to sorting. The easiest way is to re-construct it.
+            const newDisplayMap = displayIndexMap.y.map(workingRowIndex => {
+                return displayIndexMap.x.map(workingColIndex => {
+                    return newWorkingMap[workingRowIndex][workingColIndex];
+                });
+            });
             setDisplayMap(newDisplayMap);
-            setDisplayRawMap(newDisplayRawMap);
 
             setAudioUrl(null);
             setMapValidationStatus('idle'); // Any manual change invalidates the last validation
@@ -1383,7 +1340,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleSaveModifiedBin = () => {
-        if (!binFile || !rawMap || !selectedMapName) {
+        if (!binFile || !workingMap || !selectedMapName || !sourceAxes || !displayAxes) {
             toast({ variant: 'destructive', title: 'Erro', description: 'Nenhum ficheiro BIN ou mapa carregado para guardar.' });
             return;
         }
@@ -1396,7 +1353,16 @@ export default function EcuTuningAssistant() {
         addLog('A iniciar a modificação do ficheiro BIN...', 'info');
 
         try {
-            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, rawMap);
+            // CRITICAL STEP: Recalculate the entire rawMap from the workingMap
+            // to ensure all edits and the current display state are correctly inverted.
+            const finalRawMap = recalculateRawMapFromCalculated(
+                workingMap,
+                definition,
+                sourceAxes,
+                manualEndianness ? manualEndianness === 'big' : definition.isBigEndian
+            );
+
+            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, finalRawMap);
             const newChecksum = generateChecksum(modifiedBuffer);
             
             addLog(`Modificação concluída. Novo checksum: ${newChecksum}`, 'success');

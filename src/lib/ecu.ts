@@ -639,76 +639,124 @@ export function bufferToHex(buffer: ArrayBuffer): string {
  */
 export function invertEquation(
   eq: string,
-  eqVar: string, // Unused, for signature consistency
   finalValue: number,
-  dataSize: number, // Unused
-  isBigEndian: boolean, // Unused
-  mapName: string, // Unused
-  axisValues: { x_calc: number, y_calc: number, x_raw: number, y_raw: number, z: number }, // Unused
-  axisLabels: { x: string, y: string } // Unused
+  axisValues: { x_calc: number; y_calc: number; x_raw: number; y_raw: number; z: number }
 ): number {
     if (finalValue === null || isNaN(finalValue)) {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
-    let sanitizedEq = (eq || 'X').trim().toUpperCase().replace(/VALUE/g, 'X').replace(/,/g, '.');
+    let sanitizedEq = (eq || 'X').trim()
+        .replace(/,/g, '.')
+        .replace(/\b(value)\b/gi, 'X');
+    
+    // Substitute axis values into the equation string
+    if (axisValues) {
+        sanitizedEq = sanitizedEq
+            .replace(/\by_calc\b/gi, String(axisValues.y_calc))
+            .replace(/\bx_calc\b/gi, String(axisValues.x_calc))
+            .replace(/\by_raw\b/gi, String(axisValues.y_raw))
+            .replace(/\bx_raw\b/gi, String(axisValues.x_raw));
+    }
 
     if ((sanitizedEq.match(/X/g) || []).length > 1) {
         throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente (múltiplas ocorrências de X).`);
     }
     
-    // Replace axis variables for evaluation (not needed for inversion logic, but good practice if eq had them)
-    // This simple solver doesn't handle equations with other variables, but we prepare for it.
-    let currentVal = finalValue;
-    
-    // Simplified parser. This is not a full algebraic solver.
-    // It works for common patterns like (X - 128) / 2 or X * 0.1
-    // It assumes X appears only once and is the primary variable.
-    
-    // Remove outer parentheses if they exist
-    if (sanitizedEq.startsWith('(') && sanitizedEq.endsWith(')')) {
+    // Remove outer parentheses if they exist and don't change the meaning
+    while (sanitizedEq.startsWith('(') && sanitizedEq.endsWith(')')) {
         sanitizedEq = sanitizedEq.substring(1, sanitizedEq.length - 1);
     }
     
     // Tokenize by operators, keeping the operators.
-    const tokens = sanitizedEq.split(/([+\-*/])/).map(t => t.trim()).filter(t => t);
+    const tokens = sanitizedEq.split(/([()+\-*/])/).map(t => t.trim()).filter(t => t);
     
-    // Find where X is.
-    const xIndex = tokens.findIndex(t => t.includes('X'));
+    const xIndex = tokens.findIndex(t => t.toUpperCase() === 'X');
     if (xIndex === -1) {
-      if (!isNaN(parseFloat(sanitizedEq))) {
-        return Math.round(finalValue); // Equation is just a number, something is wrong. Return final value.
-      }
-      throw new Error(`A variável 'X' não foi encontrada na equação para inversão: "${eq}"`);
+      // If X is not found, it might be a constant equation.
+      // This is an edge case, but we should handle it.
+      // For now, assume the raw value is the final value.
+      return Math.round(finalValue);
     }
 
-    // Process operations from right to left to invert them.
-    for (let i = tokens.length - 1; i > xIndex; i -= 2) {
-        const op = tokens[i - 1];
-        const num = parseFloat(tokens[i]);
+    let currentVal = finalValue;
+    
+    // This is a simplified solver and will not handle all algebraic cases.
+    // It works from right to left, inverting operations.
+    // E.g., for (X - 128) / 2
+    // 1. Tokens: ['(', 'X', '-', '128', ')', '/', '2']
+    // 2. Start with final_value, multiply by 2.
+    // 3. Then add 128.
 
-        if (isNaN(num)) throw new Error(`Token numérico inválido "${tokens[i]}" na equação "${eq}"`);
-        
-        if (op === '+') currentVal -= num;
-        else if (op === '-') currentVal += num;
-        else if (op === '*') currentVal /= num;
-        else if (op === '/') currentVal *= num;
+    function solve(op: string, val: number, isLeft: boolean) {
+        if (op === '+') currentVal -= val;
+        else if (op === '-') currentVal = isLeft ? val - currentVal : currentVal + val;
+        else if (op === '*') currentVal /= val;
+        else if (op === '/') currentVal = isLeft ? val / currentVal : currentVal * val;
+    }
+    
+    // Process operations to the right of X
+    for (let i = xIndex + 1; i < tokens.length; i += 2) {
+        const op = tokens[i];
+        const numToken = tokens[i + 1];
+        if (!op || !numToken || isNaN(parseFloat(numToken))) continue;
+        solve(op, parseFloat(numToken), false);
     }
 
-    // Process operations from left to right up to X.
-    for (let i = 0; i < xIndex; i += 2) {
-        const num = parseFloat(tokens[i]);
-        const op = tokens[i + 1];
-
-        if (isNaN(num)) throw new Error(`Token numérico inválido "${tokens[i]}" na equação "${eq}"`);
-
-        if (op === '+') currentVal -= num;
-        else if (op === '-') currentVal = num - currentVal; // Invert for N - X
-        else if (op === '*') currentVal /= num;
-        else if (op === '/') currentVal = num / currentVal; // Invert for N / X
+    // Process operations to the left of X
+    for (let i = xIndex - 1; i >= 0; i -= 2) {
+        const op = tokens[i];
+        const numToken = tokens[i - 1];
+        if (!op || !numToken || isNaN(parseFloat(numToken))) continue;
+        solve(op, parseFloat(numToken), true);
     }
     
     return Math.round(currentVal);
+}
+
+
+export function recalculateRawMapFromCalculated(
+    calculatedMap: MapData,
+    def: XDFDefinition,
+    sourceAxes: { x: AxisDataState, y: AxisDataState },
+    isBigEndian: boolean
+): MapData {
+    const newRawMap: MapData = [];
+
+    for (let r = 0; r < def.rows; r++) {
+        const newRawRow: (number | null)[] = [];
+        for (let c = 0; c < def.cols; c++) {
+            const calculatedValue = calculatedMap[r]?.[c];
+
+            if (calculatedValue === null || calculatedValue === undefined) {
+                newRawRow.push(null);
+                continue;
+            }
+
+            try {
+                const axisValues = {
+                    x_calc: (sourceAxes.x.calculated[c] as number) || 0,
+                    y_calc: (sourceAxes.y.calculated[r] as number) || 0,
+                    x_raw: sourceAxes.x.raw[c] || 0,
+                    y_raw: sourceAxes.y.raw[r] || 0,
+                    z: 0
+                };
+                
+                const newRawValue = invertEquation(
+                    def.equation,
+                    calculatedValue,
+                    axisValues
+                );
+                newRawRow.push(newRawValue);
+            } catch (e) {
+                const errorMsg = e instanceof Error ? e.message : "Erro desconhecido";
+                console.error(`Não foi possível recalcular o valor raw para a célula [${r}, ${c}]: ${errorMsg}. A utilizar NaN.`);
+                newRawRow.push(NaN); // Push NaN or another indicator of failure
+            }
+        }
+        newRawMap.push(newRawRow);
+    }
+    return newRawMap;
 }
 
 
@@ -730,7 +778,7 @@ export function writeMapToBin(
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             const rawValue = rawMapData[r][c];
-            if (rawValue === null) {
+            if (rawValue === null || isNaN(rawValue)) {
                 continue;
             }
 
