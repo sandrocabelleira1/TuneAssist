@@ -495,8 +495,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     if (axisDef.dataSize === 1) {
         rawValue = view.getUint8(offset);
     } else if (axisDef.dataSize === 2) {
-        // Use the isBigEndian flag from the definition. The '!' is because getUint16's second param is 'littleEndian'.
-        rawValue = view.getUint16(offset, !axisDef.isBigEndian);
+        // Force little-endian read
+        rawValue = view.getUint16(offset, true);
     } else {
         rawData.push(NaN);
         calculatedData.push(NaN);
@@ -578,8 +578,8 @@ export function readAndCalculateMapFromBin(
       if (def.dataSize === 1) {
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          // Use the isBigEndian flag from the definition. The '!' is because getUint16's second param is 'littleEndian'.
-          rawValue = view.getUint16(offset, !def.isBigEndian);
+          // Force little-endian read
+          rawValue = view.getUint16(offset, true);
       } else {
           calculatedRow.push(null);
           rawRow.push(null);
@@ -788,8 +788,8 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                     // Use the isBigEndian flag from the definition. The '!' is because getUint16's second param is 'littleEndian'.
-                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !def.isBigEndian);
+                     // Force little-endian write
+                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), true);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
