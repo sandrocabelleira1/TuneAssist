@@ -1,6 +1,7 @@
 
 
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -297,6 +298,7 @@ export default function EcuTuningAssistant() {
     const [displayIndexMap, setDisplayIndexMap] = useState<{ x: number[], y: number[] } | null>(null);
     const [mapRenderKey, setMapRenderKey] = useState(0);
     const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
+    const [isEndianSwapped, setIsEndianSwapped] = useState(false);
 
     const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [potentialMapsDb, setPotentialMapsDb] = useState<Record<string, XDFDefinition[]>>({});
@@ -494,6 +496,7 @@ export default function EcuTuningAssistant() {
         setQuickEditValue('');
         setLogs([]);
         setPlotSliceIndex(0);
+        setIsEndianSwapped(false);
 
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
@@ -618,10 +621,10 @@ export default function EcuTuningAssistant() {
         newDefinition.equation = zEquation;
         
         try {
-            const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-            const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+            const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef, isEndianSwapped);
+            const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef, isEndianSwapped);
 
-            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis);
+            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis, isEndianSwapped);
             
             const newSourceAxes = {
                 x: currentXAxis,
@@ -680,7 +683,7 @@ export default function EcuTuningAssistant() {
             toast({ variant: 'destructive', title: 'Erro ao Aplicar Correção', description: 'Não foi possível recalcular o mapa com a nova equação.' });
             setMapValidationStatus('error');
         }
-    }, [binFile, xdfFile, addLog, toast]);
+    }, [binFile, xdfFile, addLog, toast, isEndianSwapped]);
 
     const runZAxisValidation = useCallback(async (
         definition: XDFDefinition, 
@@ -727,9 +730,9 @@ export default function EcuTuningAssistant() {
                     const newDefinition = JSON.parse(JSON.stringify(definition));
                     newDefinition.equation = validSuggestedEquation;
 
-                    const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-                    const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
-                    const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis);
+                    const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef, isEndianSwapped);
+                    const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef, isEndianSwapped);
+                    const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis, isEndianSwapped);
 
                     setAiSuggestion({
                         reasoning,
@@ -753,7 +756,7 @@ export default function EcuTuningAssistant() {
             addLog(`A análise do eixo Z falhou: ${result.error}`, 'error');
             setMapValidationStatus('error');
         }
-    }, [binFile, addLog, activeXdfBrand, motorcycleModel]);
+    }, [binFile, addLog, activeXdfBrand, motorcycleModel, isEndianSwapped]);
 
     const handleSortAxis = useCallback((axis: 'x' | 'y', currentMap: MapData, currentRawMap: MapData, currentAxes: { x: (string|number)[], y: (string|number)[] }, currentIndexMap: { x: number[], y: number[] }) => {
         const axisToSort = currentAxes[axis];
@@ -841,14 +844,14 @@ export default function EcuTuningAssistant() {
         setPlotSliceIndex(0);
 
         try {
-            const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef);
-            const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef);
+            const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef, isEndianSwapped);
+            const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef, isEndianSwapped);
 
             if (!axisXData || !axisYData) {
                 throw new Error("Não foi possível ler os dados do eixo do ficheiro BIN.");
             }
 
-            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData);
+            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData, isEndianSwapped);
             
             const currentAxes = {
               x: axisXData,
@@ -893,7 +896,7 @@ export default function EcuTuningAssistant() {
             setDisplayRawMap(null);
             setDisplayAxes(null);
         }
-    }, [binFile, availableMaps, addLog, toast, runZAxisValidation]);
+    }, [binFile, availableMaps, addLog, toast, runZAxisValidation, isEndianSwapped]);
     
     const handleConfirmAxes = (data: { xEquation: string, yEquation: string, zEquation: string }) => {
         if (!selectedMapName || !binFile) return;
@@ -911,14 +914,14 @@ export default function EcuTuningAssistant() {
             newDefinition.xAxisDef!.equation = data.xEquation;
             newDefinition.yAxisDef!.equation = data.yEquation;
 
-            const newX = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef);
-            const newY = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef);
+            const newX = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef, isEndianSwapped);
+            const newY = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef, isEndianSwapped);
 
             if (!newX || !newY) {
                 throw new Error("Não foi possível ler os eixos com as novas equações.");
             }
             
-            const { calculatedMap: newMapData, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, newX, newY);
+            const { calculatedMap: newMapData, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, newX, newY, isEndianSwapped);
 
             const newAxesState = {
               x: newX,
@@ -1353,10 +1356,11 @@ export default function EcuTuningAssistant() {
             const finalRawMap = recalculateRawMapFromCalculated(
                 workingMap,
                 definition,
-                sourceAxes
+                sourceAxes,
+                isEndianSwapped
             );
 
-            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, finalRawMap);
+            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, finalRawMap, isEndianSwapped);
             const newChecksum = generateChecksum(modifiedBuffer);
             
             addLog(`Modificação concluída. Novo checksum: ${newChecksum}`, 'success');
@@ -1506,6 +1510,23 @@ export default function EcuTuningAssistant() {
         }
     }, [logs]);
 
+    const handleToggleEndianness = () => {
+        if (!selectedMapName) {
+            toast({ variant: 'destructive', title: "Ação Necessária", description: "Por favor, selecione um mapa primeiro." });
+            return;
+        }
+        
+        // This sets the new state, but it will only be available on the next render.
+        // So we pass the new value directly to handleMapSelect.
+        const newIsEndianSwapped = !isEndianSwapped;
+        setIsEndianSwapped(newIsEndianSwapped);
+        
+        // We must re-run handleMapSelect to re-read and re-calculate everything with the new endianness setting.
+        // It's safe to call it immediately because it will use the latest state values for everything else.
+        handleMapSelect(selectedMapName);
+        addLog(`Ordem de bytes de 16-bit invertida. Swap está ${newIsEndianSwapped ? 'ATIVO' : 'INATIVO'}.`, 'info');
+    };
+
 
     const selectedMapDefinition = useMemo(() => {
         return availableMaps.find(m => m.name === selectedMapName);
@@ -1628,6 +1649,10 @@ export default function EcuTuningAssistant() {
                                                 <p>Editar Nome do Mapa</p></TooltipContent>
                                         </Tooltip>
                                     </div>
+                                    <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={!selectedMapDefinition}>
+                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                        Inverter Ordem de Bytes (Endian)
+                                    </Button>
                                 </div>
 
                                 <div className="space-y-2">

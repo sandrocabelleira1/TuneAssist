@@ -1,5 +1,6 @@
 
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -432,7 +433,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 }
 
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): AxisDataState {
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
   const emptyState: AxisDataState = { raw: [], calculated: [] };
   if (!axisDef) return emptyState;
 
@@ -482,7 +483,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       stride = axisDef.dataSize;
   }
 
-  const useLittleEndian = true; // Force little-endian for compatibility
+  // Determine the final endianness based on the XDF and the user's manual swap.
+  // The `isBigEndian` from XDF is the base, `isEndianSwapped` toggles it.
+  // `true` for getUint16 means little-endian. So we want `!isBigEndianFinal`.
+  const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
 
   for (let i = 0; i < count; i++) {
     const offset = axisDef.address + (i * stride);
@@ -524,7 +528,8 @@ export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
     xAxis: AxisDataState,
-    yAxis: AxisDataState
+    yAxis: AxisDataState,
+    isEndianSwapped = false
 ): { calculatedMap: MapData, rawMap: MapData } {
   if (!def || !binBuffer) return { calculatedMap: [], rawMap: [] };
 
@@ -565,7 +570,7 @@ export function readAndCalculateMapFromBin(
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
   const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
   
-  const useLittleEndian = true; // Force little-endian for compatibility
+  const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
   for (let r = 0; r < def.rows; r++) {
     const calculatedRow: (number|null)[] = [];
@@ -717,7 +722,8 @@ export function invertEquation(
 export function recalculateRawMapFromCalculated(
     calculatedMap: MapData,
     def: XDFDefinition,
-    sourceAxes: { x: AxisDataState, y: AxisDataState }
+    sourceAxes: { x: AxisDataState, y: AxisDataState },
+    isEndianSwapped = false
 ): MapData {
     const newRawMap: MapData = [];
 
@@ -761,7 +767,8 @@ export function recalculateRawMapFromCalculated(
 export function writeMapToBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-    rawMapData: MapData
+    rawMapData: MapData,
+    isEndianSwapped = false
 ): ArrayBuffer {
     if (!def || !binBuffer || !rawMapData) {
         throw new Error('Parâmetros inválidos fornecidos para writeMapToBin.');
@@ -773,7 +780,7 @@ export function writeMapToBin(
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
     const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
     
-    const useLittleEndian = true; // Force little-endian for compatibility
+    const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
