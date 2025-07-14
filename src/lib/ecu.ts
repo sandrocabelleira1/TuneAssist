@@ -155,7 +155,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     const dataSizeNode = findNode(sourceNode, 'data_size'); // Another possible location for data size
     const dataSize = parseInt(dataSizeBitsStr || dataSizeNode?.textContent || '8', 10) / 8;
 
-    const isBigEndian = getAttr(sourceNode, 'bigendian') === '1';
+    const isBigEndian = getAttr(sourceNode, 'bigendian')?.toLowerCase() === 'true' || getAttr(sourceNode, 'bigendian') === '1';
     
     const majorStride = parseInt(getAttr(sourceNode, 'mmedmajorstridebits', 'major_stride') || '0', 10) / 8;
     const minorStride = parseInt(getAttr(sourceNode, 'mmedminorstridebits', 'minor_stride') || '0', 10) / 8;
@@ -173,7 +173,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                 const sourceAddrStr = getAttr(sourceEmbeddedData, 'mmedaddress');
                 const sourceAddr = sourceAddrStr ? parseInt(sourceAddrStr, 16) : null;
                 const sourceDataSize = parseInt(getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '8', 10) / 8;
-                const sourceIsBigEndian = getAttr(sourceEmbeddedData, 'bigendian') === '1';
+                const sourceIsBigEndian = getAttr(sourceEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(sourceEmbeddedData, 'bigendian') === '1';
                 const sourceMajorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
                 const sourceMinorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
 
@@ -338,7 +338,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const rows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
       const cols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
-      const isBigEndian = getAttr(zEmbeddedData, 'bigendian') === '1';
+      const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
       const majorStride = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
       const minorStride = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
 
