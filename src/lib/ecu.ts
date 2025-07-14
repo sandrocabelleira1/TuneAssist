@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -430,7 +431,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 }
 
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped: boolean): AxisDataState {
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition): AxisDataState {
   const emptyState: AxisDataState = { raw: [], calculated: [] };
   if (!axisDef) return emptyState;
 
@@ -480,9 +481,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
       stride = axisDef.dataSize;
   }
 
-  // Determine the final endianness based on XDF and manual override.
-  // XOR: if isEndianSwapped is true, we flip the XDF setting.
-  const useLittleEndian = isEndianSwapped ? !axisDef.isBigEndian : axisDef.isBigEndian;
+  const useLittleEndian = true; // Force little-endian for compatibility
 
   for (let i = 0; i < count; i++) {
     const offset = axisDef.address + (i * stride);
@@ -499,8 +498,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     if (axisDef.dataSize === 1) {
         rawValue = view.getUint8(offset);
     } else if (axisDef.dataSize === 2) {
-        // Here we apply the final endianness choice
-        rawValue = view.getUint16(offset, !useLittleEndian);
+        rawValue = view.getUint16(offset, useLittleEndian);
     } else {
         rawData.push(NaN);
         calculatedData.push(NaN);
@@ -525,8 +523,7 @@ export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
     xAxis: AxisDataState,
-    yAxis: AxisDataState,
-    isEndianSwapped: boolean
+    yAxis: AxisDataState
 ): { calculatedMap: MapData, rawMap: MapData } {
   if (!def || !binBuffer) return { calculatedMap: [], rawMap: [] };
 
@@ -567,8 +564,7 @@ export function readAndCalculateMapFromBin(
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
   const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
   
-  // Determine the final endianness based on XDF and manual override.
-  const useLittleEndian = isEndianSwapped ? !def.isBigEndian : def.isBigEndian;
+  const useLittleEndian = true; // Force little-endian for compatibility
 
   for (let r = 0; r < def.rows; r++) {
     const calculatedRow: (number|null)[] = [];
@@ -586,8 +582,7 @@ export function readAndCalculateMapFromBin(
       if (def.dataSize === 1) {
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          // Here we apply the final endianness choice
-          rawValue = view.getUint16(offset, !useLittleEndian);
+          rawValue = view.getUint16(offset, useLittleEndian);
       } else {
           calculatedRow.push(null);
           rawRow.push(null);
@@ -721,8 +716,7 @@ export function invertEquation(
 export function recalculateRawMapFromCalculated(
     calculatedMap: MapData,
     def: XDFDefinition,
-    sourceAxes: { x: AxisDataState, y: AxisDataState },
-    isEndianSwapped: boolean
+    sourceAxes: { x: AxisDataState, y: AxisDataState }
 ): MapData {
     const newRawMap: MapData = [];
 
@@ -766,8 +760,7 @@ export function recalculateRawMapFromCalculated(
 export function writeMapToBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-    rawMapData: MapData,
-    isEndianSwapped: boolean
+    rawMapData: MapData
 ): ArrayBuffer {
     if (!def || !binBuffer || !rawMapData) {
         throw new Error('Parâmetros inválidos fornecidos para writeMapToBin.');
@@ -779,7 +772,7 @@ export function writeMapToBin(
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
     const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
     
-    const useLittleEndian = isEndianSwapped ? !def.isBigEndian : def.isBigEndian;
+    const useLittleEndian = true; // Force little-endian for compatibility
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
@@ -800,7 +793,7 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), !useLittleEndian);
+                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndian);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
