@@ -1,5 +1,6 @@
 
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -482,8 +483,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
       stride = axisDef.dataSize;
   }
 
-  const useLittleEndian = !axisDef.isBigEndian;
-
   for (let i = 0; i < count; i++) {
     const offset = axisDef.address + (i * stride);
     if (offset + axisDef.dataSize > view.byteLength) {
@@ -496,9 +495,12 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition)
     }
     
     let rawValue;
-    if (axisDef.dataSize === 1) rawValue = view.getUint8(offset);
-    else if (axisDef.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
-    else {
+    if (axisDef.dataSize === 1) {
+        rawValue = view.getUint8(offset);
+    } else if (axisDef.dataSize === 2) {
+        // Force little-endian read for 16-bit data, which is most common for ECUs.
+        rawValue = view.getUint16(offset, true);
+    } else {
         rawData.push(NaN);
         calculatedData.push(NaN);
         continue;
@@ -563,8 +565,6 @@ export function readAndCalculateMapFromBin(
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
   const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
 
-  const useLittleEndian = !def.isBigEndian;
-
   for (let r = 0; r < def.rows; r++) {
     const calculatedRow: (number|null)[] = [];
     const rawRow: (number|null)[] = [];
@@ -581,7 +581,8 @@ export function readAndCalculateMapFromBin(
       if (def.dataSize === 1) {
           rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
-          rawValue = view.getUint16(offset, useLittleEndian);
+          // Force little-endian read for 16-bit data, which is most common for ECUs.
+          rawValue = view.getUint16(offset, true);
       } else {
           calculatedRow.push(null);
           rawRow.push(null);
@@ -771,8 +772,6 @@ export function writeMapToBin(
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
     const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
 
-    const useLittleEndian = !def.isBigEndian;
-
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             const rawValue = rawMapData[r][c];
@@ -792,7 +791,8 @@ export function writeMapToBin(
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
                 } else if (def.dataSize === 2) {
-                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndian);
+                     // Force little-endian write for 16-bit data.
+                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), true);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
@@ -803,3 +803,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
