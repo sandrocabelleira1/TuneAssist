@@ -100,9 +100,10 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         ''
     ).trim() || defaultLabel;
 
+    // Look for a math node specific to this axis first.
     const mathNode = findNode(axisNode, 'math', 'MATH');
-    const equation = getAttr(mathNode || axisNode, 'equation', 'Equation') || 'X';
-    const varNode = findNode(mathNode || axisNode, 'VAR', 'var');
+    const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
+    const varNode = findNode(mathNode, 'var', 'VAR');
     const equationVar = getAttr(varNode, 'id') || 'X';
 
     // --- Case 1: Static Labels ---
@@ -387,16 +388,10 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       
       // --- Z-AXIS ADDRESS (PRIORITIZED) ---
       const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-      const tableAddressStr = getAttr(table, 'address');
-      
       const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
-      const tableAddress = tableAddressStr ? parseInt(tableAddressStr, 16) : null;
       
-      // Use the Z-axis address if it exists, otherwise fall back to the table address.
-      const mapAddress = (zAddress !== null && !isNaN(zAddress)) ? zAddress : tableAddress;
-
-      if (mapAddress === null || isNaN(mapAddress)) {
-          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal.`);
+      if (zAddress === null || isNaN(zAddress)) {
+          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal (eixo Z).`);
           continue;
       }
       
@@ -417,7 +412,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       definitions.push({ 
         name: tableName, 
-        address: mapAddress, 
+        address: zAddress, 
         rows: rowsCount, 
         cols: colsCount, 
         dataSize, 
