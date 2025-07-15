@@ -547,9 +547,8 @@ export function readAndCalculateMapFromBin(
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
-  // Use a simplified and safe stride calculation
-  const minorStride = def.dataSize;
-  const majorStride = def.cols * def.dataSize;
+  const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
+  const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
   
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
@@ -758,9 +757,8 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    // Use a simplified and safe stride calculation
-    const minorStride = def.dataSize;
-    const majorStride = def.cols * def.dataSize;
+    const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
+    const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
 
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
