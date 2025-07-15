@@ -1,6 +1,3 @@
-
-
-
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -397,11 +394,11 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       
       // --- Stride Calculation (Final) ---
       // Read stride from XDF, otherwise assume contiguity.
-      let minorStride = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
-      if (minorStride === 0) minorStride = dataSize;
+      let minorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
+      let minorStride = minorStrideFromXdf > 0 ? minorStrideFromXdf : dataSize;
 
-      let majorStride = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
-      if (majorStride === 0) majorStride = colsCount * minorStride;
+      let majorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
+      let majorStride = majorStrideFromXdf > 0 ? majorStrideFromXdf : colsCount * minorStride;
 
       // Handle duplicate table names by appending a counter.
       let tableName = originalName;
