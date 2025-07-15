@@ -5,6 +5,7 @@
 
 
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -1514,19 +1515,12 @@ export default function EcuTuningAssistant() {
     }, [logs]);
 
     const handleToggleEndianness = () => {
-        if (!selectedMapName) {
-            toast({ variant: 'destructive', title: "Ação Necessária", description: "Por favor, selecione um mapa primeiro." });
-            return;
-        }
-        
-        // This sets the new state, but it will only be available on the next render.
-        // So we pass the new value directly to handleMapSelect.
         const newIsEndianSwapped = !isEndianSwapped;
         setIsEndianSwapped(newIsEndianSwapped);
-        
-        // We must re-run handleMapSelect to re-read and re-calculate everything with the new endianness setting.
-        // It's safe to call it immediately because it will use the latest state values for everything else.
-        handleMapSelect(selectedMapName);
+        if (selectedMapName) {
+            // Re-select the map to re-read and re-calculate with the new endianness
+            handleMapSelect(selectedMapName);
+        }
         addLog(`Ordem de bytes de 16-bit invertida. Swap está ${newIsEndianSwapped ? 'ATIVO' : 'INATIVO'}.`, 'info');
     };
 
@@ -1652,7 +1646,12 @@ export default function EcuTuningAssistant() {
                                                 <p>Editar Nome do Mapa</p></TooltipContent>
                                         </Tooltip>
                                     </div>
-                                    <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={!selectedMapDefinition || selectedMapDefinition.dataSize !== 2}>
+                                    <Button 
+                                        variant="secondary" 
+                                        className="w-full" 
+                                        onClick={handleToggleEndianness} 
+                                        disabled={!selectedMapDefinition || selectedMapDefinition.dataSize !== 2}
+                                    >
                                         <RefreshCw className="mr-2 h-4 w-4" />
                                         Inverter Ordem de Bytes (Endian)
                                     </Button>
@@ -1764,7 +1763,7 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent className="flex-1 flex flex-col min-h-0">
+                            <CardContent className="flex-1 flex flex-col min-h-0 p-6 pt-0">
                                 {displayMap && displayAxes ? (
                                     <Tabs defaultValue="2d" className="flex-1 flex flex-col min-h-0" onValueChange={(value) => {
                                         if (value === 'plot-2d') {
