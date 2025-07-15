@@ -1,4 +1,5 @@
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -349,42 +350,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       let yAxisDef = parseAxis(yAxisNode, tableMap, 'y');
       let xAxisDef = parseAxis(xAxisNode, tableMap, 'x');
-
-      // --- Address Inference Logic (New) ---
-      let mapAddress: number | null = null;
-      let xAxisEnd = 0;
-      let yAxisEnd = 0;
-
-      // Calculate where each axis ends in memory, only if they have a valid address.
-      if (xAxisDef && xAxisDef.address !== null && !isNaN(xAxisDef.address)) {
-          xAxisEnd = xAxisDef.address + (xAxisDef.count * xAxisDef.dataSize);
-      }
-      if (yAxisDef && yAxisDef.address !== null && !isNaN(yAxisDef.address)) {
-          yAxisEnd = yAxisDef.address + (yAxisDef.count * yAxisDef.dataSize);
-      }
-
-      // Infer the map address to be immediately after the axis that ends last in memory.
-      if (xAxisEnd > 0 || yAxisEnd > 0) {
-          mapAddress = Math.max(xAxisEnd, yAxisEnd);
-      } else {
-          // Fallback if no axis has a valid address: try to get it from the z-axis or table.
-          const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-          if (zAddressStr) {
-              mapAddress = parseInt(zAddressStr, 16);
-          }
-      }
-
-      if (mapAddress === null || isNaN(mapAddress)) {
-          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal.`);
-          continue;
-      }
       
-      // Get Z-axis math.
-      const mathNode = findMainMathNode(table, zAxisNode);
-      const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
-      const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
-      const equationVar = getAttr(varNode, 'id') || 'X';
-
       // --- Robust Axis Handling & Validation ---
       
       // If an axis is missing, we create a placeholder but do NOT infer an address.
@@ -413,7 +379,46 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       } else if (xAxisDef.count === 0) {
           xAxisDef.count = colsCount;
       }
+
+      // --- Address Inference Logic (Final) ---
+      let mapAddress: number | null = null;
       
+      // Calculate where each axis ends in memory.
+      let xAxisEnd = 0;
+      if (xAxisDef && xAxisDef.address !== null && !isNaN(xAxisDef.address)) {
+          const axisSize = xAxisDef.count * xAxisDef.dataSize;
+          xAxisEnd = xAxisDef.address + axisSize;
+      }
+
+      let yAxisEnd = 0;
+      if (yAxisDef && yAxisDef.address !== null && !isNaN(yAxisDef.address)) {
+          const axisSize = yAxisDef.count * yAxisDef.dataSize;
+          yAxisEnd = yAxisDef.address + axisSize;
+      }
+
+      // Infer the map address to be immediately after the axis that ends last in memory.
+      if (xAxisEnd > 0 || yAxisEnd > 0) {
+          mapAddress = Math.max(xAxisEnd, yAxisEnd);
+      } else {
+          // Fallback: Use the address from Z-axis if axis inference fails.
+          const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
+          if (zAddressStr) {
+              mapAddress = parseInt(zAddressStr, 16);
+          }
+      }
+
+      if (mapAddress === null || isNaN(mapAddress)) {
+          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal.`);
+          continue;
+      }
+      
+      // Get Z-axis math.
+      const mathNode = findMainMathNode(table, zAxisNode);
+      const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
+      const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
+      const equationVar = getAttr(varNode, 'id') || 'X';
+      
+      // --- Stride Calculation (Final) ---
       const minorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
       const majorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
       
