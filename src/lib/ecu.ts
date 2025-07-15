@@ -509,7 +509,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     rawData.push(rawValue);
 
     try {
-        const calculatedValue = equationFunc(rawValue, 0, 0, 0);
+        const calculatedValue = equationFunc(rawValue, rawValue, 0, 0); // Pass rawValue for both X and x
         calculatedData.push(calculatedValue);
     } catch (e) {
         const errorMsg = e instanceof Error ? e.message : String(e);
@@ -545,8 +545,8 @@ export function readAndCalculateMapFromBin(
   let equationFunc: Function;
   try {
     // Pass all possible variables the equation might use.
-    // The main value from the map is always 'X'. The other variables are for context.
-    equationFunc = new Function('X', 'x_raw', 'y_raw', 'x_calc', 'y_calc', 'z', `return ${sanitizedEquation || 'X'}`);
+    // The main value from the map is always 'X' and 'x'. The other variables are for context.
+    equationFunc = new Function('X', 'x', 'y_raw', 'x_raw', 'y_calc', 'x_calc', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
@@ -588,7 +588,8 @@ export function readAndCalculateMapFromBin(
         const xRawVal = xAxis.raw[c] ?? 0;
         const yRawVal = yAxis.raw[r] ?? 0;
         
-        const calculatedValue = equationFunc(rawValue, xRawVal, yRawVal, xCalcVal, yCalcVal, 0);
+        // Call with both X and x set to the rawValue
+        const calculatedValue = equationFunc(rawValue, rawValue, yRawVal, xRawVal, yCalcVal, xCalcVal, 0);
         calculatedRow.push(calculatedValue);
 
       } catch(e) {
