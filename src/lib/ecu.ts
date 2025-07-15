@@ -322,49 +322,53 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           continue;
       }
       
-      // Basic Z-axis properties.
-      const initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
-      const initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
+
+      // Transposition logic
+      const zEmbedInfoNode = findNode(zAxisNode, 'embedinfo', 'EMBEDINFO');
+      const embedType = getAttr(zEmbedInfoNode, 'type');
+      const isTransposed = embedType === '2';
+      
+      const initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
+      const initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
 
       if (initialRows === 0 || initialCols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas.`);
         continue;
       }
       
-      const zEmbedInfoNode = findNode(zAxisNode, 'embedinfo', 'EMBEDINFO');
-      const embedType = getAttr(zEmbedInfoNode, 'type');
-      const isTransposed = embedType === '2';
-
+      // Determine final dimensions based on transposition
       let finalRows = isTransposed ? initialCols : initialRows;
       let finalCols = isTransposed ? initialRows : initialCols;
 
+      // Get axis definitions
       const yAxisNodeSrc = findNode(table, `XDFAXIS[id="y"]`, `XDFAXIS[id="Y"]`, `yaxis`);
       const xAxisNodeSrc = findNode(table, `XDFAXIS[id="x"]`, `XDFAXIS[id="X"]`, `xaxis`);
 
       let yAxisDef = parseAxis(yAxisNodeSrc, tableMap, 'y');
       let xAxisDef = parseAxis(xAxisNodeSrc, tableMap, 'x');
 
+      // Swap axes if transposed
       if (isTransposed) {
         [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
       }
       
       if (!yAxisDef || !xAxisDef) {
-        console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta.`);
+        console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta ou inválidas.`);
         continue;
       }
       
       yAxisDef.count = yAxisDef.count > 0 ? yAxisDef.count : finalRows;
       xAxisDef.count = xAxisDef.count > 0 ? xAxisDef.count : finalCols;
-
-      // Stride calculation (Robust version)
+      
+      // FINAL Stride Calculation
       const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
       const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
-
+      
       const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
       const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : finalCols * minorStride;
-      
+
       // --- Z-AXIS ADDRESS (PRIORITIZED) ---
       const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
       const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
