@@ -466,7 +466,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
 
   let equationFunc: Function;
   try {
-    equationFunc = new Function('X', 'x', 'y', 'z', `return ${sanitizedEquation || 'X'}`);
+    equationFunc = new Function('X', 'x', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação do eixo "${axisDef.equation}" para "${axisDef.label}" é inválida. (${error})`);
@@ -475,10 +475,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  let stride = Math.max(axisDef.majorStride || 0, axisDef.minorStride || 0);
-  if (stride === 0) {
-      stride = axisDef.dataSize;
-  }
+  const stride = axisDef.majorStride > 0 ? axisDef.majorStride : axisDef.dataSize;
 
   // Determine the final endianness based on the XDF and the user's manual swap.
   // The `isBigEndian` from XDF is the base, `isEndianSwapped` toggles it.
@@ -509,7 +506,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     rawData.push(rawValue);
 
     try {
-        const calculatedValue = equationFunc(rawValue, rawValue, 0, 0); // Pass rawValue for both X and x
+        const calculatedValue = equationFunc(rawValue, rawValue); // Pass rawValue for both X and x
         calculatedData.push(calculatedValue);
     } catch (e) {
         const errorMsg = e instanceof Error ? e.message : String(e);
@@ -544,16 +541,14 @@ export function readAndCalculateMapFromBin(
       
   let equationFunc: Function;
   try {
-    // Pass all possible variables the equation might use.
-    // The main value from the map is always 'X' and 'x'. The other variables are for context.
-    equationFunc = new Function('X', 'x', 'y_raw', 'x_raw', 'y_calc', 'x_calc', 'z', `return ${sanitizedEquation || 'X'}`);
+    equationFunc = new Function('X', 'x', 'y_raw', 'x_raw', 'y_calc', 'x_calc', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
-  const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
+  const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * def.dataSize);
   
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
@@ -588,8 +583,7 @@ export function readAndCalculateMapFromBin(
         const xRawVal = xAxis.raw[c] ?? 0;
         const yRawVal = yAxis.raw[r] ?? 0;
         
-        // Call with both X and x set to the rawValue
-        const calculatedValue = equationFunc(rawValue, rawValue, yRawVal, xRawVal, yCalcVal, xCalcVal, 0);
+        const calculatedValue = equationFunc(rawValue, rawValue, yRawVal, xRawVal, yCalcVal, xCalcVal);
         calculatedRow.push(calculatedValue);
 
       } catch(e) {
@@ -764,7 +758,7 @@ export function writeMapToBin(
     const view = new DataView(newBuffer);
     
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
-    const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
+    const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * def.dataSize);
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
