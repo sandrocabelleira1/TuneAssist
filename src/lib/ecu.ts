@@ -326,14 +326,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const cols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
-      
-      // Read stride values directly from the XDF (in BITS), then convert to BYTES.
-      const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
-      const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-
-      // If stride is defined in XDF, use it. Otherwise, calculate a safe default.
-      const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
-      const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : cols * minorStride;
 
       if (rows === 0 || cols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas.`);
@@ -348,45 +340,28 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const rowsCount = isTransposed ? cols : rows;
       const colsCount = isTransposed ? rows : cols;
 
-      // Correctly swap axis IDs if transposed
-      const yAxisId = isTransposed ? 'x' : 'y';
-      const xAxisId = isTransposed ? 'y' : 'x';
+      const yAxisNodeSrc = findNode(table, `XDFAXIS[id="y"]`, `XDFAXIS[id="Y"]`, `yaxis`);
+      const xAxisNodeSrc = findNode(table, `XDFAXIS[id="x"]`, `XDFAXIS[id="X"]`, `xaxis`);
 
-      const yAxisNode = findNode(table, `XDFAXIS[id="${yAxisId}"]`, `XDFAXIS[id="${yAxisId.toUpperCase()}"]`, `yaxis`);
-      const xAxisNode = findNode(table, `XDFAXIS[id="${xAxisId}"]`, `XDFAXIS[id="${xAxisId.toUpperCase()}"]`, `xaxis`);
-
-      let yAxisDef = parseAxis(yAxisNode, tableMap, 'y');
-      let xAxisDef = parseAxis(xAxisNode, tableMap, 'x');
+      const yAxisDef = parseAxis(isTransposed ? xAxisNodeSrc : yAxisNodeSrc, tableMap, 'y');
+      const xAxisDef = parseAxis(isTransposed ? yAxisNodeSrc : xAxisNodeSrc, tableMap, 'x');
       
-      // --- Robust Axis Handling & Validation ---
-      
-      // If an axis is missing, we create a placeholder but do NOT infer an address.
-      if (!yAxisDef) {
-          yAxisDef = {
-              address: null, count: rowsCount, dataSize: 2, isBigEndian: false,
-              equation: 'X', equationVar: 'X', label: 'RPM (Inferido)', majorStride: 0, minorStride: 0
-          };
-          console.warn(`Definição do eixo Y em falta para "${originalName}". Foi criado um substituto sem endereço.`);
-      } else if (yAxisDef.count !== rowsCount && yAxisDef.count > 0) {
-          console.warn(`A contagem do eixo Y para "${originalName}" (${yAxisDef.count}) não corresponde às linhas do mapa (${rowsCount}). A ajustar para corresponder.`);
-          yAxisDef.count = rowsCount;
-      } else if (yAxisDef.count === 0) {
-           yAxisDef.count = rowsCount;
-      }
-
-      if (!xAxisDef) {
-          xAxisDef = {
-              address: null, count: colsCount, dataSize: 2, isBigEndian: false,
-              equation: 'X', equationVar: 'X', label: 'TPS (Inferido)', majorStride: 0, minorStride: 0
-          };
-          console.warn(`Definição do eixo X em falta para "${originalName}". Foi criado um substituto sem endereço.`);
-      } else if (xAxisDef.count !== colsCount && xAxisDef.count > 0) {
-          console.warn(`A contagem do eixo X para "${originalName}" (${xAxisDef.count}) não corresponde às colunas do mapa (${colsCount}). A ajustar para corresponder.`);
-          xAxisDef.count = colsCount;
-      } else if (xAxisDef.count === 0) {
-          xAxisDef.count = colsCount;
+      if (!yAxisDef || !xAxisDef) {
+        console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta.`);
+        continue;
       }
       
+      yAxisDef.count = yAxisDef.count > 0 ? yAxisDef.count : rowsCount;
+      xAxisDef.count = xAxisDef.count > 0 ? xAxisDef.count : colsCount;
+
+      // Stride calculation
+      const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
+      const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
+      
+      // Use XDF stride if available, otherwise calculate a safe default.
+      const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
+      const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : colsCount * minorStride;
+
       // --- Z-AXIS ADDRESS (PRIORITIZED) ---
       const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
       const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
