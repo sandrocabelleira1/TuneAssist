@@ -300,8 +300,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
   const nameCounts: Record<string, number> = {};
 
   for (const table of xdfTables) {
-    const titleNode = findNode(table, 'title', 'TITLE');
-    const originalName = titleNode?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
+    const originalName = findNode(table, 'title', 'TITLE')?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
     
     try {
         if (originalName === 'Tabela Sem Nome') continue;
@@ -328,7 +327,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             continue;
         }
 
-        // Handle Transposition
         const zEmbedInfoNode = findNode(zAxisNode, 'embedinfo', 'EMBEDINFO');
         const embedType = getAttr(zEmbedInfoNode, 'type');
         const isTransposed = embedType === '2';
@@ -341,33 +339,31 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             continue;
         }
 
-        // Get initial axis definitions
         let yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'XDFAXIS[id="Y"]', 'yaxis'), tableMap, 'y');
         let xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'XDFAXIS[id="X"]', 'xaxis'), tableMap, 'x');
         
-        // Swap axes if transposed
         if (isTransposed) {
             [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
         }
 
         if (!yAxisDef || !xAxisDef) {
-            console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta ou inválidas após a transposição.`);
+            console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta ou inválidas.`);
             continue;
         }
-
+        
         const finalRows = isTransposed ? initialCols : initialRows;
         const finalCols = isTransposed ? initialRows : initialCols;
 
         yAxisDef.count = yAxisDef.count > 0 ? yAxisDef.count : finalRows;
         xAxisDef.count = xAxisDef.count > 0 ? xAxisDef.count : finalCols;
 
-        // Final, definitive stride calculation
+        // Definitive stride calculation
         let minorStride;
         const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
         if (minorStrideBitsRaw) {
             minorStride = parseInt(minorStrideBitsRaw, 10) / 8;
         } else {
-            minorStride = dataSize; // Safe fallback
+            minorStride = dataSize;
         }
 
         let majorStride;
@@ -375,7 +371,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         if (majorStrideBitsRaw) {
             majorStride = parseInt(majorStrideBitsRaw, 10) / 8;
         } else {
-            majorStride = finalCols * minorStride; // Safe fallback
+            majorStride = finalCols * minorStride;
         }
 
         const mathNode = findMainMathNode(table, zAxisNode);
