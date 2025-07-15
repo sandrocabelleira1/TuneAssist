@@ -321,14 +321,14 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       }
       
       // Get the Z address with correct priority.
-      // 1. From the table's 'address' attribute (most common and authoritative).
-      // 2. Fallback to the z-axis's 'mmedaddress' attribute.
-      const tableAddressStr = getAttr(table, 'address');
+      // 1. From the z-axis's 'mmedaddress' attribute (most authoritative for 2D maps).
+      // 2. Fallback to the table's 'address' attribute.
       const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-      const finalAddressStr = tableAddressStr || zAddressStr;
+      const tableAddressStr = getAttr(table, 'address');
+      const finalAddressStr = zAddressStr || tableAddressStr;
 
       if (!finalAddressStr) {
-          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar o endereço do mapa principal (nem em 'table[address]' nem em 'zaxis[mmedaddress]').`);
+          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar o endereço do mapa principal (nem em 'zaxis[mmedaddress]' nem em 'table[address]').`);
           continue;
       }
 
@@ -475,7 +475,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  // For a 1D axis, the stride is simply the dataSize unless a specific minor stride is given.
+  // For a 1D axis, the stride is the most important of minor stride or dataSize
   const stride = Math.max(axisDef.minorStride || 0, axisDef.dataSize);
 
   // Determine the final endianness based on the XDF and the user's manual swap.
@@ -548,6 +548,7 @@ export function readAndCalculateMapFromBin(
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
+  // Use stride from XDF if available, otherwise assume contiguous data.
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
   const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
   
@@ -758,6 +759,7 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
+    // Use stride from XDF if available, otherwise assume contiguous data.
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
     const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
 
