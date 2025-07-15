@@ -148,6 +148,34 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         };
     }
 
+    // --- Special Case: Linked Axis ---
+    const embedType = getAttr(embedInfoNode, 'type');
+    if (embedType === '3' && embedInfoNode) {
+        const linkId = getAttr(embedInfoNode, 'linkobjid');
+        const linkedTable = linkId ? tableMap.get(linkId) : null;
+        
+        if (linkedTable) {
+            const linkedZAxis = findNode(linkedTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
+            if (linkedZAxis) {
+                // We recursively call parseAxis on the *linked* Z-axis to get its properties.
+                // We pass 'x' as type because linked axes are usually single-dimensional like an X-axis.
+                const linkedAxisDef = parseAxis(linkedZAxis, tableMap, 'x');
+
+                if (linkedAxisDef && linkedAxisDef.address !== null) {
+                    // Use properties from the linked axis, but override with local equation and label.
+                    return {
+                        ...linkedAxisDef,
+                        equation, 
+                        equationVar,
+                        label: localLabel,
+                        count: count > 0 ? count : linkedAxisDef.count,
+                    };
+                }
+            }
+        }
+         console.warn(`Falha ao resolver o eixo ligado com linkobjid="${linkId}".`);
+    }
+
     const addrStr = getAttr(sourceNode, 'mmedaddress', 'address');
     const addr = addrStr ? parseInt(addrStr, 16) : null;
     
@@ -159,44 +187,6 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     
     const majorStride = parseInt(getAttr(sourceNode, 'mmedmajorstridebits', 'major_stride') || '0', 10) / 8;
     const minorStride = parseInt(getAttr(sourceNode, 'mmedminorstridebits', 'minor_stride') || '0', 10) / 8;
-
-    // --- Special Case: Linked Axis ---
-    const embedType = getAttr(embedInfoNode, 'type');
-    if (embedType === '3' && embedInfoNode) {
-        const linkId = getAttr(embedInfoNode, 'linkobjid');
-        const linkedTable = linkId ? tableMap.get(linkId) : null;
-        
-        const linkedZAxis = findNode(linkedTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
-        if (linkedZAxis) {
-            const sourceEmbeddedData = findNode(linkedZAxis, 'embeddeddata', 'EMBEDDEDDATA');
-            if (sourceEmbeddedData) {
-                const sourceAddrStr = getAttr(sourceEmbeddedData, 'mmedaddress');
-                const sourceAddr = sourceAddrStr ? parseInt(sourceAddrStr, 16) : null;
-                const sourceDataSize = parseInt(getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '8', 10) / 8;
-                const sourceIsBigEndian = getAttr(sourceEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(sourceEmbeddedData, 'bigendian') === '1';
-                const sourceMajorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
-                const sourceMinorStride = parseInt(getAttr(sourceEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
-
-                const linkedRows = parseInt(getAttr(sourceEmbeddedData, 'mmedrowcount') || '0');
-                const linkedCols = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || '0');
-                const sourceCount = Math.max(linkedRows, linkedCols);
-
-                if (sourceAddr !== null && !isNaN(sourceAddr)) {
-                    return {
-                        address: sourceAddr,
-                        count: count > 0 ? count : sourceCount,
-                        dataSize: sourceDataSize,
-                        isBigEndian: sourceIsBigEndian,
-                        equation: equation, // Math from this axis, not the linked one
-                        equationVar: equationVar,
-                        majorStride: sourceMajorStride,
-                        minorStride: sourceMinorStride,
-                        label: localLabel,
-                    };
-                }
-            }
-        }
-    }
 
     return { 
         address: addr,
@@ -360,7 +350,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         // Definitive stride calculation
         let minorStride;
         const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
-        if (minorStrideBitsRaw) {
+        if (minorStrideBitsRaw && parseInt(minorStrideBitsRaw, 10) !== 0) {
             minorStride = parseInt(minorStrideBitsRaw, 10) / 8;
         } else {
             minorStride = dataSize;
@@ -368,7 +358,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
         let majorStride;
         const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-        if (majorStrideBitsRaw) {
+        if (majorStrideBitsRaw && parseInt(majorStrideBitsRaw, 10) !== 0) {
             majorStride = parseInt(majorStrideBitsRaw, 10) / 8;
         } else {
             majorStride = finalCols * minorStride;
