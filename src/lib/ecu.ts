@@ -1,6 +1,3 @@
-
-
-
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -540,13 +537,14 @@ export function readAndCalculateMapFromBin(
   const sanitizedEquation = (def.equation || 'X')
       .replace(/,/g, '.')
       .replace(/\s*\r?\n\s*/g, ' ')
-      .replace(/\b(value)\b/gi, 'X') // Standardize variable to 'X', but keep 'x' for axis
+      .replace(/\b(value)\b/gi, 'X')
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
       .replace(/(X)(\d)/gi, 'X * $2');
       
   let finalEquation = sanitizedEquation;
-  // Replace labels first, with _calc suffix to avoid collision with raw x/y
+  // Use regex to avoid replacing parts of words. `\b` is a word boundary.
+  // Replace axis labels first to avoid conflicts with 'x' and 'y'.
   if (def.yAxisDef?.label) {
       const yLabelVar = def.yAxisDef.label.replace(/[^a-zA-Z0-9_]/g, '');
       if (yLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${yLabelVar}\\b`, 'gi'), 'y_calc');
@@ -556,11 +554,12 @@ export function readAndCalculateMapFromBin(
       if (xLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${xLabelVar}\\b`, 'gi'), 'x_calc');
   }
 
-  // Then replace literal x/y with _raw suffix
+  // Replace raw axis variables.
   finalEquation = finalEquation.replace(/\by\b/g, 'y_raw').replace(/\bx\b/g, 'x_raw');
 
   let equationFunc: Function;
   try {
+    // The main value from the map is always 'X'. The other variables are for context.
     equationFunc = new Function('X', 'x_raw', 'y_raw', 'x_calc', 'y_calc', 'z', `return ${finalEquation || 'X'}`);
   } catch(e) {
     const error = e instanceof Error ? e.message : String(e);
