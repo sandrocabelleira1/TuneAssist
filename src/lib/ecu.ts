@@ -85,126 +85,111 @@ function getAttr(element: Element | null, ...names: string[]): string | null {
     return null;
 }
 
-
 function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axisType: 'y' | 'x'): AxisDefinition {
     if (!axisNode) return null;
 
     const defaultLabel = axisType === 'y' ? 'RPM' : 'TPS';
+    const localLabel = (findNode(axisNode, 'units', 'UNITS')?.textContent || findNode(axisNode, 'title', 'TITLE')?.textContent || '').trim() || defaultLabel;
+    const localCount = parseInt(findNode(axisNode, 'indexcount', 'INDEXCOUNT')?.textContent || '0', 10);
+    const localMathNode = findNode(axisNode, 'math', 'MATH');
+    const localEquation = getAttr(localMathNode, 'equation', 'Equation') || 'X';
+    const localEquationVar = getAttr(findNode(localMathNode, 'var', 'VAR'), 'id') || 'X';
 
-    const localCountNode = findNode(axisNode, 'indexcount', 'INDEXCOUNT');
-    let count = localCountNode ? parseInt(localCountNode.textContent || '0', 10) : 0;
-    
-    const localLabel = (
-        findNode(axisNode, 'units', 'UNITS')?.textContent ||
-        findNode(axisNode, 'title', 'TITLE')?.textContent ||
-        ''
-    ).trim() || defaultLabel;
-
-    // Look for a math node specific to this axis first.
-    const mathNode = findNode(axisNode, 'math', 'MATH');
-    const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
-    const varNode = findNode(mathNode, 'var', 'VAR');
-    const equationVar = getAttr(varNode, 'id') || 'X';
-
-    // --- Case 1: Static Labels ---
-    // The axis values are defined directly in the XDF as <label> tags. No BIN reading needed.
-    const labelNodes = findNodes(axisNode, 'label');
-    if (labelNodes.length > 0) {
-        const labels = Array.from(labelNodes).map(l => getAttr(l, 'value') || '');
-        if (labels.length > 0) {
-            const staticLabels = labels.map(l => {
-                const num = parseFloat(l);
-                return isNaN(num) ? l.trim() : num;
-            });
-            // The count should match the number of labels. If `indexcount` is missing, use the number of labels.
-            const finalCount = count > 0 ? count : labels.length;
-            if (count === 0) count = finalCount;
-            return { 
-                staticLabels, 
-                count: finalCount, 
-                label: localLabel, 
-                equation: 'X', 
-                equationVar: 'X', 
-                majorStride: 0, 
-                minorStride: 0,
-                address: null,
-                dataSize: 1, // Placeholder
-                isBigEndian: false, // Placeholder
-            };
-        }
-    }
-    
-    // --- Case 2: Data stored in BIN file (most common) ---
-    // The data source can be <embeddeddata> or <embedinfo>
-    const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+    // --- Case 1: Linked Axis (embedinfo type="3") ---
+    // This is the highest priority. It reuses the definition of another axis.
     const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
-    
-    // --- Special Case: Linked Axis ---
     const embedType = getAttr(embedInfoNode, 'type');
+    
     if (embedType === '3' && embedInfoNode) {
         const linkId = getAttr(embedInfoNode, 'linkobjid');
-        const linkedTable = linkId ? tableMap.get(linkId) : null;
+        const linkedTableNode = linkId ? tableMap.get(linkId) : null;
         
-        if (linkedTable) {
-            // A linked axis re-uses the Z-axis of another table for its definition.
-            const linkedZAxis = findNode(linkedTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
-            if (linkedZAxis) {
-                // We recursively call parseAxis on the *linked* Z-axis to get its properties.
-                // We pass 'x' as type because linked axes are usually single-dimensional like an X-axis.
-                const linkedAxisDef = parseAxis(linkedZAxis, tableMap, 'x');
-
-                if (linkedAxisDef && linkedAxisDef.address !== null) {
-                    // Use properties from the linked axis, but override with local equation and label.
-                    // The count of the *current* axis definition takes precedence.
+        if (linkedTableNode) {
+            // A linked axis re-uses the Z-axis data of another table for its definition.
+            const linkedZAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
+            
+            if (linkedZAxisNode) {
+                // IMPORTANT: Recursively call parseAxis on the *linked* Z-axis to get its properties.
+                // It's not a real axis, but we treat it as one to get its address, datasize, etc.
+                const linkedAxisDef = parseAxis(linkedZAxisNode, tableMap, 'x'); // Treat linked as 1D 'x'
+                if (linkedAxisDef) {
+                    // Use properties from the linked axis, but allow local overrides for count and equation.
                     return {
                         ...linkedAxisDef,
-                        equation, 
-                        equationVar,
                         label: localLabel,
-                        count: count > 0 ? count : linkedAxisDef.count,
+                        // The count of the *current* axis definition takes precedence.
+                        count: localCount > 0 ? localCount : linkedAxisDef.count,
+                        // The equation of the *current* axis definition takes precedence.
+                        equation: localEquation,
+                        equationVar: localEquationVar,
                     };
                 }
             }
         }
-         console.warn(`Falha ao resolver o eixo ligado com linkobjid="${linkId}".`);
+        console.warn(`Failed to resolve linked axis with linkobjid="${linkId}".`);
     }
 
-    const sourceNode = embeddedData || embedInfoNode;
-    if (!sourceNode) {
-        // Cannot determine data source, return a minimal definition
+    // --- Case 2: Static Labels ---
+    // The axis values are defined directly in the XDF as <label> tags. No BIN reading needed.
+    const labelNodes = findNodes(axisNode, 'label');
+    if (labelNodes.length > 0) {
+        const labels = Array.from(labelNodes).map(l => getAttr(l, 'value') || '');
+        const staticLabels = labels.map(l => {
+            const num = parseFloat(l);
+            return isNaN(num) ? l.trim() : num;
+        });
+        const finalCount = localCount > 0 ? localCount : labels.length;
+        return { 
+            staticLabels, 
+            count: finalCount, 
+            label: localLabel, 
+            equation: 'X', // Equation is irrelevant for static labels
+            equationVar: 'X', 
+            majorStride: 0, 
+            minorStride: 0,
+            address: null,
+            dataSize: 1, // Placeholder
+            isBigEndian: false, // Placeholder
+        };
+    }
+    
+    // --- Case 3: Data stored in BIN file (most common) ---
+    const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+    if (!embeddedData) {
+        // Cannot determine data source, return a minimal definition with placeholders
         return {
-            address: null, count: count, dataSize: 1, isBigEndian: false,
-            equation, equationVar, label: localLabel, majorStride: 0, minorStride: 0
+            address: null, count: localCount, dataSize: 1, isBigEndian: false,
+            equation: localEquation, equationVar: localEquationVar, label: localLabel,
+            majorStride: 0, minorStride: 0
         };
     }
 
-    const addrStr = getAttr(sourceNode, 'mmedaddress', 'address');
+    const addrStr = getAttr(embeddedData, 'mmedaddress', 'address');
     const addr = addrStr ? parseInt(addrStr, 16) : null;
     
-    const dataSizeBitsStr = getAttr(sourceNode, 'mmedelementsizebits', 'datasize');
-    const dataSizeNode = findNode(sourceNode, 'data_size'); // Another possible location for data size
-    const dataSize = parseInt(dataSizeBitsStr || dataSizeNode?.textContent || '8', 10) / 8;
+    const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits', 'datasize');
+    const dataSize = parseInt(dataSizeBitsStr || '8', 10) / 8;
 
-    const isBigEndian = getAttr(sourceNode, 'bigendian')?.toLowerCase() === 'true' || getAttr(sourceNode, 'bigendian') === '1';
+    const isBigEndian = getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(embeddedData, 'bigendian') === '1';
     
-    const majorStrideBits = getAttr(sourceNode, 'mmedmajorstridebits', 'major_stride');
-    const majorStride = majorStrideBits ? parseInt(majorStrideBits, 10) / 8 : 0;
-    
-    const minorStrideBits = getAttr(sourceNode, 'mmedminorstridebits', 'minor_stride');
-    const minorStride = minorStrideBits ? parseInt(minorStrideBits, 10) / 8 : 0;
+    // For simple axes read directly from the BIN, majorStride is not relevant.
+    // minorStride indicates the step between each value. If not specified, it's just the dataSize.
+    const minorStrideBits = getAttr(embeddedData, 'mmedminorstridebits', 'minor_stride');
+    const minorStride = minorStrideBits ? parseInt(minorStrideBits, 10) / 8 : dataSize;
 
     return { 
         address: addr,
-        count, 
+        count: localCount, 
         dataSize, 
         isBigEndian, 
-        equation,
-        equationVar,
-        majorStride,
+        equation: localEquation,
+        equationVar: localEquationVar,
+        majorStride: 0, // Not applicable for 1D axes
         minorStride,
         label: localLabel,
     };
 }
+
 
 /**
  * Finds the main <math> node for the Z-axis data. This is more robust than a simple find.
@@ -321,46 +306,37 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal (eixo Z).`);
             continue;
         }
-
-        const zEmbedInfoNode = findNode(zAxisNode, 'embedinfo', 'EMBEDINFO');
-        const embedType = getAttr(zEmbedInfoNode, 'type');
-        const isTransposed = embedType === '2';
+        
+        const isTransposed = getAttr(findNode(zAxisNode, 'embedinfo'), 'type') === '2';
 
         let initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
         let initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
         
-        // If row/col count is missing on Z, try getting it from Y/X axis definitions
-        if (initialRows === 0) {
-            const yAxisNodeCheck = findNode(table, 'XDFAXIS[id="y"]', 'XDFAXIS[id="Y"]', 'yaxis');
-            initialRows = parseInt(findNode(yAxisNodeCheck, 'indexcount')?.textContent || '0');
-        }
-        if (initialCols === 0) {
-            const xAxisNodeCheck = findNode(table, 'XDFAXIS[id="x"]', 'XDFAXIS[id="X"]', 'xaxis');
-            initialCols = parseInt(findNode(xAxisNodeCheck, 'indexcount')?.textContent || '0');
-        }
-
-        if (initialRows === 0 || initialCols === 0) {
-            console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas (linhas ou colunas são 0).`);
-            continue;
-        }
-
         let yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'XDFAXIS[id="Y"]', 'yaxis'), tableMap, 'y');
         let xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'XDFAXIS[id="X"]', 'xaxis'), tableMap, 'x');
-        
-        if (isTransposed) {
-            [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
-        }
 
         if (!yAxisDef || !xAxisDef) {
             console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta ou inválidas.`);
             continue;
         }
         
+        if (initialRows === 0) initialRows = yAxisDef.count;
+        if (initialCols === 0) initialCols = xAxisDef.count;
+
+        if (initialRows === 0 || initialCols === 0) {
+            console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas (linhas ou colunas são 0).`);
+            continue;
+        }
+
         const finalRows = isTransposed ? initialCols : initialRows;
         const finalCols = isTransposed ? initialRows : initialCols;
+        
+        if (isTransposed) {
+            [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
+        }
 
-        yAxisDef.count = yAxisDef.count > 0 ? yAxisDef.count : finalRows;
-        xAxisDef.count = xAxisDef.count > 0 ? xAxisDef.count : finalCols;
+        yAxisDef.count = finalRows;
+        xAxisDef.count = finalCols;
 
         // Definitive stride calculation
         let minorStride;
@@ -420,13 +396,13 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   if (!axisDef) return emptyState;
   
   const count = axisDef.count || 0;
+  if (count === 0) return emptyState;
 
   if (axisDef.staticLabels && axisDef.staticLabels.length > 0) {
-      if (count > 0 && axisDef.staticLabels.length !== count) {
+      if (axisDef.staticLabels.length !== count) {
           console.warn(`O número de etiquetas estáticas (${axisDef.staticLabels.length}) não corresponde à contagem do eixo (${count}).`);
       }
-      const finalCount = count > 0 ? count : axisDef.staticLabels.length;
-      const calculated = axisDef.staticLabels.slice(0, finalCount);
+      const calculated = axisDef.staticLabels.slice(0, count);
       const raw = calculated.map((_, i) => i); // Generate dummy raw values for static labels
       return { raw, calculated };
   }
