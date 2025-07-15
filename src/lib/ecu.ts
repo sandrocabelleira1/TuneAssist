@@ -332,7 +332,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         continue;
       }
       
-      // Handle transposed maps where X and Y axes are swapped.
       const zEmbedInfoNode = findNode(zAxisNode, 'embedinfo', 'EMBEDINFO');
       const embedType = getAttr(zEmbedInfoNode, 'type');
       const isTransposed = embedType === '2';
@@ -361,9 +360,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       // Stride calculation
       const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
       const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
-      
+
       const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-      // IMPORTANT: Calculate major stride based on the FINAL (post-transposition) column count.
       const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : colsCount * minorStride;
 
       // --- Z-AXIS ADDRESS (PRIORITIZED) ---
@@ -428,7 +426,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
       return { raw, calculated };
   }
   
-  if (axisDef.address === null || isNaN(axisDef.address) || count === 0) {
+  if (axisDef.address === null || isNaN(axisDef.address)) {
       const calculated = Array.from({ length: count }, (_, i) => i + 1);
       const raw = calculated;
       return { raw, calculated };
@@ -776,5 +774,6 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
 
