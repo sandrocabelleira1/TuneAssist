@@ -456,7 +456,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const sanitizedEquation = (axisDef.equation || 'X')
       .replace(/,/g, '.')
       .replace(/\s*\r?\n\s*/g, ' ') // Replace newlines and surrounding whitespace with a single space
-      .replace(/\b(x|value)\b/gi, 'X') // Standardize variable to 'X'
+      .replace(/\b(value)\b/gi, 'X') // Standardize value to 'X'
       // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)` - now handles expressions with spaces/newlines
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
       // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
@@ -632,7 +632,7 @@ export function invertEquation(
 
     let sanitizedEq = (eq || 'X').trim()
         .replace(/,/g, '.')
-        .replace(/\b(value)\b/gi, 'X');
+        .replace(/\b(value|x)\b/gi, 'X');
     
     // Substitute axis values into the equation string
     if (axisValues) {
@@ -757,9 +757,10 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
+    // Correctly determine stride, falling back to contiguous memory if not specified.
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
     const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * def.dataSize);
-    
+
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
     for (let r = 0; r < def.rows; r++) {
