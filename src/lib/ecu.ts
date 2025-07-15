@@ -96,7 +96,6 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     const localEquationVar = getAttr(findNode(localMathNode, 'var', 'VAR'), 'id') || 'X';
 
     // --- Case 1: Linked Axis (embedinfo type="3") ---
-    // This is the highest priority. It reuses the definition of another axis.
     const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
     const embedType = getAttr(embedInfoNode, 'type');
     
@@ -105,15 +104,13 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         const linkedTableNode = linkId ? tableMap.get(linkId) : null;
         
         if (linkedTableNode) {
-            // A linked axis re-uses the Z-axis data of another table for its definition.
             const linkedZAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
             
             if (linkedZAxisNode) {
-                // IMPORTANT: Recursively call parseAxis on the *linked* Z-axis to get its properties.
-                // It's not a real axis, but we treat it as one to get its address, datasize, etc.
-                const linkedAxisDef = parseAxis(linkedZAxisNode, tableMap, 'x'); // Treat linked as 1D 'x'
+                const linkedAxisDef = parseAxis(linkedZAxisNode, tableMap, 'x'); // Recursively parse the *linked* Z-axis
                 if (linkedAxisDef) {
-                    // Use properties from the linked axis, but allow local overrides for count and equation.
+                    // It's a linked axis. We inherit properties from the linked definition,
+                    // but allow local overrides for count and equation.
                     return {
                         ...linkedAxisDef,
                         label: localLabel,
@@ -130,11 +127,11 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     }
 
     // --- Case 2: Static Labels ---
-    // The axis values are defined directly in the XDF as <label> tags. No BIN reading needed.
     const labelNodes = findNodes(axisNode, 'label');
     if (labelNodes.length > 0) {
         const labels = Array.from(labelNodes).map(l => getAttr(l, 'value') || '');
         const staticLabels = labels.map(l => {
+            if (l === "") return ""; // Keep empty labels as they are
             const num = parseFloat(l);
             return isNaN(num) ? l.trim() : num;
         });
@@ -143,7 +140,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
             staticLabels, 
             count: finalCount, 
             label: localLabel, 
-            equation: 'X', // Equation is irrelevant for static labels
+            equation: 'X',
             equationVar: 'X', 
             majorStride: 0, 
             minorStride: 0,
@@ -156,7 +153,24 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     // --- Case 3: Data stored in BIN file (most common) ---
     const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     if (!embeddedData) {
-        // Cannot determine data source, return a minimal definition with placeholders
+        // For Z-axis definitions being used as linked axes, they might not have <embeddeddata> themselves
+        // if their own axes are linked. In this case, we just care about the properties we already parsed.
+        // For regular axes, this is an issue.
+        const rowCount = parseInt(getAttr(axisNode, 'mmedrowcount') || '0', 10);
+        if (rowCount > 0) { // This is likely a Z-axis being parsed for a link
+             return {
+                address: null,
+                count: rowCount,
+                dataSize: 1, // Placeholder
+                isBigEndian: false, // Placeholder
+                equation: localEquation,
+                equationVar: localEquationVar,
+                label: localLabel,
+                majorStride: 0,
+                minorStride: 0,
+             }
+        }
+        // Cannot determine data source for a normal axis, return a minimal definition
         return {
             address: null, count: localCount, dataSize: 1, isBigEndian: false,
             equation: localEquation, equationVar: localEquationVar, label: localLabel,
@@ -172,19 +186,20 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
 
     const isBigEndian = getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(embeddedData, 'bigendian') === '1';
     
-    // For simple axes read directly from the BIN, majorStride is not relevant.
-    // minorStride indicates the step between each value. If not specified, it's just the dataSize.
+    // If it's a Z-axis being parsed for a link, its count is its row count.
+    const finalCount = localCount > 0 ? localCount : parseInt(getAttr(embeddedData, 'mmedrowcount') || '0', 10);
+    
     const minorStrideBits = getAttr(embeddedData, 'mmedminorstridebits', 'minor_stride');
     const minorStride = minorStrideBits ? parseInt(minorStrideBits, 10) / 8 : dataSize;
 
     return { 
         address: addr,
-        count: localCount, 
+        count: finalCount, 
         dataSize, 
         isBigEndian, 
         equation: localEquation,
         equationVar: localEquationVar,
-        majorStride: 0, // Not applicable for 1D axes
+        majorStride: 0, // Not applicable for 1D axes (or Z-axes treated as 1D)
         minorStride,
         label: localLabel,
     };
@@ -400,7 +415,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
 
   if (axisDef.staticLabels && axisDef.staticLabels.length > 0) {
       if (axisDef.staticLabels.length !== count) {
-          console.warn(`O número de etiquetas estáticas (${axisDef.staticLabels.length}) não corresponde à contagem do eixo (${count}).`);
+          console.warn(`O número de etiquetas estáticas (${axisDef.staticLabels.length}) não corresponde à contagem do eixo (${count}). A usar a contagem do eixo.`);
       }
       const calculated = axisDef.staticLabels.slice(0, count);
       const raw = calculated.map((_, i) => i); // Generate dummy raw values for static labels
@@ -408,6 +423,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   }
   
   if (axisDef.address === null || isNaN(axisDef.address)) {
+      // Create a dummy axis if no address is provided (e.g., for user-created maps)
       const calculated = Array.from({ length: count }, (_, i) => i + 1);
       const raw = calculated;
       return { raw, calculated };
