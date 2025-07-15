@@ -139,15 +139,6 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
     
-    const sourceNode = embeddedData || embedInfoNode;
-    if (!sourceNode) {
-        // Cannot determine data source, return a minimal definition
-        return {
-            address: null, count: count, dataSize: 1, isBigEndian: false,
-            equation, equationVar, label: localLabel, majorStride: 0, minorStride: 0
-        };
-    }
-
     // --- Special Case: Linked Axis ---
     const embedType = getAttr(embedInfoNode, 'type');
     if (embedType === '3' && embedInfoNode) {
@@ -155,6 +146,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         const linkedTable = linkId ? tableMap.get(linkId) : null;
         
         if (linkedTable) {
+            // A linked axis re-uses the Z-axis of another table for its definition.
             const linkedZAxis = findNode(linkedTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
             if (linkedZAxis) {
                 // We recursively call parseAxis on the *linked* Z-axis to get its properties.
@@ -163,6 +155,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
 
                 if (linkedAxisDef && linkedAxisDef.address !== null) {
                     // Use properties from the linked axis, but override with local equation and label.
+                    // The count of the *current* axis definition takes precedence.
                     return {
                         ...linkedAxisDef,
                         equation, 
@@ -176,6 +169,15 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
          console.warn(`Falha ao resolver o eixo ligado com linkobjid="${linkId}".`);
     }
 
+    const sourceNode = embeddedData || embedInfoNode;
+    if (!sourceNode) {
+        // Cannot determine data source, return a minimal definition
+        return {
+            address: null, count: count, dataSize: 1, isBigEndian: false,
+            equation, equationVar, label: localLabel, majorStride: 0, minorStride: 0
+        };
+    }
+
     const addrStr = getAttr(sourceNode, 'mmedaddress', 'address');
     const addr = addrStr ? parseInt(addrStr, 16) : null;
     
@@ -185,8 +187,11 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
 
     const isBigEndian = getAttr(sourceNode, 'bigendian')?.toLowerCase() === 'true' || getAttr(sourceNode, 'bigendian') === '1';
     
-    const majorStride = parseInt(getAttr(sourceNode, 'mmedmajorstridebits', 'major_stride') || '0', 10) / 8;
-    const minorStride = parseInt(getAttr(sourceNode, 'mmedminorstridebits', 'minor_stride') || '0', 10) / 8;
+    const majorStrideBits = getAttr(sourceNode, 'mmedmajorstridebits', 'major_stride');
+    const majorStride = majorStrideBits ? parseInt(majorStrideBits, 10) / 8 : 0;
+    
+    const minorStrideBits = getAttr(sourceNode, 'mmedminorstridebits', 'minor_stride');
+    const minorStride = minorStrideBits ? parseInt(minorStrideBits, 10) / 8 : 0;
 
     return { 
         address: addr,
@@ -195,8 +200,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         isBigEndian, 
         equation,
         equationVar,
-        majorStride: majorStride,
-        minorStride: minorStride,
+        majorStride,
+        minorStride,
         label: localLabel,
     };
 }
@@ -323,6 +328,16 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
         let initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
         let initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
+        
+        // If row/col count is missing on Z, try getting it from Y/X axis definitions
+        if (initialRows === 0) {
+            const yAxisNodeCheck = findNode(table, 'XDFAXIS[id="y"]', 'XDFAXIS[id="Y"]', 'yaxis');
+            initialRows = parseInt(findNode(yAxisNodeCheck, 'indexcount')?.textContent || '0');
+        }
+        if (initialCols === 0) {
+            const xAxisNodeCheck = findNode(table, 'XDFAXIS[id="x"]', 'XDFAXIS[id="X"]', 'xaxis');
+            initialCols = parseInt(findNode(xAxisNodeCheck, 'indexcount')?.textContent || '0');
+        }
 
         if (initialRows === 0 || initialCols === 0) {
             console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas (linhas ou colunas são 0).`);
@@ -388,6 +403,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             equationVar,
             xAxisDef, 
             yAxisDef,
+            isPotential: false,
             minorStride,
             majorStride,
         });
