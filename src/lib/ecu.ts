@@ -320,29 +320,14 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           continue;
       }
       
-      // Get the Z address with correct priority.
-      // 1. From the z-axis's 'mmedaddress' attribute (most authoritative for 2D maps).
-      // 2. Fallback to the table's 'address' attribute.
-      const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-      const tableAddressStr = getAttr(table, 'address');
-      const finalAddressStr = zAddressStr || tableAddressStr;
-
-      if (!finalAddressStr) {
-          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar o endereço do mapa principal (nem em 'zaxis[mmedaddress]' nem em 'table[address]').`);
-          continue;
-      }
-
       // Basic Z-axis properties.
-      const address = parseInt(finalAddressStr, 16);
       const rows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
       const cols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
-      const majorStride = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
-      const minorStride = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
 
-      if (isNaN(address) || rows === 0 || cols === 0) {
-        console.warn(`A tabela "${originalName}" foi ignorada: dimensões ou endereço do eixo Z inválidos.`);
+      if (rows === 0 || cols === 0) {
+        console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas.`);
         continue;
       }
       
@@ -363,6 +348,36 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       let yAxisDef = parseAxis(yAxisNode, tableMap, 'y');
       let xAxisDef = parseAxis(xAxisNode, tableMap, 'x');
+      
+      // --- Address Inference Logic ---
+      let mapAddress: number | null = null;
+      let xAxisEnd = 0;
+      let yAxisEnd = 0;
+
+      if (xAxisDef && xAxisDef.address !== null) {
+          xAxisEnd = xAxisDef.address + (xAxisDef.count * xAxisDef.dataSize);
+      }
+      if (yAxisDef && yAxisDef.address !== null) {
+          yAxisEnd = yAxisDef.address + (yAxisDef.count * yAxisDef.dataSize);
+      }
+
+      // The map address is inferred to be immediately after the axis that ends last in memory.
+      if (xAxisEnd > 0 || yAxisEnd > 0) {
+          mapAddress = Math.max(xAxisEnd, yAxisEnd);
+      } else {
+          // Fallback if no axis has an address: try to get it from the z-axis or table.
+          const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
+          const tableAddressStr = getAttr(table, 'address');
+          const finalAddressStr = zAddressStr || tableAddressStr;
+          if (finalAddressStr) {
+              mapAddress = parseInt(finalAddressStr, 16);
+          }
+      }
+
+      if (mapAddress === null || isNaN(mapAddress)) {
+          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal.`);
+          continue;
+      }
       
       // Get Z-axis math.
       const mathNode = findMainMathNode(table, zAxisNode);
@@ -410,15 +425,18 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       definitions.push({ 
         name: tableName, 
-        address, 
+        address: mapAddress, 
         rows: rowsCount, 
         cols: colsCount, 
         dataSize, 
         isBigEndian, 
         equation,
         equationVar,
-        majorStride, 
-        minorStride,
+        // The stride for the Z-data itself is assumed to be contiguous.
+        // The XDF's major/minor stride attributes often refer to how to read from a shared data block,
+        // which our address inference method bypasses. We rely on a simple contiguous block model.
+        majorStride: colsCount * dataSize, 
+        minorStride: dataSize,
         xAxisDef, 
         yAxisDef 
       });
@@ -475,8 +493,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  // For a 1D axis, the stride is the most important of minor stride or dataSize
-  const stride = Math.max(axisDef.minorStride || 0, axisDef.dataSize);
+  // For a 1D axis, the stride is just the dataSize. XDF stride attributes can be unreliable for simple axes.
+  const stride = axisDef.dataSize;
 
   // Determine the final endianness based on the XDF and the user's manual swap.
   // The `isBigEndian` from XDF is the base, `isEndianSwapped` toggles it.
