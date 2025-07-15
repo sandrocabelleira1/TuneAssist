@@ -205,8 +205,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         isBigEndian, 
         equation,
         equationVar,
-        majorStride: majorStride, // Use value from XDF directly
-        minorStride: minorStride, // Use value from XDF directly
+        majorStride: majorStride,
+        minorStride: minorStride,
         label: localLabel,
     };
 }
@@ -343,8 +343,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const yAxisNodeSrc = findNode(table, `XDFAXIS[id="y"]`, `XDFAXIS[id="Y"]`, `yaxis`);
       const xAxisNodeSrc = findNode(table, `XDFAXIS[id="x"]`, `XDFAXIS[id="X"]`, `xaxis`);
 
-      const yAxisDef = parseAxis(isTransposed ? xAxisNodeSrc : yAxisNodeSrc, tableMap, 'y');
-      const xAxisDef = parseAxis(isTransposed ? yAxisNodeSrc : xAxisNodeSrc, tableMap, 'x');
+      let yAxisDef = parseAxis(yAxisNodeSrc, tableMap, 'y');
+      let xAxisDef = parseAxis(xAxisNodeSrc, tableMap, 'x');
+
+      if (isTransposed) {
+        [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
+      }
       
       if (!yAxisDef || !xAxisDef) {
         console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta.`);
@@ -358,7 +362,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
       const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
       
-      // Use XDF stride if available, otherwise calculate a safe default.
       const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
       const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : colsCount * minorStride;
 
@@ -772,3 +775,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
