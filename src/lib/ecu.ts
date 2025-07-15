@@ -548,7 +548,7 @@ export function readAndCalculateMapFromBin(
   }
   
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
-  const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * def.dataSize);
+  const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
   
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
@@ -759,7 +759,7 @@ export function writeMapToBin(
     
     // Correctly determine stride, falling back to contiguous memory if not specified.
     const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
-    const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * def.dataSize);
+    const majorStride = def.majorStride > 0 ? def.majorStride : (def.cols * minorStride);
 
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
