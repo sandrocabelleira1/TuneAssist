@@ -1,5 +1,6 @@
 
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -379,34 +380,10 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       } else if (xAxisDef.count === 0) {
           xAxisDef.count = colsCount;
       }
-
-      // --- Address Inference Logic (Final) ---
-      let mapAddress: number | null = null;
       
-      // Calculate where each axis ends in memory.
-      let xAxisEnd = 0;
-      if (xAxisDef && xAxisDef.address !== null && !isNaN(xAxisDef.address)) {
-          const axisSize = xAxisDef.count * xAxisDef.dataSize;
-          xAxisEnd = xAxisDef.address + axisSize;
-      }
-
-      let yAxisEnd = 0;
-      if (yAxisDef && yAxisDef.address !== null && !isNaN(yAxisDef.address)) {
-          const axisSize = yAxisDef.count * yAxisDef.dataSize;
-          yAxisEnd = yAxisDef.address + axisSize;
-      }
-
-      // Infer the map address to be immediately after the axis that ends last in memory.
-      if (xAxisEnd > 0 || yAxisEnd > 0) {
-          mapAddress = Math.max(xAxisEnd, yAxisEnd);
-      } else {
-          // Fallback: Use the address from Z-axis if axis inference fails.
-          const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-          if (zAddressStr) {
-              mapAddress = parseInt(zAddressStr, 16);
-          }
-      }
-
+      // --- Z-AXIS ADDRESS ---
+      const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
+      const mapAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
       if (mapAddress === null || isNaN(mapAddress)) {
           console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal.`);
           continue;
@@ -419,11 +396,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const equationVar = getAttr(varNode, 'id') || 'X';
       
       // --- Stride Calculation (Final) ---
-      const minorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
-      const majorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
-      
-      const finalMinorStride = minorStrideFromXdf > 0 ? minorStrideFromXdf : dataSize;
-      const finalMajorStride = majorStrideFromXdf > 0 ? majorStrideFromXdf : colsCount * finalMinorStride;
+      // Read stride from XDF, otherwise assume contiguity.
+      let minorStride = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
+      if (minorStride === 0) minorStride = dataSize;
+
+      let majorStride = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
+      if (majorStride === 0) majorStride = colsCount * minorStride;
 
       // Handle duplicate table names by appending a counter.
       let tableName = originalName;
@@ -443,8 +421,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         isBigEndian, 
         equation,
         equationVar,
-        majorStride: finalMajorStride,
-        minorStride: finalMinorStride,
+        majorStride,
+        minorStride,
         xAxisDef, 
         yAxisDef 
       });
@@ -459,21 +437,22 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
   const emptyState: AxisDataState = { raw: [], calculated: [] };
   if (!axisDef) return emptyState;
+  
+  const count = axisDef.count || 0;
 
   if (axisDef.staticLabels && axisDef.staticLabels.length > 0) {
-      if (axisDef.count > 0 && axisDef.staticLabels.length !== axisDef.count) {
-          console.warn(`O número de etiquetas estáticas (${axisDef.staticLabels.length}) não corresponde à contagem do eixo (${axisDef.count}).`);
+      if (count > 0 && axisDef.staticLabels.length !== count) {
+          console.warn(`O número de etiquetas estáticas (${axisDef.staticLabels.length}) não corresponde à contagem do eixo (${count}).`);
       }
-      const finalCount = axisDef.count > 0 ? axisDef.count : axisDef.staticLabels.length;
+      const finalCount = count > 0 ? count : axisDef.staticLabels.length;
       const calculated = axisDef.staticLabels.slice(0, finalCount);
       const raw = calculated.map((_, i) => i); // Generate dummy raw values for static labels
       return { raw, calculated };
   }
   
-  const count = axisDef.count || 0;
   if (axisDef.address === null || isNaN(axisDef.address) || count === 0) {
       const calculated = Array.from({ length: count }, (_, i) => i + 1);
-      const raw = calculated.map(v => typeof v === 'number' ? v : 0); // Raw is same as calculated if no address
+      const raw = calculated;
       return { raw, calculated };
   }
   
