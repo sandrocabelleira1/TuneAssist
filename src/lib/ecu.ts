@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -348,29 +349,28 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       let yAxisDef = parseAxis(yAxisNode, tableMap, 'y');
       let xAxisDef = parseAxis(xAxisNode, tableMap, 'x');
-      
-      // --- Address Inference Logic ---
+
+      // --- Address Inference Logic (New) ---
       let mapAddress: number | null = null;
       let xAxisEnd = 0;
       let yAxisEnd = 0;
 
-      if (xAxisDef && xAxisDef.address !== null) {
+      // Calculate where each axis ends in memory, only if they have a valid address.
+      if (xAxisDef && xAxisDef.address !== null && !isNaN(xAxisDef.address)) {
           xAxisEnd = xAxisDef.address + (xAxisDef.count * xAxisDef.dataSize);
       }
-      if (yAxisDef && yAxisDef.address !== null) {
+      if (yAxisDef && yAxisDef.address !== null && !isNaN(yAxisDef.address)) {
           yAxisEnd = yAxisDef.address + (yAxisDef.count * yAxisDef.dataSize);
       }
 
-      // The map address is inferred to be immediately after the axis that ends last in memory.
+      // Infer the map address to be immediately after the axis that ends last in memory.
       if (xAxisEnd > 0 || yAxisEnd > 0) {
           mapAddress = Math.max(xAxisEnd, yAxisEnd);
       } else {
-          // Fallback if no axis has an address: try to get it from the z-axis or table.
+          // Fallback if no axis has a valid address: try to get it from the z-axis or table.
           const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-          const tableAddressStr = getAttr(table, 'address');
-          const finalAddressStr = zAddressStr || tableAddressStr;
-          if (finalAddressStr) {
-              mapAddress = parseInt(finalAddressStr, 16);
+          if (zAddressStr) {
+              mapAddress = parseInt(zAddressStr, 16);
           }
       }
 
@@ -413,6 +413,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       } else if (xAxisDef.count === 0) {
           xAxisDef.count = colsCount;
       }
+      
+      const minorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
+      const majorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
+      
+      const finalMinorStride = minorStrideFromXdf > 0 ? minorStrideFromXdf : dataSize;
+      const finalMajorStride = majorStrideFromXdf > 0 ? majorStrideFromXdf : colsCount * finalMinorStride;
 
       // Handle duplicate table names by appending a counter.
       let tableName = originalName;
@@ -432,11 +438,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         isBigEndian, 
         equation,
         equationVar,
-        // The stride for the Z-data itself is assumed to be contiguous.
-        // The XDF's major/minor stride attributes often refer to how to read from a shared data block,
-        // which our address inference method bypasses. We rely on a simple contiguous block model.
-        majorStride: colsCount * dataSize, 
-        minorStride: dataSize,
+        majorStride: finalMajorStride,
+        minorStride: finalMinorStride,
         xAxisDef, 
         yAxisDef 
       });
@@ -493,11 +496,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  // For a 1D axis, the stride is just the dataSize. XDF stride attributes can be unreliable for simple axes.
-  const stride = axisDef.dataSize;
+  // For a 1D axis, the stride is just the dataSize, unless minorStride is larger (for sparse data)
+  const stride = Math.max(axisDef.minorStride || 0, axisDef.dataSize);
 
   // Determine the final endianness based on the XDF and the user's manual swap.
-  // The `isBigEndian` from XDF is the base, `isEndianSwapped` toggles it.
   // `true` for getUint16 means little-endian. So we want `!isBigEndianFinal`.
   const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
 
@@ -566,9 +568,8 @@ export function readAndCalculateMapFromBin(
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
-  // Use stride from XDF if available, otherwise assume contiguous data.
-  const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
-  const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
+  const minorStride = def.minorStride;
+  const majorStride = def.majorStride;
   
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
@@ -777,9 +778,8 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    // Use stride from XDF if available, otherwise assume contiguous data.
-    const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
-    const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
+    const minorStride = def.minorStride;
+    const majorStride = def.majorStride;
 
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
