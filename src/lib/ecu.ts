@@ -542,25 +542,11 @@ export function readAndCalculateMapFromBin(
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
       .replace(/(X)(\d)/gi, 'X * $2');
       
-  let finalEquation = sanitizedEquation;
-  // Use regex to avoid replacing parts of words. `\b` is a word boundary.
-  // Replace axis labels first to avoid conflicts with 'x' and 'y'.
-  if (def.yAxisDef?.label) {
-      const yLabelVar = def.yAxisDef.label.replace(/[^a-zA-Z0-9_]/g, '');
-      if (yLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${yLabelVar}\\b`, 'gi'), 'y_calc');
-  }
-  if (def.xAxisDef?.label) {
-      const xLabelVar = def.xAxisDef.label.replace(/[^a-zA-Z0-9_]/g, '');
-      if (xLabelVar) finalEquation = finalEquation.replace(new RegExp(`\\b${xLabelVar}\\b`, 'gi'), 'x_calc');
-  }
-
-  // Replace raw axis variables.
-  finalEquation = finalEquation.replace(/\by\b/g, 'y_raw').replace(/\bx\b/g, 'x_raw');
-
   let equationFunc: Function;
   try {
+    // Pass all possible variables the equation might use.
     // The main value from the map is always 'X'. The other variables are for context.
-    equationFunc = new Function('X', 'x_raw', 'y_raw', 'x_calc', 'y_calc', 'z', `return ${finalEquation || 'X'}`);
+    equationFunc = new Function('X', 'x_raw', 'y_raw', 'x_calc', 'y_calc', 'z', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
