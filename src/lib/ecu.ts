@@ -475,7 +475,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  const stride = axisDef.majorStride > 0 ? axisDef.majorStride : axisDef.dataSize;
+  // For a 1D axis, the stride is simply the dataSize unless a specific minor stride is given.
+  const stride = Math.max(axisDef.minorStride || 0, axisDef.dataSize);
 
   // Determine the final endianness based on the XDF and the user's manual swap.
   // The `isBigEndian` from XDF is the base, `isEndianSwapped` toggles it.
