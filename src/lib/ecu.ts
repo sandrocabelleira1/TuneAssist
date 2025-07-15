@@ -337,8 +337,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const embedType = getAttr(zEmbedInfoNode, 'type');
       const isTransposed = embedType === '2';
 
-      let rowsCount = isTransposed ? initialCols : initialRows;
-      let colsCount = isTransposed ? initialRows : initialCols;
+      let finalRows = isTransposed ? initialCols : initialRows;
+      let finalCols = isTransposed ? initialRows : initialCols;
 
       const yAxisNodeSrc = findNode(table, `XDFAXIS[id="y"]`, `XDFAXIS[id="Y"]`, `yaxis`);
       const xAxisNodeSrc = findNode(table, `XDFAXIS[id="x"]`, `XDFAXIS[id="X"]`, `xaxis`);
@@ -355,16 +355,16 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         continue;
       }
       
-      yAxisDef.count = yAxisDef.count > 0 ? yAxisDef.count : rowsCount;
-      xAxisDef.count = xAxisDef.count > 0 ? xAxisDef.count : colsCount;
+      yAxisDef.count = yAxisDef.count > 0 ? yAxisDef.count : finalRows;
+      xAxisDef.count = xAxisDef.count > 0 ? xAxisDef.count : finalCols;
 
-      // Stride calculation
+      // Stride calculation (Robust version)
       const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
       const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
 
       const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-      const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : colsCount * minorStride;
-
+      const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : finalCols * minorStride;
+      
       // --- Z-AXIS ADDRESS (PRIORITIZED) ---
       const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
       const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
@@ -392,8 +392,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       definitions.push({ 
         name: tableName, 
         address: zAddress, 
-        rows: rowsCount, 
-        cols: colsCount, 
+        rows: finalRows, 
+        cols: finalCols, 
         dataSize, 
         isBigEndian, 
         equation,
