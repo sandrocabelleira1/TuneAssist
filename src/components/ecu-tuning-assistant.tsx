@@ -4,6 +4,7 @@
 
 
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -1824,7 +1825,7 @@ export default function EcuTuningAssistant() {
                                                 </div>
                                             </div>
                                         </TabsContent>
-                                        <TabsContent value="3d" className="flex-1">
+                                        <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
                                             <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
                                         </TabsContent>
                                     </Tabs>
