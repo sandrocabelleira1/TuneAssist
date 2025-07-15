@@ -6,6 +6,7 @@
 
 
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -1715,7 +1716,7 @@ export default function EcuTuningAssistant() {
 
                     <div className="flex-1 min-w-0">
                         <Card className="flex flex-col h-full">
-                             <CardHeader>
+                            <CardHeader className="flex-shrink-0">
                                 <div className="flex items-center justify-between">
                                     <div className="flex-1">
                                         <CardTitle className="flex items-center gap-2">
@@ -1763,113 +1764,115 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent className="flex-1 flex flex-col min-h-0 p-6 pt-0">
-                                {displayMap && displayAxes ? (
-                                    <Tabs defaultValue="2d" className="flex-1 flex flex-col min-h-0" onValueChange={(value) => {
-                                        if (value === 'plot-2d') {
-                                            setPlotRenderKey(Math.random());
-                                        }
-                                    }}>
-                                        <TabsList className="mb-2">
-                                            <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
-                                            <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
-                                            <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
-                                        </TabsList>
-                                        <TabsContent value="2d" className="flex-1 flex flex-col min-h-0">
-                                            <MapTable
-                                                key={mapRenderKey}
-                                                mapData={displayMap || []} 
-                                                rawMapData={displayRawMap || []}
-                                                xAxis={displayAxes.x} 
-                                                yAxis={displayAxes.y} 
-                                                definition={selectedMapDefinition}
-                                                onSortAxis={triggerSortAxis}
-                                                onSortByFirstColumn={handleSortByFirstColumn}
-                                                onResetSort={handleResetSort}
-                                                onCellChange={handleCellChange}
-                                                valueFormat={valueFormat}
-                                                selectedCells={selectedCells}
-                                                onCellSelect={handleCellSelect}
-                                                viewMode={mapViewMode}
-                                                onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
+                            <div className="flex flex-col flex-1 min-h-0">
+                                <CardContent className="flex-1 p-6 pt-0 min-h-0">
+                                    {displayMap && displayAxes ? (
+                                        <Tabs defaultValue="2d" className="flex-1 flex flex-col min-h-0" onValueChange={(value) => {
+                                            if (value === 'plot-2d') {
+                                                setPlotRenderKey(Math.random());
+                                            }
+                                        }}>
+                                            <TabsList className="mb-2">
+                                                <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
+                                                <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
+                                                <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
+                                            </TabsList>
+                                            <TabsContent value="2d" className="flex-1 flex flex-col min-h-0">
+                                                <MapTable
+                                                    key={mapRenderKey}
+                                                    mapData={displayMap || []} 
+                                                    rawMapData={displayRawMap || []}
+                                                    xAxis={displayAxes.x} 
+                                                    yAxis={displayAxes.y} 
+                                                    definition={selectedMapDefinition}
+                                                    onSortAxis={triggerSortAxis}
+                                                    onSortByFirstColumn={handleSortByFirstColumn}
+                                                    onResetSort={handleResetSort}
+                                                    onCellChange={handleCellChange}
+                                                    valueFormat={valueFormat}
+                                                    selectedCells={selectedCells}
+                                                    onCellSelect={handleCellSelect}
+                                                    viewMode={mapViewMode}
+                                                    onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
+                                                />
+                                            </TabsContent>
+                                            <TabsContent value="plot-2d" className="flex-1 flex flex-col min-h-0">
+                                                <div className="flex flex-col flex-1 min-h-0">
+                                                    <div className="p-2 flex items-center gap-2">
+                                                        <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
+                                                        <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
+                                                            <SelectTrigger id="plot-slice-selector" className="w-[120px]">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {displayAxes.y.map((yVal, index) => {
+                                                                    const formattedY = typeof yVal === 'number' ? yVal.toFixed(0) : yVal;
+                                                                    return <SelectItem key={index} value={String(index)}>{String(formattedY)}</SelectItem>
+                                                                })}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="flex-1 relative">
+                                                        <LinePlot2D
+                                                            key={plotRenderKey}
+                                                            mapData={displayMap}
+                                                            xAxis={displayAxes.x}
+                                                            yAxis={displayAxes.y}
+                                                            yAxisLabel={displayAxes.yLabel}
+                                                            xAxisLabel={displayAxes.xLabel}
+                                                            sliceIndex={plotSliceIndex}
+                                                            className="absolute inset-0"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </TabsContent>
+                                            <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
+                                                <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
+                                            </TabsContent>
+                                        </Tabs>
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-12">
+                                            <FileUp className="w-16 h-16 mb-4"/>
+                                            <p className="font-semibold">Nenhum mapa carregado</p>
+                                            <p className="text-sm">Por favor carregue um ficheiro .BIN e procure por mapas ou carregue um .XDF.</p>
+                                        </div>
+                                    )}
+                                </CardContent>
+                                {displayMap && (
+                                    <CardFooter className="border-t pt-4 justify-between items-center flex-wrap gap-4 flex-shrink-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <Label htmlFor="quick-edit-val" className="text-sm font-medium">Edição Rápida:</Label>
+                                            <Input 
+                                                id="quick-edit-val"
+                                                type="number" 
+                                                className="w-24 h-9" 
+                                                placeholder="Valor"
+                                                value={quickEditValue}
+                                                onChange={(e) => setQuickEditValue(e.target.value)}
+                                                disabled={mapViewMode === 'raw'}
                                             />
-                                        </TabsContent>
-                                        <TabsContent value="plot-2d" className="flex-1 flex flex-col min-h-0">
-                                            <div className="flex flex-col flex-1 min-h-0">
-                                                <div className="p-2 flex items-center gap-2">
-                                                    <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
-                                                    <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
-                                                        <SelectTrigger id="plot-slice-selector" className="w-[120px]">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {displayAxes.y.map((yVal, index) => {
-                                                                const formattedY = typeof yVal === 'number' ? yVal.toFixed(0) : yVal;
-                                                                return <SelectItem key={index} value={String(index)}>{String(formattedY)}</SelectItem>
-                                                            })}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div className="flex-1 relative">
-                                                    <LinePlot2D
-                                                        key={plotRenderKey}
-                                                        mapData={displayMap}
-                                                        xAxis={displayAxes.x}
-                                                        yAxis={displayAxes.y}
-                                                        yAxisLabel={displayAxes.yLabel}
-                                                        xAxisLabel={displayAxes.xLabel}
-                                                        sliceIndex={plotSliceIndex}
-                                                        className="absolute inset-0"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </TabsContent>
-                                        <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
-                                            <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
-                                        </TabsContent>
-                                    </Tabs>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-12">
-                                        <FileUp className="w-16 h-16 mb-4"/>
-                                        <p className="font-semibold">Nenhum mapa carregado</p>
-                                        <p className="text-sm">Por favor carregue um ficheiro .BIN e procure por mapas ou carregue um .XDF.</p>
-                                    </div>
+                                            <Select value={quickEditType} onValueChange={(v: 'percent' | 'unit') => setQuickEditType(v)} disabled={mapViewMode === 'raw'}>
+                                                <SelectTrigger className="w-[100px] h-9">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="percent">%</SelectItem>
+                                                    <SelectItem value="unit">Unid.</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <Button size="sm" variant="outline" onClick={() => handleQuickEdit('subtract')} disabled={mapViewMode === 'raw'}>- Subtrair</Button>
+                                            <Button size="sm" variant="outline" onClick={() => handleQuickEdit('add')} disabled={mapViewMode === 'raw'}>+ Adicionar</Button>
+                                            <p className="text-xs text-muted-foreground ml-2">
+                                                {selectedCells.size > 0 ? `${selectedCells.size} células selecionadas` : 'todas as células'}
+                                            </p>
+                                        </div>
+                                        <Button onClick={handleSaveModifiedBin} disabled={!binFile || !workingMap}>
+                                            <Save className="mr-2 h-4 w-4" />
+                                            Guardar BIN Modificado
+                                        </Button>
+                                    </CardFooter>
                                 )}
-                            </CardContent>
-                            {displayMap && (
-                                <CardFooter className="border-t pt-4 justify-between items-center flex-wrap gap-4">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <Label htmlFor="quick-edit-val" className="text-sm font-medium">Edição Rápida:</Label>
-                                        <Input 
-                                            id="quick-edit-val"
-                                            type="number" 
-                                            className="w-24 h-9" 
-                                            placeholder="Valor"
-                                            value={quickEditValue}
-                                            onChange={(e) => setQuickEditValue(e.target.value)}
-                                            disabled={mapViewMode === 'raw'}
-                                        />
-                                        <Select value={quickEditType} onValueChange={(v: 'percent' | 'unit') => setQuickEditType(v)} disabled={mapViewMode === 'raw'}>
-                                            <SelectTrigger className="w-[100px] h-9">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="percent">%</SelectItem>
-                                                <SelectItem value="unit">Unid.</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <Button size="sm" variant="outline" onClick={() => handleQuickEdit('subtract')} disabled={mapViewMode === 'raw'}>- Subtrair</Button>
-                                        <Button size="sm" variant="outline" onClick={() => handleQuickEdit('add')} disabled={mapViewMode === 'raw'}>+ Adicionar</Button>
-                                        <p className="text-xs text-muted-foreground ml-2">
-                                            {selectedCells.size > 0 ? `${selectedCells.size} células selecionadas` : 'todas as células'}
-                                        </p>
-                                    </div>
-                                    <Button onClick={handleSaveModifiedBin} disabled={!binFile || !workingMap}>
-                                        <Save className="mr-2 h-4 w-4" />
-                                        Guardar BIN Modificado
-                                    </Button>
-                                </CardFooter>
-                            )}
+                            </div>
                         </Card>
                     </div>
                 </div>
