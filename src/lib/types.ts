@@ -25,8 +25,6 @@ export type XDFDefinition = {
   isBigEndian: boolean;
   equation: string;
   equationVar: string;
-  majorStride: number; // in bytes
-  minorStride: number; // in bytes
   xAxisDef: AxisDefinition;
   yAxisDef: AxisDefinition;
   isPotential?: boolean;

@@ -204,8 +204,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         isBigEndian, 
         equation,
         equationVar,
-        majorStride,
-        minorStride,
+        majorStride: majorStride > 0 ? majorStride : dataSize, // Default to dataSize if 0
+        minorStride: minorStride > 0 ? minorStride : dataSize, // Default to dataSize if 0
         label: localLabel,
     };
 }
@@ -378,9 +378,16 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           xAxisDef.count = colsCount;
       }
       
-      // --- Z-AXIS ADDRESS ---
+      // --- Z-AXIS ADDRESS (PRIORITIZED) ---
       const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-      const mapAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
+      const tableAddressStr = getAttr(table, 'address');
+      
+      const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
+      const tableAddress = tableAddressStr ? parseInt(tableAddressStr, 16) : null;
+      
+      // Use the Z-axis address if it exists, otherwise fall back to the table address.
+      const mapAddress = (zAddress !== null && !isNaN(zAddress)) ? zAddress : tableAddress;
+
       if (mapAddress === null || isNaN(mapAddress)) {
           console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal.`);
           continue;
@@ -391,14 +398,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
       const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
       const equationVar = getAttr(varNode, 'id') || 'X';
-      
-      // --- Stride Calculation (Final) ---
-      // Read stride from XDF, otherwise assume contiguity.
-      let minorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8;
-      let minorStride = minorStrideFromXdf > 0 ? minorStrideFromXdf : dataSize;
-
-      let majorStrideFromXdf = parseInt(getAttr(zEmbeddedData, 'mmedmajorstridebits') || '0', 10) / 8;
-      let majorStride = majorStrideFromXdf > 0 ? majorStrideFromXdf : colsCount * minorStride;
 
       // Handle duplicate table names by appending a counter.
       let tableName = originalName;
@@ -418,8 +417,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         isBigEndian, 
         equation,
         equationVar,
-        majorStride,
-        minorStride,
         xAxisDef, 
         yAxisDef 
       });
@@ -549,8 +546,8 @@ export function readAndCalculateMapFromBin(
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
-  const minorStride = def.minorStride;
-  const majorStride = def.majorStride;
+  const minorStride = def.dataSize;
+  const majorStride = def.cols * minorStride;
   
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
@@ -759,8 +756,8 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    const minorStride = def.minorStride;
-    const majorStride = def.majorStride;
+    const minorStride = def.dataSize;
+    const majorStride = def.cols * minorStride;
 
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
