@@ -330,26 +330,23 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const embedType = getAttr(zEmbedInfoNode, 'type');
       const isTransposed = embedType === '2';
       
-      const initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
-      const initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
+      let initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
+      let initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
 
       if (initialRows === 0 || initialCols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas.`);
         continue;
       }
       
-      // Determine final dimensions based on transposition
       let finalRows = isTransposed ? initialCols : initialRows;
       let finalCols = isTransposed ? initialRows : initialCols;
 
-      // Get axis definitions
       const yAxisNodeSrc = findNode(table, `XDFAXIS[id="y"]`, `XDFAXIS[id="Y"]`, `yaxis`);
       const xAxisNodeSrc = findNode(table, `XDFAXIS[id="x"]`, `XDFAXIS[id="X"]`, `xaxis`);
 
       let yAxisDef = parseAxis(yAxisNodeSrc, tableMap, 'y');
       let xAxisDef = parseAxis(xAxisNodeSrc, tableMap, 'x');
 
-      // Swap axes if transposed
       if (isTransposed) {
         [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
       }
@@ -362,14 +359,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       yAxisDef.count = yAxisDef.count > 0 ? yAxisDef.count : finalRows;
       xAxisDef.count = xAxisDef.count > 0 ? xAxisDef.count : finalCols;
       
-      // FINAL Stride Calculation
       const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
       const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
       
       const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
       const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : finalCols * minorStride;
 
-      // --- Z-AXIS ADDRESS (PRIORITIZED) ---
       const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
       const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
       
@@ -378,13 +373,11 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
           continue;
       }
       
-      // Get Z-axis math.
       const mathNode = findMainMathNode(table, zAxisNode);
       const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
       const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
       const equationVar = getAttr(varNode, 'id') || 'X';
 
-      // Handle duplicate table names by appending a counter.
       let tableName = originalName;
       if (nameCounts[originalName]) {
           nameCounts[originalName]++;
@@ -438,16 +431,12 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   }
   
   const view = new DataView(binBuffer);
-  // Improved sanitizer: handles multi-line if/else and removes newlines within the expression.
   const sanitizedEquation = (axisDef.equation || 'X')
       .replace(/,/g, '.')
-      .replace(/\s*\r?\n\s*/g, ' ') // Replace newlines and surrounding whitespace with a single space
-      .replace(/\b(value)\b/gi, 'X') // Standardize value to 'X'
-      // Convert `if (cond) { A } else { B }` to ternary `(cond ? A : B)` - now handles expressions with spaces/newlines
+      .replace(/\s*\r?\n\s*/g, ' ') 
+      .replace(/\b(value)\b/gi, 'X') 
       .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
-      // Convert `IF(cond, A, B)` to ternary `(cond ? A : B)`
       .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
-      // Add implicit multiplication, e.g., X100 -> X * 100
       .replace(/(X)(\d)/gi, 'X * $2');
 
   let equationFunc: Function;
@@ -461,12 +450,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  // For a 1D axis, the stride is the larger of minorStride or dataSize.
-  // This correctly handles cases where XDF defines a stride larger than the data type itself.
   const stride = Math.max(axisDef.minorStride || 0, axisDef.dataSize);
 
-  // Determine the final endianness based on the XDF and the user's manual swap.
-  // `true` for getUint16 means little-endian. So we want `!isBigEndianFinal`.
   const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
 
   for (let i = 0; i < count; i++) {
