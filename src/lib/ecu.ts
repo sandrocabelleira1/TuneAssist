@@ -205,8 +205,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         isBigEndian, 
         equation,
         equationVar,
-        majorStride: majorStride > 0 ? majorStride : dataSize, // Default to dataSize if 0
-        minorStride: minorStride > 0 ? minorStride : dataSize, // Default to dataSize if 0
+        majorStride: majorStride, // Use value from XDF directly
+        minorStride: minorStride, // Use value from XDF directly
         label: localLabel,
     };
 }
@@ -327,12 +327,13 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
       
-      const minorStrideBits = getAttr(zEmbeddedData, 'mmedminorstridebits');
-      const minorStride = minorStrideBits ? parseInt(minorStrideBits, 10) / 8 : dataSize;
+      // Read stride values directly from the XDF (in BITS), then convert to BYTES.
+      const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
+      const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
 
-      const majorStrideBits = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-      const majorStride = majorStrideBits && parseInt(majorStrideBits, 10) > 0 ? parseInt(majorStrideBits, 10) / 8 : cols * minorStride;
-
+      // If stride is defined in XDF, use it. Otherwise, calculate a safe default.
+      const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
+      const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : cols * minorStride;
 
       if (rows === 0 || cols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas.`);
@@ -478,7 +479,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  // For a 1D axis, the stride is just the dataSize, unless minorStride is larger (for sparse data)
+  // For a 1D axis, the stride is the larger of minorStride or dataSize.
+  // This correctly handles cases where XDF defines a stride larger than the data type itself.
   const stride = Math.max(axisDef.minorStride || 0, axisDef.dataSize);
 
   // Determine the final endianness based on the XDF and the user's manual swap.
