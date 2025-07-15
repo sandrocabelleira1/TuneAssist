@@ -322,12 +322,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       }
       
       // Basic Z-axis properties.
-      const rows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
-      const cols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
+      const initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
+      const initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
 
-      if (rows === 0 || cols === 0) {
+      if (initialRows === 0 || initialCols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas.`);
         continue;
       }
@@ -337,8 +337,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const embedType = getAttr(zEmbedInfoNode, 'type');
       const isTransposed = embedType === '2';
 
-      const rowsCount = isTransposed ? cols : rows;
-      const colsCount = isTransposed ? rows : cols;
+      let rowsCount = isTransposed ? initialCols : initialRows;
+      let colsCount = isTransposed ? initialRows : initialCols;
 
       const yAxisNodeSrc = findNode(table, `XDFAXIS[id="y"]`, `XDFAXIS[id="Y"]`, `yaxis`);
       const xAxisNodeSrc = findNode(table, `XDFAXIS[id="x"]`, `XDFAXIS[id="X"]`, `xaxis`);
@@ -360,9 +360,10 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
       // Stride calculation
       const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
-      const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-      
       const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
+      
+      const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
+      // IMPORTANT: Calculate major stride based on the FINAL (post-transposition) column count.
       const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : colsCount * minorStride;
 
       // --- Z-AXIS ADDRESS (PRIORITIZED) ---
@@ -775,4 +776,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
