@@ -28,6 +28,8 @@ export type XDFDefinition = {
   xAxisDef: AxisDefinition;
   yAxisDef: AxisDefinition;
   isPotential?: boolean;
+  majorStride: number; // in bytes
+  minorStride: number; // in bytes
 };
 
 export type LogMessage = {

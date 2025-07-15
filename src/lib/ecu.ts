@@ -325,6 +325,13 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
       const cols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
       const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
       const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
+      
+      const minorStrideBits = getAttr(zEmbeddedData, 'mmedminorstridebits');
+      const minorStride = minorStrideBits ? parseInt(minorStrideBits, 10) / 8 : dataSize;
+
+      const majorStrideBits = getAttr(zEmbeddedData, 'mmedmajorstridebits');
+      const majorStride = majorStrideBits && parseInt(majorStrideBits, 10) > 0 ? parseInt(majorStrideBits, 10) / 8 : cols * minorStride;
+
 
       if (rows === 0 || cols === 0) {
         console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas.`);
@@ -418,7 +425,9 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         equation,
         equationVar,
         xAxisDef, 
-        yAxisDef 
+        yAxisDef,
+        minorStride,
+        majorStride,
       });
     } catch (e) {
       console.error(`Erro ao analisar a tabela "${originalName}": ${(e as Error).message}`);
@@ -546,8 +555,8 @@ export function readAndCalculateMapFromBin(
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
-  const minorStride = def.dataSize;
-  const majorStride = def.cols * minorStride;
+  const minorStride = def.minorStride;
+  const majorStride = def.majorStride;
   
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
@@ -756,8 +765,8 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    const minorStride = def.dataSize;
-    const majorStride = def.cols * minorStride;
+    const minorStride = def.minorStride;
+    const majorStride = def.majorStride;
 
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
