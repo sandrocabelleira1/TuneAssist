@@ -1,4 +1,3 @@
-
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -305,103 +304,109 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     const originalName = titleNode?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
     
     try {
-      if (originalName === 'Tabela Sem Nome') {
-          continue; // Skip tables without a name.
-      }
+        if (originalName === 'Tabela Sem Nome') continue;
+        
+        const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
+        if (!zAxisNode) {
+            console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar a definição do eixo Z.`);
+            continue;
+        }
+        
+        const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
+        if (!zEmbeddedData) {
+            console.warn(`A tabela "${originalName}" foi ignorada: o eixo Z não tem <embeddeddata>.`);
+            continue;
+        }
 
-      // Z-Axis is mandatory for a map definition.
-      const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
-      if (!zAxisNode) {
-          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar a definição do eixo Z.`);
-          continue;
-      }
-      
-      const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
-      if (!zEmbeddedData) {
-          console.warn(`A tabela "${originalName}" foi ignorada: o eixo Z não tem <embeddeddata>.`);
-          continue;
-      }
-      
-      const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
-      const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
+        const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
+        const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
 
-      // Transposition logic
-      const zEmbedInfoNode = findNode(zAxisNode, 'embedinfo', 'EMBEDINFO');
-      const embedType = getAttr(zEmbedInfoNode, 'type');
-      const isTransposed = embedType === '2';
-      
-      let initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
-      let initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
+        const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
+        const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
+        if (zAddress === null || isNaN(zAddress)) {
+            console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal (eixo Z).`);
+            continue;
+        }
 
-      if (initialRows === 0 || initialCols === 0) {
-        console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas.`);
-        continue;
-      }
-      
-      let finalRows = isTransposed ? initialCols : initialRows;
-      let finalCols = isTransposed ? initialRows : initialCols;
+        // Handle Transposition
+        const zEmbedInfoNode = findNode(zAxisNode, 'embedinfo', 'EMBEDINFO');
+        const embedType = getAttr(zEmbedInfoNode, 'type');
+        const isTransposed = embedType === '2';
 
-      const yAxisNodeSrc = findNode(table, `XDFAXIS[id="y"]`, `XDFAXIS[id="Y"]`, `yaxis`);
-      const xAxisNodeSrc = findNode(table, `XDFAXIS[id="x"]`, `XDFAXIS[id="X"]`, `xaxis`);
+        let initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
+        let initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
 
-      let yAxisDef = parseAxis(yAxisNodeSrc, tableMap, 'y');
-      let xAxisDef = parseAxis(xAxisNodeSrc, tableMap, 'x');
+        if (initialRows === 0 || initialCols === 0) {
+            console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas (linhas ou colunas são 0).`);
+            continue;
+        }
 
-      if (isTransposed) {
-        [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
-      }
-      
-      if (!yAxisDef || !xAxisDef) {
-        console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta ou inválidas.`);
-        continue;
-      }
-      
-      yAxisDef.count = yAxisDef.count > 0 ? yAxisDef.count : finalRows;
-      xAxisDef.count = xAxisDef.count > 0 ? xAxisDef.count : finalCols;
-      
-      const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
-      const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : dataSize;
-      
-      const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-      const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : finalCols * minorStride;
+        // Get initial axis definitions
+        let yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'XDFAXIS[id="Y"]', 'yaxis'), tableMap, 'y');
+        let xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'XDFAXIS[id="X"]', 'xaxis'), tableMap, 'x');
+        
+        // Swap axes if transposed
+        if (isTransposed) {
+            [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
+        }
 
-      const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-      const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
-      
-      if (zAddress === null || isNaN(zAddress)) {
-          console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal (eixo Z).`);
-          continue;
-      }
-      
-      const mathNode = findMainMathNode(table, zAxisNode);
-      const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
-      const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
-      const equationVar = getAttr(varNode, 'id') || 'X';
+        if (!yAxisDef || !xAxisDef) {
+            console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta ou inválidas após a transposição.`);
+            continue;
+        }
 
-      let tableName = originalName;
-      if (nameCounts[originalName]) {
-          nameCounts[originalName]++;
-          tableName = `${originalName} (${nameCounts[originalName]})`;
-      } else {
-          nameCounts[originalName] = 1;
-      }
+        const finalRows = isTransposed ? initialCols : initialRows;
+        const finalCols = isTransposed ? initialRows : initialCols;
 
-      definitions.push({ 
-        name: tableName, 
-        address: zAddress, 
-        rows: finalRows, 
-        cols: finalCols, 
-        dataSize, 
-        isBigEndian, 
-        equation,
-        equationVar,
-        xAxisDef, 
-        yAxisDef,
-        minorStride,
-        majorStride,
-      });
+        yAxisDef.count = yAxisDef.count > 0 ? yAxisDef.count : finalRows;
+        xAxisDef.count = xAxisDef.count > 0 ? xAxisDef.count : finalCols;
+
+        // Final, definitive stride calculation
+        let minorStride;
+        const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
+        if (minorStrideBitsRaw) {
+            minorStride = parseInt(minorStrideBitsRaw, 10) / 8;
+        } else {
+            minorStride = dataSize; // Safe fallback
+        }
+
+        let majorStride;
+        const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
+        if (majorStrideBitsRaw) {
+            majorStride = parseInt(majorStrideBitsRaw, 10) / 8;
+        } else {
+            majorStride = finalCols * minorStride; // Safe fallback
+        }
+
+        const mathNode = findMainMathNode(table, zAxisNode);
+        const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
+        const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
+        const equationVar = getAttr(varNode, 'id') || 'X';
+
+        let tableName = originalName;
+        if (nameCounts[originalName]) {
+            nameCounts[originalName]++;
+            tableName = `${originalName} (${nameCounts[originalName]})`;
+        } else {
+            nameCounts[originalName] = 1;
+        }
+
+        definitions.push({ 
+            name: tableName, 
+            address: zAddress, 
+            rows: finalRows, 
+            cols: finalCols, 
+            dataSize, 
+            isBigEndian, 
+            equation,
+            equationVar,
+            xAxisDef, 
+            yAxisDef,
+            minorStride,
+            majorStride,
+        });
     } catch (e) {
-      console.error(`Erro ao analisar a tabela "${originalName}": ${(e as Error).message}`);
+        console.error(`Erro ao analisar a tabela "${originalName}": ${(e as Error).message}`);
     }
   }
   return definitions;
