@@ -223,7 +223,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         // Skip breakpoint tables from the main list of maps to display
         const categoryNode = findNode(table, 'CATEGORYMEM');
         if (categoryNode && getAttr(categoryNode, 'category') === '7') {
-            continue;
+            // continue;
         }
 
         try {
