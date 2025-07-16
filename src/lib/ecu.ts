@@ -110,19 +110,16 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         const linkedTableNode = linkId ? tableMap.get(linkId) : null;
 
         if (linkedTableNode) {
-            // A linked axis inherits its properties from the Z-AXIS of the linked table.
             const linkedZAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
             if (linkedZAxisNode) {
                 const linkedAxisDef = parseAxis(linkedZAxisNode, tableMap);
                 if (linkedAxisDef) {
-                    // It's a linked axis. We inherit properties from the linked definition.
                     return {
                         ...linkedAxisDef,
-                        // The count of the *current* axis definition takes precedence.
                         count: localCount > 0 ? localCount : linkedAxisDef.count,
-                        // A local equation overrides the linked one.
                         equation: localEquation !== 'X' ? localEquation : linkedAxisDef.equation,
-                        equationVar: localEquationVar,
+                        equationVar: localEquation !== 'X' ? localEquationVar : linkedAxisDef.equationVar,
+                        label: localLabel || linkedAxisDef.label,
                     };
                 }
             }
@@ -145,10 +142,10 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
             staticLabels,
             count: finalCount,
             label: localLabel,
-            address: null, // No direct address for static labels
-            dataSize: 1, // Placeholder
-            isBigEndian: false, // Not applicable
-            equation: 'X', // Static labels don't need equations
+            address: null,
+            dataSize: 1,
+            isBigEndian: false,
+            equation: 'X',
             equationVar: 'X',
             minorStride: 0,
             majorStride: 0,
@@ -158,38 +155,40 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
     // --- Case 3: Data stored in BIN file (most common case for non-linked axes) ---
     const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     if (!embeddedData) {
-        // Z-axes being used as a source for a link might not have embeddeddata directly.
+        // Z-axis definitions being used as a source for links might not have embeddeddata directly.
         // We handle this by checking for table dimensions on the axis itself.
-        const rowCount = parseInt(getAttr(axisNode, 'mmedrowcount') || '0', 10);
-        const colCount = parseInt(getAttr(axisNode, 'mmedcolcount') || '0', 10);
-        const zAxisCount = colCount > 0 ? colCount : (rowCount > 0 ? rowCount : localCount);
-
-        if (zAxisCount > 0) {
-            return {
-                address: null, // Address is on the embedded data node which is missing
-                count: zAxisCount,
-                dataSize: 1, // Placeholder
-                isBigEndian: false,
-                equation: localEquation,
-                equationVar: localEquationVar,
-                label: localLabel,
-                minorStride: 0,
-                majorStride: 0,
-            };
+        const rowCountAttr = getAttr(axisNode, 'mmedrowcount');
+        const colCountAttr = getAttr(axisNode, 'mmedcolcount');
+        if (rowCountAttr || colCountAttr) {
+            const rowCount = parseInt(rowCountAttr || '0', 10);
+            const colCount = parseInt(colCountAttr || '0', 10);
+            const zAxisCount = colCount > 0 ? colCount : (rowCount > 0 ? rowCount : localCount);
+            if (zAxisCount > 0) {
+                return {
+                    address: null,
+                    count: zAxisCount,
+                    dataSize: 1, // Placeholder
+                    isBigEndian: false, // Placeholder
+                    equation: localEquation,
+                    equationVar: localEquationVar,
+                    label: localLabel,
+                    minorStride: 0,
+                    majorStride: 0,
+                };
+            }
         }
-        // Cannot determine data source, return null
+
         console.warn(`Não foi possível determinar a fonte de dados para o eixo com a etiqueta "${localLabel}"`);
         return null;
     }
-
+    
     const addrStr = getAttr(embeddedData, 'mmedaddress', 'address');
     const addr = addrStr ? parseInt(addrStr, 16) : null;
     
-    // For a Z-axis used as a source for a linked axis, its 'count' is its number of columns or rows.
     const rowCount = parseInt(getAttr(embeddedData, 'mmedrowcount') || '0', 10);
     const colCount = parseInt(getAttr(embeddedData, 'mmedcolcount') || '0', 10);
-    const zAxisCount = colCount > 0 ? colCount : rowCount;
-    const finalCount = localCount > 0 ? localCount : zAxisCount;
+    const axisCountFromZ = colCount > 0 ? colCount : rowCount; // If it's a z-axis being used as a source.
+    const finalCount = localCount > 0 ? localCount : axisCountFromZ;
 
     const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits', 'datasize');
     const dataSize = parseInt(dataSizeBitsStr || '8', 10) / 8;
@@ -338,19 +337,16 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
                  continue;
             }
 
-            // Handle transposition by swapping axis definitions and dimensions
             if (isTransposed) {
                 [initialRows, initialCols] = [initialCols, initialRows];
                 [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
             }
             
-            // Final dimensions
             const finalRows = initialRows;
             const finalCols = initialCols;
             yAxisDef.count = finalRows;
             xAxisDef.count = finalCols;
 
-            // Definitive stride calculation
             let minorStride;
             const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
             if (minorStrideBitsRaw && parseInt(minorStrideBitsRaw, 10) !== 0) {
@@ -448,11 +444,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   
   const stride = Math.max(axisDef.minorStride || 0, axisDef.dataSize);
 
-  // Correction: Properly determine if little endian should be used.
-  // The XDF standard defaults to Big Endian (MSB first) if not specified.
-  // `isBigEndian` is true if the XDF says so.
-  // The UI toggle `isEndianSwapped` inverts the logic.
-  // `useLittleEndian` should be true if the final intended logic is little endian.
   const useLittleEndian = !axisDef.isBigEndian;
 
   for (let i = 0; i < count; i++) {
@@ -470,7 +461,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     if (axisDef.dataSize === 1) {
         rawValue = view.getUint8(offset);
     } else if (axisDef.dataSize === 2) {
-        // Apply the determined endianness.
         rawValue = view.getUint16(offset, useLittleEndian);
     } else {
         rawData.push(NaN);
@@ -480,7 +470,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     rawData.push(rawValue);
 
     try {
-        const calculatedValue = equationFunc(rawValue, rawValue); // Pass rawValue for both X and x
+        const calculatedValue = equationFunc(rawValue, rawValue);
         calculatedData.push(calculatedValue);
     } catch (e) {
         const errorMsg = e instanceof Error ? e.message : String(e);
