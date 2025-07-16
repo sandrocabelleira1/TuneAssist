@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -165,13 +166,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, "application/xml");
     
-    // This was the source of the "file locked" error. It was too aggressive.
-    // By removing it, we trust the user's file and attempt to parse it directly.
-    // const parseError = xmlDoc.getElementsByTagName("parsererror");
-    // if (parseError.length > 0) {
-    //    throw new Error("O ficheiro XDF parece estar corrompido ou não é um XML válido.");
-    // }
-
     const allTableElements = Array.from(xmlDoc.getElementsByTagName('XDFTABLE'));
     
     if (allTableElements.length === 0) {
