@@ -82,10 +82,23 @@ function findMainMathNode(tableNode: Element, zAxisNode: Element): Element | nul
 function parseAxis(axisNode: Element | null, allTables: Element[]): AxisDefinition {
     if (!axisNode) return null;
 
+    // --- 1. Handle STATIC labels first ---
+    const labelNodes = findNodes(axisNode, 'label');
+    if (labelNodes.length > 0) {
+        const labels = Array.from(labelNodes).map(l => getAttr(l, 'value') || '');
+        return {
+            staticLabels: labels,
+            count: parseInt(getAttr(axisNode, 'indexcount') || String(labels.length), 10),
+            label: (getAttr(axisNode, 'units') || getAttr(axisNode, 'title') || '').trim(),
+            address: null, // Static labels don't have a memory address
+            dataSize: 1, isBigEndian: false, equation: 'X', equationVar: 'X', majorStride: 0, minorStride: 0,
+        };
+    }
+
     const embedInfoNode = findNode(axisNode, 'embedinfo');
     const linkObjId = embedInfoNode ? getAttr(embedInfoNode, 'linkobjid') : null;
 
-    // --- 1. Handle LINKED axes first ---
+    // --- 2. Handle LINKED axes ---
     if (embedInfoNode && getAttr(embedInfoNode, 'type') === '3' && linkObjId) {
         const linkedTable = allTables.find(t => getAttr(t, 'uniqueid')?.toLowerCase() === linkObjId.toLowerCase());
         if (linkedTable) {
@@ -107,19 +120,6 @@ function parseAxis(axisNode: Element | null, allTables: Element[]): AxisDefiniti
                 }
             }
         }
-    }
-
-    // --- 2. Handle STATIC labels ---
-    const labelNodes = findNodes(axisNode, 'label');
-    if (labelNodes.length > 0) {
-        const labels = Array.from(labelNodes).map(l => getAttr(l, 'value') || '');
-        return {
-            staticLabels: labels,
-            count: parseInt(getAttr(axisNode, 'indexcount') || String(labels.length), 10),
-            label: (getAttr(axisNode, 'units') || getAttr(axisNode, 'title') || '').trim(),
-            address: null, // Static labels don't have a memory address
-            dataSize: 1, isBigEndian: false, equation: 'X', equationVar: 'X', majorStride: 0, minorStride: 0,
-        };
     }
     
     // --- 3. Handle standard axes with data stored in the BIN file ---
@@ -165,7 +165,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, "application/xml");
     
-    // FINAL FIX: Remove the parsererror check completely. Trust the user's file.
     const parseError = xmlDoc.getElementsByTagName("parsererror");
     if (parseError.length > 0) {
        console.warn("XML parsing warning:", parseError[0].textContent);
@@ -175,7 +174,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     const allTableElements = Array.from(xmlDoc.getElementsByTagName('XDFTABLE'));
     
     if (allTableElements.length === 0) {
-        // Return empty instead of throwing error if no tables found
         return [];
     }
 
