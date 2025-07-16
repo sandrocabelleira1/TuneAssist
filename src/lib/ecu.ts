@@ -1,4 +1,3 @@
-
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -107,6 +106,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         const linkedTableNode = linkId ? tableMap.get(linkId) : null;
 
         if (linkedTableNode) {
+            // A linked axis in XDFs often points to a "breakpoint" table. The actual axis data is the Z-axis of that breakpoint table.
             const linkedZAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
             if (linkedZAxisNode) {
                 // Recursively parse the linked axis, which is the Z-axis of another table
@@ -335,22 +335,17 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             yAxisDef.count = finalRows;
             xAxisDef.count = finalCols;
 
-            let minorStride;
+            // CORRECT STRIDE LOGIC
             const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
-            if (minorStrideBitsRaw && parseInt(minorStrideBitsRaw, 10) !== 0) {
-                minorStride = parseInt(minorStrideBitsRaw, 10) / 8;
-            } else {
-                minorStride = dataSize;
-            }
+            const minorStride = (minorStrideBitsRaw && parseInt(minorStrideBitsRaw, 10) !== 0) 
+                ? parseInt(minorStrideBitsRaw, 10) / 8 
+                : dataSize;
 
-            let majorStride;
             const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-            if (majorStrideBitsRaw && parseInt(majorStrideBitsRaw, 10) !== 0) {
-                majorStride = parseInt(majorStrideBitsRaw, 10) / 8;
-            } else {
-                majorStride = finalCols * minorStride;
-            }
-
+            const majorStride = (majorStrideBitsRaw && parseInt(majorStrideBitsRaw, 10) !== 0) 
+                ? parseInt(majorStrideBitsRaw, 10) / 8 
+                : finalCols * minorStride;
+            
             const mathNode = findMainMathNode(table, zAxisNode);
             const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
             const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
@@ -430,7 +425,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  // Use majorStride if it's explicitly defined and non-zero, otherwise fallback to dataSize
+  // CORRECT AXIS STRIDE LOGIC
   const stride = (axisDef.majorStride && axisDef.majorStride > 0) ? axisDef.majorStride : axisDef.dataSize;
 
   const useLittleEndian = !axisDef.isBigEndian;
