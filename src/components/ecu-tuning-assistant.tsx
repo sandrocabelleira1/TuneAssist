@@ -1,15 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -1553,71 +1542,77 @@ export default function EcuTuningAssistant() {
                             <CardContent className="space-y-6 h-[calc(100%-76px)] overflow-y-auto">
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">1. Carregar Ficheiros</h3>
-                                    <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}><FileUp className="mr-2"/> .BIN</Button>
-                                    <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
-
-                                    <div className="space-y-1 pt-2">
-                                        <Label className="text-xs text-muted-foreground">Marca e Modelo (para procura com IA e novos XDFs)</Label>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <Select value={selectedBrandForNewXdf} onValueChange={setSelectedBrandForNewXdf}>
-                                                <SelectTrigger className="h-10"><SelectValue placeholder="Marca..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="no-brand">Nenhuma</SelectItem>
-                                                    <SelectItem value="Yamaha">Yamaha</SelectItem>
-                                                    <SelectItem value="Honda">Honda</SelectItem>
-                                                    <SelectItem value="Suzuki">Suzuki</SelectItem>
-                                                    <SelectItem value="Kawasaki">Kawasaki</SelectItem>
-                                                    <SelectItem value="BMW">BMW</SelectItem>
-                                                    <SelectItem value="Ducati">Ducati</SelectItem>
-                                                    <SelectItem value="Triumph">Triumph</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <Input 
-                                                className="h-10"
-                                                placeholder="Modelo (ex: R3)" 
-                                                value={motorcycleModel} 
-                                                onChange={(e) => setMotorcycleModel(e.target.value)} 
-                                            />
-                                        </div>
-                                    </div>
-                                    
-                                    <Separator className="my-2" />
-                                    
                                     <div className="space-y-2">
-                                        <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}><Plus className="mr-2"/> Adicionar novo .XDF à biblioteca</Button>
-                                        <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
+                                        <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}><FileUp className="mr-2"/>Carregar Ficheiro .BIN</Button>
+                                        <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
+                                        {binFile && <p className="text-xs text-green-400 truncate">BIN: {binFile.name}</p>}
                                     </div>
-
-                                    {binFile && <p className="text-xs text-green-400 truncate">BIN: {binFile.name}</p>}
                                     
-                                    {Object.keys(xdfLibrary).length > 0 && (
-                                        <div className="space-y-2 pt-2">
-                                            <div className="flex items-center justify-between">
-                                                <Label className="text-xs text-muted-foreground">Ou use um da biblioteca</Label>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearXdfLibrary}>
-                                                            <Trash2 className="w-3 h-3" />
-                                                        </Button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent><p>Limpar Biblioteca XDF</p></TooltipContent>
-                                                </Tooltip>
+                                    <Separator className="my-4" />
+
+                                    <div className="space-y-2">
+                                        <Label className="text-sm font-medium">Definição do Mapa (.XDF)</Label>
+                                        <p className="text-xs text-muted-foreground">Forneça um XDF para definir os mapas no BIN.</p>
+                                        
+                                        <div className="space-y-1 pt-2">
+                                            <Label className="text-xs text-muted-foreground">Marca e Modelo (para procura com IA e novos XDFs)</Label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Select value={selectedBrandForNewXdf} onValueChange={setSelectedBrandForNewXdf}>
+                                                    <SelectTrigger className="h-10"><SelectValue placeholder="Marca..." /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="no-brand">Nenhuma</SelectItem>
+                                                        <SelectItem value="Yamaha">Yamaha</SelectItem>
+                                                        <SelectItem value="Honda">Honda</SelectItem>
+                                                        <SelectItem value="Suzuki">Suzuki</SelectItem>
+                                                        <SelectItem value="Kawasaki">Kawasaki</SelectItem>
+                                                        <SelectItem value="BMW">BMW</SelectItem>
+                                                        <SelectItem value="Ducati">Ducati</SelectItem>
+                                                        <SelectItem value="Triumph">Triumph</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                <Input 
+                                                    className="h-10"
+                                                    placeholder="Modelo (ex: R3)" 
+                                                    value={motorcycleModel} 
+                                                    onChange={(e) => setMotorcycleModel(e.target.value)} 
+                                                />
                                             </div>
-                                            <Select onValueChange={handleSelectXdfFromLibrary} value={selectedXdfFromLibrary}>
-                                                <SelectTrigger><SelectValue placeholder="Selecione um XDF..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {Object.values(xdfLibrary).map(xdf => (
-                                                        <SelectItem key={xdf.name} value={xdf.name}>
-                                                            {xdf.brand && <span className="font-semibold mr-1">[{xdf.brand}]</span>}
-                                                            {xdf.name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
                                         </div>
-                                    )}
-                                    {xdfFile && <p className="text-xs text-green-400 truncate">XDF Ativo: {xdfFile.name}{activeXdfBrand && ` (${activeXdfBrand})`}</p>}
-                                 </div>
+
+                                        <div className="space-y-2 pt-2">
+                                            <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}><Plus className="mr-2"/> Adicionar novo .XDF à biblioteca</Button>
+                                            <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
+                                        </div>
+                                    
+                                        {Object.keys(xdfLibrary).length > 0 && (
+                                            <div className="space-y-2 pt-2">
+                                                <div className="flex items-center justify-between">
+                                                    <Label className="text-xs text-muted-foreground">Ou use um da biblioteca</Label>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearXdfLibrary}>
+                                                                <Trash2 className="w-3 h-3" />
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent><p>Limpar Biblioteca XDF</p></TooltipContent>
+                                                    </Tooltip>
+                                                </div>
+                                                <Select onValueChange={handleSelectXdfFromLibrary} value={selectedXdfFromLibrary}>
+                                                    <SelectTrigger><SelectValue placeholder="Selecione um XDF..." /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {Object.values(xdfLibrary).map(xdf => (
+                                                            <SelectItem key={xdf.name} value={xdf.name}>
+                                                                {xdf.brand && <span className="font-semibold mr-1">[{xdf.brand}]</span>}
+                                                                {xdf.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        )}
+                                        {xdfFile && <p className="text-xs text-green-400 truncate">XDF Ativo: {xdfFile.name}{activeXdfBrand && ` (${activeXdfBrand})`}</p>}
+                                    </div>
+                                </div>
                                 
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
