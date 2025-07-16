@@ -104,6 +104,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
         const linkedTableNode = linkId ? tableMap.get(linkId) : null;
         
         if (linkedTableNode) {
+            // A linked axis inherits its properties from the Z-AXIS of the linked table.
             const linkedZAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
             
             if (linkedZAxisNode) {
@@ -116,9 +117,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
                         label: localLabel,
                         // The count of the *current* axis definition takes precedence.
                         count: localCount > 0 ? localCount : linkedAxisDef.count,
-                        // The equation of the *current* axis definition takes precedence.
-                        equation: localEquation,
-                        equationVar: localEquationVar,
+                        // The equation of the *current* axis definition takes precedence if it's not the default 'X'.
+                        equation: localEquation !== 'X' ? localEquation : linkedAxisDef.equation,
+                        equationVar: localEquationVar !== 'X' ? localEquationVar : linkedAxisDef.equationVar,
                     };
                 }
             }
@@ -153,14 +154,17 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     // --- Case 3: Data stored in BIN file (most common) ---
     const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     if (!embeddedData) {
-        // For Z-axis definitions being used as linked axes, they might not have <embeddeddata> themselves
-        // if their own axes are linked. In this case, we just care about the properties we already parsed.
-        // For regular axes, this is an issue.
+        // This handles cases where a Z-axis is being parsed for a link. It might not have <embeddeddata>
+        // itself if its own axes are linked. The important properties are parsed above.
         const rowCount = parseInt(getAttr(axisNode, 'mmedrowcount') || '0', 10);
-        if (rowCount > 0) { // This is likely a Z-axis being parsed for a link
+        const colCount = parseInt(getAttr(axisNode, 'mmedcolcount') || '0', 10);
+        // For a Z-axis used as a source for a linked axis, its 'count' is its number of columns.
+        const zAxisCount = colCount > 0 ? colCount : rowCount; 
+
+        if (zAxisCount > 0) {
              return {
                 address: null,
-                count: rowCount,
+                count: zAxisCount,
                 dataSize: 1, // Placeholder
                 isBigEndian: false, // Placeholder
                 equation: localEquation,
@@ -186,8 +190,9 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
 
     const isBigEndian = getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(embeddedData, 'bigendian') === '1';
     
-    // If it's a Z-axis being parsed for a link, its count is its row count.
-    const finalCount = localCount > 0 ? localCount : parseInt(getAttr(embeddedData, 'mmedrowcount') || '0', 10);
+    // If it's a Z-axis being parsed for a link, its count is its column count.
+    const colCount = parseInt(getAttr(embeddedData, 'mmedcolcount') || '0', 10);
+    const finalCount = localCount > 0 ? localCount : colCount;
     
     const minorStrideBits = getAttr(embeddedData, 'mmedminorstridebits', 'minor_stride');
     const minorStride = minorStrideBits ? parseInt(minorStrideBits, 10) / 8 : dataSize;
@@ -343,10 +348,11 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             continue;
         }
 
-        const finalRows = isTransposed ? initialCols : initialRows;
-        const finalCols = isTransposed ? initialRows : initialCols;
+        let finalRows = initialRows;
+        let finalCols = initialCols;
         
         if (isTransposed) {
+            [finalRows, finalCols] = [finalCols, finalRows];
             [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
         }
 
@@ -451,7 +457,12 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   
   const stride = Math.max(axisDef.minorStride || 0, axisDef.dataSize);
 
-  const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
+  // Correction: Properly determine if little endian should be used.
+  // The XDF standard defaults to Big Endian (MSB first) if not specified.
+  // `isBigEndian` is true if the XDF says so.
+  // The UI toggle `isEndianSwapped` inverts the logic.
+  // `useLittleEndian` should be true if the final intended logic is little endian.
+  const useLittleEndian = !axisDef.isBigEndian;
 
   for (let i = 0; i < count; i++) {
     const offset = axisDef.address + (i * stride);
@@ -468,6 +479,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     if (axisDef.dataSize === 1) {
         rawValue = view.getUint8(offset);
     } else if (axisDef.dataSize === 2) {
+        // Apply the determined endianness.
         rawValue = view.getUint16(offset, useLittleEndian);
     } else {
         rawData.push(NaN);
