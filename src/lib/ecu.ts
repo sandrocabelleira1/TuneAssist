@@ -85,11 +85,17 @@ function getAttr(element: Element | null, ...names: string[]): string | null {
     return null;
 }
 
-function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axisType: 'y' | 'x'): AxisDefinition {
+/**
+ * Parses an axis definition from an <XDFAXIS> node. Handles direct definitions,
+ * static labels, and linked axes.
+ * @param axisNode The <XDFAXIS> element to parse.
+ * @param tableMap A map of all tables in the XDF, keyed by their uniqueid, for resolving links.
+ * @returns An AxisDefinition object or null if parsing fails.
+ */
+function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): AxisDefinition {
     if (!axisNode) return null;
 
-    const defaultLabel = axisType === 'y' ? 'RPM' : 'TPS';
-    const localLabel = (findNode(axisNode, 'units', 'UNITS')?.textContent || findNode(axisNode, 'title', 'TITLE')?.textContent || '').trim() || defaultLabel;
+    const localLabel = (findNode(axisNode, 'units', 'UNITS')?.textContent || findNode(axisNode, 'title', 'TITLE')?.textContent || '').trim();
     const localCount = parseInt(findNode(axisNode, 'indexcount', 'INDEXCOUNT')?.textContent || '0', 10);
     const localMathNode = findNode(axisNode, 'math', 'MATH');
     const localEquation = getAttr(localMathNode, 'equation', 'Equation') || 'X';
@@ -98,33 +104,31 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
     // --- Case 1: Linked Axis (embedinfo type="3") ---
     const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
     const embedType = getAttr(embedInfoNode, 'type');
-    
+
     if (embedType === '3' && embedInfoNode) {
         const linkId = getAttr(embedInfoNode, 'linkobjid');
         const linkedTableNode = linkId ? tableMap.get(linkId) : null;
-        
+
         if (linkedTableNode) {
             // A linked axis inherits its properties from the Z-AXIS of the linked table.
             const linkedZAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
-            
             if (linkedZAxisNode) {
-                const linkedAxisDef = parseAxis(linkedZAxisNode, tableMap, 'x'); // Recursively parse the *linked* Z-axis
+                const linkedAxisDef = parseAxis(linkedZAxisNode, tableMap);
                 if (linkedAxisDef) {
-                    // It's a linked axis. We inherit properties from the linked definition,
-                    // but allow local overrides for count and equation.
+                    // It's a linked axis. We inherit properties from the linked definition.
                     return {
                         ...linkedAxisDef,
-                        label: localLabel,
                         // The count of the *current* axis definition takes precedence.
                         count: localCount > 0 ? localCount : linkedAxisDef.count,
-                        // The equation of the *current* axis definition takes precedence if it's not the default 'X'.
+                        // A local equation overrides the linked one.
                         equation: localEquation !== 'X' ? localEquation : linkedAxisDef.equation,
-                        equationVar: localEquationVar !== 'X' ? localEquationVar : linkedAxisDef.equationVar,
+                        equationVar: localEquationVar,
                     };
                 }
             }
         }
-        console.warn(`Failed to resolve linked axis with linkobjid="${linkId}".`);
+        console.warn(`Falha ao resolver o eixo ligado com linkobjid="${linkId}".`);
+        return null;
     }
 
     // --- Case 2: Static Labels ---
@@ -137,76 +141,71 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>, axi
             return isNaN(num) ? l.trim() : num;
         });
         const finalCount = localCount > 0 ? localCount : labels.length;
-        return { 
-            staticLabels, 
-            count: finalCount, 
-            label: localLabel, 
-            equation: 'X',
-            equationVar: 'X', 
-            majorStride: 0, 
-            minorStride: 0,
-            address: null,
+        return {
+            staticLabels,
+            count: finalCount,
+            label: localLabel,
+            address: null, // No direct address for static labels
             dataSize: 1, // Placeholder
-            isBigEndian: false, // Placeholder
+            isBigEndian: false, // Not applicable
+            equation: 'X', // Static labels don't need equations
+            equationVar: 'X',
+            minorStride: 0,
+            majorStride: 0,
         };
     }
-    
-    // --- Case 3: Data stored in BIN file (most common) ---
+
+    // --- Case 3: Data stored in BIN file (most common case for non-linked axes) ---
     const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     if (!embeddedData) {
-        // This handles cases where a Z-axis is being parsed for a link. It might not have <embeddeddata>
-        // itself if its own axes are linked. The important properties are parsed above.
+        // Z-axes being used as a source for a link might not have embeddeddata directly.
+        // We handle this by checking for table dimensions on the axis itself.
         const rowCount = parseInt(getAttr(axisNode, 'mmedrowcount') || '0', 10);
         const colCount = parseInt(getAttr(axisNode, 'mmedcolcount') || '0', 10);
-        // For a Z-axis used as a source for a linked axis, its 'count' is its number of columns.
-        const zAxisCount = colCount > 0 ? colCount : rowCount; 
+        const zAxisCount = colCount > 0 ? colCount : (rowCount > 0 ? rowCount : localCount);
 
         if (zAxisCount > 0) {
-             return {
-                address: null,
+            return {
+                address: null, // Address is on the embedded data node which is missing
                 count: zAxisCount,
                 dataSize: 1, // Placeholder
-                isBigEndian: false, // Placeholder
+                isBigEndian: false,
                 equation: localEquation,
                 equationVar: localEquationVar,
                 label: localLabel,
-                majorStride: 0,
                 minorStride: 0,
-             }
+                majorStride: 0,
+            };
         }
-        // Cannot determine data source for a normal axis, return a minimal definition
-        return {
-            address: null, count: localCount, dataSize: 1, isBigEndian: false,
-            equation: localEquation, equationVar: localEquationVar, label: localLabel,
-            majorStride: 0, minorStride: 0
-        };
+        // Cannot determine data source, return null
+        console.warn(`Não foi possível determinar a fonte de dados para o eixo com a etiqueta "${localLabel}"`);
+        return null;
     }
 
     const addrStr = getAttr(embeddedData, 'mmedaddress', 'address');
     const addr = addrStr ? parseInt(addrStr, 16) : null;
     
+    // For a Z-axis used as a source for a linked axis, its 'count' is its number of columns or rows.
+    const rowCount = parseInt(getAttr(embeddedData, 'mmedrowcount') || '0', 10);
+    const colCount = parseInt(getAttr(embeddedData, 'mmedcolcount') || '0', 10);
+    const zAxisCount = colCount > 0 ? colCount : rowCount;
+    const finalCount = localCount > 0 ? localCount : zAxisCount;
+
     const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits', 'datasize');
     const dataSize = parseInt(dataSizeBitsStr || '8', 10) / 8;
 
     const isBigEndian = getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(embeddedData, 'bigendian') === '1';
-    
-    // If it's a Z-axis being parsed for a link, its count is its column count.
-    const colCount = parseInt(getAttr(embeddedData, 'mmedcolcount') || '0', 10);
-    const finalCount = localCount > 0 ? localCount : colCount;
-    
-    const minorStrideBits = getAttr(embeddedData, 'mmedminorstridebits', 'minor_stride');
-    const minorStride = minorStrideBits ? parseInt(minorStrideBits, 10) / 8 : dataSize;
 
-    return { 
+    return {
         address: addr,
-        count: finalCount, 
-        dataSize, 
-        isBigEndian, 
+        count: finalCount,
+        dataSize,
+        isBigEndian,
         equation: localEquation,
         equationVar: localEquationVar,
-        majorStride: 0, // Not applicable for 1D axes (or Z-axes treated as 1D)
-        minorStride,
         label: localLabel,
+        majorStride: 0, // Calculated later
+        minorStride: 0, // Calculated later
     };
 }
 
@@ -248,167 +247,159 @@ function findMainMathNode(tableNode: Element, zAxisNode: Element): Element | nul
 
 
 export function parseXDF(xmlString: string): XDFDefinition[] {
-  if (typeof DOMParser === 'undefined') {
-    return [];
-  }
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-  const parserError = xmlDoc.querySelector('parsererror');
-  if (parserError) {
-    throw new Error('Erro de análise XML: O ficheiro XDF parece estar corrompido ou mal formatado.');
-  }
-
-  // Helper to check if an element is nested within another table-like element.
-  const isNestedInTable = (element: Element | null): boolean => {
-    let parent = element?.parentElement;
-    while(parent) {
-      const parentTagName = parent.tagName.toLowerCase();
-      if (parentTagName === 'xdftable' || parentTagName === 'table') {
-        return true;
-      }
-      parent = parent.parentElement;
+    if (typeof DOMParser === 'undefined') {
+        return [];
     }
-    return false;
-  };
-  
-  const allElements = xmlDoc.getElementsByTagName('*');
-  const xdfTables: Element[] = [];
-  for(const el of Array.from(allElements)) {
-      const tagName = el.tagName.toLowerCase();
-      if ((tagName === 'xdftable' || tagName === 'table') && !isNestedInTable(el)) {
-          xdfTables.push(el);
-      }
-  }
-
-  if (xdfTables.length === 0) {
-    throw new Error('Nenhuma definição de <XDFTABLE> ou <table> foi encontrada no ficheiro.');
-  }
-  
-  // Create a map of tables by their unique ID for resolving links.
-  const tableMap = new Map<string, Element>();
-  xdfTables.forEach(table => {
-      const uniqueid = getAttr(table, 'uniqueid');
-      if (uniqueid && uniqueid !== '0x0' && uniqueid !== '0') {
-          if (tableMap.has(uniqueid)) {
-            console.warn(`ID único de tabela duplicado encontrado: ${uniqueid}. A ligação a esta tabela pode ser ambígua.`);
-          }
-          tableMap.set(uniqueid, table);
-      }
-  });
-
-  const definitions: XDFDefinition[] = [];
-  const nameCounts: Record<string, number> = {};
-
-  for (const table of xdfTables) {
-    const originalName = findNode(table, 'title', 'TITLE')?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
-    
-    try {
-        if (originalName === 'Tabela Sem Nome') continue;
-        
-        const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
-        if (!zAxisNode) {
-            console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar a definição do eixo Z.`);
-            continue;
-        }
-        
-        const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
-        if (!zEmbeddedData) {
-            console.warn(`A tabela "${originalName}" foi ignorada: o eixo Z não tem <embeddeddata>.`);
-            continue;
-        }
-
-        const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
-        const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
-
-        const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-        const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
-        if (zAddress === null || isNaN(zAddress)) {
-            console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal (eixo Z).`);
-            continue;
-        }
-        
-        const isTransposed = getAttr(findNode(zAxisNode, 'embedinfo'), 'type') === '2';
-
-        let initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0');
-        let initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0');
-        
-        let yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'XDFAXIS[id="Y"]', 'yaxis'), tableMap, 'y');
-        let xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'XDFAXIS[id="X"]', 'xaxis'), tableMap, 'x');
-
-        if (!yAxisDef || !xAxisDef) {
-            console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta ou inválidas.`);
-            continue;
-        }
-        
-        if (initialRows === 0) initialRows = yAxisDef.count;
-        if (initialCols === 0) initialCols = xAxisDef.count;
-
-        if (initialRows === 0 || initialCols === 0) {
-            console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas (linhas ou colunas são 0).`);
-            continue;
-        }
-
-        let finalRows = initialRows;
-        let finalCols = initialCols;
-        
-        if (isTransposed) {
-            [finalRows, finalCols] = [finalCols, finalRows];
-            [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
-        }
-
-        yAxisDef.count = finalRows;
-        xAxisDef.count = finalCols;
-
-        // Definitive stride calculation
-        let minorStride;
-        const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
-        if (minorStrideBitsRaw && parseInt(minorStrideBitsRaw, 10) !== 0) {
-            minorStride = parseInt(minorStrideBitsRaw, 10) / 8;
-        } else {
-            minorStride = dataSize;
-        }
-
-        let majorStride;
-        const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-        if (majorStrideBitsRaw && parseInt(majorStrideBitsRaw, 10) !== 0) {
-            majorStride = parseInt(majorStrideBitsRaw, 10) / 8;
-        } else {
-            majorStride = finalCols * minorStride;
-        }
-
-        const mathNode = findMainMathNode(table, zAxisNode);
-        const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
-        const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
-        const equationVar = getAttr(varNode, 'id') || 'X';
-
-        let tableName = originalName;
-        if (nameCounts[originalName]) {
-            nameCounts[originalName]++;
-            tableName = `${originalName} (${nameCounts[originalName]})`;
-        } else {
-            nameCounts[originalName] = 1;
-        }
-
-        definitions.push({ 
-            name: tableName, 
-            address: zAddress, 
-            rows: finalRows, 
-            cols: finalCols, 
-            dataSize, 
-            isBigEndian, 
-            equation,
-            equationVar,
-            xAxisDef, 
-            yAxisDef,
-            isPotential: false,
-            minorStride,
-            majorStride,
-        });
-    } catch (e) {
-        console.error(`Erro ao analisar a tabela "${originalName}": ${(e as Error).message}`);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+    const parserError = xmlDoc.querySelector('parsererror');
+    if (parserError) {
+        throw new Error('Erro de análise XML: O ficheiro XDF parece estar corrompido ou mal formatado.');
     }
-  }
-  return definitions;
+
+    const isNestedInTable = (element: Element | null): boolean => {
+        let parent = element?.parentElement;
+        while (parent) {
+            const parentTagName = parent.tagName.toLowerCase();
+            if (parentTagName === 'xdftable' || parentTagName === 'table') {
+                return true;
+            }
+            parent = parent.parentElement;
+        }
+        return false;
+    };
+
+    const allElements = xmlDoc.getElementsByTagName('*');
+    const xdfTables: Element[] = [];
+    for (const el of Array.from(allElements)) {
+        const tagName = el.tagName.toLowerCase();
+        if ((tagName === 'xdftable' || tagName === 'table') && !isNestedInTable(el)) {
+            xdfTables.push(el);
+        }
+    }
+
+    if (xdfTables.length === 0) {
+        throw new Error('Nenhuma definição de <XDFTABLE> ou <table> foi encontrada no ficheiro.');
+    }
+
+    const tableMap = new Map<string, Element>();
+    xdfTables.forEach(table => {
+        const uniqueid = getAttr(table, 'uniqueid');
+        if (uniqueid && uniqueid !== '0x0' && uniqueid !== '0') {
+            tableMap.set(uniqueid, table);
+        }
+    });
+
+    const definitions: XDFDefinition[] = [];
+    const nameCounts: Record<string, number> = {};
+
+    for (const table of xdfTables) {
+        const originalName = findNode(table, 'title', 'TITLE')?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
+
+        try {
+            if (originalName === 'Tabela Sem Nome') continue;
+
+            const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
+            if (!zAxisNode) {
+                console.warn(`A tabela "${originalName}" foi ignorada: não foi possível encontrar a definição do eixo Z.`);
+                continue;
+            }
+
+            const zEmbeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
+            if (!zEmbeddedData) {
+                console.warn(`A tabela "${originalName}" foi ignorada: o eixo Z não tem <embeddeddata>.`);
+                continue;
+            }
+
+            const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
+            const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
+            if (zAddress === null || isNaN(zAddress)) {
+                console.warn(`A tabela "${originalName}" foi ignorada: não foi possível determinar o endereço do mapa principal (eixo Z).`);
+                continue;
+            }
+            
+            const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
+            const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
+
+            let yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'XDFAXIS[id="Y"]', 'yaxis'), tableMap);
+            let xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'XDFAXIS[id="X"]', 'xaxis'), tableMap);
+
+            if (!yAxisDef || !xAxisDef) {
+                console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta ou inválidas.`);
+                continue;
+            }
+
+            const isTransposed = getAttr(findNode(zAxisNode, 'embedinfo'), 'type') === '2';
+            let initialRows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0') || yAxisDef.count;
+            let initialCols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0') || xAxisDef.count;
+            
+            if (initialRows === 0 || initialCols === 0) {
+                 console.warn(`A tabela "${originalName}" foi ignorada: dimensões do eixo Z inválidas (linhas ou colunas são 0).`);
+                 continue;
+            }
+
+            // Handle transposition by swapping axis definitions and dimensions
+            if (isTransposed) {
+                [initialRows, initialCols] = [initialCols, initialRows];
+                [yAxisDef, xAxisDef] = [xAxisDef, yAxisDef];
+            }
+            
+            // Final dimensions
+            const finalRows = initialRows;
+            const finalCols = initialCols;
+            yAxisDef.count = finalRows;
+            xAxisDef.count = finalCols;
+
+            // Definitive stride calculation
+            let minorStride;
+            const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
+            if (minorStrideBitsRaw && parseInt(minorStrideBitsRaw, 10) !== 0) {
+                minorStride = parseInt(minorStrideBitsRaw, 10) / 8;
+            } else {
+                minorStride = dataSize;
+            }
+
+            let majorStride;
+            const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
+            if (majorStrideBitsRaw && parseInt(majorStrideBitsRaw, 10) !== 0) {
+                majorStride = parseInt(majorStrideBitsRaw, 10) / 8;
+            } else {
+                majorStride = finalCols * minorStride;
+            }
+
+            const mathNode = findMainMathNode(table, zAxisNode);
+            const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
+            const varNode = mathNode ? findNode(mathNode, 'var', 'VAR') : findNode(zAxisNode, 'var', 'VAR');
+            const equationVar = getAttr(varNode, 'id') || 'X';
+
+            let tableName = originalName;
+            if (nameCounts[originalName]) {
+                nameCounts[originalName]++;
+                tableName = `${originalName} (${nameCounts[originalName]})`;
+            } else {
+                nameCounts[originalName] = 1;
+            }
+
+            definitions.push({
+                name: tableName,
+                address: zAddress,
+                rows: finalRows,
+                cols: finalCols,
+                dataSize,
+                isBigEndian,
+                equation,
+                equationVar,
+                xAxisDef,
+                yAxisDef,
+                isPotential: false,
+                minorStride,
+                majorStride,
+            });
+        } catch (e) {
+            console.error(`Erro ao analisar a tabela "${originalName}": ${(e as Error).message}`);
+        }
+    }
+    return definitions;
 }
 
 
