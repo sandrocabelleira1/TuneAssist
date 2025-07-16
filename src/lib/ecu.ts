@@ -199,11 +199,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     }
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-    const parserError = xmlDoc.querySelector('parsererror');
-    if (parserError) {
-        throw new Error('Erro de análise XML: O ficheiro XDF parece estar corrompido ou mal formatado.');
-    }
-
+    
     const allElements = xmlDoc.getElementsByTagName('*');
     const xdfTables: Element[] = [];
     for (const el of Array.from(allElements)) {
