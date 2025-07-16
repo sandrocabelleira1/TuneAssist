@@ -96,15 +96,11 @@ function getAttr(element: Element | null, ...names: string[]): string | null {
 function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): AxisDefinition {
     if (!axisNode) return null;
 
-    const localLabel = (findNode(axisNode, 'units', 'UNITS')?.textContent || findNode(axisNode, 'title', 'TITLE')?.textContent || '').trim();
-    const localCount = parseInt(findNode(axisNode, 'indexcount', 'INDEXCOUNT')?.textContent || '0', 10);
-    const localMathNode = findNode(axisNode, 'math', 'MATH');
-    const localEquation = getAttr(localMathNode, 'equation', 'Equation') || 'X';
-    const localEquationVar = getAttr(findNode(localMathNode, 'var', 'VAR'), 'id') || 'X';
-
-    // --- Case 1: Linked Axis (embedinfo type="3") ---
+    // --- Resolve Linked Axis First (embedinfo type="3") ---
     const embedInfoNode = findNode(axisNode, 'embedinfo', 'EMBEDINFO');
     const embedType = getAttr(embedInfoNode, 'type');
+    const localEquation = getAttr(findNode(axisNode, 'math', 'MATH'), 'equation');
+    const localLabel = (findNode(axisNode, 'units', 'UNITS')?.textContent || findNode(axisNode, 'title', 'TITLE')?.textContent || '').trim();
 
     if (embedType === '3' && embedInfoNode) {
         const linkId = getAttr(embedInfoNode, 'linkobjid');
@@ -113,14 +109,17 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         if (linkedTableNode) {
             const linkedZAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]', 'zaxis');
             if (linkedZAxisNode) {
-                const linkedAxisDef = parseAxis(linkedZAxisNode, tableMap);
+                // Recursively parse the linked axis, which is the Z-axis of another table
+                const linkedAxisDef = parseAxis(linkedZAxisNode, tableMap); 
                 if (linkedAxisDef) {
                     return {
                         ...linkedAxisDef,
-                        count: localCount > 0 ? localCount : linkedAxisDef.count,
-                        equation: localEquation !== 'X' ? localEquation : linkedAxisDef.equation,
-                        equationVar: localEquation !== 'X' ? localEquationVar : linkedAxisDef.equationVar,
+                        // Override the linked axis's equation if a local one is defined
+                        equation: localEquation && localEquation.toUpperCase() !== 'X' ? localEquation : linkedAxisDef.equation,
+                        // Override label if a local one is present
                         label: localLabel || linkedAxisDef.label,
+                        // Use the count from the current axis definition if it exists
+                        count: parseInt(findNode(axisNode, 'indexcount', 'INDEXCOUNT')?.textContent || '0', 10) || linkedAxisDef.count,
                     };
                 }
             }
@@ -128,6 +127,11 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         console.warn(`Falha ao resolver o eixo ligado com linkobjid="${linkId}".`);
         return null;
     }
+
+    const localCount = parseInt(findNode(axisNode, 'indexcount', 'INDEXCOUNT')?.textContent || '0', 10);
+    const localMathNode = findNode(axisNode, 'math', 'MATH');
+    const equation = getAttr(localMathNode, 'equation', 'Equation') || 'X';
+    const localEquationVar = getAttr(findNode(localMathNode, 'var', 'VAR'), 'id') || 'X';
 
     // --- Case 2: Static Labels ---
     const labelNodes = findNodes(axisNode, 'label');
@@ -155,40 +159,17 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
 
     // --- Case 3: Data stored in BIN file (most common case for non-linked axes) ---
     const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-    if (!embeddedData) {
-        // Z-axis definitions being used as a source for links might not have embeddeddata directly.
-        // We handle this by checking for table dimensions on the axis itself.
-        const rowCountAttr = getAttr(axisNode, 'mmedrowcount');
-        const colCountAttr = getAttr(axisNode, 'mmedcolcount');
-        if (rowCountAttr || colCountAttr) {
-            const rowCount = parseInt(rowCountAttr || '0', 10);
-            const colCount = parseInt(colCountAttr || '0', 10);
-            const zAxisCount = colCount > 0 ? colCount : (rowCount > 0 ? rowCount : localCount);
-            if (zAxisCount > 0) {
-                return {
-                    address: null,
-                    count: zAxisCount,
-                    dataSize: 1, // Placeholder
-                    isBigEndian: false, // Placeholder
-                    equation: localEquation,
-                    equationVar: localEquationVar,
-                    label: localLabel,
-                    minorStride: 0,
-                    majorStride: 0,
-                };
-            }
-        }
-
-        console.warn(`Não foi possível determinar a fonte de dados para o eixo com a etiqueta "${localLabel}"`);
-        return null;
-    }
+    if (!embeddedData) return null; // Should not happen if not a link or static
     
     const addrStr = getAttr(embeddedData, 'mmedaddress', 'address');
     const addr = addrStr ? parseInt(addrStr, 16) : null;
     
-    const rowCount = parseInt(getAttr(embeddedData, 'mmedrowcount') || '0', 10);
-    const colCount = parseInt(getAttr(embeddedData, 'mmedcolcount') || '0', 10);
-    const axisCountFromZ = colCount > 0 ? colCount : rowCount; // If it's a z-axis being used as a source.
+    // For Z-axes being used as sources for links, they define row/col counts.
+    const rowCountAttr = getAttr(axisNode, 'mmedrowcount') || getAttr(embeddedData, 'mmedrowcount');
+    const colCountAttr = getAttr(axisNode, 'mmedcolcount') || getAttr(embeddedData, 'mmedcolcount');
+    const rowCount = parseInt(rowCountAttr || '0', 10);
+    const colCount = parseInt(colCountAttr || '0', 10);
+    const axisCountFromZ = colCount > 1 ? colCount : rowCount; // Prefer columns for 1D arrays
     const finalCount = localCount > 0 ? localCount : axisCountFromZ;
 
     const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits', 'datasize');
@@ -207,7 +188,7 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         count: finalCount,
         dataSize,
         isBigEndian,
-        equation: localEquation,
+        equation: equation,
         equationVar: localEquationVar,
         label: localLabel,
         majorStride,
