@@ -85,7 +85,7 @@ function parseAxis(axisNode: Element | null, allTables: Element[]): AxisDefiniti
 
     // --- 1. Handle STATIC labels first ---
     const labelNodes = findNodes(axisNode, 'label');
-    if (labelNodes.length > 0) {
+    if (labelNodes.length > 0 && !findNode(axisNode, 'embedinfo')) {
         const labels = Array.from(labelNodes).map(l => getAttr(l, 'value') || '');
         return {
             staticLabels: labels,
@@ -109,7 +109,8 @@ function parseAxis(axisNode: Element | null, allTables: Element[]): AxisDefiniti
                 // Recursively parse the linked axis's Z-data as if it were a normal axis
                 const parsedLinkedAxis = parseAxis(linkedZAxis, allTables); 
                 if (parsedLinkedAxis) {
-                    // IMPORTANT: The count and label/units come from the CURRENT axis, not the linked one.
+                    // IMPORTANT: The count comes from the CURRENT axis, not the linked one.
+                    // The label/units also come from the current axis if present, otherwise inherit.
                     const currentCount = parseInt(getAttr(axisNode, 'indexcount') || '0', 10);
                     const currentLabel = (getAttr(axisNode, 'units') || getAttr(axisNode, 'title') || parsedLinkedAxis.label || '').trim();
                     
