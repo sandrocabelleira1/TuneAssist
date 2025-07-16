@@ -334,8 +334,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             const finalCols = initialCols;
             yAxisDef.count = finalRows;
             xAxisDef.count = finalCols;
-
-            // CORRECT STRIDE LOGIC
+            
             const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
             const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : 0;
             
@@ -421,9 +420,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  // CORRECT AXIS STRIDE LOGIC
-  const stride = (axisDef.majorStride && axisDef.majorStride > 0) ? axisDef.majorStride : axisDef.dataSize;
-
+  const stride = (axisDef.majorStride > 0) ? axisDef.majorStride : axisDef.dataSize;
   const useLittleEndian = !(axisDef.isBigEndian ?? false);
 
   for (let i = 0; i < count; i++) {
@@ -491,10 +488,8 @@ export function readAndCalculateMapFromBin(
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
-  // FINAL STRIDE LOGIC
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
   const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
-  
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
   for (let r = 0; r < def.rows; r++) {
