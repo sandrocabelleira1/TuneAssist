@@ -91,9 +91,39 @@ function getAttr(element: Element | null, ...names: string[]): string | null {
  * @param axisNode The <XDFAXIS> element to parse.
  * @returns An AxisDefinition object or null if parsing fails.
  */
-function parseAxis(axisNode: Element | null): AxisDefinition {
+function parseAxis(axisNode: Element | null, allTables: Element[]): AxisDefinition {
     if (!axisNode) return null;
     
+    // --- Case 0: Handle linked axes ---
+    const embedInfoNode = findNode(axisNode, 'embedinfo');
+    const linkObjId = embedInfoNode ? getAttr(embedInfoNode, 'linkobjid') : null;
+    if (embedInfoNode && getAttr(embedInfoNode, 'type') === '3' && linkObjId) {
+        const linkedTable = allTables.find(t => getAttr(t, 'uniqueid')?.toLowerCase() === linkObjId.toLowerCase());
+        if (linkedTable) {
+            const linkedZAxis = findNode(linkedTable, 'XDFAXIS[id="z"]', 'zaxis');
+            if (linkedZAxis) {
+                const linkedEmbeddedData = findNode(linkedZAxis, 'embeddeddata', 'EMBEDDEDDATA');
+                const linkedMath = findNode(linkedZAxis, 'math', 'MATH');
+                
+                const addrStr = getAttr(linkedEmbeddedData, 'mmedaddress', 'address');
+                const dataSizeBitsStr = getAttr(linkedEmbeddedData, 'mmedelementsizebits', 'datasize');
+                const majorStrideBitsRaw = getAttr(linkedEmbeddedData, 'mmedmajorstridebits');
+                
+                return {
+                    address: addrStr ? parseInt(addrStr, 16) : null,
+                    count: parseInt(getAttr(axisNode, 'indexcount') || '0', 10),
+                    dataSize: (parseInt(dataSizeBitsStr || '16', 10)) / 8,
+                    isBigEndian: getAttr(linkedEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(linkedEmbeddedData, 'bigendian') === '1',
+                    equation: getAttr(linkedMath, 'equation', 'Equation') || 'X',
+                    equationVar: getAttr(findNode(linkedMath, 'var'), 'id') || 'X',
+                    label: (findNode(axisNode, 'units')?.textContent || findNode(axisNode, 'title')?.textContent || 'Linked Axis').trim(),
+                    majorStride: majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : 0,
+                    minorStride: 0, // Not applicable for axes
+                };
+            }
+        }
+    }
+
     // --- Case 1: Static Labels ---
     const labelNodes = findNodes(axisNode, 'label');
     if (labelNodes.length > 0) {
@@ -125,14 +155,13 @@ function parseAxis(axisNode: Element | null): AxisDefinition {
     const addr = addrStr ? parseInt(addrStr, 16) : null;
     
     // For X/Y axes, count comes from indexcount. For Z axes, it's from row/col counts.
-    const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
+    const count = parseInt(getAttr(axisNode, 'indexcount') || '0', 10);
 
     const dataSizeBitsStr = getAttr(embeddedData, 'mmedelementsizebits', 'datasize');
     const dataSize = parseInt(dataSizeBitsStr || '8', 10) / 8;
 
     const isBigEndian = getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(embeddedData, 'bigendian') === '1';
     
-    // STRIDE is critical. Use it if present, otherwise default to dataSize.
     const majorStrideBitsRaw = getAttr(embeddedData, 'mmedmajorstridebits');
     const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : 0;
     
@@ -205,35 +234,25 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         throw new Error('Erro de análise XML: O ficheiro XDF parece estar corrompido ou mal formatado.');
     }
 
-    const isNestedInTable = (element: Element | null): boolean => {
-        let parent = element?.parentElement;
-        while (parent) {
-            const parentTagName = parent.tagName.toLowerCase();
-            if (parentTagName === 'xdftable' || parentTagName === 'table') {
-                return true;
-            }
-            parent = parent.parentElement;
-        }
-        return false;
-    };
-
     const allElements = xmlDoc.getElementsByTagName('*');
     const xdfTables: Element[] = [];
     for (const el of Array.from(allElements)) {
         const tagName = el.tagName.toLowerCase();
-        if ((tagName === 'xdftable' || tagName === 'table') && !isNestedInTable(el)) {
+        if ((tagName === 'xdftable' || tagName === 'table')) {
             xdfTables.push(el);
         }
     }
+    
+    const mainTables = xdfTables.filter(table => !findNode(table, 'CATEGORYMEM[category="7"]'));
 
-    if (xdfTables.length === 0) {
-        throw new Error('Nenhuma definição de <XDFTABLE> ou <table> foi encontrada no ficheiro.');
+    if (mainTables.length === 0) {
+        throw new Error('Nenhuma definição de <XDFTABLE> principal foi encontrada no ficheiro.');
     }
 
     const definitions: XDFDefinition[] = [];
     const nameCounts: Record<string, number> = {};
 
-    for (const table of xdfTables) {
+    for (const table of mainTables) {
         const originalName = findNode(table, 'title', 'TITLE')?.textContent || getAttr(table, 'name') || 'Tabela Sem Nome';
 
         try {
@@ -261,8 +280,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
             const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
 
-            let yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'XDFAXIS[id="Y"]', `yaxis`));
-            let xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'XDFAXIS[id="X"]', `xaxis`));
+            let yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'XDFAXIS[id="Y"]', `yaxis`), xdfTables);
+            let xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'XDFAXIS[id="X"]', `xaxis`), xdfTables);
 
             if (!yAxisDef || !xAxisDef) {
                 console.warn(`A tabela "${originalName}" foi ignorada: definições de eixo X ou Y em falta ou inválidas.`);
