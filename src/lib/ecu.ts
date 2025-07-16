@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -165,8 +166,6 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, "application/xml");
     
-    // Do NOT check for parsererror. It's too aggressive and gives false positives.
-    
     const allTableElements = Array.from(xmlDoc.getElementsByTagName('XDFTABLE'));
     
     if (allTableElements.length === 0) {
@@ -177,16 +176,9 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
     for (const table of allTableElements) {
         try {
-            const tableName = getAttr(table, 'title') || 'Tabela Sem Nome';
-            if (tableName === 'Tabela Sem Nome') continue;
+            const tableName = getAttr(table, 'title');
+            if (!tableName) continue;
             
-            // Skip breakpoint tables from the main list, they are only used for axis linking
-            const categoryNode = findNode(table, 'CATEGORYMEM');
-            const categoryIndex = categoryNode ? getAttr(categoryNode, 'category') : null;
-            if (categoryIndex === '7') { // Category 7 is "Breakpoint" in the user's XDF
-                continue;
-            }
-
             const zAxisNode = findNode(table, 'XDFAXIS[id="z"]');
             if (!zAxisNode) continue;
             
