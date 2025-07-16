@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo } from 'react';
@@ -23,16 +24,30 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     if (!isXNumeric || !isYNumeric) {
       return null;
     }
+    
+    // Create indexed data for sorting
+    const indexedX = (xAxis as number[]).map((val, index) => ({ val, index }));
+    const indexedY = (yAxis as number[]).map((val, index) => ({ val, index }));
+    
+    // Sort axes and keep original indices
+    indexedX.sort((a, b) => a.val - b.val);
+    indexedY.sort((a, b) => a.val - b.val);
 
-    // Replace any nulls in the z data with NaN so Plotly can handle them as gaps.
-    const sanitizedZ = mapData.map(row => 
-      row.map(cell => (cell === null || !isFinite(cell) ? NaN : cell))
+    const sortedX = indexedX.map(item => item.val);
+    const sortedY = indexedY.map(item => item.val);
+
+    // Reorder the Z data matrix according to the sorted axes
+    const sortedZ = indexedY.map(yItem => 
+        indexedX.map(xItem => {
+            const cellValue = mapData[yItem.index]?.[xItem.index];
+            return (cellValue === null || !isFinite(cellValue)) ? NaN : cellValue;
+        })
     );
 
     return {
-      x: xAxis,
-      y: yAxis,
-      z: sanitizedZ,
+      x: sortedX,
+      y: sortedY,
+      z: sortedZ,
     };
   }, [mapData, xAxis, yAxis]);
 

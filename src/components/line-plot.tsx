@@ -38,12 +38,27 @@ export default function LinePlot2D({
       return null;
     }
 
-    const yData = mapData[sliceIndex].map(val => (typeof val === 'number' && isFinite(val) ? val : null));
-    const xData = xAxis;
+    const yDataSlice = mapData[sliceIndex];
+
+    // Create pairs of [x, y] to sort them together
+    const pairedData = xAxis
+      .map((xVal, index) => ({
+        x: xVal,
+        y: yDataSlice[index] ?? null,
+      }))
+      // Filter out non-numeric x values for sorting
+      .filter(pair => typeof pair.x === 'number' && isFinite(pair.x));
+
+    // Sort pairs based on the numeric x value
+    pairedData.sort((a, b) => (a.x as number) - (b.x as number));
+    
+    // Separate back into x and y arrays
+    const sortedX = pairedData.map(pair => pair.x);
+    const sortedY = pairedData.map(pair => pair.y);
 
     return {
-      x: xData,
-      y: yData,
+      x: sortedX,
+      y: sortedY,
     };
   }, [mapData, xAxis, yAxis, sliceIndex]);
 
