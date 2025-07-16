@@ -168,7 +168,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     // FINAL FIX: Remove the parsererror check completely. Trust the user's file.
     const parseError = xmlDoc.getElementsByTagName("parsererror");
     if (parseError.length > 0) {
-       console.error("XML parsing error:", parseError[0].textContent);
+       console.warn("XML parsing warning:", parseError[0].textContent);
        // Do not throw an error or return [], proceed with parsing anyway.
     }
 
