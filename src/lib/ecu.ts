@@ -168,6 +168,7 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     const allTableElements = Array.from(xmlDoc.getElementsByTagName('XDFTABLE'));
     
     if (allTableElements.length === 0) {
+        // Return empty instead of throwing error if no tables found
         return [];
     }
 
