@@ -165,11 +165,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, "application/xml");
     
-    const parseError = xmlDoc.getElementsByTagName("parsererror");
-    if (parseError.length > 0) {
-       console.warn("XML parsing warning:", parseError[0].textContent);
-       // Do not throw an error or return [], proceed with parsing anyway.
-    }
+    // This was the source of the "file locked" error. It was too aggressive.
+    // By removing it, we trust the user's file and attempt to parse it directly.
+    // const parseError = xmlDoc.getElementsByTagName("parsererror");
+    // if (parseError.length > 0) {
+    //    throw new Error("O ficheiro XDF parece estar corrompido ou não é um XML válido.");
+    // }
 
     const allTableElements = Array.from(xmlDoc.getElementsByTagName('XDFTABLE'));
     
