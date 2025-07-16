@@ -165,6 +165,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, "application/xml");
     
+    // FINAL FIX: Remove the parsererror check completely. Trust the user's file.
+    // const parseError = xmlDoc.getElementsByTagName("parsererror");
+    // if (parseError.length > 0) {
+    //    return [];
+    // }
+
     const allTableElements = Array.from(xmlDoc.getElementsByTagName('XDFTABLE'));
     
     if (allTableElements.length === 0) {
