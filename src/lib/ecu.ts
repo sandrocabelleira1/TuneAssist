@@ -195,6 +195,12 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
 
     const isBigEndian = getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(embeddedData, 'bigendian') === '1';
 
+    const minorStrideBitsRaw = getAttr(embeddedData, 'mmedminorstridebits');
+    const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : 0;
+    
+    const majorStrideBitsRaw = getAttr(embeddedData, 'mmedmajorstridebits');
+    const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : 0;
+
     return {
         address: addr,
         count: finalCount,
@@ -203,8 +209,8 @@ function parseAxis(axisNode: Element | null, tableMap: Map<string, Element>): Ax
         equation: localEquation,
         equationVar: localEquationVar,
         label: localLabel,
-        majorStride: 0, // Calculated later
-        minorStride: 0, // Calculated later
+        majorStride,
+        minorStride,
     };
 }
 
@@ -442,7 +448,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   const rawData: number[] = [];
   const calculatedData: (number | string)[] = [];
   
-  const stride = Math.max(axisDef.minorStride || 0, axisDef.dataSize);
+  // Use majorStride if it's explicitly defined and non-zero, otherwise fallback to dataSize
+  const stride = (axisDef.majorStride && axisDef.majorStride > 0) ? axisDef.majorStride : axisDef.dataSize;
 
   const useLittleEndian = !axisDef.isBigEndian;
 
