@@ -338,14 +338,10 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
             // CORRECT STRIDE LOGIC
             const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
-            const minorStride = (minorStrideBitsRaw && parseInt(minorStrideBitsRaw, 10) !== 0) 
-                ? parseInt(minorStrideBitsRaw, 10) / 8 
-                : dataSize;
-
+            const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : 0;
+            
             const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-            const majorStride = (majorStrideBitsRaw && parseInt(majorStrideBitsRaw, 10) !== 0) 
-                ? parseInt(majorStrideBitsRaw, 10) / 8 
-                : finalCols * minorStride;
+            const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : 0;
             
             const mathNode = findMainMathNode(table, zAxisNode);
             const equation = getAttr(mathNode, 'equation', 'Equation') || 'X';
@@ -429,7 +425,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
   // CORRECT AXIS STRIDE LOGIC
   const stride = (axisDef.majorStride && axisDef.majorStride > 0) ? axisDef.majorStride : axisDef.dataSize;
 
-  const useLittleEndian = !axisDef.isBigEndian;
+  const useLittleEndian = !(axisDef.isBigEndian ?? false);
 
   for (let i = 0; i < count; i++) {
     const offset = axisDef.address + (i * stride);
@@ -496,6 +492,7 @@ export function readAndCalculateMapFromBin(
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
+  // FINAL STRIDE LOGIC
   const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
   const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
   
