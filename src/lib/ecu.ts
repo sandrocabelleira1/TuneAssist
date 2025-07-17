@@ -109,7 +109,7 @@ function parseAxis(axisNode: Element | null, allTables: Element[]): AxisDefiniti
                 const parsedLinkedAxis = parseAxis(linkedZAxis, allTables); 
                 if (parsedLinkedAxis) {
                     // IMPORTANT: The count comes from the CURRENT axis, not the linked one.
-                    // The label/units also come from the current axis if present, otherwise inherit.
+                    // The label/units come from the current axis if present, otherwise inherit.
                     const currentCount = parseInt(getAttr(axisNode, 'indexcount') || '0', 10);
                     const currentLabel = (getAttr(axisNode, 'units') || getAttr(axisNode, 'title') || parsedLinkedAxis.label || '').trim();
                     
@@ -171,17 +171,17 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
         throw new Error(`Erro de análise do XDF: ${parseError[0].textContent}`);
     }
 
-    const allTableElements = Array.from(xmlDoc.getElementsByTagName('XDFTABLE'));
+    const allTableElements = Array.from(xmlDoc.querySelectorAll('XDFTABLE, table'));
     
     if (allTableElements.length === 0) {
-        throw new Error("Nenhuma tag <XDFTABLE> foi encontrada no ficheiro. Este não parece ser um ficheiro XDF válido.");
+        throw new Error("Nenhuma tag <XDFTABLE> ou <table> foi encontrada no ficheiro. Este não parece ser um ficheiro XDF válido.");
     }
 
     const definitions: XDFDefinition[] = [];
 
     for (const table of allTableElements) {
         try {
-            const tableName = getAttr(table, 'title');
+            const tableName = getAttr(table, 'title') || findNode(table, 'title')?.textContent;
             if (!tableName) continue;
             
             const zAxisNode = findNode(table, 'XDFAXIS[id="z"]');
@@ -194,8 +194,8 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
             if (zAddress === null) continue;
             
-            const yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]'), allTableElements);
-            const xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]'), allTableElements);
+            const yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'yaxis'), allTableElements);
+            const xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'xaxis'), allTableElements);
             
             if (!yAxisDef || !xAxisDef) continue;
             
