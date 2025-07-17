@@ -25,7 +25,6 @@ import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight,
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
-import packageJson from '../../../package.json';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -249,7 +248,7 @@ function MapTable({
                       onCellChange={(value) => onCellChange(yi, xi, value)}
                       isEditable={isEditable}
                       valueFormat={valueFormat}
-                      viewMode={viewMode}
+                      viewMode={mapViewMode}
                       dataSize={definition.dataSize}
                     />
                   </td>
@@ -1608,7 +1607,7 @@ export default function EcuTuningAssistant() {
                                 
                                 <div className="space-y-2">
                                     <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
-                                    <div className="text-center text-xs text-muted-foreground">Versão: {packageJson.version}</div>
+                                    <div className="text-center text-xs text-muted-foreground">Versão: 1.0.2-partial-success-base</div>
                                 </div>
 
                                 <div>
