@@ -1,6 +1,6 @@
 {
   "name": "nextn",
-  "version": "1.0.1-final-robust-parser",
+  "version": "1.0.2-partial-success-base",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

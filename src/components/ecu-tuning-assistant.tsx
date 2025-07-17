@@ -25,7 +25,7 @@ import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight,
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
-import packageJson from '../../package.json';
+import packageJson from '../../../package.json';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -1486,11 +1486,17 @@ export default function EcuTuningAssistant() {
                             <CardContent className="space-y-6 h-[calc(100%-76px)] overflow-y-auto">
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">1. Carregar Ficheiros</h3>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}><FileUp className="mr-2"/>Carregar .BIN</Button>
+                                     <div className="grid grid-cols-2 gap-2">
+                                        <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}>
+                                            <FileUp className="mr-2 h-4 w-4" />
+                                            Carregar .BIN
+                                        </Button>
                                         <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
 
-                                        <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}><FileUp className="mr-2"/>Carregar .XDF</Button>
+                                        <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}>
+                                            <FileUp className="mr-2 h-4 w-4" />
+                                            Carregar .XDF
+                                        </Button>
                                         <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
                                     </div>
                                     <div className="text-xs space-y-1 pt-2">
@@ -2042,8 +2048,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-    
-
-
-
