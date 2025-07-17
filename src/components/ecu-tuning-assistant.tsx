@@ -299,9 +299,7 @@ export default function EcuTuningAssistant() {
     const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
     const [isEndianSwapped, setIsEndianSwapped] = useState(false);
 
-    const [xdfLibrary, setXdfLibrary] = useState<Record<string, { name: string; content: string; brand?: string }>>({});
     const [potentialMapsDb, setPotentialMapsDb] = useState<Record<string, XDFDefinition[]>>({});
-    const [selectedXdfFromLibrary, setSelectedXdfFromLibrary] = useState<string>('');
     const [selectedBrandForNewXdf, setSelectedBrandForNewXdf] = useState<string>('Yamaha');
     const [motorcycleModel, setMotorcycleModel] = useState('R3');
     const [activeXdfBrand, setActiveXdfBrand] = useState('');
@@ -370,11 +368,6 @@ export default function EcuTuningAssistant() {
     // Load custom data from localStorage on component mount
     useEffect(() => {
         try {
-            const savedLibrary = localStorage.getItem('xdfLibrary');
-            if (savedLibrary) {
-                setXdfLibrary(JSON.parse(savedLibrary));
-                addLog('Biblioteca XDF carregada.', 'debug');
-            }
             const savedPotentialMaps = localStorage.getItem('potentialMapsLibrary');
             if (savedPotentialMaps) {
                 setPotentialMapsDb(JSON.parse(savedPotentialMaps));
@@ -389,13 +382,12 @@ export default function EcuTuningAssistant() {
     // Save custom data to localStorage whenever they change
     useEffect(() => {
         try {
-            if (Object.keys(xdfLibrary).length > 0) localStorage.setItem('xdfLibrary', JSON.stringify(xdfLibrary));
             if (Object.keys(potentialMapsDb).length > 0) localStorage.setItem('potentialMapsLibrary', JSON.stringify(potentialMapsDb));
         } catch (error) {
             console.error("Failed to save to localStorage", error);
             addLog('Não foi possível guardar dados no armazenamento local.', 'error');
         }
-    }, [xdfLibrary, potentialMapsDb]);
+    }, [potentialMapsDb]);
 
     // Rebuild available maps when files or potential maps DB changes
     useEffect(() => {
@@ -487,7 +479,6 @@ export default function EcuTuningAssistant() {
         setDisplayIndexMap(null);
         setMapValidationStatus('idle');
         setAiSuggestion(null);
-        setSelectedXdfFromLibrary('');
         setActiveXdfBrand('');
         setAvailableMaps([]);
         setAudioUrl(null);
@@ -543,16 +534,6 @@ export default function EcuTuningAssistant() {
                     setXdfFile({ name: file.name, definitions: definitions });
                     setActiveXdfBrand(brandValue);
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
-
-                    try {
-                        const newLibrary = { ...xdfLibrary, [file.name]: { name: file.name, content: text, brand: brandValue }};
-                        setXdfLibrary(newLibrary);
-                        setSelectedXdfFromLibrary(file.name);
-                        addLog(`"${file.name}" ${brandValue ? `(Marca: ${brandValue}) `: ''}adicionado à biblioteca XDF.`, 'info');
-                    } catch (error) {
-                        addLog('Não foi possível guardar o XDF na biblioteca (pode estar cheia).', 'error');
-                        toast({ variant: 'destructive', title: "Biblioteca Cheia", description: "Não foi possível guardar o XDF na biblioteca." });
-                    }
                 }
             } catch (error) {
                 const msg = `Erro ao carregar ${file.name}: ${(error as Error).message}`;
@@ -571,45 +552,6 @@ export default function EcuTuningAssistant() {
         reader.readAsArrayBuffer(file);
     };
     
-    const handleSelectXdfFromLibrary = async (name: string) => {
-        if (!name || !xdfLibrary[name]) return;
-        
-        const xdfData = xdfLibrary[name];
-        if (!xdfData) return;
-        try {
-            let definitions = parseXDF(xdfData.content);
-            if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada.");
-            
-            setSelectedMapName(''); setDisplayMap(null); setDisplayRawMap(null); setDisplayAxes(null); setRawMap(null); setAudioUrl(null);
-            setSelectedCells(new Set());
-            setMapValidationStatus('idle');
-            setPlotSliceIndex(0);
-
-            const brandValue = xdfData.brand || '';
-            
-            setXdfFile({ name, definitions: definitions });
-            setSelectedXdfFromLibrary(name);
-            setActiveXdfBrand(brandValue);
-            addLog(`XDF "${name}" ${brandValue ? `(Marca: ${brandValue}) `: ''}carregado da biblioteca.`, 'success');
-        } catch (error) {
-            const msg = `Erro ao carregar ${name} da biblioteca: ${(error as Error).message}`;
-            addLog(msg, 'error');
-            setIsXdfErrorModalOpen(true);
-            setXdfFile(null);
-        }
-    }
-    
-    const handleClearXdfLibrary = () => {
-        setXdfLibrary({});
-        localStorage.removeItem('xdfLibrary');
-        setXdfFile(null);
-        setAvailableMaps([]);
-        setSelectedXdfFromLibrary('');
-        setActiveXdfBrand('');
-        addLog('Biblioteca XDF limpa.', 'info');
-        toast({ title: 'Biblioteca Limpa', description: 'A sua biblioteca de ficheiros XDF foi removida.' });
-    }
-
     const applyZAxisCorrectionAndReload = useCallback((
       originalDefinition: XDFDefinition,
       zEquation: string
@@ -1544,77 +1486,48 @@ export default function EcuTuningAssistant() {
                             <CardContent className="space-y-6 h-[calc(100%-76px)] overflow-y-auto">
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">1. Carregar Ficheiros</h3>
-                                    <div className="space-y-2">
-                                        <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}><FileUp className="mr-2"/>Carregar Ficheiro .BIN</Button>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}><FileUp className="mr-2"/>Carregar .BIN</Button>
                                         <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
-                                        {binFile && <p className="text-xs text-green-400 truncate">BIN: {binFile.name}</p>}
+
+                                        <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}><FileUp className="mr-2"/>Carregar .XDF</Button>
+                                        <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
                                     </div>
-                                    
-                                    <Separator className="my-4" />
-
-                                    <div className="space-y-2">
-                                        <Label className="text-sm font-medium">Definição do Mapa (.XDF)</Label>
-                                        <p className="text-xs text-muted-foreground">Forneça um XDF para definir os mapas no BIN.</p>
-                                        
-                                        <div className="space-y-1 pt-2">
-                                            <Label className="text-xs text-muted-foreground">Marca e Modelo (para procura com IA e novos XDFs)</Label>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <Select value={selectedBrandForNewXdf} onValueChange={setSelectedBrandForNewXdf}>
-                                                    <SelectTrigger className="h-10"><SelectValue placeholder="Marca..." /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="no-brand">Nenhuma</SelectItem>
-                                                        <SelectItem value="Yamaha">Yamaha</SelectItem>
-                                                        <SelectItem value="Honda">Honda</SelectItem>
-                                                        <SelectItem value="Suzuki">Suzuki</SelectItem>
-                                                        <SelectItem value="Kawasaki">Kawasaki</SelectItem>
-                                                        <SelectItem value="BMW">BMW</SelectItem>
-                                                        <SelectItem value="Ducati">Ducati</SelectItem>
-                                                        <SelectItem value="Triumph">Triumph</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                                <Input 
-                                                    className="h-10"
-                                                    placeholder="Modelo (ex: R3)" 
-                                                    value={motorcycleModel} 
-                                                    onChange={(e) => setMotorcycleModel(e.target.value)} 
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2 pt-2">
-                                            <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}><Plus className="mr-2"/> Adicionar novo .XDF à biblioteca</Button>
-                                            <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
-                                        </div>
-                                    
-                                        {Object.keys(xdfLibrary).length > 0 && (
-                                            <div className="space-y-2 pt-2">
-                                                <div className="flex items-center justify-between">
-                                                    <Label className="text-xs text-muted-foreground">Ou use um da biblioteca</Label>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearXdfLibrary}>
-                                                                <Trash2 className="w-3 h-3" />
-                                                            </Button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent><p>Limpar Biblioteca XDF</p></TooltipContent>
-                                                    </Tooltip>
-                                                </div>
-                                                <Select onValueChange={handleSelectXdfFromLibrary} value={selectedXdfFromLibrary}>
-                                                    <SelectTrigger><SelectValue placeholder="Selecione um XDF..." /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {Object.values(xdfLibrary).map(xdf => (
-                                                            <SelectItem key={xdf.name} value={xdf.name}>
-                                                                {xdf.brand && <span className="font-semibold mr-1">[{xdf.brand}]</span>}
-                                                                {xdf.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        )}
-                                        {xdfFile && <p className="text-xs text-green-400 truncate">XDF Ativo: {xdfFile.name}{activeXdfBrand && ` (${activeXdfBrand})`}</p>}
+                                    <div className="text-xs space-y-1 pt-2">
+                                        {binFile && <p className="text-green-400 truncate">BIN Ativo: {binFile.name}</p>}
+                                        {xdfFile && <p className="text-green-400 truncate">XDF Ativo: {xdfFile.name}</p>}
                                     </div>
                                 </div>
+                                
+                                <Separator />
+
+                                <div className="space-y-2">
+                                     <Label className="text-sm font-medium">Informação da ECU (para IA)</Label>
+                                     <p className="text-xs text-muted-foreground">Fornecer isto ajuda a IA a ser mais precisa.</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Select value={selectedBrandForNewXdf} onValueChange={setSelectedBrandForNewXdf}>
+                                            <SelectTrigger className="h-10"><SelectValue placeholder="Marca..." /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="no-brand">Nenhuma</SelectItem>
+                                                <SelectItem value="Yamaha">Yamaha</SelectItem>
+                                                <SelectItem value="Honda">Honda</SelectItem>
+                                                <SelectItem value="Suzuki">Suzuki</SelectItem>
+                                                <SelectItem value="Kawasaki">Kawasaki</SelectItem>
+                                                <SelectItem value="BMW">BMW</SelectItem>
+                                                <SelectItem value="Ducati">Ducati</SelectItem>
+                                                <SelectItem value="Triumph">Triumph</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Input 
+                                            className="h-10"
+                                            placeholder="Modelo (ex: R3)" 
+                                            value={motorcycleModel} 
+                                            onChange={(e) => setMotorcycleModel(e.target.value)} 
+                                        />
+                                    </div>
+                                </div>
+
+                                <Separator />
                                 
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
@@ -1837,7 +1750,7 @@ export default function EcuTuningAssistant() {
                                         <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-12">
                                             <FileUp className="w-16 h-16 mb-4"/>
                                             <p className="font-semibold">Nenhum mapa carregado</p>
-                                            <p className="text-sm">Por favor carregue um ficheiro .BIN e procure por mapas ou carregue um .XDF.</p>
+                                            <p className="text-sm">Por favor carregue um ficheiro .BIN e um .XDF para começar.</p>
                                         </div>
                                     )}
                                 </CardContent>
@@ -2131,5 +2044,6 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
 }
 
     
+
 
 
