@@ -161,15 +161,20 @@ function parseAxis(axisNode: Element | null, allTables: Element[]): AxisDefiniti
  */
 export function parseXDF(xmlString: string): XDFDefinition[] {
     if (typeof DOMParser === 'undefined') {
-        return [];
+        throw new Error("O ambiente não suporta DOMParser.");
     }
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, "application/xml");
     
+    const parseError = xmlDoc.getElementsByTagName("parsererror");
+    if (parseError.length) {
+        throw new Error(`Erro de análise do XDF: ${parseError[0].textContent}`);
+    }
+
     const allTableElements = Array.from(xmlDoc.getElementsByTagName('XDFTABLE'));
     
     if (allTableElements.length === 0) {
-        return [];
+        throw new Error("Nenhuma tag <XDFTABLE> foi encontrada no ficheiro. Este não parece ser um ficheiro XDF válido.");
     }
 
     const definitions: XDFDefinition[] = [];
