@@ -125,7 +125,7 @@ function MapTable({
   selectedCells: Set<string>;
   onCellSelect: (rowIndex: number, colIndex: number, isCtrlOrCmd: boolean) => void;
   viewMode: 'calculated' | 'raw';
-  onViewModeChange: (isRaw: boolean) => void;
+  onViewModeChange?: (isRaw: boolean) => void;
 }) {
   const { min, max } = useMemo(() => {
     let minVal = Infinity;
@@ -176,15 +176,17 @@ function MapTable({
                         </div>
                     </div>
                     <div className="flex items-center flex-shrink-0">
-                        <div className="flex items-center">
-                            <Label htmlFor="view-mode-switch" className="text-xs">Hex</Label>
-                            <Switch 
-                                id="view-mode-switch"
-                                className="h-4 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3.5"
-                                checked={viewMode === 'raw'}
-                                onCheckedChange={onViewModeChange}
-                            />
-                        </div>
+                        {onViewModeChange && (
+                           <div className="flex items-center">
+                                <Label htmlFor="view-mode-switch" className="text-xs">Hex</Label>
+                                <Switch 
+                                    id="view-mode-switch"
+                                    className="h-4 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3.5"
+                                    checked={viewMode === 'raw'}
+                                    onCheckedChange={onViewModeChange}
+                                />
+                            </div>
+                        )}
                         {isEditable && (
                            <>
                                 <Tooltip>
@@ -363,30 +365,6 @@ export default function EcuTuningAssistant() {
         return debugMode ? logs : logs.filter(log => log.type !== 'debug');
     }, [logs, debugMode]);
 
-    // Load custom data from localStorage on component mount
-    useEffect(() => {
-        try {
-            const savedPotentialMaps = localStorage.getItem('potentialMapsLibrary');
-            if (savedPotentialMaps) {
-                setPotentialMapsDb(JSON.parse(savedPotentialMaps));
-                addLog('Biblioteca de mapas potenciais carregada.', 'debug');
-            }
-        } catch (error) {
-            console.error("Failed to load from localStorage", error);
-            addLog('Não foi possível carregar dados do armazenamento local.', 'error');
-        }
-    }, [addLog]);
-
-    // Save custom data to localStorage whenever they change
-    useEffect(() => {
-        try {
-            if (Object.keys(potentialMapsDb).length > 0) localStorage.setItem('potentialMapsLibrary', JSON.stringify(potentialMapsDb));
-        } catch (error) {
-            console.error("Failed to save to localStorage", error);
-            addLog('Não foi possível guardar dados no armazenamento local.', 'error');
-        }
-    }, [potentialMapsDb]);
-
     // Rebuild available maps when files or potential maps DB changes
     useEffect(() => {
         if (!binFile) {
@@ -419,12 +397,8 @@ export default function EcuTuningAssistant() {
                 }
             });
         }
-
-        const previouslyFoundMaps = potentialMapsDb[binFile.checksum] || [];
-        const definedAddresses = new Set(validDefinitions.map(d => d.address));
-        const uniquePotentials = previouslyFoundMaps.filter(pMap => !definedAddresses.has(pMap.address));
-
-        const combinedMaps = [...validDefinitions, ...uniquePotentials];
+        
+        const combinedMaps = [...validDefinitions];
 
         const finalMapNames = new Set<string>();
         const uniqueCombinedMaps = combinedMaps.map(def => {
@@ -460,7 +434,7 @@ export default function EcuTuningAssistant() {
                 duration: 8000,
             });
         }
-    }, [binFile, xdfFile, potentialMapsDb, addLog, toast, selectedMapName]);
+    }, [binFile, xdfFile, addLog, toast, selectedMapName]);
 
 
     const resetState = useCallback(() => {
@@ -488,7 +462,7 @@ export default function EcuTuningAssistant() {
 
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
-        addLog('O estado da sessão foi reiniciado. As suas bibliotecas foram preservadas.', 'info');
+        addLog('O estado da sessão foi reiniciado.', 'info');
     }, [addLog]);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
@@ -514,12 +488,7 @@ export default function EcuTuningAssistant() {
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
-                    addLog(`Ficheiro BIN carregado: ${file.name} (Checksum: ${checksum})`, 'success');
-                    
-                    const mapsForBin = potentialMapsDb[checksum] || [];
-                    if (mapsForBin.length > 0) {
-                      addLog(`${mapsForBin.length} mapa(s) potencial(is) previamente encontrado(s) foram carregados para este BIN.`, 'info');
-                    }
+                    addLog(`Ficheiro BIN carregado: ${file.name}`, 'success');
 
                 } else { // XDF
                     const text = new TextDecoder().decode(buffer);
@@ -547,7 +516,12 @@ export default function EcuTuningAssistant() {
              addLog(`Erro ao ler o ficheiro ${file.name}`, 'error');
              toast({ variant: 'destructive', title: "Erro no Ficheiro", description: `Não foi possível ler o ficheiro ${file.name}` });
         }
-        reader.readAsArrayBuffer(file);
+        
+        if (type === 'xdf') {
+            reader.readAsText(file);
+        } else {
+            reader.readAsArrayBuffer(file);
+        }
     };
     
     const applyZAxisCorrectionAndReload = useCallback((
@@ -1244,23 +1218,14 @@ export default function EcuTuningAssistant() {
                 };
             });
             
-            const message = `A IA encontrou ${newPotentialMaps.length} novo(s) mapa(s) potencial(is). Eles foram guardados para este BIN.`;
+            const message = `A IA encontrou ${newPotentialMaps.length} novo(s) mapa(s) potencial(is).`;
             addLog(message, 'success');
             toast({
                 title: "Mapas Encontrados!",
                 description: message
             });
 
-            setPotentialMapsDb(prevDb => {
-                const existingForThisBin = prevDb[binFile.checksum] || [];
-                const existingAddresses = new Set(existingForThisBin.map(m => m.address));
-                const mapsToAdd = newPotentialMaps.filter(pMap => !existingAddresses.has(pMap.address));
-
-                return {
-                    ...prevDb,
-                    [binFile.checksum]: [...existingForThisBin, ...mapsToAdd]
-                };
-            });
+            setAvailableMaps(prev => [...prev, ...newPotentialMaps]);
 
         } else if (result.error) {
             addLog(`Erro ao procurar mapas: ${result.error}`, 'error');
@@ -1940,7 +1905,6 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 selectedCells={new Set()}
                                 onCellSelect={() => {}}
                                 viewMode={'calculated'}
-                                onViewModeChange={() => {}}
                               />
                             </div>
                         </div>
@@ -1962,7 +1926,6 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   selectedCells={new Set()}
                                   onCellSelect={() => {}}
                                   viewMode={'calculated'}
-                                  onViewModeChange={() => {}}
                                />
                             </div>
                         </div>
@@ -2046,3 +2009,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+    
