@@ -24,6 +24,7 @@ import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight,
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
+import packageJson from '../../package.json';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -1685,7 +1686,10 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 </div>
                                 
-                                <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
+                                <div className="space-y-2">
+                                    <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
+                                    <div className="text-center text-xs text-muted-foreground">Versão: {packageJson.version}</div>
+                                </div>
 
                                 <div>
                                     <div className="flex justify-between items-center mb-2">
