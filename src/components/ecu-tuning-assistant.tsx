@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -252,7 +253,7 @@ function MapTable({
                       onCellChange={(value) => onCellChange(yi, xi, value)}
                       isEditable={isEditable}
                       valueFormat={valueFormat}
-                      viewMode={viewMode}
+                      viewMode={mapViewMode}
                       dataSize={definition.dataSize}
                     />
                   </td>
@@ -549,8 +550,8 @@ export default function EcuTuningAssistant() {
             const newSourceAxes = {
                 x: currentXAxis,
                 y: currentYAxis,
-                xLabel: newDefinition.xAxisDef?.label || 'Posição da Borboleta',
-                yLabel: newDefinition.yAxisDef?.label || 'RPM'
+                xLabel: newDefinition.xAxisDef?.label || 'Eixo X',
+                yLabel: newDefinition.yAxisDef?.label || 'Eixo Y'
             };
 
             if (newDefinition.isPotential) {
@@ -776,8 +777,8 @@ export default function EcuTuningAssistant() {
             const currentAxes = {
               x: axisXData,
               y: axisYData,
-              xLabel: definition.xAxisDef?.label || 'Posição da Borboleta',
-              yLabel: definition.yAxisDef?.label || 'RPM',
+              xLabel: definition.xAxisDef?.label || 'Eixo X',
+              yLabel: definition.yAxisDef?.label || 'Eixo Y',
             };
 
             setWorkingMap(calculatedMap);
@@ -846,8 +847,8 @@ export default function EcuTuningAssistant() {
             const newAxesState = {
               x: newX,
               y: newY,
-              xLabel: newDefinition.xAxisDef?.label || 'Posição da Borboleta',
-              yLabel: newDefinition.yAxisDef?.label || 'RPM',
+              xLabel: newDefinition.xAxisDef?.label || 'Eixo X',
+              yLabel: newDefinition.yAxisDef?.label || 'Eixo Y',
             };
 
             if (newDefinition.isPotential) {
