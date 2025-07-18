@@ -155,7 +155,7 @@ function MapTable({
   }
   
   const Address = ({ addr }: { addr: number | null | undefined }) => {
-    if (addr === null || addr === undefined) return null;
+    if (addr === null || addr === undefined || isNaN(addr)) return null;
     return <span className="ml-1 font-mono text-xs text-muted-foreground">(0x{addr.toString(16).toUpperCase()})</span>;
   };
 
@@ -682,12 +682,47 @@ export default function EcuTuningAssistant() {
         try {
             const { calculatedMap, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, definition, isEndianSwapped);
             
-            setWorkingMap(calculatedMap);
-            setRawMap(newRawMap);
-            setSourceAxes(sortedAxes);
-            setDisplayMap(calculatedMap);
-            setDisplayRawMap(newRawMap);
-            setDisplayAxes(sortedAxes);
+            // This is where we sort the data for display
+            const sortAxis = (axisState: AxisDataState) => {
+                const indexed = axisState.calculated.map((value, index) => ({ value, originalIndex: index }));
+                // Sort numerically if possible, otherwise by string
+                indexed.sort((a, b) => {
+                    const valA = Number(a.value);
+                    const valB = Number(b.value);
+                    if (!isNaN(valA) && !isNaN(valB)) return valA - valB;
+                    return String(a.value).localeCompare(String(b.value));
+                });
+                return {
+                    label: axisState.label,
+                    calculated: indexed.map(i => i.value),
+                    originalIndices: indexed.map(i => i.originalIndex),
+                    raw: indexed.map(i => axisState.raw[i.originalIndex]),
+                };
+            };
+
+            const displayX = sortAxis(sortedAxes.x);
+            const displayY = sortAxis(sortedAxes.y);
+            
+            const sortedDisplayMap = displayY.originalIndices.map(originalRowIndex => 
+                displayX.originalIndices.map(originalColIndex => 
+                    calculatedMap[originalRowIndex][originalColIndex]
+                )
+            );
+            
+            const sortedRawDisplayMap = displayY.originalIndices.map(originalRowIndex => 
+                displayX.originalIndices.map(originalColIndex => 
+                    newRawMap[originalRowIndex][originalColIndex]
+                )
+            );
+            
+            // Set state for both unsorted (source of truth) and sorted (display) data
+            setWorkingMap(sortedDisplayMap); // Editable map is the sorted one
+            setRawMap(newRawMap); // The raw map in its original order
+            setSourceAxes({ x: displayX, y: displayY }); // Store the sorted axes info
+            
+            setDisplayMap(sortedDisplayMap);
+            setDisplayRawMap(sortedRawDisplayMap);
+            setDisplayAxes({ x: displayX, y: displayY });
 
             addLog(`Mapa carregado: ${name}.`, 'info');
             setMapRenderKey(p => p + 1);
@@ -717,38 +752,29 @@ export default function EcuTuningAssistant() {
             newDefinition.xAxisDef!.equation = data.xEquation;
             newDefinition.yAxisDef!.equation = data.yEquation;
 
-            const { calculatedMap: newMapData, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, isEndianSwapped);
-
-            if (newDefinition.isPotential) {
+            // Immediately re-select the map with the modified definition to trigger a full reload
+            const newDefinitions = availableMaps.map(def => def.name === selectedMapName ? newDefinition : def);
+            setAvailableMaps(newDefinitions);
+            
+            // Persist change
+             if (newDefinition.isPotential) {
                 setPotentialMapsDb(prev => ({
                     ...prev,
                     [binFile.checksum]: (prev[binFile.checksum] || []).map(pMap =>
                         pMap.name === selectedMapName ? newDefinition : pMap
                     ),
                 }));
-                addLog(`Equações atualizadas para o mapa potencial "${selectedMapName}".`, 'success');
             } else if (xdfFile) {
-                const newDefinitions = xdfFile.definitions.map(def =>
+                const newXdfDefs = xdfFile.definitions.map(def =>
                     def.name === selectedMapName ? newDefinition : def
                 );
-                setXdfFile({ ...xdfFile, definitions: newDefinitions });
-                addLog(`Equações atualizadas na definição XDF para "${selectedMapName}".`, 'success');
-            } else {
-                addLog(`Não foi possível persistir as alterações na equação para "${selectedMapName}".`, 'error');
+                setXdfFile({ ...xdfFile, definitions: newXdfDefs });
             }
 
-            setWorkingMap(newMapData);
-            setRawMap(newRawMap);
-            setSourceAxes(sortedAxes);
-            setDisplayMap(newMapData);
-            setDisplayRawMap(newRawMap);
-            setDisplayAxes(sortedAxes);
-
-            setAudioUrl(null);
-            setSelectedCells(new Set());
-            setPlotSliceIndex(0);
+            // Trigger re-render by re-selecting the map
+            handleMapSelect(selectedMapName);
             
-            setMapRenderKey(p => p + 1);
+            addLog(`Equações atualizadas para "${selectedMapName}".`, 'success');
             setIsAxesModalOpen(false);
             toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
 
@@ -762,7 +788,7 @@ export default function EcuTuningAssistant() {
     const handleResetSort = () => {
         if (workingMap && rawMap && sourceAxes) {
             setDisplayMap(workingMap);
-            setDisplayRawMap(rawMap);
+            setDisplayRawMap(displayRawMap); // This needs to be the sorted one to match workingMap
             setDisplayAxes(sourceAxes);
             setSelectedCells(new Set());
             setMapRenderKey(p => p + 1);
