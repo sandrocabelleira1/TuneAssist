@@ -224,7 +224,7 @@ function MapTable({
             </th>
             {xAxis.calculated.map((x, i) => (
               <th key={`head-x-${i}`} className="sticky top-0 z-20 bg-card p-1 border border-border font-semibold text-center min-w-[60px]">
-                {definition.xAxisDef?.label} - {xAxisFormatter(x)}
+                {xAxisFormatter(x)}
               </th>
             ))}
           </tr>
@@ -233,7 +233,7 @@ function MapTable({
           {yAxis.calculated.map((y, yi) => (
             <tr key={`row-${yi}`}>
               <td className="sticky left-0 z-20 p-1 border border-border bg-card font-semibold text-center min-w-[60px] w-[60px]">
-                 {definition.yAxisDef?.label} - {yAxisFormatter(y)}
+                 {yAxisFormatter(y)}
               </td>
               {mapData[yi]?.map((cellValue, xi) => {
                 const isSelected = selectedCells.has(`${yi}-${xi}`);
