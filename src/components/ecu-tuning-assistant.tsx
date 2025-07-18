@@ -489,10 +489,10 @@ export default function EcuTuningAssistant() {
 
                 } else { // XDF
                     if (typeof buffer !== 'string') {
-                        throw new Error("O ficheiro XDF não foi lido como texto.");
+                         throw new Error("O ficheiro XDF não foi lido como texto.");
                     }
                     const text = buffer;
-                    let definitions = parseXDF(text);
+                    const definitions = parseXDF(text);
                     if (definitions.length === 0) {
                         throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     }
@@ -1472,11 +1472,11 @@ export default function EcuTuningAssistant() {
                                  <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
                                     <div className="flex items-center gap-2">
-                                        <Select onValueChange={handleMapSelect} disabled={!binFile || !xdfFile || availableMaps.length === 0} value={selectedMapName} >
+                                        <Select onValueChange={handleMapSelect} disabled={!binFile || availableMaps.length === 0} value={selectedMapName} >
                                             <SelectTrigger className="flex-1">
                                                 <SelectValue placeholder={
                                                     !binFile ? "Carregue um ficheiro BIN" :
-                                                    !xdfFile ? "Carregue um ficheiro XDF" :
+                                                    availableMaps.length === 0 ? "Carregue um ficheiro XDF" :
                                                     "Selecione um mapa"
                                                 } />
                                             </SelectTrigger>

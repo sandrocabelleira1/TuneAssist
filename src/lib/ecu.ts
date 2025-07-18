@@ -1,4 +1,5 @@
 
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -50,13 +51,13 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
     allTableElements.forEach(table => {
         try {
-            const tableName = findNode(table, 'title')?.textContent || getAttr(table, 'title') || 'Tabela sem nome';
+            const tableName = findNode(table, 'title')?.textContent || getAttr(table, 'name') || 'Tabela sem nome';
             if (tableName === 'Tabela sem nome') return; // Skip tables without a name
 
-            const zAxisNode = findNode(table, 'XDFAXIS[id="z"]');
+            const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             if (!zAxisNode) return;
             
-            const embeddedData = findNode(zAxisNode, 'embeddeddata');
+            const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             if (!embeddedData) return; // Z-Axis must have embedded data
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
@@ -65,15 +66,15 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '', 10);
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
 
-            const mathNode = findNode(zAxisNode, 'math');
+            const mathNode = findNode(zAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation')?.replace(/x/g, 'X') || 'X';
 
             if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSizeBits)) {
                 return; // Skip if essential data is missing
             }
 
-            const xAxisNode = findNode(table, 'xaxis, XDFAXIS[id="x"]');
-            const yAxisNode = findNode(table, 'yaxis, XDFAXIS[id="y"]');
+            const xAxisNode = findNode(table, 'xaxis', 'XDFAXIS[id="x"]');
+            const yAxisNode = findNode(table, 'yaxis', 'XDFAXIS[id="y"]');
             
             // Dummy axis definitions that can be populated by readAxisFromBin
             const xAxisDef: AxisDefinition = {
@@ -112,30 +113,23 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
-    const emptyState: AxisDataState = { raw: [], calculated: [] };
-    if (!axisDef || !binBuffer) {
-        const count = axisDef?.count || 0;
-        const calculated = Array.from({ length: count }, (_, i) => i + 1);
-        return { raw: calculated, calculated };
-    }
-    
-    if (!axisDef.node) {
-        const count = axisDef.count || 0;
-        const calculated = Array.from({ length: count }, (_, i) => i + 1);
-        return { raw: calculated, calculated };
+    const count = axisDef?.count || 0;
+    const defaultCalculated = Array.from({ length: count }, (_, i) => i + 1);
+    const emptyState: AxisDataState = { raw: defaultCalculated, calculated: defaultCalculated };
+
+    if (!axisDef || !binBuffer || !axisDef.node) {
+        return emptyState;
     }
 
-    const embeddedData = findNode(axisDef.node, 'embeddeddata');
+    const embeddedData = findNode(axisDef.node, 'embeddeddata', 'EMBEDDEDDATA');
     if (!embeddedData) {
         // Handle axes without direct data (e.g., just labels or implicit count)
-        const count = axisDef.count || 0;
-        const calculated = Array.from({ length: count }, (_, i) => i + 1);
-        return { raw: calculated, calculated };
+        return emptyState;
     }
 
     const view = new DataView(binBuffer);
     const addr = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-    const count = parseInt(getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedrowcount') || String(axisDef.count), 10);
+    
     const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '8', 10);
     const dataSize = dataSizeBits / 8;
     const useLittleEndian = !(getAttr(embeddedData, 'bigendian') === '1');
