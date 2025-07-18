@@ -1,34 +1,20 @@
-// This file contains functions that can only be run on the client
-// due to the use of browser-specific APIs like DOMParser.
 
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
-/**
- * Finds a DIRECT child element by query selector. Case-insensitive support is not needed
- * as modern browsers handle CSS selectors in a standard way.
- */
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
     if (!parent) return null;
     for (const selector of selectors) {
-        // Use querySelector for direct children. `>` is implicit but good for clarity.
         const node = parent.querySelector(`:scope > ${selector}`);
         if (node) return node;
     }
     return null;
 }
 
-
-/**
- * Gets an attribute from an element.
- */
 function getAttr(element: Element | null, attrName: string): string | null {
     if (!element) return null;
     return element.getAttribute(attrName);
 }
 
-/**
- * The definitive, robust XDF parser.
- */
 export function parseXDF(xmlString: string): { definitions: XDFDefinition[], brand: string | null } {
     if (typeof DOMParser === 'undefined') {
         throw new Error("O ambiente não suporta DOMParser.");
@@ -62,7 +48,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     allTablesMap.forEach(table => {
         try {
             const tableName = table.querySelector('title')?.textContent || getAttr(table, 'name');
-            if (!tableName) return; // Skip tables without a name
+            if (!tableName) return;
 
             const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             if (!zAxisNode) return;
@@ -80,7 +66,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const equation = getAttr(mathNode, 'equation')?.replace(/x/g, 'X') || 'X';
 
             if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSizeBits)) {
-                return; // Skip if essential Z-axis data is missing
+                return;
             }
 
             const parseAxis = (axisNode: Element | null): AxisDefinition => {
@@ -91,8 +77,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if(getAttr(axisNode, 'id')?.toLowerCase() === 'y') count = rows;
                 
                 const label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || (getAttr(axisNode, 'id') === 'x' ? 'Eixo X' : 'Eixo Y');
-
-                const axisDef: AxisDefinition = { label, count, node: axisNode };
+                const axisDef: Partial<AxisDefinition> = { label, count, node: axisNode };
 
                 const axisEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
                 if (axisEmbeddedData) {
@@ -114,7 +99,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                          }
                     }
                 }
-                return axisDef;
+                return axisDef as AxisDefinition;
             };
 
             const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
@@ -133,9 +118,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 xAxisDef,
                 yAxisDef,
                 isPotential: false,
-                equationVar: 'X', // default, can be refined
-                majorStride: 0,
-                minorStride: 0,
             });
         } catch (e) {
             const tableName = getAttr(table, 'name') || 'desconhecida';
@@ -146,114 +128,130 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     return { definitions, brand };
 }
 
-
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
     const count = axisDef?.count || 0;
-    const defaultCalculated = Array.from({ length: count }, (_, i) => i + 1);
-    const emptyState: AxisDataState = { raw: defaultCalculated, calculated: defaultCalculated };
+    const defaultState: AxisDataState = {
+        raw: Array.from({ length: count }, (_, i) => i + 1),
+        calculated: Array.from({ length: count }, (_, i) => i + 1),
+        originalIndices: Array.from({ length: count }, (_, i) => i),
+    };
 
     if (!axisDef || !binBuffer || (!axisDef.address && axisDef.address !== 0)) {
-        return emptyState;
+        return defaultState;
     }
 
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
-    const dataSize = axisDef.dataSize || 2; // Default to 2 bytes
-    const useLittleEndian = !(axisDef.isBigEndian ?? false);
+    const dataSize = axisDef.dataSize || 2;
+    const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = axisDef.equation || 'X';
 
-    if (isNaN(addr) || isNaN(count) || isNaN(dataSize)) return emptyState;
-    
-    let equationFunc: Function;
+    if (isNaN(addr) || isNaN(count) || isNaN(dataSize)) return defaultState;
+
+    let equationFunc: (val: number) => number | string;
     try {
-        equationFunc = new Function('X', `return ${equation}`);
-    } catch(e) {
+        equationFunc = new Function('X', `return ${equation.replace(/x/g, 'X')}`) as (val: number) => number;
+    } catch (e) {
         console.error(`Equação de eixo inválida para "${axisDef.label}": ${equation}`);
         equationFunc = (X: number) => X;
     }
 
-    const rawData: number[] = [];
-    const calculatedData: (number | string)[] = [];
+    const raw: number[] = [];
+    const calculated: (number | string)[] = [];
+    const originalIndices: number[] = [];
 
-    for(let i=0; i < count; i++) {
+    for (let i = 0; i < count; i++) {
         const offset = addr + (i * dataSize);
         if (offset + dataSize > view.byteLength) continue;
 
         let rawValue;
-        if(dataSize === 1) rawValue = view.getUint8(offset);
-        else if(dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
+        if (dataSize === 1) rawValue = view.getUint8(offset);
+        else if (dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
         else continue;
-        
-        rawData.push(rawValue);
-        calculatedData.push(equationFunc(rawValue));
+
+        raw.push(rawValue);
+        calculated.push(equationFunc(rawValue));
+        originalIndices.push(i);
     }
-    return { raw: rawData, calculated: calculatedData };
+    return { raw, calculated, originalIndices };
 }
 
 
 export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-    xAxisState: AxisDataState,
-    yAxisState: AxisDataState,
     isEndianSwapped = false
-): { calculatedMap: MapData, rawMap: MapData } {
-  if (!def || !binBuffer) return { calculatedMap: [], rawMap: [] };
+): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
+  if (!def || !binBuffer) return { calculatedMap: [], rawMap: [], sortedAxes: { x: { raw: [], calculated: [], originalIndices:[]}, y: { raw: [], calculated: [], originalIndices:[]} } };
 
   const view = new DataView(binBuffer);
-  
-  const sanitizedEquation = (def.equation || 'X').replace(/x/g, 'X');
-      
-  let equationFunc: Function;
-  try {
-    equationFunc = new Function('X', `return ${sanitizedEquation || 'X'}`);
-  } catch(e) {
-    const error = e instanceof Error ? e.message : String(e);
-    throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
-  }
-  
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
-
-  // 1. Read the raw map data from the file
+  
+  // 1. Read and calculate axes first
+  const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
+  const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
+  
+  // 2. Read the raw Z-data map
   const rawMap: MapData = [];
   for (let r = 0; r < def.rows; r++) {
     const rawRow: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
       const offset = def.address + (r * def.cols + c) * def.dataSize;
-
       if (offset + def.dataSize > view.byteLength) {
-        console.error(`Leitura do mapa fora dos limites para "${def.name}". Offset: ${offset}`);
         rawRow.push(null);
         continue;
       }
-      
       let rawValue;
-      if (def.dataSize === 1) {
-          rawValue = view.getUint8(offset);
-      } else if (def.dataSize === 2) {
-          rawValue = view.getUint16(offset, useLittleEndian);
-      } else {
-          rawRow.push(null);
-          continue;
-      }
+      if (def.dataSize === 1) rawValue = view.getUint8(offset);
+      else if (def.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
+      else { rawRow.push(null); continue; }
       rawRow.push(rawValue);
     }
     rawMap.push(rawRow);
   }
 
-  // 2. Calculate the final map values using the equation
-  const calculatedMap: MapData = rawMap.map(row => 
-    row.map(cell => {
-      if (cell === null) return null;
-      try {
-        return equationFunc(cell);
-      } catch (e) {
-        return cell;
-      }
-    })
+  // 3. Sort axes and get the sorted indices
+  const sortAxis = (axisState: AxisDataState) => {
+    const indexed = axisState.calculated.map((value, index) => ({ value, originalIndex: index }));
+    indexed.sort((a, b) => {
+        const valA = Number(a.value);
+        const valB = Number(b.value);
+        if (!isNaN(valA) && !isNaN(valB)) return valA - valB;
+        return String(a.value).localeCompare(String(b.value));
+    });
+    return {
+        calculated: indexed.map(i => i.value),
+        originalIndices: indexed.map(i => i.originalIndex),
+        raw: indexed.map(i => axisState.raw[i.originalIndex]),
+    };
+  };
+
+  const sortedX = sortAxis(axisXData);
+  const sortedY = sortAxis(axisYData);
+  
+  // 4. Reorder the raw map and then calculate the final Z values
+  let equationFunc: (val: number) => number | string;
+  try {
+    equationFunc = new Function('X', `return ${def.equation.replace(/x/g, 'X')}`) as (val: number) => number;
+  } catch(e) {
+    throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida.`);
+  }
+
+  const sortedRawMap: MapData = sortedY.originalIndices.map(originalRowIndex => 
+    sortedX.originalIndices.map(originalColIndex => 
+      rawMap[originalRowIndex][originalColIndex]
+    )
   );
 
-  return { calculatedMap: calculatedMap, rawMap: rawMap };
+  const calculatedMap: MapData = sortedRawMap.map(row => 
+    row.map(cell => (cell !== null ? equationFunc(cell) : null))
+  );
+
+  return { 
+    calculatedMap, 
+    rawMap: sortedRawMap, 
+    sortedAxes: { x: sortedX, y: sortedY }
+  };
 }
 
 export function generateChecksum(buffer: ArrayBuffer): string {
@@ -271,9 +269,6 @@ export function bufferToHex(buffer: ArrayBuffer): string {
     .join('');
 }
 
-/**
- * Reverses a mathematical equation to find the "raw" value that would produce a given final value.
- */
 export function invertEquation(
   eq: string,
   finalValue: number
@@ -301,7 +296,7 @@ export function invertEquation(
     }
     if (sanitizedEq.includes('-')) {
         const factor = parseFloat(sanitizedEq.split('-')[1]);
-        if (!isNaN(factor)) return finalValue - factor;
+        if (!isNaN(factor)) return finalValue + factor;
     }
     if (sanitizedEq.toUpperCase() === 'X') {
         return finalValue;
@@ -318,12 +313,24 @@ export function recalculateRawMapFromCalculated(
     sourceAxes: { x: AxisDataState, y: AxisDataState },
     isEndianSwapped = false
 ): MapData {
-    const newRawMap: MapData = [];
+    if (!sourceAxes.x.originalIndices || !sourceAxes.y.originalIndices) {
+        throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
+    }
 
+    const unsortedCalculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
+    for (let r = 0; r < def.rows; r++) {
+        for (let c = 0; c < def.cols; c++) {
+            const originalRowIndex = sourceAxes.y.originalIndices[r];
+            const originalColIndex = sourceAxes.x.originalIndices[c];
+            unsortedCalculatedMap[originalRowIndex][originalColIndex] = calculatedMap[r][c];
+        }
+    }
+
+    const newRawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
         const newRawRow: (number | null)[] = [];
         for (let c = 0; c < def.cols; c++) {
-            const calculatedValue = calculatedMap[r]?.[c];
+            const calculatedValue = unsortedCalculatedMap[r]?.[c];
 
             if (calculatedValue === null || calculatedValue === undefined) {
                 newRawRow.push(null);
@@ -336,7 +343,7 @@ export function recalculateRawMapFromCalculated(
             } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : "Erro desconhecido";
                 console.error(`Não foi possível recalcular o valor raw para a célula [${r}, ${c}]: ${errorMsg}. A utilizar NaN.`);
-                newRawRow.push(NaN); // Push NaN or another indicator of failure
+                newRawRow.push(NaN);
             }
         }
         newRawMap.push(newRawRow);

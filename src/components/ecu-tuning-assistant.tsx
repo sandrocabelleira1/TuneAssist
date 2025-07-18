@@ -114,8 +114,8 @@ function MapTable({
 }: {
   mapData: MapData;
   rawMapData: MapData;
-  xAxis: (string | number)[];
-  yAxis: (string | number)[];
+  xAxis: AxisDataState;
+  yAxis: AxisDataState;
   definition: XDFDefinition | undefined;
   onSortAxis: (axis: 'x' | 'y') => void;
   onSortByFirstColumn: () => void;
@@ -222,7 +222,7 @@ function MapTable({
                     </div>
                 </div>
             </th>
-            {xAxis.map((x, i) => (
+            {xAxis.calculated.map((x, i) => (
               <th key={`head-x-${i}`} className="sticky top-0 z-20 bg-card p-1 border border-border font-semibold text-center min-w-[60px]">
                 {definition.xAxisDef?.label} - {xAxisFormatter(x)}
               </th>
@@ -230,7 +230,7 @@ function MapTable({
           </tr>
         </thead>
         <tbody>
-          {yAxis.map((y, yi) => (
+          {yAxis.calculated.map((y, yi) => (
             <tr key={`row-${yi}`}>
               <td className="sticky left-0 z-20 p-1 border border-border bg-card font-semibold text-center min-w-[60px] w-[60px]">
                  {definition.yAxisDef?.label} - {yAxisFormatter(y)}
@@ -293,12 +293,10 @@ export default function EcuTuningAssistant() {
     // State for map data. "working" is the editable source of truth, "display" is for rendering (can be sorted)
     const [rawMap, setRawMap] = useState<MapData | null>(null);
     const [workingMap, setWorkingMap] = useState<MapData | null>(null);
-    const [sourceAxes, setSourceAxes] = useState<{ x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string } | null>(null);
+    const [sourceAxes, setSourceAxes] = useState<{ x: AxisDataState, y: AxisDataState } | null>(null);
     const [displayMap, setDisplayMap] = useState<MapData | null>(null);
     const [displayRawMap, setDisplayRawMap] = useState<MapData | null>(null);
-    const [displayAxes, setDisplayAxes] = useState<{ x: (string|number)[], y: (string|number)[], xLabel: string, yLabel: string } | null>(null);
-    const [originalSortOrder, setOriginalSortOrder] = useState<OriginalSortOrder | null>(null);
-    const [displayIndexMap, setDisplayIndexMap] = useState<{ x: number[], y: number[] } | null>(null);
+    const [displayAxes, setDisplayAxes] = useState<{ x: AxisDataState, y: AxisDataState } | null>(null);
     const [mapRenderKey, setMapRenderKey] = useState(0);
     const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
     const [isEndianSwapped, setIsEndianSwapped] = useState(false);
@@ -443,8 +441,6 @@ export default function EcuTuningAssistant() {
         setDisplayMap(null); 
         setDisplayRawMap(null);
         setDisplayAxes(null);
-        setOriginalSortOrder(null);
-        setDisplayIndexMap(null);
         setMapValidationStatus('idle');
         setAiSuggestion(null);
         setActiveXdfBrand('');
@@ -542,17 +538,9 @@ export default function EcuTuningAssistant() {
         newDefinition.equation = zEquation;
         
         try {
-            const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef, isEndianSwapped);
-            const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef, isEndianSwapped);
-
-            const { calculatedMap: correctedMap, rawMap: correctedRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis, isEndianSwapped);
+            const { calculatedMap: correctedMap, rawMap: correctedRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, isEndianSwapped);
             
-            const newSourceAxes = {
-                x: currentXAxis,
-                y: currentYAxis,
-                xLabel: newDefinition.xAxisDef?.label || 'Eixo X',
-                yLabel: newDefinition.yAxisDef?.label || 'Eixo Y'
-            };
+            const newSourceAxes = { x: sortedAxes.x, y: sortedAxes.y };
 
             if (newDefinition.isPotential) {
                 setPotentialMapsDb(prev => ({
@@ -574,24 +562,10 @@ export default function EcuTuningAssistant() {
             setDisplayRawMap(correctedRawMap);
             
             setSourceAxes(newSourceAxes);
-            const displayableAxes = {
-                x: newSourceAxes.x.calculated,
-                y: newSourceAxes.y.calculated,
-                xLabel: newSourceAxes.xLabel,
-                yLabel: newSourceAxes.yLabel
-            };
-            setDisplayAxes(displayableAxes);
+            setDisplayAxes(newSourceAxes);
             setAudioUrl(null);
             setSelectedCells(new Set());
             setPlotSliceIndex(0);
-            setOriginalSortOrder({
-              x: newSourceAxes.x.calculated.map((value, index) => ({ value, index })),
-              y: newSourceAxes.y.calculated.map((value, index) => ({ value, index })),
-            });
-            setDisplayIndexMap({
-              x: newSourceAxes.x.calculated.map((_, i) => i),
-              y: newSourceAxes.y.calculated.map((_, i) => i),
-            });
             
             setMapRenderKey(p => p + 1);
             const logMessage = `IA aplicou a sugestão de correção aos dados do mapa (Eixo Z).`;
@@ -609,7 +583,7 @@ export default function EcuTuningAssistant() {
     const runZAxisValidation = useCallback(async (
         definition: XDFDefinition, 
         mapData: MapData, 
-        axes: { x: AxisDataState, y: AxisDataState, xLabel: string, yLabel: string }
+        axes: { x: AxisDataState, y: AxisDataState }
     ) => {
         setMapValidationStatus('loading');
         addLog(`A iniciar a análise do eixo Z para "${definition.name}"...`, 'debug');
@@ -651,16 +625,17 @@ export default function EcuTuningAssistant() {
                     const newDefinition = JSON.parse(JSON.stringify(definition));
                     newDefinition.equation = validSuggestedEquation;
 
-                    const currentXAxis = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef, isEndianSwapped);
-                    const currentYAxis = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef, isEndianSwapped);
-                    const { calculatedMap: correctedMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, currentXAxis, currentYAxis, isEndianSwapped);
+                    const { calculatedMap: correctedMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, isEndianSwapped);
+                    
+                    const originalAxesForSuggestion = { x: axes.x.calculated, y: axes.y.calculated, xLabel: definition.xAxisDef?.label || "X", yLabel: definition.yAxisDef?.label || "Y" };
+                    const correctedAxesForSuggestion = { x: sortedAxes.x.calculated, y: sortedAxes.y.calculated, xLabel: newDefinition.xAxisDef?.label || "X", yLabel: newDefinition.yAxisDef?.label || "Y" };
 
                     setAiSuggestion({
                         reasoning,
                         originalMap: mapData,
                         correctedMap: correctedMap,
-                        originalAxes: { x: axes.x.calculated, y: axes.y.calculated, xLabel: axes.xLabel, yLabel: axes.yLabel },
-                        correctedAxes: { x: currentXAxis.calculated, y: currentYAxis.calculated, xLabel: newDefinition.xAxisDef.label, yLabel: newDefinition.yAxisDef.label },
+                        originalAxes: originalAxesForSuggestion,
+                        correctedAxes: correctedAxesForSuggestion,
                         originalDefinition: definition,
                         newDefinition,
                     });
@@ -678,75 +653,15 @@ export default function EcuTuningAssistant() {
             setMapValidationStatus('error');
         }
     }, [binFile, addLog, activeXdfBrand, motorcycleModel, isEndianSwapped]);
-
-    const handleSortAxis = useCallback((axis: 'x' | 'y', currentMap: MapData, currentRawMap: MapData, currentAxes: { x: (string|number)[], y: (string|number)[] }, currentIndexMap: { x: number[], y: number[] }) => {
-        const axisToSort = currentAxes[axis];
-        if (!axisToSort) return null;
-
-        // Sempre ordenar em ordem ascendente (menor para o maior)
-        const sortedAxisWithIndices = axisToSort
-            .map((value, index) => ({
-                calc: value,
-                originalIndex: currentIndexMap[axis][index],
-            }))
-            .sort((a, b) => {
-                const valA = a.calc;
-                const valB = b.calc;
-                if (typeof valA === 'number' && typeof valB === 'number') {
-                    return valA - valB;
-                }
-                return String(valA).localeCompare(String(valB));
-            });
     
-        const newSortedCalculated = sortedAxisWithIndices.map(item => item.calc);
-        const newIndexMap = sortedAxisWithIndices.map(item => item.originalIndex);
-    
-        let newSortedMap: MapData;
-        let newSortedRawMap: MapData;
-    
-        if (axis === 'y') { // Sorting rows
-            const reorderedMap = newIndexMap.map(originalRowIndex => {
-                const sourceIndex = displayIndexMap?.y.indexOf(originalRowIndex);
-                if (sourceIndex === undefined || sourceIndex === -1) return new Array(currentMap[0]?.length || 0).fill(null);
-                return currentMap[sourceIndex];
-            });
-            const reorderedRawMap = newIndexMap.map(originalRowIndex => {
-                const sourceIndex = displayIndexMap?.y.indexOf(originalRowIndex);
-                if (sourceIndex === undefined || sourceIndex === -1) return new Array(currentRawMap[0]?.length || 0).fill(null);
-                return currentRawMap[sourceIndex];
-            });
-            newSortedMap = reorderedMap;
-            newSortedRawMap = reorderedRawMap;
-        } else { // Sorting columns
-            newSortedMap = currentMap.map(row => {
-                return newIndexMap.map(originalColIndex => {
-                    const sourceIndex = displayIndexMap?.x.indexOf(originalColIndex);
-                    if (sourceIndex === undefined || sourceIndex === -1) return null;
-                    return row[sourceIndex];
-                });
-            });
-            newSortedRawMap = currentRawMap.map(row => {
-                return newIndexMap.map(originalColIndex => {
-                    const sourceIndex = displayIndexMap?.x.indexOf(originalColIndex);
-                    if (sourceIndex === undefined || sourceIndex === -1) return null;
-                    return row[sourceIndex];
-                });
-            });
-        }
-    
-        return {
-            newMap: newSortedMap,
-            newRawMap: newSortedRawMap,
-            newAxes: {
-                ...currentAxes,
-                [axis]: newSortedCalculated,
-            },
-            newIndexMap: {
-                ...currentIndexMap,
-                [axis]: newIndexMap
-            }
-        };
-    }, [displayIndexMap]);
+    // UNSORTED
+    const handleSortAxis = (axis: 'x' | 'y') => {
+        addLog(`A ordenação manual foi desativada para garantir a integridade dos dados. Utilize 'Restaurar Ordem' para voltar ao estado original.`, 'info');
+    };
+    // UNSORTED
+    const handleSortByFirstColumn = () => {
+        addLog(`A ordenação manual foi desativada para garantir a integridade dos dados. Utilize 'Restaurar Ordem' para voltar ao estado original.`, 'info');
+    };
 
     const handleMapSelect = useCallback((name: string) => {
         if (!binFile || !name) return;
@@ -765,50 +680,18 @@ export default function EcuTuningAssistant() {
         setPlotSliceIndex(0);
 
         try {
-            const axisXData = readAxisFromBin(binFile.buffer, definition.xAxisDef, isEndianSwapped);
-            const axisYData = readAxisFromBin(binFile.buffer, definition.yAxisDef, isEndianSwapped);
-
-            if (!axisXData || !axisYData) {
-                throw new Error("Não foi possível ler os dados do eixo do ficheiro BIN.");
-            }
-
-            const { calculatedMap, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, definition, axisXData, axisYData, isEndianSwapped);
+            const { calculatedMap, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, definition, isEndianSwapped);
             
-            const currentAxes = {
-              x: axisXData,
-              y: axisYData,
-              xLabel: definition.xAxisDef?.label || 'Eixo X',
-              yLabel: definition.yAxisDef?.label || 'Eixo Y',
-            };
-
             setWorkingMap(calculatedMap);
             setRawMap(newRawMap);
-            setSourceAxes(currentAxes);
-
-            setOriginalSortOrder({
-              x: currentAxes.x.calculated.map((value, index) => ({ value, index })),
-              y: currentAxes.y.calculated.map((value, index) => ({ value, index })),
-            });
-            
-            addLog(`Mapa carregado: ${name}.`, 'info');
-            
+            setSourceAxes(sortedAxes);
             setDisplayMap(calculatedMap);
             setDisplayRawMap(newRawMap);
-            setDisplayAxes({
-                x: currentAxes.x.calculated,
-                y: currentAxes.y.calculated,
-                xLabel: currentAxes.xLabel,
-                yLabel: currentAxes.yLabel,
-            });
-            setDisplayIndexMap({
-              x: axisXData.calculated.map((_, i) => i),
-              y: axisYData.calculated.map((_, i) => i),
-            });
-            
+            setDisplayAxes(sortedAxes);
+
+            addLog(`Mapa carregado: ${name}.`, 'info');
             setMapRenderKey(p => p + 1);
             
-            // runZAxisValidation(definition, calculatedMap, currentAxes); // AI validation is now manual
-
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
             addLog(msg, 'error');
@@ -831,25 +714,10 @@ export default function EcuTuningAssistant() {
         try {
             const newDefinition = JSON.parse(JSON.stringify(definition)) as XDFDefinition;
             newDefinition.equation = data.zEquation;
-            newDefinition.equationVar = 'X'; // Assume X for simplicity after manual edit
             newDefinition.xAxisDef!.equation = data.xEquation;
             newDefinition.yAxisDef!.equation = data.yEquation;
 
-            const newX = readAxisFromBin(binFile.buffer, newDefinition.xAxisDef, isEndianSwapped);
-            const newY = readAxisFromBin(binFile.buffer, newDefinition.yAxisDef, isEndianSwapped);
-
-            if (!newX || !newY) {
-                throw new Error("Não foi possível ler os eixos com as novas equações.");
-            }
-            
-            const { calculatedMap: newMapData, rawMap: newRawMap } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, newX, newY, isEndianSwapped);
-
-            const newAxesState = {
-              x: newX,
-              y: newY,
-              xLabel: newDefinition.xAxisDef?.label || 'Eixo X',
-              yLabel: newDefinition.yAxisDef?.label || 'Eixo Y',
-            };
+            const { calculatedMap: newMapData, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, isEndianSwapped);
 
             if (newDefinition.isPotential) {
                 setPotentialMapsDb(prev => ({
@@ -871,35 +739,18 @@ export default function EcuTuningAssistant() {
 
             setWorkingMap(newMapData);
             setRawMap(newRawMap);
+            setSourceAxes(sortedAxes);
             setDisplayMap(newMapData);
             setDisplayRawMap(newRawMap);
-            
-            setSourceAxes(newAxesState);
-            const displayableAxes = {
-                x: newAxesState.x.calculated,
-                y: newAxesState.y.calculated,
-                xLabel: newAxesState.xLabel,
-                yLabel: newAxesState.yLabel
-            };
-            setDisplayAxes(displayableAxes);
+            setDisplayAxes(sortedAxes);
+
             setAudioUrl(null);
             setSelectedCells(new Set());
             setPlotSliceIndex(0);
-            setOriginalSortOrder({
-              x: newX.calculated.map((value, index) => ({ value, index })),
-              y: newY.calculated.map((value, index) => ({ value, index })),
-            });
-            setDisplayIndexMap({
-              x: newX.calculated.map((_, i) => i),
-              y: newY.calculated.map((_, i) => i),
-            });
             
             setMapRenderKey(p => p + 1);
             setIsAxesModalOpen(false);
             toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
-            
-            // Re-run validation after manual changes
-            // runZAxisValidation(newDefinition, newMapData, newAxesState);
 
         } catch (error) {
             const msg = `Erro ao recalcular o mapa com as novas equações: ${(error as Error).message}`;
@@ -908,82 +759,11 @@ export default function EcuTuningAssistant() {
         }
     };
 
-    const triggerSortAxis = (axis: 'x' | 'y') => {
-        if (!displayMap || !displayAxes || !displayIndexMap || !displayRawMap) return;
-    
-        const sortResult = handleSortAxis(axis, displayMap, displayRawMap, displayAxes, displayIndexMap);
-        if (!sortResult) return;
-
-        const { newMap, newRawMap, newAxes, newIndexMap } = sortResult;
-        
-        setDisplayMap(newMap);
-        setDisplayRawMap(newRawMap);
-        setDisplayAxes(newAxes);
-        setDisplayIndexMap(newIndexMap);
-        setSelectedCells(new Set());
-        setMapRenderKey(k => k + 1);
-        addLog(`Eixo ${axis === 'x' ? displayAxes.xLabel : displayAxes.yLabel} ordenado.`, 'info');
-    };
-
-    const handleSortByFirstColumn = useCallback(() => {
-        if (!displayMap || !displayRawMap || !displayAxes) return;
-
-        // Create an array of rows with their original index to sort
-        const sortable = displayMap.map((row, index) => ({
-            value: row[0],       // The value from the first Z column
-            originalIndex: index, // The original visual index
-        }));
-
-        // Sort based on the first column's value (Z-data)
-        sortable.sort((a, b) => {
-            const valA = a.value;
-            const valB = b.value;
-            if (valA === null) return 1;
-            if (valB === null) return -1;
-            if (typeof valA === 'number' && typeof valB === 'number') {
-                return valA - valB; // Ascending sort
-            }
-            return String(valA).localeCompare(String(valB));
-        });
-
-        // Create the new sorted map data by reordering the original rows
-        const newSortedMap = sortable.map(item => displayMap[item.originalIndex]);
-        const newSortedRawMap = sortable.map(item => displayRawMap[item.originalIndex]);
-
-        // IMPORTANT: Update only the map data, not the Y-axis labels.
-        // The displayAxes state remains unchanged.
-        setDisplayMap(newSortedMap);
-        setDisplayRawMap(newSortedRawMap);
-
-        // We do, however, need to update the Y index map so future operations know
-        // how the data rows have been shuffled relative to the *original* source data.
-        setDisplayIndexMap(prev => {
-            if (!prev) return null;
-            const newYIndexMap = sortable.map(item => prev.y[item.originalIndex]);
-            return { ...prev, y: newYIndexMap };
-        });
-
-        setSelectedCells(new Set());
-        setMapRenderKey(p => p + 1);
-        addLog(`Linhas de dados ordenadas pela 1ª coluna (Z). Eixo Y permanece fixo.`, 'info');
-    }, [displayMap, displayRawMap, displayAxes, addLog]);
-    
     const handleResetSort = () => {
         if (workingMap && rawMap && sourceAxes) {
-            setDisplayMap(JSON.parse(JSON.stringify(workingMap)));
-            setDisplayRawMap(JSON.parse(JSON.stringify(rawMap)));
-            
-            const displayableAxes = {
-                x: sourceAxes.x.calculated,
-                y: sourceAxes.y.calculated,
-                xLabel: sourceAxes.xLabel,
-                yLabel: sourceAxes.yLabel
-            };
-            setDisplayAxes(displayableAxes);
-            setDisplayIndexMap({
-              x: sourceAxes.x.calculated.map((_, i) => i),
-              y: sourceAxes.y.calculated.map((_, i) => i),
-            });
+            setDisplayMap(workingMap);
+            setDisplayRawMap(rawMap);
+            setDisplayAxes(sourceAxes);
             setSelectedCells(new Set());
             setMapRenderKey(p => p + 1);
             addLog('Ordenação do mapa revertida para o original.', 'info');
@@ -991,7 +771,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleCellChange = (rowIndex: number, colIndex: number, value: string) => {
-      if (!workingMap || !displayMap || !displayAxes || !displayIndexMap || !rawMap || !sourceAxes) return;
+      if (!workingMap || !displayMap || !displayAxes || !rawMap || !sourceAxes) return;
 
       const newValue = parseFloat(value);
       if (isNaN(newValue)) {
@@ -1000,20 +780,10 @@ export default function EcuTuningAssistant() {
         return;
       }
       
-      const workingRowIndex = displayIndexMap.y[rowIndex];
-      const workingColIndex = displayIndexMap.x[colIndex];
-
-      if (workingRowIndex === undefined || workingColIndex === undefined) {
-        addLog('Não foi possível atualizar o valor: célula correspondente não encontrada após a ordenação.', 'error');
-        return;
-      }
-
-      // Update the source-of-truth map (workingMap)
       const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
-      newWorkingMap[workingRowIndex][workingColIndex] = newValue;
+      newWorkingMap[rowIndex][colIndex] = newValue;
       setWorkingMap(newWorkingMap);
 
-      // Update the display map to reflect the change immediately
       const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
       newDisplayMap[rowIndex][colIndex] = newValue;
       setDisplayMap(newDisplayMap);
@@ -1043,7 +813,7 @@ export default function EcuTuningAssistant() {
 
     const handleQuickEdit = (operation: 'add' | 'subtract') => {
         const value = parseFloat(quickEditValue);
-        if (isNaN(value) || !workingMap || !rawMap || !displayMap || !displayRawMap || !displayAxes || !sourceAxes || !displayIndexMap) {
+        if (isNaN(value) || !workingMap || !rawMap || !displayMap || !displayRawMap || !displayAxes || !sourceAxes) {
             addLog("Valor de edição rápida inválido ou nenhum mapa carregado.", "error");
             return;
         }
@@ -1068,19 +838,13 @@ export default function EcuTuningAssistant() {
                     continue;
                 }
 
-                const workingRowIndex = displayIndexMap.y[r];
-                const workingColIndex = displayIndexMap.x[c];
-
-                if (workingRowIndex === undefined || workingColIndex === undefined) continue;
-
-                const currentCalculatedValue = newWorkingMap[workingRowIndex][workingColIndex];
+                const currentCalculatedValue = newWorkingMap[r][c];
                 if (currentCalculatedValue === null) continue;
                 
                 let newCalculatedValue: number;
 
                 if (quickEditType === 'percent') {
                     let effectiveOperation = (operation === 'add' ? 1 : -1);
-                    // If the value is negative, "adding" a percentage should make it more positive (increase its value).
                     if (currentCalculatedValue < 0) {
                          newCalculatedValue = currentCalculatedValue * (1 - (value/100 * effectiveOperation));
                     } else {
@@ -1091,21 +855,14 @@ export default function EcuTuningAssistant() {
                     newCalculatedValue = currentCalculatedValue + changeAmount;
                 }
                 
-                newWorkingMap[workingRowIndex][workingColIndex] = newCalculatedValue;
+                newWorkingMap[r][c] = newCalculatedValue;
                 changesMade++;
             }
         }
 
         if (changesMade > 0) {
             setWorkingMap(newWorkingMap);
-            // We need to update the display map to reflect the changes.
-            // This is complex due to sorting. The easiest way is to re-construct it.
-            const newDisplayMap = displayIndexMap.y.map(workingRowIndex => {
-                return displayIndexMap.x.map(workingColIndex => {
-                    return newWorkingMap[workingRowIndex][workingColIndex];
-                });
-            });
-            setDisplayMap(newDisplayMap);
+            setDisplayMap(newWorkingMap);
 
             setAudioUrl(null);
             setMapValidationStatus('idle'); // Any manual change invalidates the last validation
@@ -1188,9 +945,8 @@ export default function EcuTuningAssistant() {
                 const yAxisAddress = null; // Cannot infer reliably
                 const xAxisAddress = null; // Cannot infer reliably
 
-                // Sugerir equações padrão para tornar os dados imediatamente úteis
-                const yAxisEquation = 'X * 100';      // Sugere RPMs (ex: 100 * 100 = 10000 RPM)
-                const xAxisEquation = 'X / 10.23';    // Sugere Posição da Borboleta % (converte 0-1023 para 0-100)
+                const yAxisEquation = 'X * 100';
+                const xAxisEquation = 'X / 10.23';
 
                 return {
                     name: uniqueName,
@@ -1198,7 +954,7 @@ export default function EcuTuningAssistant() {
                     rows: rows,
                     cols: cols,
                     dataSize: pMap.dataSize,
-                    isBigEndian: false, // O Z-data endianness é do mapa
+                    isBigEndian: false,
                     equation: 'X',
                     xAxisDef: { 
                         address: xAxisAddress, 
@@ -1206,10 +962,7 @@ export default function EcuTuningAssistant() {
                         dataSize: 2, 
                         isBigEndian: false, 
                         equation: xAxisEquation,
-                        equationVar: 'X',
                         label: 'Posição da Borboleta',
-                        majorStride: 0, 
-                        minorStride: 0,
                         node: null,
                     },
                     yAxisDef: { 
@@ -1218,10 +971,7 @@ export default function EcuTuningAssistant() {
                         dataSize: 2, 
                         isBigEndian: false, 
                         equation: yAxisEquation,
-                        equationVar: 'X',
                         label: 'RPM',
-                        majorStride: 0, 
-                        minorStride: 0,
                         node: null,
                     },
                     isPotential: true,
@@ -1265,8 +1015,6 @@ export default function EcuTuningAssistant() {
         addLog('A iniciar a modificação do ficheiro BIN...', 'info');
 
         try {
-            // CRITICAL STEP: Recalculate the entire rawMap from the workingMap
-            // to ensure all edits and the current display state are correctly inverted.
             const finalRawMap = recalculateRawMapFromCalculated(
                 workingMap,
                 definition,
@@ -1369,21 +1117,22 @@ export default function EcuTuningAssistant() {
             return;
         }
         if (!displayMap || !displayAxes || !selectedMapName) return;
+        
+        const def = availableMaps.find(d => d.name === selectedMapName);
+        if (!def) return;
 
         setIsExplaining(true);
         addLog(`A gerar explicação áudio para "${selectedMapName}"...`, 'info');
         setAudioUrl(null);
 
         try {
-            // The table shows Y-axis (RPM) as rows and X-axis (TPS) as columns.
-            // But the AI expects X/Y to match the labels. We pass the correct axes.
             const explanationResult = await explainMap({
                 mapName: selectedMapName,
-                mapData: displayMap, // displayMap is Y x X
-                xAxis: displayAxes.x,
-                yAxis: displayAxes.y,
-                xAxisLabel: displayAxes.xLabel,
-                yLabel: displayAxes.yLabel
+                mapData: displayMap,
+                xAxis: displayAxes.x.calculated,
+                yAxis: displayAxes.y.calculated,
+                xAxisLabel: def.xAxisDef?.label || 'Eixo X',
+                yAxisLabel: def.yAxisDef?.label || 'Eixo Y'
             });
 
             if (!explanationResult.success || !explanationResult.data?.explanation) {
@@ -1639,7 +1388,7 @@ export default function EcuTuningAssistant() {
                                                     xAxis={displayAxes.x} 
                                                     yAxis={displayAxes.y} 
                                                     definition={selectedMapDefinition}
-                                                    onSortAxis={triggerSortAxis}
+                                                    onSortAxis={handleSortAxis}
                                                     onSortByFirstColumn={handleSortByFirstColumn}
                                                     onResetSort={handleResetSort}
                                                     onCellChange={handleCellChange}
@@ -1653,13 +1402,13 @@ export default function EcuTuningAssistant() {
                                             <TabsContent value="plot-2d" className="flex-1 flex flex-col min-h-0">
                                                 <div className="flex flex-col flex-1 min-h-0">
                                                     <div className="p-2 flex items-center gap-2">
-                                                        <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {displayAxes.yLabel}:</Label>
+                                                        <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'}:</Label>
                                                         <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
                                                             <SelectTrigger id="plot-slice-selector" className="w-[120px]">
                                                                 <SelectValue />
                                                             </SelectTrigger>
                                                             <SelectContent>
-                                                                {displayAxes.y.map((yVal, index) => {
+                                                                {displayAxes.y.calculated.map((yVal, index) => {
                                                                     const formattedY = typeof yVal === 'number' ? yVal.toFixed(0) : yVal;
                                                                     return <SelectItem key={index} value={String(index)}>{String(formattedY)}</SelectItem>
                                                                 })}
@@ -1670,10 +1419,10 @@ export default function EcuTuningAssistant() {
                                                         <LinePlot2D
                                                             key={plotRenderKey}
                                                             mapData={displayMap}
-                                                            xAxis={displayAxes.x}
-                                                            yAxis={displayAxes.y}
-                                                            yAxisLabel={displayAxes.yLabel}
-                                                            xAxisLabel={displayAxes.xLabel}
+                                                            xAxis={displayAxes.x.calculated}
+                                                            yAxis={displayAxes.y.calculated}
+                                                            yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'}
+                                                            xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'}
                                                             sliceIndex={plotSliceIndex}
                                                             className="absolute inset-0"
                                                         />
@@ -1681,7 +1430,7 @@ export default function EcuTuningAssistant() {
                                                 </div>
                                             </TabsContent>
                                             <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
-                                                <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x} yAxis={displayAxes.y} xAxisLabel={displayAxes.xLabel} yAxisLabel={displayAxes.yLabel}/>
+                                                <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'}/>
                                             </TabsContent>
                                         </Tabs>
                                     ) : (
@@ -1863,8 +1612,8 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 key={mapRenderKey + '-orig-sugg'}
                                 mapData={suggestion.originalMap}
                                 rawMapData={suggestion.originalMap}
-                                xAxis={suggestion.originalAxes.x}
-                                yAxis={suggestion.originalAxes.y}
+                                xAxis={{raw: [], calculated: suggestion.originalAxes.x}}
+                                yAxis={{raw: [], calculated: suggestion.originalAxes.y}}
                                 definition={suggestion.originalDefinition}
                                 isEditable={false}
                                 onSortAxis={() => {}}
@@ -1884,8 +1633,8 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   key={mapRenderKey + '-prev-sugg'}
                                   mapData={suggestion.correctedMap}
                                   rawMapData={suggestion.correctedMap}
-                                  xAxis={suggestion.correctedAxes.x}
-                                  yAxis={suggestion.correctedAxes.y}
+                                  xAxis={{raw: [], calculated: suggestion.correctedAxes.x}}
+                                  yAxis={{raw: [], calculated: suggestion.correctedAxes.y}}
                                   definition={suggestion.newDefinition}
                                   isEditable={false}
                                   onSortAxis={() => {}}
