@@ -225,7 +225,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
         try {
             calculated.push(equationFunc(rawValue));
         } catch (e) {
-            console.error(`Erro ao aplicar equação "${equation}" ao valor raw ${rawValue} para o eixo "${axisDef.label}"`, e);
+            console.error(`Erro ao aplicar equação "${equation}" ao valor raw ${rawValue} para o eixo "${axisDef.label}"`);
             calculated.push(rawValue); // Fallback to raw value on error
         }
         originalIndices.push(i);
