@@ -224,7 +224,7 @@ function MapTable({
             </th>
             {xAxis.map((x, i) => (
               <th key={`head-x-${i}`} className="sticky top-0 z-20 bg-card p-1 border border-border font-semibold text-center min-w-[60px]">
-                {xAxisFormatter(x)}
+                {definition.xAxisDef?.label} - {xAxisFormatter(x)}
               </th>
             ))}
           </tr>
@@ -233,7 +233,7 @@ function MapTable({
           {yAxis.map((y, yi) => (
             <tr key={`row-${yi}`}>
               <td className="sticky left-0 z-20 p-1 border border-border bg-card font-semibold text-center min-w-[60px] w-[60px]">
-                 {yAxisFormatter(y)}
+                 {definition.yAxisDef?.label} - {yAxisFormatter(y)}
               </td>
               {mapData[yi]?.map((cellValue, xi) => {
                 const isSelected = selectedCells.has(`${yi}-${xi}`);
@@ -253,7 +253,7 @@ function MapTable({
                       onCellChange={(value) => onCellChange(yi, xi, value)}
                       isEditable={isEditable}
                       valueFormat={valueFormat}
-                      viewMode={mapViewMode}
+                      viewMode={viewMode}
                       dataSize={definition.dataSize}
                     />
                   </td>
@@ -1540,7 +1540,7 @@ export default function EcuTuningAssistant() {
                                 
                                 <div className="space-y-2">
                                     <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
-                                    <div className="text-center text-xs text-muted-foreground">Versão: 1.0.2-partial-success-base</div>
+                                    <div className="text-center text-xs text-muted-foreground">Versão: 1.0.1</div>
                                 </div>
 
                                 <div>
