@@ -807,7 +807,7 @@ export default function EcuTuningAssistant() {
             
             setMapRenderKey(p => p + 1);
             
-            runZAxisValidation(definition, calculatedMap, currentAxes);
+            // runZAxisValidation(definition, calculatedMap, currentAxes); // AI validation is now manual
 
         } catch (error) {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
@@ -817,7 +817,7 @@ export default function EcuTuningAssistant() {
             setDisplayRawMap(null);
             setDisplayAxes(null);
         }
-    }, [binFile, availableMaps, addLog, toast, runZAxisValidation, isEndianSwapped]);
+    }, [binFile, availableMaps, addLog, toast, isEndianSwapped]);
     
     const handleConfirmAxes = (data: { xEquation: string, yEquation: string, zEquation: string }) => {
         if (!selectedMapName || !binFile) return;
@@ -899,7 +899,7 @@ export default function EcuTuningAssistant() {
             toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
             
             // Re-run validation after manual changes
-            runZAxisValidation(newDefinition, newMapData, newAxesState);
+            // runZAxisValidation(newDefinition, newMapData, newAxesState);
 
         } catch (error) {
             const msg = `Erro ao recalcular o mapa com as novas equações: ${(error as Error).message}`;
