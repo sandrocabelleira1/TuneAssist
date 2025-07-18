@@ -83,7 +83,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if(axisId === 'y') count = rows;
                 
                 // Robustly get the label/name for the axis
-                const label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || (axisId === 'x' ? 'Eixo X' : 'Eixo Y');
+                const label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || (axisId === 'x' ? 'Eixo X' : 'Eixo Y');
                 
                 const axisDef: Partial<AxisDefinition> = { label, count, node: axisNode };
 
@@ -98,6 +98,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     });
                     
                     axisDef.values = values;
+                    axisDef.count = values.length; // Count should match number of labels
                     // For explicitly defined axes, the other properties are not needed for calculation
                     axisDef.address = 0;
                     axisDef.dataSize = 0;
@@ -244,7 +245,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
         }
         originalIndices.push(i);
     }
-    return { raw, calculated, originalIndices, label: axisDef.label };
+    return { raw, calculated, originalIndices, label };
 }
 
 
@@ -330,6 +331,9 @@ export function invertEquation(
     let sanitizedEq = (eq || 'X').trim()
         .replace(/,/g, '.')
         .replace(/\b(value|x)\b/gi, 'X');
+    
+    // Normalize equation (e.g., X100 to X*100)
+    sanitizedEq = normalizeEquation(sanitizedEq);
 
     // This is a very basic implementation and will fail on complex equations.
     // It handles simple arithmetic like `X * 0.1` or `X - 40`.
