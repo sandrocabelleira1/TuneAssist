@@ -38,7 +38,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     });
 
     const header = findNode(xmlDoc, 'XDF', 'xdfile');
-    // Find brand in a more specific way
     const brand = findNode(header, 'DEFAULTS', 'defaults')?.querySelector('CATEGORY')?.textContent?.split(' ')[0] || null;
 
     if (allTableElements.length === 0) {
@@ -82,47 +81,45 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || (axisId === 'x' ? 'Eixo X' : 'Eixo Y');
                 
                 const axisDef: Partial<AxisDefinition> = { label, count, node: axisNode };
-
-                const labelNodes = axisNode.querySelectorAll(':scope > label');
-                if (labelNodes.length > 0) {
-                    const values: (string|number)[] = [];
-                    labelNodes.forEach(ln => {
-                        const val = ln.textContent || '';
-                        const numVal = parseFloat(val);
-                        values.push(isNaN(numVal) ? val : numVal);
-                    });
-                    
-                    axisDef.values = values;
-                    axisDef.count = values.length;
-                    axisDef.address = 0;
-                    axisDef.dataSize = 0;
-                    axisDef.isBigEndian = false;
-                    axisDef.equation = 'X';
                 
-                } else {
-                    const axisEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-                    const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name');
-                    const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
-
-                    let sourceNodeForEquation: Element | null = axisNode;
-                    
-                    if (axisEmbeddedData) {
-                        axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                        axisDef.dataSize = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
-                        axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
-                    } else if(linkedTableNode) {
-                        const linkedAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]');
-                        const linkedEmbeddedData = findNode(linkedAxis, 'embeddeddata');
-                         if (linkedEmbeddedData && linkedAxis) {
+                let sourceNodeForEquation: Element | null = axisNode;
+                const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name');
+                const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
+                
+                if (linkedTableNode) {
+                    const linkedAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]');
+                     if(linkedAxisNode) {
+                        const linkedEmbeddedData = findNode(linkedAxisNode, 'embeddeddata');
+                         if (linkedEmbeddedData) {
                             axisDef.address = parseInt(getAttr(linkedEmbeddedData, 'mmedaddress') || '', 16);
                             axisDef.dataSize = parseInt(getAttr(linkedEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
                             axisDef.isBigEndian = getAttr(linkedEmbeddedData, 'bigendian') === '1';
-                            sourceNodeForEquation = linkedAxis;
+                            sourceNodeForEquation = linkedAxisNode;
                          }
+                     }
+                } else {
+                    const axisEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+                    if(axisEmbeddedData) {
+                         axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
+                         axisDef.dataSize = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
+                         axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
+                    } else {
+                        const labelNodes = axisNode.querySelectorAll(':scope > label');
+                        if(labelNodes.length > 0) {
+                            const values: (string|number)[] = [];
+                            labelNodes.forEach(ln => {
+                                const val = ln.textContent || '';
+                                const numVal = parseFloat(val);
+                                values.push(isNaN(numVal) ? val : numVal);
+                            });
+                            axisDef.values = values;
+                            axisDef.count = values.length;
+                        }
                     }
-                     axisDef.equation = findNode(sourceNodeForEquation, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
                 }
                 
+                axisDef.equation = findNode(sourceNodeForEquation, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+
                 if ((axisDef.values === undefined) && (isNaN(axisDef.address!) || isNaN(axisDef.dataSize!) || !axisDef.equation)) {
                     return null;
                 }
@@ -132,7 +129,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
             const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
-
+            
             if (!xAxisDef || !yAxisDef) return;
             
             definitions.push({
@@ -156,15 +153,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     return { definitions, brand };
 }
 
+
 function normalizeEquation(eq: string): string {
     let sanitizedEq = (eq || 'X').trim().toUpperCase();
     
-    if (/^X\d/.test(sanitizedEq)) {
-        sanitizedEq = sanitizedEq.replace('X', 'X*');
-    } else if (/\dX$/.test(sanitizedEq)) {
-        sanitizedEq = sanitizedEq.replace(/(\d+)(X)/, '$1*$2');
-    }
-
+    // Handles cases like X100 -> X*100 and 100X -> 100*X
+    sanitizedEq = sanitizedEq.replace(/(\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d+)/g, '$1*$2');
+    
     return sanitizedEq.replace(/x/g, 'X');
 }
 
