@@ -164,18 +164,18 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 }
 
 function normalizeEquation(eq: string): string {
-    const trimmedEq = eq.trim().toUpperCase();
-    // Handles "X100" -> "X*100" or "100X" -> "100*X"
-    const match = trimmedEq.match(/^(\d+\.?\d*|X)([*/+-])?(\d+\.?\d*|X)$/);
-
-    if (match) {
-        const [, part1, operator, part2] = match;
-        // If there's no operator but both parts exist, assume multiplication
-        if (!operator && part2) {
-            return `${part1}*${part2}`;
-        }
+    let sanitizedEq = (eq || 'X').trim().toUpperCase();
+    
+    // Test for "X<number>" or "<number>X" and add a multiplication operator
+    // Example: "X100" -> "X*100", "100X" -> "100*X"
+    // Does not affect "X/10" or "X+10"
+    if (/^X\d/.test(sanitizedEq)) {
+        sanitizedEq = sanitizedEq.replace('X', 'X*');
+    } else if (/\dX$/.test(sanitizedEq)) {
+        sanitizedEq = sanitizedEq.replace('X', '*X');
     }
-    return eq; // Return original if it doesn't fit the simple pattern
+
+    return sanitizedEq.replace(/x/g, 'X');
 }
 
 
@@ -184,7 +184,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const label = axisDef?.label || 'Eixo Desconhecido';
     
     // If values are defined directly in the XDF, use them and return.
-    if (axisDef?.values) {
+    if (axisDef?.values && axisDef.values.length > 0) {
         return {
             label: label,
             raw: axisDef.values.map(v => typeof v === 'number' ? v : 0), // Use 0 for non-numeric raw values
@@ -216,11 +216,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
 
     let equationFunc: (val: number) => number | string;
     try {
-        // More robust function creation
-        equationFunc = new Function('X', `return ${equation.replace(/x/g, 'X')}`) as (val: number) => number;
+        equationFunc = new Function('X', `return ${equation}`) as (val: number) => number;
     } catch (e) {
         console.error(`Equação de eixo inválida para "${axisDef.label}": ${equation}`);
-        equationFunc = (X: number) => X;
+        equationFunc = (X: number) => X; // Fallback to identity
     }
 
     const raw: number[] = [];
@@ -286,7 +285,7 @@ export function readAndCalculateMapFromBin(
   let zEquationFunc: (val: number) => number | string;
   try {
     const normalizedEquation = normalizeEquation(def.equation);
-    zEquationFunc = new Function('X', `return ${normalizedEquation.replace(/x/g, 'X')}`) as (val: number) => number;
+    zEquationFunc = new Function('X', `return ${normalizedEquation}`) as (val: number) => number;
   } catch(e) {
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida.`);
   }
@@ -296,12 +295,10 @@ export function readAndCalculateMapFromBin(
     row.map(cell => (cell !== null ? zEquationFunc(cell) : null))
   );
 
-  // Return the calculated map and raw map in their original (unsorted) order,
-  // along with the calculated axes. The frontend will be responsible for sorting for display.
   return { 
     calculatedMap, 
     rawMap, 
-    sortedAxes: { x: axisXData, y: axisYData } // The "sortedAxes" name is now a bit of a misnomer, they are calculated but not yet sorted.
+    sortedAxes: { x: axisXData, y: axisYData }
   };
 }
 

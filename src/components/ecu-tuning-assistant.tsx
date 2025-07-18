@@ -682,10 +682,8 @@ export default function EcuTuningAssistant() {
         try {
             const { calculatedMap, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, definition, isEndianSwapped);
             
-            // This is where we sort the data for display
             const sortAxis = (axisState: AxisDataState) => {
                 const indexed = axisState.calculated.map((value, index) => ({ value, originalIndex: index }));
-                // Sort numerically if possible, otherwise by string
                 indexed.sort((a, b) => {
                     const valA = Number(a.value);
                     const valB = Number(b.value);
@@ -705,20 +703,19 @@ export default function EcuTuningAssistant() {
             
             const sortedDisplayMap = displayY.originalIndices.map(originalRowIndex => 
                 displayX.originalIndices.map(originalColIndex => 
-                    calculatedMap[originalRowIndex][originalColIndex]
+                    calculatedMap[originalRowIndex]?.[originalColIndex] ?? null
                 )
             );
             
             const sortedRawDisplayMap = displayY.originalIndices.map(originalRowIndex => 
                 displayX.originalIndices.map(originalColIndex => 
-                    newRawMap[originalRowIndex][originalColIndex]
+                    newRawMap[originalRowIndex]?.[originalColIndex] ?? null
                 )
             );
             
-            // Set state for both unsorted (source of truth) and sorted (display) data
-            setWorkingMap(sortedDisplayMap); // Editable map is the sorted one
-            setRawMap(newRawMap); // The raw map in its original order
-            setSourceAxes({ x: displayX, y: displayY }); // Store the sorted axes info
+            setWorkingMap(sortedDisplayMap);
+            setRawMap(newRawMap);
+            setSourceAxes({ x: displayX, y: displayY });
             
             setDisplayMap(sortedDisplayMap);
             setDisplayRawMap(sortedRawDisplayMap);
@@ -737,47 +734,43 @@ export default function EcuTuningAssistant() {
         }
     }, [binFile, availableMaps, addLog, toast, isEndianSwapped]);
     
-    const handleConfirmAxes = (data: { xEquation: string, yEquation: string, zEquation: string }) => {
-        if (!selectedMapName || !binFile) return;
-
-        const originalDefinition = availableMaps.find(d => d.name === selectedMapName);
-        if (!originalDefinition || !originalDefinition.xAxisDef || !originalDefinition.yAxisDef) {
-            addLog(`Definição de mapa ou de eixo para "${selectedMapName}" não encontrada para recálculo.`, 'error');
-            return;
-        }
-
-        try {
-            // Create a deep copy to avoid mutating the original state directly
-            const newDefinition = JSON.parse(JSON.stringify(originalDefinition));
-            
-            // Apply new equations
-            newDefinition.equation = data.zEquation;
-            if (newDefinition.xAxisDef) {
-                newDefinition.xAxisDef.equation = data.xEquation;
+    const handleConfirmAxes = useCallback((data: { xEquation: string, yEquation: string, zEquation: string }) => {
+        if (!selectedMapName || !xdfFile) return;
+        
+        let newAvailableMaps = [...availableMaps];
+        let mapFound = false;
+        
+        // Find and update the definition in availableMaps
+        newAvailableMaps = newAvailableMaps.map(def => {
+            if (def.name === selectedMapName && def.xAxisDef && def.yAxisDef) {
+                mapFound = true;
+                const newDef = JSON.parse(JSON.stringify(def));
+                newDef.equation = data.zEquation;
+                newDef.xAxisDef.equation = data.xEquation;
+                newDef.yAxisDef.equation = data.yEquation;
+                return newDef;
             }
-            if (newDefinition.yAxisDef) {
-                newDefinition.yAxisDef.equation = data.yEquation;
-            }
+            return def;
+        });
 
-            // Update the definition in the central 'availableMaps' state
-            const newDefinitions = availableMaps.map(def => 
-                def.name === selectedMapName ? newDefinition : def
-            );
-            setAvailableMaps(newDefinitions);
+        if (mapFound) {
+            // Update the available maps state
+            setAvailableMaps(newAvailableMaps);
             
             // Re-run the map selection logic with the updated definition to force a full reload
-            handleMapSelect(selectedMapName);
-            
-            addLog(`Equações atualizadas para "${selectedMapName}".`, 'success');
-            setIsAxesModalOpen(false);
-            toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
-
-        } catch (error) {
-            const msg = `Erro ao recalcular o mapa com as novas equações: ${(error as Error).message}`;
+            // We need to use a timeout to ensure the state update has propagated before re-selecting
+            setTimeout(() => {
+                handleMapSelect(selectedMapName);
+                addLog(`Equações atualizadas para "${selectedMapName}".`, 'success');
+                setIsAxesModalOpen(false);
+                toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
+            }, 0);
+        } else {
+            const msg = `Definição de mapa ou de eixo para "${selectedMapName}" não encontrada para recálculo.`;
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Recálculo", description: msg });
         }
-    };
+    }, [selectedMapName, availableMaps, xdfFile, handleMapSelect, addLog, toast]);
 
     const handleResetSort = () => {
         if (workingMap && rawMap && sourceAxes) {
