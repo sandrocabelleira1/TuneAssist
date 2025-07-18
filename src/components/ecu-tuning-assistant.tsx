@@ -150,7 +150,7 @@ function MapTable({
     return Math.round(val);
   };
 
-  if (!mapData || mapData.length === 0 || !definition) {
+  if (!mapData || mapData.length === 0 || !definition || !xAxis || !yAxis) {
     return null;
   }
   
@@ -170,12 +170,12 @@ function MapTable({
                         <div className="font-semibold text-foreground truncate" title={definition.name}>
                             Z: {definition.name}<Address addr={definition.address} />
                         </div>
-                        <div className="text-muted-foreground truncate" title={`${definition.yAxisDef?.label}`}>
-                            <span className="font-semibold">Y:</span> {definition.yAxisDef?.label}
+                        <div className="text-muted-foreground truncate" title={yAxis.label}>
+                            <span className="font-semibold">Y:</span> {yAxis.label}
                             <Address addr={definition.yAxisDef?.address} />
                         </div>
-                         <div className="text-muted-foreground truncate" title={`${definition.xAxisDef?.label}`}>
-                            <span className="font-semibold">X:</span> {definition.xAxisDef?.label}
+                         <div className="text-muted-foreground truncate" title={xAxis.label}>
+                            <span className="font-semibold">X:</span> {xAxis.label}
                              <Address addr={definition.xAxisDef?.address} />
                         </div>
                     </div>

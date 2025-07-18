@@ -131,6 +131,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
     const count = axisDef?.count || 0;
     const defaultState: AxisDataState = {
+        label: axisDef?.label || 'Eixo Desconhecido',
         raw: Array.from({ length: count }, (_, i) => i + 1),
         calculated: Array.from({ length: count }, (_, i) => i + 1),
         originalIndices: Array.from({ length: count }, (_, i) => i),
@@ -173,7 +174,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
         calculated.push(equationFunc(rawValue));
         originalIndices.push(i);
     }
-    return { raw, calculated, originalIndices };
+    return { raw, calculated, originalIndices, label: axisDef.label };
 }
 
 
@@ -182,7 +183,7 @@ export function readAndCalculateMapFromBin(
     def: XDFDefinition,
     isEndianSwapped = false
 ): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
-  if (!def || !binBuffer) return { calculatedMap: [], rawMap: [], sortedAxes: { x: { raw: [], calculated: [], originalIndices:[]}, y: { raw: [], calculated: [], originalIndices:[]} } };
+  if (!def || !binBuffer) return { calculatedMap: [], rawMap: [], sortedAxes: { x: { raw: [], calculated: [], originalIndices:[], label: 'X'}, y: { raw: [], calculated: [], originalIndices:[], label: 'Y'} } };
 
   const view = new DataView(binBuffer);
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
@@ -220,6 +221,7 @@ export function readAndCalculateMapFromBin(
         return String(a.value).localeCompare(String(b.value));
     });
     return {
+        label: axisState.label,
         calculated: indexed.map(i => i.value),
         originalIndices: indexed.map(i => i.originalIndex),
         raw: indexed.map(i => axisState.raw[i.originalIndex]),
