@@ -86,29 +86,49 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 
                 const axisDef: Partial<AxisDefinition> = { label, count, node: axisNode };
 
-                const axisEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-                if (axisEmbeddedData) {
-                    axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                    axisDef.dataSize = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
-                    axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
-                    axisDef.equation = findNode(axisNode, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+                // NEW LOGIC: Prioritize explicit <LABEL> tags for axis values ("breakpoints")
+                const labelNodes = axisNode.querySelectorAll(':scope > label');
+                if (labelNodes.length > 0) {
+                    const values: (string|number)[] = [];
+                    labelNodes.forEach(ln => {
+                        const val = ln.textContent || '';
+                        const numVal = parseFloat(val);
+                        values.push(isNaN(numVal) ? val : numVal);
+                    });
+                    
+                    axisDef.values = values;
+                    // For explicitly defined axes, the other properties are not needed for calculation
+                    axisDef.address = 0;
+                    axisDef.dataSize = 0;
+                    axisDef.isBigEndian = false;
+                    axisDef.equation = 'X';
+                
                 } else {
-                    const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name');
-                    const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
-                    if(linkedTableNode) {
-                        const linkedAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]'); // Linked axes point to the Z axis of another table
-                        const linkedEmbeddedData = findNode(linkedAxis, 'embeddeddata');
-                         if (linkedEmbeddedData && linkedAxis) {
-                            axisDef.address = parseInt(getAttr(linkedEmbeddedData, 'mmedaddress') || '', 16);
-                            axisDef.dataSize = parseInt(getAttr(linkedEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
-                            axisDef.isBigEndian = getAttr(linkedEmbeddedData, 'bigendian') === '1';
-                            axisDef.equation = findNode(linkedAxis, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
-                         }
+                    // FALLBACK LOGIC: If no <LABEL> tags, read from BIN
+                    const axisEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+                    if (axisEmbeddedData) {
+                        axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
+                        axisDef.dataSize = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
+                        axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
+                        axisDef.equation = findNode(axisNode, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+                    } else {
+                        const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name');
+                        const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
+                        if(linkedTableNode) {
+                            const linkedAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]'); // Linked axes point to the Z axis of another table
+                            const linkedEmbeddedData = findNode(linkedAxis, 'embeddeddata');
+                             if (linkedEmbeddedData && linkedAxis) {
+                                axisDef.address = parseInt(getAttr(linkedEmbeddedData, 'mmedaddress') || '', 16);
+                                axisDef.dataSize = parseInt(getAttr(linkedEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
+                                axisDef.isBigEndian = getAttr(linkedEmbeddedData, 'bigendian') === '1';
+                                axisDef.equation = findNode(linkedAxis, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+                             }
+                        }
                     }
                 }
                 
                 // Ensure essential properties are not NaN before casting
-                if (isNaN(axisDef.address!) || isNaN(axisDef.dataSize!) || !axisDef.equation) {
+                if ((axisDef.values === undefined) && (isNaN(axisDef.address!) || isNaN(axisDef.dataSize!) || !axisDef.equation)) {
                     return null;
                 }
 
@@ -144,8 +164,21 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
     const count = axisDef?.count || 0;
+    const label = axisDef?.label || 'Eixo Desconhecido';
+    
+    // If values are defined directly in the XDF, use them and return.
+    if (axisDef?.values) {
+        return {
+            label: label,
+            raw: axisDef.values.map(v => typeof v === 'number' ? v : 0), // Use 0 for non-numeric raw values
+            calculated: axisDef.values,
+            originalIndices: Array.from({ length: axisDef.values.length }, (_, i) => i),
+        };
+    }
+    
+    // Fallback to default if no values and no address
     const defaultState: AxisDataState = {
-        label: axisDef?.label || 'Eixo Desconhecido',
+        label: label,
         raw: Array.from({ length: count }, (_, i) => i + 1),
         calculated: Array.from({ length: count }, (_, i) => i + 1),
         originalIndices: Array.from({ length: count }, (_, i) => i),

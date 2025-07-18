@@ -13,6 +13,7 @@ export type AxisDefinition = {
   dataSize?: number;
   isBigEndian?: boolean;
   equation?: string;
+  values?: (string | number)[]; // To hold explicit values from <LABEL> tags
 } | null;
 
 export type XDFDefinition = {
