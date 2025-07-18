@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -171,9 +170,9 @@ function MapTable({
                             Z: {definition.name}<Address addr={definition.address} />
                         </div>
                         <div className="text-muted-foreground truncate" title={`${definition.yAxisDef?.label} | ${definition.xAxisDef?.label}`}>
-                            <span className="font-semibold">Y:</span> {definition.yAxisDef?.label}<Address addr={definition.yAxisDef?.address} />
+                            <span className="font-semibold">Y:</span> {definition.yAxisDef?.label}
                             <span className="mx-1">|</span>
-                            <span className="font-semibold">X:</span> {definition.xAxisDef?.label}<Address addr={definition.xAxisDef?.address} />
+                            <span className="font-semibold">X:</span> {definition.xAxisDef?.label}
                         </div>
                     </div>
                     <div className="flex items-center flex-shrink-0">
@@ -382,15 +381,7 @@ export default function EcuTuningAssistant() {
                 let isInvalid = false;
                 const mapEndAddr = def.address + (def.rows * def.cols * def.dataSize);
                 if (mapEndAddr > binSize || def.address < 0) { isInvalid = true; }
-                if (!isInvalid && def.xAxisDef?.address !== null && def.xAxisDef?.address !== undefined) {
-                    const axisEndAddr = def.xAxisDef.address + (def.xAxisDef.count * def.xAxisDef.dataSize);
-                    if (axisEndAddr > binSize || def.xAxisDef.address < 0) { isInvalid = true; }
-                }
-                if (!isInvalid && def.yAxisDef?.address !== null && def.yAxisDef?.address !== undefined) {
-                    const axisEndAddr = def.yAxisDef.address + (def.yAxisDef.count * def.yAxisDef.dataSize);
-                    if (axisEndAddr > binSize || def.yAxisDef.address < 0) { isInvalid = true; }
-                }
-
+                
                 if (isInvalid) {
                     invalidCount++;
                 } else {
@@ -1209,6 +1200,7 @@ export default function EcuTuningAssistant() {
                         label: 'Posição da Borboleta',
                         majorStride: 0, 
                         minorStride: 0,
+                        node: null,
                     },
                     yAxisDef: { 
                         address: yAxisAddress, 
@@ -1220,6 +1212,7 @@ export default function EcuTuningAssistant() {
                         label: 'RPM',
                         majorStride: 0, 
                         minorStride: 0,
+                        node: null,
                     },
                     isPotential: true,
                 };
@@ -1975,5 +1968,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-    

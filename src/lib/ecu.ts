@@ -1,3 +1,4 @@
+
 // This file contains functions that can only be run on the client
 // due to the use of browser-specific APIs like DOMParser.
 
@@ -10,7 +11,7 @@ import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './ty
 function findNode(parent: Element | null, ...selectors: string[]): Element | null {
     if (!parent) return null;
     for (const selector of selectors) {
-        const node = parent.querySelector(selector);
+        const node = parent.querySelector(`:scope > ${selector}`);
         if (node) return node;
     }
     return null;
@@ -112,9 +113,14 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
     const emptyState: AxisDataState = { raw: [], calculated: [] };
-    if (!axisDef || !axisDef.node || !binBuffer) {
-        // If no node, create a simple linear axis
+    if (!axisDef || !binBuffer) {
         const count = axisDef?.count || 0;
+        const calculated = Array.from({ length: count }, (_, i) => i + 1);
+        return { raw: calculated, calculated };
+    }
+    
+    if (!axisDef.node) {
+        const count = axisDef.count || 0;
         const calculated = Array.from({ length: count }, (_, i) => i + 1);
         return { raw: calculated, calculated };
     }
@@ -345,7 +351,7 @@ export function writeMapToBin(
 
             try {
                 const intValue = Math.round(rawValue);
-                const offset = def.address + (r * def.cols) + c * def.dataSize;
+                const offset = def.address + (r * def.cols * def.dataSize + c * def.dataSize);
 
                 if (offset + def.dataSize > view.byteLength) {
                     console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
@@ -366,5 +372,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-    
