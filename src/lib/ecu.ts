@@ -168,15 +168,14 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
 export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-    xAxis: AxisDataState,
-    yAxis: AxisDataState,
+    xAxisState: AxisDataState,
+    yAxisState: AxisDataState,
     isEndianSwapped = false
 ): { calculatedMap: MapData, rawMap: MapData } {
   if (!def || !binBuffer) return { calculatedMap: [], rawMap: [] };
 
   const view = new DataView(binBuffer);
-  const calculatedMap: MapData = [];
-  const rawMap: MapData = [];
+  const rawMapUnsorted: MapData = [];
   
   const sanitizedEquation = (def.equation || 'X').replace(/x/g, 'X');
       
@@ -190,15 +189,14 @@ export function readAndCalculateMapFromBin(
   
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
+  // 1. Read the map data as it is in the file (unsorted)
   for (let r = 0; r < def.rows; r++) {
-    const calculatedRow: (number|null)[] = [];
     const rawRow: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
       const offset = def.address + (r * def.cols + c) * def.dataSize;
 
       if (offset + def.dataSize > view.byteLength) {
         console.error(`Leitura do mapa fora dos limites para "${def.name}". Offset: ${offset}`);
-        calculatedRow.push(null);
         rawRow.push(null);
         continue;
       }
@@ -209,27 +207,48 @@ export function readAndCalculateMapFromBin(
       } else if (def.dataSize === 2) {
           rawValue = view.getUint16(offset, useLittleEndian);
       } else {
-          calculatedRow.push(null);
           rawRow.push(null);
           continue;
       }
-      
       rawRow.push(rawValue);
-
-      try {
-        const calculatedValue = equationFunc(rawValue);
-        calculatedRow.push(calculatedValue);
-
-      } catch(e) {
-          const errorMessage = e instanceof Error ? e.message : String(e);
-          console.error(`Erro ao aplicar equação "${sanitizedEquation}" na célula [${r},${c}] do mapa "${def.name}": ${errorMessage}. A utilizar o valor "cru".`);
-          calculatedRow.push(rawValue);
-      }
     }
-    calculatedMap.push(calculatedRow);
-    rawMap.push(rawRow);
+    rawMapUnsorted.push(rawRow);
   }
-  return { calculatedMap, rawMap };
+
+  // 2. Get the sort order from the axis data
+  const ySortOrder = yAxisState.calculated.map((val, index) => ({ val: Number(val), index })).sort((a, b) => a.val - b.val);
+  const xSortOrder = xAxisState.calculated.map((val, index) => ({ val: Number(val), index })).sort((a, b) => a.val - b.val);
+
+  // 3. Reorder the raw map and calculate the final values
+  const finalCalculatedMap: MapData = [];
+  const finalRawMapSorted: MapData = [];
+
+  ySortOrder.forEach(yItem => {
+      const calculatedRow: (number | null)[] = [];
+      const rawSortedRow: (number | null)[] = [];
+      const originalRow = rawMapUnsorted[yItem.index];
+
+      xSortOrder.forEach(xItem => {
+          const rawValue = originalRow[xItem.index];
+          rawSortedRow.push(rawValue);
+          if (rawValue === null) {
+              calculatedRow.push(null);
+          } else {
+              try {
+                  const calculatedValue = equationFunc(rawValue);
+                  calculatedRow.push(calculatedValue);
+              } catch (e) {
+                  const errorMessage = e instanceof Error ? e.message : String(e);
+                  console.error(`Erro ao aplicar equação "${sanitizedEquation}" no valor raw "${rawValue}": ${errorMessage}. A utilizar o valor "cru".`);
+                  calculatedRow.push(rawValue);
+              }
+          }
+      });
+      finalCalculatedMap.push(calculatedRow);
+      finalRawMapSorted.push(rawSortedRow);
+  });
+
+  return { calculatedMap: finalCalculatedMap, rawMap: finalRawMapSorted };
 }
 
 export function generateChecksum(buffer: ArrayBuffer): string {
@@ -366,3 +385,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
