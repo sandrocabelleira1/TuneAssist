@@ -16,6 +16,16 @@ function getAttr(element: Element | null, attrName: string): string | null {
     return element.getAttribute(attrName);
 }
 
+function normalizeEquation(eq: string | null | undefined): string {
+    if (!eq) return 'X';
+    let sanitizedEq = eq.trim().toUpperCase();
+    
+    // Handles cases like X100 -> X*100 and 100X -> 100*X
+    sanitizedEq = sanitizedEq.replace(/(\d*\.?\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d*\.?\d+)/g, '$1*$2');
+    
+    return sanitizedEq.replace(/x/g, 'X');
+}
+
 export function parseXDF(xmlString: string): { definitions: XDFDefinition[], brand: string | null } {
     if (typeof DOMParser === 'undefined') {
         throw new Error("O ambiente não suporta DOMParser.");
@@ -57,80 +67,70 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             if (!embeddedData) return;
 
-            const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             const rows = parseInt(getAttr(embeddedData, 'mmedrowcount') || '', 10);
             const cols = parseInt(getAttr(embeddedData, 'mmedcolcount') || '', 10);
-            const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '', 10);
             
-            // Only consider it a main map if it has both rows and columns.
-            // This filters out 1D tables used for axis definitions.
+            // This is the key: Only treat tables with both rows and columns as main maps.
+            // Tables with only one dimension are likely for axis definitions.
             if (isNaN(rows) || isNaN(cols) || rows <= 1 || cols <= 1) {
                 return;
             }
 
+            const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
+            const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '', 10);
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
-
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
-            const equation = getAttr(mathNode, 'equation')?.replace(/x/g, 'X') || 'X';
+            const equation = getAttr(mathNode, 'equation') || 'X';
 
             if (isNaN(address) || isNaN(dataSizeBits)) {
                 return;
             }
-            
-            const parseAxis = (axisNode: Element | null): AxisDefinition => {
+
+            const parseAxis = (axisNode: Element | null, dimensionSize: number): AxisDefinition => {
                 if (!axisNode) return null;
                 
                 const axisId = getAttr(axisNode, 'id')?.toLowerCase();
                 const defaultLabel = axisId === 'x' ? 'Eixo X' : 'Eixo Y';
-                let label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
-
-                const axisDef: Partial<AxisDefinition> = { node: axisNode };
+                const axisDef: Partial<AxisDefinition> = { node: axisNode, count: dimensionSize };
 
                 const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name');
                 const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
+                
+                let sourceNodeForCalcs = axisNode;
+                let label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
                 if (linkedTableNode) {
                     const linkedTitle = findNode(linkedTableNode, 'title')?.textContent;
                     if (linkedTitle) label = linkedTitle;
-
-                    const linkedZAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]');
-                    if(linkedZAxisNode) {
-                        const linkedEmbeddedData = findNode(linkedZAxisNode, 'embeddeddata');
-                         if (linkedEmbeddedData) {
-                            axisDef.address = parseInt(getAttr(linkedEmbeddedData, 'mmedaddress') || '', 16);
-                            axisDef.dataSize = parseInt(getAttr(linkedEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
-                            axisDef.isBigEndian = getAttr(linkedEmbeddedData, 'bigendian') === '1';
-                            
-                            const linkedRows = parseInt(getAttr(linkedEmbeddedData, 'mmedrowcount') || '0', 10);
-                            const linkedCols = parseInt(getAttr(linkedEmbeddedData, 'mmedcolcount') || '0', 10);
-                            axisDef.count = Math.max(linkedRows, linkedCols);
-                         }
-                        axisDef.equation = findNode(linkedZAxisNode, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+                    // The actual calculation data comes from the Z-axis of the linked table
+                    const linkedZAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+                    if(linkedZAxis) {
+                      sourceNodeForCalcs = linkedZAxis;
                     }
-                } else {
-                     const axisEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-                    if(axisEmbeddedData) {
-                         axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                         axisDef.dataSize = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
-                         axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
-                    } else {
-                        const labelNodes = axisNode.querySelectorAll(':scope > label');
-                        if(labelNodes.length > 0) {
-                            const values: (string|number)[] = [];
-                            labelNodes.forEach(ln => {
-                                const val = ln.getAttribute('value') || ln.textContent || '';
-                                const numVal = parseFloat(val);
-                                values.push(isNaN(numVal) ? val : numVal);
-                            });
-                            axisDef.values = values;
-                        }
-                    }
-                     axisDef.equation = findNode(axisNode, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
                 }
                 
                 axisDef.label = label;
-                if (axisId === 'x') axisDef.count = cols;
-                if (axisId === 'y') axisDef.count = rows;
+                const axisEmbeddedData = findNode(sourceNodeForCalcs, 'embeddeddata', 'EMBEDDEDDATA');
+                if (axisEmbeddedData) {
+                    axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
+                    axisDef.dataSize = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
+                    axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
+                }
+                
+                const axisMathNode = findNode(sourceNodeForCalcs, 'math', 'MATH');
+                axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
+
+                // Handle explicitly defined values (<LABEL> tags)
+                const labelNodes = sourceNodeForCalcs.querySelectorAll(':scope > label, :scope > LABEL');
+                if (labelNodes.length > 0) {
+                    const values: (string|number)[] = [];
+                    labelNodes.forEach(ln => {
+                        const val = ln.getAttribute('value') || ln.textContent || '';
+                        const numVal = parseFloat(val);
+                        values.push(isNaN(numVal) ? val : numVal);
+                    });
+                    axisDef.values = values;
+                }
 
                 // Final check for validity
                 if (!axisDef.values && (axisDef.address === undefined || isNaN(axisDef.address))) {
@@ -140,8 +140,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 return axisDef as AxisDefinition;
             };
 
-            const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
-            const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
+            const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'), cols);
+            const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'), rows);
             
             if (!xAxisDef || !yAxisDef) return;
             
@@ -164,17 +164,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     });
 
     return { definitions, brand };
-}
-
-
-function normalizeEquation(eq: string): string {
-    if (!eq) return 'X';
-    let sanitizedEq = eq.trim().toUpperCase();
-    
-    // Handles cases like X100 -> X*100 and 100X -> 100*X
-    sanitizedEq = sanitizedEq.replace(/(\d*\.?\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d*\.?\d+)/g, '$1*$2');
-    
-    return sanitizedEq.replace(/x/g, 'X');
 }
 
 
@@ -206,7 +195,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
-    const equation = normalizeEquation(axisDef.equation || 'X');
+    const equation = normalizeEquation(axisDef.equation);
 
 
     if (isNaN(addr) || isNaN(count) || isNaN(dataSize)) return defaultState;
@@ -236,7 +225,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
         try {
             calculated.push(equationFunc(rawValue));
         } catch (e) {
-            console.error(`Erro ao aplicar equação "${equation}" ao valor raw ${rawValue} para o eixo "${axisDef.label}"`);
+            console.error(`Erro ao aplicar equação "${equation}" ao valor raw ${rawValue} para o eixo "${axisDef.label}"`, e);
             calculated.push(rawValue); // Fallback to raw value on error
         }
         originalIndices.push(i);
@@ -318,11 +307,7 @@ export function invertEquation(
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
-    let sanitizedEq = (eq || 'X').trim()
-        .replace(/,/g, '.')
-        .replace(/\b(value|x)\b/gi, 'X');
-    
-    sanitizedEq = normalizeEquation(sanitizedEq);
+    const sanitizedEq = normalizeEquation(eq);
 
     // This is a simplified symbolic inverter. It handles simple arithmetic.
     // E.g., "X * 0.1" or "X / 10" or "X + 5" or "X - 5" or "5 - X"
