@@ -1572,7 +1572,7 @@ export default function EcuTuningAssistant() {
                                 
                                 <div className="space-y-2">
                                     <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
-                                    <div className="text-center text-xs text-muted-foreground">Versão: 1.0.2-partial-success-base</div>
+                                    <div className="text-center text-xs text-muted-foreground">Versão: 1.0.1</div>
                                 </div>
 
                                 <div>
