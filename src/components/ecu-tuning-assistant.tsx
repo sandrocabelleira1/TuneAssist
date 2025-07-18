@@ -169,10 +169,13 @@ function MapTable({
                         <div className="font-semibold text-foreground truncate" title={definition.name}>
                             Z: {definition.name}<Address addr={definition.address} />
                         </div>
-                        <div className="text-muted-foreground truncate" title={`${definition.yAxisDef?.label} | ${definition.xAxisDef?.label}`}>
+                        <div className="text-muted-foreground truncate" title={`${definition.yAxisDef?.label}`}>
                             <span className="font-semibold">Y:</span> {definition.yAxisDef?.label}
-                            <span className="mx-1">|</span>
+                            <Address addr={definition.yAxisDef?.address} />
+                        </div>
+                         <div className="text-muted-foreground truncate" title={`${definition.xAxisDef?.label}`}>
                             <span className="font-semibold">X:</span> {definition.xAxisDef?.label}
+                             <Address addr={definition.xAxisDef?.address} />
                         </div>
                     </div>
                     <div className="flex items-center flex-shrink-0">
@@ -492,9 +495,15 @@ export default function EcuTuningAssistant() {
                          throw new Error("O ficheiro XDF não foi lido como texto.");
                     }
                     const text = buffer;
-                    const definitions = parseXDF(text);
+                    const { definitions, brand } = parseXDF(text);
                     if (definitions.length === 0) {
                         throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
+                    }
+                    
+                    if (brand) {
+                        setActiveXdfBrand(brand);
+                        setSelectedBrandForNewXdf(brand);
+                        addLog(`Marca da ECU detetada no XDF: ${brand}`, 'info');
                     }
                     
                     setXdfFile({ name: file.name, definitions: definitions });
