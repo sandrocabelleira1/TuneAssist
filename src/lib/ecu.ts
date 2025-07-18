@@ -352,7 +352,7 @@ export function invertEquation(
     }
     if (sanitizedEq.includes('-')) {
         const factor = parseFloat(sanitizedEq.split('-')[1]);
-        if (!isNaN(factor)) return finalValue + factor;
+        if (!isNaN(factor)) return finalValue - factor;
     }
     if (sanitizedEq.toUpperCase() === 'X') {
         return finalValue;
