@@ -3,10 +3,10 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { LogMessage, XDFDefinition, MapData, AxisDefinition, OriginalSortOrder, AxisDataState } from '@/lib/types';
-import { parseXDF, readAndCalculateMapFromBin, readAxisFromBin, generateChecksum, bufferToHex, writeMapToBin, recalculateRawMapFromCalculated } from '@/lib/ecu';
+import type { LogMessage, XDFDefinition, MapData, AxisDefinition, AxisDataState } from '@/lib/types';
+import { parseXDF, readAndCalculateMapFromBin, generateChecksum, bufferToHex, writeMapToBin, recalculateRawMapFromCalculated } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps, explainMap, generateSpeech } from '@/app/actions';
-import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
+import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,10 +19,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowDownAZ, ArrowUpNarrowWide, CheckCircle, ChevronRight, FileUp, GitCompareArrows, Loader2, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Table, Box, Undo2, Save, Pencil, AudioLines, Pause, LineChart, RefreshCw, Repeat } from 'lucide-react';
-import { Checkbox } from "@/components/ui/checkbox";
+import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, Table, Undo2, Box, LineChart } from 'lucide-react';
 import { Separator } from "@/components/ui/separator";
 import dynamic from 'next/dynamic';
 
@@ -102,7 +100,6 @@ function MapTable({
   yAxis,
   definition,
   onSortAxis,
-  onSortByFirstColumn,
   onResetSort,
   onCellChange,
   isEditable = true,
@@ -118,7 +115,6 @@ function MapTable({
   yAxis: AxisDataState;
   definition: XDFDefinition | undefined;
   onSortAxis: (axis: 'x' | 'y') => void;
-  onSortByFirstColumn: () => void;
   onResetSort: () => void;
   onCellChange: (rowIndex: number, colIndex: number, value: string) => void;
   isEditable?: boolean;
@@ -207,12 +203,6 @@ function MapTable({
                                 </Tooltip>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onSortByFirstColumn}><ArrowDownAZ className="h-4 w-4" /></Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Ordenar linhas pelos valores da 1ª coluna (Z)</p></TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onResetSort}><Undo2 className="h-4 w-4" /></Button>
                                     </TooltipTrigger>
                                     <TooltipContent><p>Restaurar ordem original</p></TooltipContent>
@@ -289,6 +279,7 @@ export default function EcuTuningAssistant() {
     const [xdfFile, setXdfFile] = useState<{ name: string; definitions: XDFDefinition[] } | null>(null);
     const [availableMaps, setAvailableMaps] = useState<XDFDefinition[]>([]);
     const [selectedMapName, setSelectedMapName] = useState<string>('');
+    const [selectedCells, setSelectedCells] = useState(new Set<string>());
 
     // State for map data. "working" is the editable source of truth, "display" is for rendering (can be sorted)
     const [rawMap, setRawMap] = useState<MapData | null>(null);
@@ -301,27 +292,9 @@ export default function EcuTuningAssistant() {
     const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
     const [isEndianSwapped, setIsEndianSwapped] = useState(false);
 
-    const [potentialMapsDb, setPotentialMapsDb] = useState<Record<string, XDFDefinition[]>>({});
-    const [selectedBrandForNewXdf, setSelectedBrandForNewXdf] = useState<string>('Yamaha');
-    const [motorcycleModel, setMotorcycleModel] = useState('R3');
-    const [activeXdfBrand, setActiveXdfBrand] = useState('');
-
-    // Quick Edit & Selection State
-    const [quickEditValue, setQuickEditValue] = useState('');
-    const [quickEditType, setQuickEditType] = useState<'percent' | 'unit'>('percent');
-    const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
-
-    // 2D Plot state
-    const [plotSliceIndex, setPlotSliceIndex] = useState(0);
-    const [plotRenderKey, setPlotRenderKey] = useState(0); // Key to force re-render
-
     // AI state
-    const [isScanning, setIsScanning] = useState(false);
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
     const [mapValidationStatus, setMapValidationStatus] = useState<'idle' | 'loading' | 'valid' | 'suggestion' | 'error'>('idle');
-    const [isExplaining, setIsExplaining] = useState(false);
-    const [audioUrl, setAudioUrl] = useState<string | null>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
 
     // Modal state
     const [isAxesModalOpen, setIsAxesModalOpen] = useState(false);
@@ -332,42 +305,27 @@ export default function EcuTuningAssistant() {
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     const valueFormat = useMemo<'integer' | 'decimal'>(() => {
         if (!selectedMapName) return 'decimal';
-        
         const lowerCaseName = selectedMapName.toLowerCase();
-        
         const decimalKeywords = ['ignição', 'ignition', 'avanço', 'spark', 'timing', 'comb', 'fuel', 'injeção'];
-        if (decimalKeywords.some(keyword => lowerCaseName.includes(keyword))) {
-            return 'decimal';
-        }
-
+        if (decimalKeywords.some(keyword => lowerCaseName.includes(keyword))) return 'decimal';
         const integerKeywords = ['tps', 'map', 've', 'etv', 'borboleta'];
-        if (integerKeywords.some(keyword => lowerCaseName.includes(keyword))) {
-            return 'integer';
-        }
-
+        if (integerKeywords.some(keyword => lowerCaseName.includes(keyword))) return 'integer';
         return 'decimal';
     }, [selectedMapName]);
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         if (type === 'debug' && !debugMode) return;
         const id = `${Date.now()}-${Math.random()}`;
-        setLogs(prev => [...prev, {
-            id,
-            timestamp: new Date().toLocaleTimeString(),
-            message,
-            type,
-        }]);
+        setLogs(prev => [...prev, { id, timestamp: new Date().toLocaleTimeString(), message, type }]);
     }, [debugMode]);
     
     const visibleLogs = useMemo(() => {
         return debugMode ? logs : logs.filter(log => log.type !== 'debug');
     }, [logs, debugMode]);
 
-    // Rebuild available maps when files or potential maps DB changes
     useEffect(() => {
         if (!binFile) {
             setAvailableMaps([]);
@@ -382,27 +340,18 @@ export default function EcuTuningAssistant() {
             xdfFile.definitions.forEach(def => {
                 let isInvalid = false;
                 const mapEndAddr = def.address + (def.rows * def.cols * def.dataSize);
-                if (mapEndAddr > binSize || def.address < 0) { isInvalid = true; }
-                
-                if (isInvalid) {
-                    invalidCount++;
-                } else {
-                    validDefinitions.push(def);
-                }
+                if (mapEndAddr > binSize || def.address < 0) isInvalid = true;
+                if (isInvalid) invalidCount++;
+                else validDefinitions.push(def);
             });
         }
         
-        const combinedMaps = [...validDefinitions];
-
         const finalMapNames = new Set<string>();
-        const uniqueCombinedMaps = combinedMaps.map(def => {
+        const uniqueCombinedMaps = validDefinitions.map(def => {
             let newName = def.name;
             if (finalMapNames.has(newName)) {
                 let count = 2;
-                do {
-                    newName = `${def.name} (${count})`;
-                    count++;
-                } while (finalMapNames.has(newName));
+                do { newName = `${def.name} (${count})`; count++; } while (finalMapNames.has(newName));
             }
             finalMapNames.add(newName);
             return { ...def, name: newName };
@@ -421,12 +370,7 @@ export default function EcuTuningAssistant() {
             const totalCount = xdfFile?.definitions.length || 0;
             const warningMsg = `${invalidCount} de ${totalCount} definições de mapa são incompatíveis com o ficheiro BIN e foram ocultadas.`;
             addLog(warningMsg, 'error');
-            toast({
-                variant: 'destructive',
-                title: "Aviso de Compatibilidade",
-                description: warningMsg,
-                duration: 8000,
-            });
+            toast({ variant: 'destructive', title: "Aviso de Compatibilidade", description: warningMsg, duration: 8000 });
         }
     }, [binFile, xdfFile, addLog, toast, selectedMapName]);
 
@@ -443,13 +387,9 @@ export default function EcuTuningAssistant() {
         setDisplayAxes(null);
         setMapValidationStatus('idle');
         setAiSuggestion(null);
-        setActiveXdfBrand('');
         setAvailableMaps([]);
-        setAudioUrl(null);
         setSelectedCells(new Set());
-        setQuickEditValue('');
         setLogs([]);
-        setPlotSliceIndex(0);
         setIsEndianSwapped(false);
 
         if (binInputRef.current) binInputRef.current.value = '';
@@ -468,52 +408,28 @@ export default function EcuTuningAssistant() {
                 if (!buffer) throw new Error("Não foi possível ler o conteúdo do ficheiro.");
 
                 if (type === 'bin') {
-                    if (!(buffer instanceof ArrayBuffer)) {
-                        throw new Error("O ficheiro BIN não foi lido como ArrayBuffer.");
-                    }
-                    setXdfFile(null); 
-                    setSelectedMapName('');
-                    setDisplayMap(null);
-                    setDisplayRawMap(null);
-                    setDisplayAxes(null);
-                    setRawMap(null);
-                    setAvailableMaps([]);
-                    setAudioUrl(null);
-                    setSelectedCells(new Set());
-                    setMapValidationStatus('idle');
-                    setPlotSliceIndex(0);
+                    if (!(buffer instanceof ArrayBuffer)) throw new Error("O ficheiro BIN não foi lido como ArrayBuffer.");
+                    
+                    // Reset everything when a new BIN is loaded
+                    resetState();
                     
                     const checksum = generateChecksum(buffer);
                     setBinFile({ name: file.name, buffer, checksum });
                     addLog(`Ficheiro BIN carregado: ${file.name}`, 'success');
 
                 } else { // XDF
-                    if (typeof buffer !== 'string') {
-                         throw new Error("O ficheiro XDF não foi lido como texto.");
-                    }
-                    const text = buffer;
-                    const { definitions, brand } = parseXDF(text);
-                    if (definitions.length === 0) {
-                        throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
-                    }
-                    
-                    if (brand) {
-                        setActiveXdfBrand(brand);
-                        setSelectedBrandForNewXdf(brand);
-                        addLog(`Marca da ECU detetada no XDF: ${brand}`, 'info');
-                    }
-                    
+                    if (typeof buffer !== 'string') throw new Error("O ficheiro XDF não foi lido como texto.");
+                    const { definitions, brand } = parseXDF(buffer);
+                    if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
+                    if (brand) addLog(`Marca da ECU detetada no XDF: ${brand}`, 'info');
                     setXdfFile({ name: file.name, definitions: definitions });
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
                 }
             } catch (error) {
                 const msg = `Erro ao carregar ${file.name}: ${(error as Error).message}`;
                 addLog(msg, 'error');
-                if (type === 'xdf') {
-                    setIsXdfErrorModalOpen(true);
-                } else {
-                    toast({ variant: 'destructive', title: "Erro no Ficheiro", description: msg });
-                }
+                if (type === 'xdf') setIsXdfErrorModalOpen(true);
+                else toast({ variant: 'destructive', title: "Erro no Ficheiro", description: msg });
             }
         };
         reader.onerror = () => {
@@ -521,146 +437,8 @@ export default function EcuTuningAssistant() {
              toast({ variant: 'destructive', title: "Erro no Ficheiro", description: `Não foi possível ler o ficheiro ${file.name}` });
         }
         
-        if (type === 'xdf') {
-            reader.readAsText(file);
-        } else {
-            reader.readAsArrayBuffer(file);
-        }
-    };
-    
-    const applyZAxisCorrectionAndReload = useCallback((
-      originalDefinition: XDFDefinition,
-      zEquation: string
-    ) => {
-        if (!binFile) return;
-
-        const newDefinition = JSON.parse(JSON.stringify(originalDefinition)) as XDFDefinition;
-        newDefinition.equation = zEquation;
-        
-        try {
-            const { calculatedMap: correctedMap, rawMap: correctedRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, isEndianSwapped);
-            
-            const newSourceAxes = { x: sortedAxes.x, y: sortedAxes.y };
-
-            if (newDefinition.isPotential) {
-                setPotentialMapsDb(prev => ({
-                    ...prev,
-                    [binFile.checksum]: (prev[binFile.checksum] || []).map(pMap => 
-                        pMap.address === newDefinition.address ? newDefinition : pMap
-                    ),
-                }));
-            } else if (xdfFile) {
-                const newDefinitions = xdfFile.definitions.map(def => 
-                    def.name === newDefinition.name ? newDefinition : def
-                );
-                setXdfFile({ ...xdfFile, definitions: newDefinitions });
-            }
-
-            setWorkingMap(correctedMap);
-            setRawMap(correctedRawMap);
-            setDisplayMap(correctedMap);
-            setDisplayRawMap(correctedRawMap);
-            
-            setSourceAxes(newSourceAxes);
-            setDisplayAxes(newSourceAxes);
-            setAudioUrl(null);
-            setSelectedCells(new Set());
-            setPlotSliceIndex(0);
-            
-            setMapRenderKey(p => p + 1);
-            const logMessage = `IA aplicou a sugestão de correção aos dados do mapa (Eixo Z).`;
-            addLog(logMessage, 'success');
-            toast({ title: 'Mapa Corrigido', description: logMessage });
-            setMapValidationStatus('valid');
-
-        } catch (error) {
-            addLog(`Erro ao aplicar a sugestão da IA: ${(error as Error).message}`, 'error');
-            toast({ variant: 'destructive', title: 'Erro ao Aplicar Correção', description: 'Não foi possível recalcular o mapa com a nova equação.' });
-            setMapValidationStatus('error');
-        }
-    }, [binFile, xdfFile, addLog, toast, isEndianSwapped]);
-
-    const runZAxisValidation = useCallback(async (
-        definition: XDFDefinition, 
-        mapData: MapData, 
-        axes: { x: AxisDataState, y: AxisDataState }
-    ) => {
-        setMapValidationStatus('loading');
-        addLog(`A iniciar a análise do eixo Z para "${definition.name}"...`, 'debug');
-
-        const numericXAxis = axes.x.calculated.filter(v => typeof v === 'number') as number[];
-        const numericYAxis = axes.y.calculated.filter(v => typeof v === 'number') as number[];
-
-        if(numericXAxis.length !== axes.x.calculated.length || numericYAxis.length !== axes.y.calculated.length) {
-            addLog('A validação do mapa requer eixos puramente numéricos.', 'error');
-            setMapValidationStatus('error');
-            return;
-        }
-
-        const result = await validateMapType({
-            mapName: definition.name,
-            mapData: mapData,
-            xAxis: numericXAxis,
-            yAxis: numericYAxis,
-            equation: definition.equation,
-            brand: activeXdfBrand,
-            model: motorcycleModel,
-        });
-
-        if (result.success && result.data) {
-            const isValidEquation = (eq: string | undefined): eq is string => {
-                if (!eq) return false;
-                const lowerEq = eq.toLowerCase().trim();
-                return !(lowerEq === 'string' || lowerEq.includes('sem alteração') || lowerEq.includes('nenhuma'));
-            };
-
-            const { suggestedEquation, reasoning } = result.data;
-            const validSuggestedEquation = isValidEquation(suggestedEquation) ? suggestedEquation : undefined;
-            
-            if (validSuggestedEquation) {
-                addLog(`IA encontrou uma sugestão para os dados do mapa (Eixo Z) de "${definition.name}". A aguardar aprovação.`, 'info');
-                 try {
-                    if(!binFile?.buffer) throw new Error("O ficheiro BIN não está carregado.");
-
-                    const newDefinition = JSON.parse(JSON.stringify(definition));
-                    newDefinition.equation = validSuggestedEquation;
-
-                    const { calculatedMap: correctedMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, newDefinition, isEndianSwapped);
-                    
-                    const originalAxesForSuggestion = { x: axes.x.calculated, y: axes.y.calculated, xLabel: definition.xAxisDef?.label || "X", yLabel: definition.yAxisDef?.label || "Y" };
-                    const correctedAxesForSuggestion = { x: sortedAxes.x.calculated, y: sortedAxes.y.calculated, xLabel: newDefinition.xAxisDef?.label || "X", yLabel: newDefinition.yAxisDef?.label || "Y" };
-
-                    setAiSuggestion({
-                        reasoning,
-                        originalMap: mapData,
-                        correctedMap: correctedMap,
-                        originalAxes: originalAxesForSuggestion,
-                        correctedAxes: correctedAxesForSuggestion,
-                        originalDefinition: definition,
-                        newDefinition,
-                    });
-                    setMapValidationStatus('suggestion');
-                 } catch (error) {
-                    addLog(`Erro ao gerar pré-visualização da correção Z: ${(error as Error).message}`, 'error');
-                    setMapValidationStatus('error');
-                 }
-            } else {
-                setMapValidationStatus('valid');
-                addLog(`Análise da IA para o eixo Z de "${definition.name}" concluída: Nenhuma correção necessária.`, 'success');
-            }
-        } else {
-            addLog(`A análise do eixo Z falhou: ${result.error}`, 'error');
-            setMapValidationStatus('error');
-        }
-    }, [binFile, addLog, activeXdfBrand, motorcycleModel, isEndianSwapped]);
-    
-    // UNSORTED
-    const handleSortAxis = (axis: 'x' | 'y') => {
-        addLog(`A ordenação manual foi desativada para garantir a integridade dos dados. Utilize 'Restaurar Ordem' para voltar ao estado original.`, 'info');
-    };
-    // UNSORTED
-    const handleSortByFirstColumn = () => {
-        addLog(`A ordenação manual foi desativada para garantir a integridade dos dados. Utilize 'Restaurar Ordem' para voltar ao estado original.`, 'info');
+        if (type === 'xdf') reader.readAsText(file);
+        else reader.readAsArrayBuffer(file);
     };
 
     const handleMapSelect = useCallback((name: string) => {
@@ -675,59 +453,18 @@ export default function EcuTuningAssistant() {
         setMapValidationStatus('idle');
         setAiSuggestion(null);
         setSelectedMapName(name);
-        setAudioUrl(null);
         setSelectedCells(new Set());
-        setPlotSliceIndex(0);
 
         try {
             const { calculatedMap, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, definition, isEndianSwapped);
             
-            // The map data should be sorted based on the axes values
-            const sortAxis = (axisState: AxisDataState) => {
-                const indexed = axisState.calculated.map((value, index) => ({ value, originalIndex: axisState.originalIndices[index] }));
-                indexed.sort((a, b) => {
-                    const valA = Number(a.value);
-                    const valB = Number(b.value);
-                    if (!isNaN(valA) && !isNaN(valB)) return valA - valB;
-                    return String(a.value).localeCompare(String(b.value));
-                });
-                return {
-                    ...axisState,
-                    calculated: indexed.map(i => i.value),
-                    // We need to re-map the original indices based on the sort
-                    originalIndices: indexed.map(i => i.originalIndex),
-                };
-            };
-
-            const displayX = sortAxis(sortedAxes.x);
-            const displayY = sortAxis(sortedAxes.y);
+            setWorkingMap(calculatedMap);
+            setRawMap(newRawMap); 
+            setSourceAxes(sortedAxes);
             
-            // Reorder the calculatedMap based on the sorted axes' original indices
-            const sortedCalculatedMap = displayY.originalIndices.map(originalRowIndex => 
-                displayX.originalIndices.map(originalColIndex => {
-                    // Find the original indices in the unsorted axes data
-                    const unsortedRowIndex = sortedAxes.y.originalIndices.indexOf(originalRowIndex);
-                    const unsortedColIndex = sortedAxes.x.originalIndices.indexOf(originalColIndex);
-                    return calculatedMap[unsortedRowIndex]?.[unsortedColIndex] ?? null;
-                })
-            );
-
-            // Reorder the rawMap similarly
-            const sortedRawMap = displayY.originalIndices.map(originalRowIndex => 
-                displayX.originalIndices.map(originalColIndex => {
-                     const unsortedRowIndex = sortedAxes.y.originalIndices.indexOf(originalRowIndex);
-                    const unsortedColIndex = sortedAxes.x.originalIndices.indexOf(originalColIndex);
-                    return newRawMap[unsortedRowIndex]?.[unsortedColIndex] ?? null;
-                })
-            );
-            
-            setWorkingMap(sortedCalculatedMap);
-            setRawMap(newRawMap); // Store the original, unsorted raw map
-            setSourceAxes({ x: displayX, y: displayY });
-            
-            setDisplayMap(sortedCalculatedMap);
-            setDisplayRawMap(sortedRawMap);
-            setDisplayAxes({ x: displayX, y: displayY });
+            setDisplayMap(calculatedMap);
+            setDisplayRawMap(newRawMap);
+            setDisplayAxes(sortedAxes);
 
             addLog(`Mapa carregado: ${name}.`, 'info');
             setMapRenderKey(p => p + 1);
@@ -743,35 +480,27 @@ export default function EcuTuningAssistant() {
     }, [binFile, availableMaps, addLog, toast, isEndianSwapped]);
     
     const handleConfirmAxes = useCallback((data: { xEquation: string, yEquation: string, zEquation: string }) => {
-        if (!selectedMapName || !xdfFile || !availableMaps) return;
+        if (!selectedMapName || !binFile) return;
 
         const currentDef = availableMaps.find(d => d.name === selectedMapName);
         if (!currentDef || !currentDef.xAxisDef || !currentDef.yAxisDef) {
-             const msg = `Definição de mapa ou de eixo para "${selectedMapName}" não encontrada para recálculo.`;
+            const msg = `Definição de mapa ou de eixo para "${selectedMapName}" não encontrada para recálculo.`;
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Recálculo", description: msg });
             return;
         }
         
-        // Deep copy the definition to avoid mutation issues
         const newDef = JSON.parse(JSON.stringify(currentDef)) as XDFDefinition;
-
-        // Apply new equations
         newDef.equation = data.zEquation;
         newDef.xAxisDef.equation = data.xEquation;
         newDef.yAxisDef.equation = data.yEquation;
-        
-        // This is the critical part: we must update the map definition in the main state
-        // and then re-select the map to trigger a full, clean reload.
         
         const newAvailableMaps = availableMaps.map(def => 
             def.name === selectedMapName ? newDef : def
         );
         
         setAvailableMaps(newAvailableMaps);
-
-        // Re-run the map selection logic with the updated definition to force a full reload
-        // We use a timeout to ensure the state update has propagated before re-selecting
+        
         setTimeout(() => {
             handleMapSelect(selectedMapName);
             addLog(`Equações atualizadas para "${selectedMapName}".`, 'success');
@@ -779,12 +508,46 @@ export default function EcuTuningAssistant() {
             toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
         }, 0);
 
-    }, [selectedMapName, availableMaps, xdfFile, handleMapSelect, addLog, toast]);
+    }, [selectedMapName, availableMaps, binFile, handleMapSelect, addLog, toast]);
+
+    const handleSortAxis = (axis: 'x' | 'y') => {
+        if (!displayMap || !displayAxes || !displayRawMap) return;
+    
+        const newAxes = JSON.parse(JSON.stringify(displayAxes));
+        const axisState = axis === 'x' ? newAxes.x : newAxes.y;
+    
+        const indexed = axisState.calculated.map((value: any, index: any) => ({ value, originalIndex: index }));
+        indexed.sort((a: any, b: any) => {
+            const valA = Number(a.value);
+            const valB = Number(b.value);
+            if (!isNaN(valA) && !isNaN(valB)) return valA - valB;
+            return String(a.value).localeCompare(String(b.value));
+        });
+    
+        const sortedIndices = indexed.map((item: any) => item.originalIndex);
+        axisState.calculated = indexed.map((item: any) => item.value);
+    
+        let newDisplayMap, newDisplayRawMap;
+    
+        if (axis === 'y') {
+            newDisplayMap = sortedIndices.map((originalIndex: any) => displayMap[originalIndex]);
+            newDisplayRawMap = sortedIndices.map((originalIndex: any) => displayRawMap[originalIndex]);
+        } else { // axis === 'x'
+            newDisplayMap = displayMap.map(row => sortedIndices.map((originalIndex: any) => row[originalIndex]));
+            newDisplayRawMap = displayRawMap.map(row => sortedIndices.map((originalIndex: any) => row[originalIndex]));
+        }
+        
+        setDisplayAxes(newAxes);
+        setDisplayMap(newDisplayMap);
+        setDisplayRawMap(newDisplayRawMap);
+        setMapRenderKey(p => p + 1);
+        addLog(`Eixo ${axis.toUpperCase()} ordenado.`, 'info');
+    };
 
     const handleResetSort = () => {
         if (workingMap && rawMap && sourceAxes) {
             setDisplayMap(workingMap);
-            setDisplayRawMap(displayRawMap); // This needs to be the sorted one to match workingMap
+            setDisplayRawMap(rawMap);
             setDisplayAxes(sourceAxes);
             setSelectedCells(new Set());
             setMapRenderKey(p => p + 1);
@@ -798,7 +561,7 @@ export default function EcuTuningAssistant() {
       const newValue = parseFloat(value);
       if (isNaN(newValue)) {
         addLog(`Valor inválido introduzido: "${value}". Apenas números são permitidos.`, 'error');
-        setMapRenderKey(p => p + 1); // Rerender to show original value
+        setMapRenderKey(p => p + 1);
         return;
       }
       
@@ -810,8 +573,7 @@ export default function EcuTuningAssistant() {
       newDisplayMap[rowIndex][colIndex] = newValue;
       setDisplayMap(newDisplayMap);
 
-      setAudioUrl(null);
-      setMapValidationStatus('idle'); // Any manual change invalidates the last validation
+      setMapValidationStatus('idle');
     };
 
     const handleCellSelect = useCallback((rowIndex: number, colIndex: number, isCtrlOrCmd: boolean) => {
@@ -819,209 +581,14 @@ export default function EcuTuningAssistant() {
         const key = `${rowIndex}-${colIndex}`;
 
         if (isCtrlOrCmd) {
-            if (newSelection.has(key)) {
-                newSelection.delete(key);
-            } else {
-                newSelection.add(key);
-            }
+            if (newSelection.has(key)) newSelection.delete(key);
+            else newSelection.add(key);
         } else {
             newSelection.clear();
             newSelection.add(key);
-            
         }
         setSelectedCells(newSelection);
     }, [selectedCells]);
-
-
-    const handleQuickEdit = (operation: 'add' | 'subtract') => {
-        const value = parseFloat(quickEditValue);
-        if (isNaN(value) || !workingMap || !rawMap || !displayMap || !displayRawMap || !displayAxes || !sourceAxes) {
-            addLog("Valor de edição rápida inválido ou nenhum mapa carregado.", "error");
-            return;
-        }
-
-        const currentDef = availableMaps.find(d => d.name === selectedMapName);
-        if (!currentDef) {
-            addLog("Definição de mapa não encontrada para edição rápida.", "error");
-            return;
-        }
-
-        const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
-        let changesMade = 0;
-        const hasSelection = selectedCells.size > 0;
-
-        const rows = displayMap.length;
-        const cols = displayMap[0]?.length || 0;
-
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                const key = `${r}-${c}`;
-                if (hasSelection && !selectedCells.has(key)) {
-                    continue;
-                }
-
-                const currentCalculatedValue = newWorkingMap[r][c];
-                if (currentCalculatedValue === null) continue;
-                
-                let newCalculatedValue: number;
-
-                if (quickEditType === 'percent') {
-                    let effectiveOperation = (operation === 'add' ? 1 : -1);
-                    if (currentCalculatedValue < 0) {
-                         newCalculatedValue = currentCalculatedValue * (1 - (value/100 * effectiveOperation));
-                    } else {
-                         newCalculatedValue = currentCalculatedValue * (1 + (value/100 * effectiveOperation));
-                    }
-                } else { // 'unit'
-                    const changeAmount = value * (operation === 'add' ? 1 : -1);
-                    newCalculatedValue = currentCalculatedValue + changeAmount;
-                }
-                
-                newWorkingMap[r][c] = newCalculatedValue;
-                changesMade++;
-            }
-        }
-
-        if (changesMade > 0) {
-            setWorkingMap(newWorkingMap);
-            setDisplayMap(newWorkingMap);
-
-            setAudioUrl(null);
-            setMapValidationStatus('idle'); // Any manual change invalidates the last validation
-            
-            const targetDescription = hasSelection ? `${changesMade} células selecionadas` : 'todas as células';
-            addLog(`Edição rápida aplicada a ${targetDescription}.`, 'success');
-        } else {
-             addLog(`Nenhuma célula elegível para a edição rápida.`, 'info');
-        }
-        setQuickEditValue('');
-    };
-
-
-    const handleValidateMap = async () => {
-        if (!displayMap || !displayAxes || !selectedMapName || !sourceAxes) return;
-        
-        const currentDef = availableMaps.find(d => d.name === selectedMapName);
-        if (!currentDef) {
-            addLog(`Não foi possível encontrar a definição do mapa para validar.`, 'error');
-            return;
-        }
-
-        runZAxisValidation(currentDef, displayMap, sourceAxes);
-    };
-    
-    const handleAcceptSuggestion = () => {
-        if (!aiSuggestion) return;
-        
-        applyZAxisCorrectionAndReload(
-            aiSuggestion.originalDefinition, 
-            aiSuggestion.newDefinition.equation
-        );
-        
-        setIsSuggestionModalOpen(false);
-        setAiSuggestion(null);
-    };
-
-    const handleScanForMaps = async () => {
-        if (!binFile || selectedBrandForNewXdf === 'no-brand') {
-            toast({ variant: 'destructive', title: "Ação Necessária", description: "Por favor, carregue um ficheiro BIN e selecione uma marca para procurar mapas." });
-            return;
-        }
-
-        setIsScanning(true);
-        addLog(`A iniciar a procura de mapas com IA para a marca ${selectedBrandForNewXdf}${motorcycleModel ? ` ${motorcycleModel}` : ''}...`, 'info');
-
-        const scanBuffer = binFile.buffer.slice(0, 8192);
-        const hexData = bufferToHex(scanBuffer);
-        const existingMaps = availableMaps.map(d => ({
-                name: d.name,
-                address: d.address,
-                sizeInBytes: d.rows * d.cols * d.dataSize
-            }));
-
-        const result = await findPotentialMaps({ binHexData: hexData, existingMaps, brand: selectedBrandForNewXdf, model: motorcycleModel });
-
-        setIsScanning(false);
-
-        if (result.success && result.data?.maps.length > 0) {
-            const numMapsFound = result.data.maps.length;
-            
-            const existingAndPotentials = [...availableMaps.map(m => m.name), ...potentialMapsDb[binFile.checksum]?.map(m => m.name) || []];
-            const allKnownNames = new Set(existingAndPotentials);
-            
-            const newPotentialMaps: XDFDefinition[] = result.data.maps.map(pMap => {
-                let uniqueName = `${pMap.name} (IA)`;
-                if (allKnownNames.has(uniqueName)) {
-                    let count = 2;
-                    do {
-                        uniqueName = `${pMap.name} (IA) (${count})`;
-                        count++;
-                    } while (allKnownNames.has(uniqueName));
-                }
-                allKnownNames.add(uniqueName);
-
-                const zAddr = pMap.address;
-                const rows = pMap.rows;
-                const cols = pMap.cols;
-                
-                const yAxisAddress = null; // Cannot infer reliably
-                const xAxisAddress = null; // Cannot infer reliably
-
-                const yAxisEquation = 'X * 100';
-                const xAxisEquation = 'X / 10.23';
-
-                return {
-                    name: uniqueName,
-                    address: zAddr,
-                    rows: rows,
-                    cols: cols,
-                    dataSize: pMap.dataSize,
-                    isBigEndian: false,
-                    equation: 'X',
-                    xAxisDef: { 
-                        address: xAxisAddress, 
-                        count: cols, 
-                        dataSize: 2, 
-                        isBigEndian: false, 
-                        equation: xAxisEquation,
-                        label: 'Posição da Borboleta',
-                        node: null,
-                    },
-                    yAxisDef: { 
-                        address: yAxisAddress, 
-                        count: rows, 
-                        dataSize: 2, 
-                        isBigEndian: false, 
-                        equation: yAxisEquation,
-                        label: 'RPM',
-                        node: null,
-                    },
-                    isPotential: true,
-                };
-            });
-            
-            const message = `A IA encontrou ${newPotentialMaps.length} novo(s) mapa(s) potencial(is).`;
-            addLog(message, 'success');
-            toast({
-                title: "Mapas Encontrados!",
-                description: message
-            });
-
-            setAvailableMaps(prev => [...prev, ...newPotentialMaps]);
-
-        } else if (result.error) {
-            addLog(`Erro ao procurar mapas: ${result.error}`, 'error');
-            toast({ variant: 'destructive', title: "Falha na Procura", description: result.error });
-        } else {
-            const analysisMessage = result.data?.analysis || 'A IA concluiu a análise mas não encontrou novos mapas potenciais.';
-            addLog(analysisMessage, 'info');
-            toast({
-                title: "Procura Concluída",
-                description: analysisMessage,
-                duration: 8000
-            });
-        }
-    };
     
     const handleSaveModifiedBin = () => {
         if (!binFile || !workingMap || !selectedMapName || !sourceAxes) {
@@ -1037,13 +604,7 @@ export default function EcuTuningAssistant() {
         addLog('A iniciar a modificação do ficheiro BIN...', 'info');
 
         try {
-            const finalRawMap = recalculateRawMapFromCalculated(
-                workingMap,
-                definition,
-                sourceAxes,
-                isEndianSwapped
-            );
-
+            const finalRawMap = recalculateRawMapFromCalculated(workingMap, definition, sourceAxes, isEndianSwapped);
             const modifiedBuffer = writeMapToBin(binFile.buffer, definition, finalRawMap, isEndianSwapped);
             const newChecksum = generateChecksum(modifiedBuffer);
             
@@ -1091,117 +652,17 @@ export default function EcuTuningAssistant() {
             return;
         }
 
-        let mapUpdated = false;
-
-        if (binFile?.checksum && potentialMapsDb[binFile.checksum]) {
-            const potentialMapIndex = potentialMapsDb[binFile.checksum].findIndex(m => m.name === oldName);
-            if (potentialMapIndex > -1) {
-                setPotentialMapsDb(prev => {
-                    const newPotentialMaps = [...prev[binFile.checksum]];
-                    newPotentialMaps[potentialMapIndex] = { ...newPotentialMaps[potentialMapIndex], name: trimmedNewName };
-                    return { ...prev, [binFile.checksum]: newPotentialMaps };
-                });
-                mapUpdated = true;
-            }
-        }
-
-        if (!mapUpdated && xdfFile) {
-            const xdfMapIndex = xdfFile.definitions.findIndex(m => m.name === oldName);
-            if (xdfMapIndex > -1) {
-                setXdfFile(prev => {
-                    if (!prev) return prev;
-                    const newDefinitions = [...prev.definitions];
-                    newDefinitions[xdfMapIndex] = { ...newDefinitions[xdfMapIndex], name: trimmedNewName };
-                    return { ...prev, definitions: newDefinitions };
-                });
-                mapUpdated = true;
-            }
-        }
-        
-        if (mapUpdated) {
-            setSelectedMapName(trimmedNewName);
-            toast({ title: 'Nome Atualizado', description: `O mapa foi renomeado para "${trimmedNewName}".` });
-        } else {
-            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível encontrar o mapa para renomear.' });
-        }
-
+        setAvailableMaps(prev => prev.map(m => m.name === oldName ? { ...m, name: trimmedNewName } : m));
+        setSelectedMapName(trimmedNewName);
+        toast({ title: 'Nome Atualizado', description: `O mapa foi renomeado para "${trimmedNewName}".` });
         setIsEditNameModalOpen(false);
         setMapToEdit(null);
     };
 
-    const handleExplainMap = async () => {
-        if (isPlaying) {
-            audioRef.current?.pause();
-            return;
-        }
-        if (audioUrl && !isPlaying) {
-            audioRef.current?.play();
-            return;
-        }
-        if (!displayMap || !displayAxes || !selectedMapName) return;
-        
-        const def = availableMaps.find(d => d.name === selectedMapName);
-        if (!def) return;
-
-        setIsExplaining(true);
-        addLog(`A gerar explicação áudio para "${selectedMapName}"...`, 'info');
-        setAudioUrl(null);
-
-        try {
-            const explanationResult = await explainMap({
-                mapName: selectedMapName,
-                mapData: displayMap,
-                xAxis: displayAxes.x.calculated,
-                yAxis: displayAxes.y.calculated,
-                xAxisLabel: def.xAxisDef?.label || 'Eixo X',
-                yAxisLabel: def.yAxisDef?.label || 'Eixo Y'
-            });
-
-            if (!explanationResult.success || !explanationResult.data?.explanation) {
-                throw new Error(explanationResult.error || 'A IA não conseguiu gerar o texto da explicação.');
-            }
-
-            addLog('Texto da explicação gerado. A gerar áudio...', 'debug');
-
-            const speechResult = await generateSpeech(explanationResult.data.explanation);
-
-            if (!speechResult.success || !speechResult.data?.media) {
-                throw new Error(speechResult.error || 'A IA não conseguiu gerar o áudio.');
-            }
-
-            setAudioUrl(speechResult.data.media);
-            addLog('Explicação em áudio pronta.', 'success');
-
-        } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            addLog(`Falha ao gerar explicação: ${msg}`, 'error');
-            toast({ variant: 'destructive', title: 'Erro na Explicação', description: msg });
-        } finally {
-            setIsExplaining(false);
-        }
-    };
-    
-    useEffect(() => {
-        if (audioUrl && audioRef.current) {
-            audioRef.current.play().catch(e => console.error("Erro ao reproduzir áudio:", e));
-        }
-    }, [audioUrl]);
-
-    useEffect(() => {
-        const logContainer = document.getElementById('log-container');
-        if (logContainer) {
-            // Auto-scrolling removed per user request
-            // logContainer.scrollTop = logContainer.scrollHeight;
-        }
-    }, [logs]);
-
     const handleToggleEndianness = () => {
         const newIsEndianSwapped = !isEndianSwapped;
         setIsEndianSwapped(newIsEndianSwapped);
-        if (selectedMapName) {
-            // Re-select the map to re-read and re-calculate with the new endianness
-            handleMapSelect(selectedMapName);
-        }
+        if (selectedMapName) handleMapSelect(selectedMapName);
         addLog(`Ordem de bytes de 16-bit invertida. Swap está ${newIsEndianSwapped ? 'ATIVO' : 'INATIVO'}.`, 'info');
     };
 
@@ -1213,7 +674,6 @@ export default function EcuTuningAssistant() {
     return (
         <TooltipProvider>
             <div className="flex flex-col h-screen p-4">
-                <audio ref={audioRef} src={audioUrl ?? undefined} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} onEnded={() => setIsPlaying(false)} />
                 <header className="text-center mb-8 flex items-center justify-center relative">
                     <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
                         <Sparkles className="text-primary w-8 h-8"/> TuneAssist AI
@@ -1224,7 +684,7 @@ export default function EcuTuningAssistant() {
                     <div className="md:w-[400px] shrink-0">
                         <Card className="h-full">
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2"><Settings className="w-6 h-6"/>Painel de Controlo</CardTitle>
+                                <CardTitle>Painel de Controlo</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6 h-[calc(100%-76px)] overflow-y-auto">
                                 <div className="space-y-2">
@@ -1255,23 +715,14 @@ export default function EcuTuningAssistant() {
                                     <div className="flex items-center gap-2">
                                         <Select onValueChange={handleMapSelect} disabled={!binFile || availableMaps.length === 0} value={selectedMapName} >
                                             <SelectTrigger className="flex-1">
-                                                <SelectValue placeholder={
-                                                    !binFile ? "Carregue um ficheiro BIN" :
-                                                    availableMaps.length === 0 ? "Carregue um ficheiro XDF" :
-                                                    "Selecione um mapa"
-                                                } />
+                                                <SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : availableMaps.length === 0 ? "Carregue um ficheiro XDF" : "Selecione um mapa"} />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {availableMaps.map(def => (
                                                   <SelectItem key={def.name} value={def.name}>
                                                       <div className="flex w-full items-center justify-between">
-                                                          <div className="flex items-center gap-2 overflow-hidden">
-                                                              {def.isPotential && <Sparkles className="h-4 w-4 text-primary shrink-0" />}
-                                                              <span className="truncate">{def.name}</span>
-                                                          </div>
-                                                          <span className="ml-4 flex-shrink-0 font-mono text-xs text-muted-foreground">
-                                                              0x{def.address.toString(16).toUpperCase()}
-                                                          </span>
+                                                          <span className="truncate">{def.name}</span>
+                                                          <span className="ml-4 flex-shrink-0 font-mono text-xs text-muted-foreground">0x{def.address.toString(16).toUpperCase()}</span>
                                                       </div>
                                                   </SelectItem>
                                                 ))}
@@ -1283,16 +734,10 @@ export default function EcuTuningAssistant() {
                                                     <Pencil className="h-4 w-4" />
                                                 </Button>
                                             </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p>Editar Nome do Mapa</p></TooltipContent>
+                                            <TooltipContent><p>Editar Nome do Mapa</p></TooltipContent>
                                         </Tooltip>
                                     </div>
-                                    <Button 
-                                        variant="secondary" 
-                                        className="w-full" 
-                                        onClick={handleToggleEndianness} 
-                                        disabled={!selectedMapDefinition || selectedMapDefinition.dataSize !== 2}
-                                    >
+                                    <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={!selectedMapDefinition || selectedMapDefinition.dataSize !== 2}>
                                         <RefreshCw className="mr-2 h-4 w-4" />
                                         Inverter Ordem de Bytes (Endian)
                                     </Button>
@@ -1301,7 +746,7 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">3. Corrigir Mapa (Opcional)</h3>
                                     <p className="text-xs text-muted-foreground">
-                                        Se os eixos ou os valores dos dados parecerem incorretos, corrija-os manualmente. A precisão da IA depende de dados base corretos.
+                                        Se os eixos ou os valores dos dados parecerem incorretos, corrija-os manualmente.
                                     </p>
                                     <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!displayMap}>
                                         <GitCompareArrows className="mr-2 h-4 w-4" />
@@ -1311,7 +756,6 @@ export default function EcuTuningAssistant() {
                                 
                                 <div className="space-y-2">
                                     <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
-                                    <div className="text-center text-xs text-muted-foreground">Versão: 1.0.1</div>
                                 </div>
 
                                 <div>
@@ -1347,44 +791,12 @@ export default function EcuTuningAssistant() {
                                         <CardTitle className="flex items-center gap-2">
                                             Visualizador de Mapas
                                             {mapValidationStatus === 'loading' && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-                                            {mapValidationStatus === 'valid' && (
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <CheckCircle className="h-5 w-5 text-green-500" />
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>A IA confirmou que as equações parecem corretas.</TooltipContent>
-                                                </Tooltip>
-                                            )}
-                                            {mapValidationStatus === 'suggestion' && (
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:text-primary" onClick={() => setIsSuggestionModalOpen(true)}>
-                                                            <Sparkles className="h-5 w-5" />
-                                                        </Button>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>A IA tem uma sugestão de correção para o eixo Z. Clique para ver.</TooltipContent>
-                                                </Tooltip>
-                                            )}
-                                            {mapValidationStatus === 'error' && (
-                                                <Tooltip>
-                                                    <TooltipTrigger>
-                                                        <AlertCircle className="h-5 w-5 text-destructive" />
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>A análise da IA falhou. Verifique o log.</TooltipContent>
-                                                </Tooltip>
-                                            )}
+                                            {mapValidationStatus === 'valid' && <Tooltip><TooltipTrigger><CheckCircle className="h-5 w-5 text-green-500" /></TooltipTrigger><TooltipContent>A IA confirmou que as equações parecem corretas.</TooltipContent></Tooltip>}
+                                            {mapValidationStatus === 'suggestion' && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:text-primary" onClick={() => setIsSuggestionModalOpen(true)}><Sparkles className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>A IA tem uma sugestão de correção. Clique para ver.</TooltipContent></Tooltip>}
+                                            {mapValidationStatus === 'error' && <Tooltip><TooltipTrigger><AlertCircle className="h-5 w-5 text-destructive" /></TooltipTrigger><TooltipContent>A análise da IA falhou. Verifique o log.</TooltipContent></Tooltip>}
                                         </CardTitle>
                                         <CardDescription>
-                                            {selectedMapDefinition ? (
-                                                <>
-                                                    {selectedMapDefinition.name}
-                                                    <span className="font-mono text-xs text-muted-foreground ml-2">
-                                                        (0x{selectedMapDefinition.address.toString(16).toUpperCase()})
-                                                    </span>
-                                                </>
-                                            ) : (
-                                                "Carregue os ficheiros e selecione um mapa para começar"
-                                            )}
+                                            {selectedMapDefinition ? `${selectedMapDefinition.name} <span className="font-mono text-xs text-muted-foreground ml-2">(0x{selectedMapDefinition.address.toString(16).toUpperCase()})</span>` : "Carregue os ficheiros e selecione um mapa para começar"}
                                         </CardDescription>
                                     </div>
                                 </div>
@@ -1392,11 +804,7 @@ export default function EcuTuningAssistant() {
                             <div className="flex flex-col flex-1 min-h-0">
                                 <CardContent className="flex-1 p-6 pt-0 min-h-0">
                                     {displayMap && displayAxes ? (
-                                        <Tabs defaultValue="2d" className="flex-1 flex flex-col min-h-0" onValueChange={(value) => {
-                                            if (value === 'plot-2d') {
-                                                setPlotRenderKey(Math.random());
-                                            }
-                                        }}>
+                                        <Tabs defaultValue="2d" className="flex-1 flex flex-col min-h-0">
                                             <TabsList className="mb-2">
                                                 <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
                                                 <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
@@ -1411,7 +819,6 @@ export default function EcuTuningAssistant() {
                                                     yAxis={displayAxes.y} 
                                                     definition={selectedMapDefinition}
                                                     onSortAxis={handleSortAxis}
-                                                    onSortByFirstColumn={handleSortByFirstColumn}
                                                     onResetSort={handleResetSort}
                                                     onCellChange={handleCellChange}
                                                     valueFormat={valueFormat}
@@ -1422,33 +829,8 @@ export default function EcuTuningAssistant() {
                                                 />
                                             </TabsContent>
                                             <TabsContent value="plot-2d" className="flex-1 flex flex-col min-h-0">
-                                                <div className="flex flex-col flex-1 min-h-0">
-                                                    <div className="p-2 flex items-center gap-2">
-                                                        <Label htmlFor="plot-slice-selector" className="text-sm shrink-0">A visualizar linha do {selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'}:</Label>
-                                                        <Select value={String(plotSliceIndex)} onValueChange={(v) => setPlotSliceIndex(Number(v))}>
-                                                            <SelectTrigger id="plot-slice-selector" className="w-[120px]">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {displayAxes.y.calculated.map((yVal, index) => {
-                                                                    const formattedY = typeof yVal === 'number' ? yVal.toFixed(0) : yVal;
-                                                                    return <SelectItem key={index} value={String(index)}>{String(formattedY)}</SelectItem>
-                                                                })}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div className="flex-1 relative">
-                                                        <LinePlot2D
-                                                            key={plotRenderKey}
-                                                            mapData={displayMap}
-                                                            xAxis={displayAxes.x.calculated}
-                                                            yAxis={displayAxes.y.calculated}
-                                                            yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'}
-                                                            xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'}
-                                                            sliceIndex={plotSliceIndex}
-                                                            className="absolute inset-0"
-                                                        />
-                                                    </div>
+                                                <div className="flex-1 relative">
+                                                    <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} className="absolute inset-0" />
                                                 </div>
                                             </TabsContent>
                                             <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
@@ -1464,33 +846,7 @@ export default function EcuTuningAssistant() {
                                     )}
                                 </CardContent>
                                 {displayMap && displayAxes && (
-                                    <CardFooter className="border-t pt-4 justify-between items-center flex-wrap gap-4 flex-shrink-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <Label htmlFor="quick-edit-val" className="text-sm font-medium">Edição Rápida:</Label>
-                                            <Input 
-                                                id="quick-edit-val"
-                                                type="number" 
-                                                className="w-24 h-9" 
-                                                placeholder="Valor"
-                                                value={quickEditValue}
-                                                onChange={(e) => setQuickEditValue(e.target.value)}
-                                                disabled={mapViewMode === 'raw'}
-                                            />
-                                            <Select value={quickEditType} onValueChange={(v: 'percent' | 'unit') => setQuickEditType(v)} disabled={mapViewMode === 'raw'}>
-                                                <SelectTrigger className="w-[100px] h-9">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="percent">%</SelectItem>
-                                                    <SelectItem value="unit">Unid.</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <Button size="sm" variant="outline" onClick={() => handleQuickEdit('subtract')} disabled={mapViewMode === 'raw'}>- Subtrair</Button>
-                                            <Button size="sm" variant="outline" onClick={() => handleQuickEdit('add')} disabled={mapViewMode === 'raw'}>+ Adicionar</Button>
-                                            <p className="text-xs text-muted-foreground ml-2">
-                                                {selectedCells.size > 0 ? `${selectedCells.size} células selecionadas` : 'todas as células'}
-                                            </p>
-                                        </div>
+                                    <CardFooter className="border-t pt-4 justify-end items-center flex-wrap gap-4 flex-shrink-0">
                                         <Button onClick={handleSaveModifiedBin} disabled={!binFile || !workingMap}>
                                             <Save className="mr-2 h-4 w-4" />
                                             Guardar BIN Modificado
@@ -1513,7 +869,7 @@ export default function EcuTuningAssistant() {
                     open={isSuggestionModalOpen} 
                     onOpenChange={setIsSuggestionModalOpen} 
                     suggestion={aiSuggestion} 
-                    onAccept={handleAcceptSuggestion}
+                    onAccept={() => {}}
                     binBuffer={binFile?.buffer || null}
                     mapRenderKey={mapRenderKey}
                 />
@@ -1639,7 +995,6 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 definition={suggestion.originalDefinition}
                                 isEditable={false}
                                 onSortAxis={() => {}}
-                                onSortByFirstColumn={() => {}}
                                 onResetSort={() => {}}
                                 onCellChange={() => {}}
                                 selectedCells={new Set()}
@@ -1660,7 +1015,6 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   definition={suggestion.newDefinition}
                                   isEditable={false}
                                   onSortAxis={() => {}}
-                                  onSortByFirstColumn={() => {}}
                                   onResetSort={() => {}}
                                   onCellChange={() => {}}
                                   selectedCells={new Set()}
@@ -1682,7 +1036,7 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                               <p className="text-sm font-medium">Alteração da Equação do Eixo Z</p>
                                <div className="text-xs space-y-1 mt-1">
                                   <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.equation}</code></p>
-                                  <p className="flex items-center gap-2">Sugerida: <ChevronRight className="h-3 w-3" /> <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
+                                  <p className="flex items-center gap-2">Sugerida: <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
                               </div>
                            </div>
                         )}
@@ -1711,14 +1065,10 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
     const [newName, setNewName] = useState('');
 
     useEffect(() => {
-        if (open) {
-            setNewName(currentName);
-        }
+        if (open) setNewName(currentName);
     }, [open, currentName]);
 
-    const handleConfirm = () => {
-        onConfirm(currentName, newName);
-    };
+    const handleConfirm = () => onConfirm(currentName, newName);
 
     if (!open) return null;
 
@@ -1727,19 +1077,11 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Editar Nome do Mapa</DialogTitle>
-                    <DialogDescription>
-                        Escolha um novo nome para "{currentName}".
-                    </DialogDescription>
+                    <DialogDescription>Escolha um novo nome para "{currentName}".</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-2 py-4">
                     <Label htmlFor="mapNameInput" className="sr-only">Nome do Mapa</Label>
-                    <Input
-                        id="mapNameInput"
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleConfirm(); } }}
-                        autoFocus
-                    />
+                    <Input id="mapNameInput" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleConfirm(); } }} autoFocus />
                 </div>
                 <DialogFooter>
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>

@@ -23,6 +23,7 @@ function normalizeEquation(eq: string | null | undefined): string {
     // Handles cases like X100 -> X*100 and 100X -> 100*X
     sanitizedEq = sanitizedEq.replace(/(\d*\.?\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d*\.?\d+)/g, '$1*$2');
     
+    // Ensure "X" is uppercase
     return sanitizedEq.replace(/x/g, 'X');
 }
 
@@ -41,7 +42,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     const allTableElements = xmlDoc.querySelectorAll('XDFTABLE, table');
     const allTablesMap = new Map<string, Element>();
     allTableElements.forEach(table => {
-        const name = findNode(table, 'title')?.textContent || getAttr(table, 'name');
+        const name = findNode(table, 'title')?.textContent?.trim() || getAttr(table, 'name');
         if (name) {
             allTablesMap.set(name, table);
         }
@@ -56,9 +57,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
     const definitions: XDFDefinition[] = [];
 
-    allTablesMap.forEach(table => {
+    allTableElements.forEach(table => {
         try {
-            const tableName = findNode(table, 'title')?.textContent || getAttr(table, 'name');
+            const tableName = findNode(table, 'title')?.textContent?.trim() || getAttr(table, 'name');
             if (!tableName) return;
 
             const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
@@ -70,8 +71,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = parseInt(getAttr(embeddedData, 'mmedrowcount') || '', 10);
             const cols = parseInt(getAttr(embeddedData, 'mmedcolcount') || '', 10);
             
-            // This is the key: Only treat tables with both rows and columns as main maps.
-            // Tables with only one dimension are likely for axis definitions.
             if (isNaN(rows) || isNaN(cols) || rows <= 1 || cols <= 1) {
                 return;
             }
@@ -91,18 +90,18 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 
                 const axisId = getAttr(axisNode, 'id')?.toLowerCase();
                 const defaultLabel = axisId === 'x' ? 'Eixo X' : 'Eixo Y';
-                const axisDef: Partial<AxisDefinition> = { node: axisNode, count: dimensionSize };
+                const axisDef: Partial<AxisDefinition> = { node: axisNode, count: dimensionSize, label: defaultLabel };
 
-                const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name');
+                const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name')?.trim();
                 const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
                 
                 let sourceNodeForCalcs = axisNode;
                 let label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
                 if (linkedTableNode) {
-                    const linkedTitle = findNode(linkedTableNode, 'title')?.textContent;
+                    const linkedTitle = findNode(linkedTableNode, 'title')?.textContent?.trim();
                     if (linkedTitle) label = linkedTitle;
-                    // The actual calculation data comes from the Z-axis of the linked table
+                    
                     const linkedZAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
                     if(linkedZAxis) {
                       sourceNodeForCalcs = linkedZAxis;
@@ -120,7 +119,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const axisMathNode = findNode(sourceNodeForCalcs, 'math', 'MATH');
                 axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
 
-                // Handle explicitly defined values (<LABEL> tags)
                 const labelNodes = sourceNodeForCalcs.querySelectorAll(':scope > label, :scope > LABEL');
                 if (labelNodes.length > 0) {
                     const values: (string|number)[] = [];
@@ -132,9 +130,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     axisDef.values = values;
                 }
 
-                // Final check for validity
                 if (!axisDef.values && (axisDef.address === undefined || isNaN(axisDef.address))) {
-                   return null; // Invalid axis if no values and no address
+                   return null; 
                 }
 
                 return axisDef as AxisDefinition;
@@ -274,7 +271,7 @@ export function readAndCalculateMapFromBin(
   }
 
   const calculatedMap: MapData = rawMap.map(row => 
-    row.map(cell => (cell !== null ? zEquationFunc(cell) : null))
+    row.map(cell => (cell !== null ? zEquationFunc(cell) as number : null))
   );
 
   return { 
