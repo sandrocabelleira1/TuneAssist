@@ -125,7 +125,21 @@ function parseAxis(axisNode: Element | null, allTables: Element[]): AxisDefiniti
     
     // --- 3. Handle standard axes with data stored in the BIN file ---
     const embeddedData = findNode(axisNode, 'embeddeddata');
-    if (!embeddedData) return null;
+    // It's valid for an axis to not have embedded data if it's, for example, just a title or label container
+    // for a dimension that's implicitly counted. In this case, we create a default axis.
+    if (!embeddedData) {
+        return {
+            address: null, // No address
+            count: parseInt(getAttr(axisNode, 'indexcount') || '0', 10),
+            dataSize: 1,
+            isBigEndian: false,
+            equation: 'X',
+            equationVar: 'X',
+            label: (getAttr(axisNode, 'units') || getAttr(axisNode, 'title') || '').trim(),
+            majorStride: 0,
+            minorStride: 0,
+        };
+    }
 
     const addrStr = getAttr(embeddedData, 'mmedaddress');
     const addr = addrStr ? parseInt(addrStr, 16) : null;
