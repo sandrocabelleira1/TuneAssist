@@ -518,6 +518,7 @@ export default function EcuTuningAssistant() {
              toast({ variant: 'destructive', title: "Erro no Ficheiro", description: `Não foi possível ler o ficheiro ${file.name}` });
         }
         
+        // This was the source of the error, it should read XDF as text.
         if (type === 'xdf') {
             reader.readAsText(file);
         } else {
