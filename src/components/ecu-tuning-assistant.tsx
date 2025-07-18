@@ -1441,7 +1441,7 @@ export default function EcuTuningAssistant() {
                                         </div>
                                     )}
                                 </CardContent>
-                                {displayMap && (
+                                {displayMap && displayAxes && (
                                     <CardFooter className="border-t pt-4 justify-between items-center flex-wrap gap-4 flex-shrink-0">
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <Label htmlFor="quick-edit-val" className="text-sm font-medium">Edição Rápida:</Label>
@@ -1612,8 +1612,8 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 key={mapRenderKey + '-orig-sugg'}
                                 mapData={suggestion.originalMap}
                                 rawMapData={suggestion.originalMap}
-                                xAxis={{raw: [], calculated: suggestion.originalAxes.x}}
-                                yAxis={{raw: [], calculated: suggestion.originalAxes.y}}
+                                xAxis={{raw: [], calculated: suggestion.originalAxes.x, originalIndices: [], label: suggestion.originalAxes.xLabel }}
+                                yAxis={{raw: [], calculated: suggestion.originalAxes.y, originalIndices: [], label: suggestion.originalAxes.yLabel }}
                                 definition={suggestion.originalDefinition}
                                 isEditable={false}
                                 onSortAxis={() => {}}
@@ -1633,8 +1633,8 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   key={mapRenderKey + '-prev-sugg'}
                                   mapData={suggestion.correctedMap}
                                   rawMapData={suggestion.correctedMap}
-                                  xAxis={{raw: [], calculated: suggestion.correctedAxes.x}}
-                                  yAxis={{raw: [], calculated: suggestion.correctedAxes.y}}
+                                  xAxis={{raw: [], calculated: suggestion.correctedAxes.x, originalIndices: [], label: suggestion.correctedAxes.xLabel }}
+                                  yAxis={{raw: [], calculated: suggestion.correctedAxes.y, originalIndices: [], label: suggestion.correctedAxes.yLabel }}
                                   definition={suggestion.newDefinition}
                                   isEditable={false}
                                   onSortAxis={() => {}}
