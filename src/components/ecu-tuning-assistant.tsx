@@ -141,12 +141,12 @@ function MapTable({
   }, [mapData]);
 
   const yAxisFormatter = (val: string | number) => {
-    if (typeof val !== 'number') return val;
+    if (typeof val !== 'number' || isNaN(val)) return val;
     return val.toFixed(1);
   };
   
   const xAxisFormatter = (val: string | number) => {
-    if (typeof val !== 'number') return val;
+    if (typeof val !== 'number' || isNaN(val)) return val;
     return Math.round(val);
   };
 
@@ -740,38 +740,32 @@ export default function EcuTuningAssistant() {
     const handleConfirmAxes = (data: { xEquation: string, yEquation: string, zEquation: string }) => {
         if (!selectedMapName || !binFile) return;
 
-        const definition = availableMaps.find(d => d.name === selectedMapName);
-        if (!definition || !definition.xAxisDef || !definition.yAxisDef) {
+        const originalDefinition = availableMaps.find(d => d.name === selectedMapName);
+        if (!originalDefinition || !originalDefinition.xAxisDef || !originalDefinition.yAxisDef) {
             addLog(`Definição de mapa ou de eixo para "${selectedMapName}" não encontrada para recálculo.`, 'error');
             return;
         }
 
         try {
-            const newDefinition = JSON.parse(JSON.stringify(definition)) as XDFDefinition;
-            newDefinition.equation = data.zEquation;
-            newDefinition.xAxisDef!.equation = data.xEquation;
-            newDefinition.yAxisDef!.equation = data.yEquation;
-
-            // Immediately re-select the map with the modified definition to trigger a full reload
-            const newDefinitions = availableMaps.map(def => def.name === selectedMapName ? newDefinition : def);
-            setAvailableMaps(newDefinitions);
+            // Create a deep copy to avoid mutating the original state directly
+            const newDefinition = JSON.parse(JSON.stringify(originalDefinition));
             
-            // Persist change
-             if (newDefinition.isPotential) {
-                setPotentialMapsDb(prev => ({
-                    ...prev,
-                    [binFile.checksum]: (prev[binFile.checksum] || []).map(pMap =>
-                        pMap.name === selectedMapName ? newDefinition : pMap
-                    ),
-                }));
-            } else if (xdfFile) {
-                const newXdfDefs = xdfFile.definitions.map(def =>
-                    def.name === selectedMapName ? newDefinition : def
-                );
-                setXdfFile({ ...xdfFile, definitions: newXdfDefs });
+            // Apply new equations
+            newDefinition.equation = data.zEquation;
+            if (newDefinition.xAxisDef) {
+                newDefinition.xAxisDef.equation = data.xEquation;
+            }
+            if (newDefinition.yAxisDef) {
+                newDefinition.yAxisDef.equation = data.yEquation;
             }
 
-            // Trigger re-render by re-selecting the map
+            // Update the definition in the central 'availableMaps' state
+            const newDefinitions = availableMaps.map(def => 
+                def.name === selectedMapName ? newDefinition : def
+            );
+            setAvailableMaps(newDefinitions);
+            
+            // Re-run the map selection logic with the updated definition to force a full reload
             handleMapSelect(selectedMapName);
             
             addLog(`Equações atualizadas para "${selectedMapName}".`, 'success');

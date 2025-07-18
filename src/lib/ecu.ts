@@ -1,4 +1,5 @@
 
+
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -284,7 +285,8 @@ export function readAndCalculateMapFromBin(
   // 3. Create a Z-map calculator function
   let zEquationFunc: (val: number) => number | string;
   try {
-    zEquationFunc = new Function('X', `return ${def.equation.replace(/x/g, 'X')}`) as (val: number) => number;
+    const normalizedEquation = normalizeEquation(def.equation);
+    zEquationFunc = new Function('X', `return ${normalizedEquation.replace(/x/g, 'X')}`) as (val: number) => number;
   } catch(e) {
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida.`);
   }
