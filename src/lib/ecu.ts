@@ -162,6 +162,22 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     return { definitions, brand };
 }
 
+function normalizeEquation(eq: string): string {
+    const trimmedEq = eq.trim().toUpperCase();
+    // Handles "X100" -> "X*100" or "100X" -> "100*X"
+    const match = trimmedEq.match(/^(\d+\.?\d*|X)([*/+-])?(\d+\.?\d*|X)$/);
+
+    if (match) {
+        const [, part1, operator, part2] = match;
+        // If there's no operator but both parts exist, assume multiplication
+        if (!operator && part2) {
+            return `${part1}*${part2}`;
+        }
+    }
+    return eq; // Return original if it doesn't fit the simple pattern
+}
+
+
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
     const count = axisDef?.count || 0;
     const label = axisDef?.label || 'Eixo Desconhecido';
@@ -192,7 +208,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
-    const equation = axisDef.equation || 'X';
+    const equation = normalizeEquation(axisDef.equation || 'X');
+
 
     if (isNaN(addr) || isNaN(count) || isNaN(dataSize)) return defaultState;
 
