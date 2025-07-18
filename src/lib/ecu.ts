@@ -61,44 +61,54 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = parseInt(getAttr(embeddedData, 'mmedrowcount') || '', 10);
             const cols = parseInt(getAttr(embeddedData, 'mmedcolcount') || '', 10);
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '', 10);
+            
+            // Only consider it a main map if it has both rows and columns.
+            // This filters out 1D tables used for axis definitions.
+            if (isNaN(rows) || isNaN(cols) || rows <= 1 || cols <= 1) {
+                return;
+            }
+
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
 
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation')?.replace(/x/g, 'X') || 'X';
 
-            if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSizeBits)) {
+            if (isNaN(address) || isNaN(dataSizeBits)) {
                 return;
             }
-
+            
             const parseAxis = (axisNode: Element | null): AxisDefinition => {
                 if (!axisNode) return null;
                 
-                let count = 0;
                 const axisId = getAttr(axisNode, 'id')?.toLowerCase();
-                if(axisId === 'x') count = cols;
-                if(axisId === 'y') count = rows;
-                
-                const label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || (axisId === 'x' ? 'Eixo X' : 'Eixo Y');
-                
-                const axisDef: Partial<AxisDefinition> = { label, count, node: axisNode };
-                
-                let sourceNodeForEquation: Element | null = axisNode;
+                const defaultLabel = axisId === 'x' ? 'Eixo X' : 'Eixo Y';
+                let label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
+
+                const axisDef: Partial<AxisDefinition> = { node: axisNode };
+
                 const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name');
                 const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
-                
+
                 if (linkedTableNode) {
-                    const linkedAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]');
-                     if(linkedAxisNode) {
-                        const linkedEmbeddedData = findNode(linkedAxisNode, 'embeddeddata');
+                    const linkedTitle = findNode(linkedTableNode, 'title')?.textContent;
+                    if (linkedTitle) label = linkedTitle;
+
+                    const linkedZAxisNode = findNode(linkedTableNode, 'XDFAXIS[id="z"]');
+                    if(linkedZAxisNode) {
+                        const linkedEmbeddedData = findNode(linkedZAxisNode, 'embeddeddata');
                          if (linkedEmbeddedData) {
                             axisDef.address = parseInt(getAttr(linkedEmbeddedData, 'mmedaddress') || '', 16);
                             axisDef.dataSize = parseInt(getAttr(linkedEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
                             axisDef.isBigEndian = getAttr(linkedEmbeddedData, 'bigendian') === '1';
-                            sourceNodeForEquation = linkedAxisNode;
+                            
+                            const linkedRows = parseInt(getAttr(linkedEmbeddedData, 'mmedrowcount') || '0', 10);
+                            const linkedCols = parseInt(getAttr(linkedEmbeddedData, 'mmedcolcount') || '0', 10);
+                            axisDef.count = Math.max(linkedRows, linkedCols);
                          }
-                     }
+                        axisDef.equation = findNode(linkedZAxisNode, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+                    }
                 } else {
-                    const axisEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+                     const axisEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
                     if(axisEmbeddedData) {
                          axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
                          axisDef.dataSize = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
@@ -108,20 +118,23 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                         if(labelNodes.length > 0) {
                             const values: (string|number)[] = [];
                             labelNodes.forEach(ln => {
-                                const val = ln.textContent || '';
+                                const val = ln.getAttribute('value') || ln.textContent || '';
                                 const numVal = parseFloat(val);
                                 values.push(isNaN(numVal) ? val : numVal);
                             });
                             axisDef.values = values;
-                            axisDef.count = values.length;
                         }
                     }
+                     axisDef.equation = findNode(axisNode, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
                 }
                 
-                axisDef.equation = findNode(sourceNodeForEquation, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
+                axisDef.label = label;
+                if (axisId === 'x') axisDef.count = cols;
+                if (axisId === 'y') axisDef.count = rows;
 
-                if ((axisDef.values === undefined) && (isNaN(axisDef.address!) || isNaN(axisDef.dataSize!) || !axisDef.equation)) {
-                    return null;
+                // Final check for validity
+                if (!axisDef.values && (axisDef.address === undefined || isNaN(axisDef.address))) {
+                   return null; // Invalid axis if no values and no address
                 }
 
                 return axisDef as AxisDefinition;
@@ -155,10 +168,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
 
 function normalizeEquation(eq: string): string {
-    let sanitizedEq = (eq || 'X').trim().toUpperCase();
+    if (!eq) return 'X';
+    let sanitizedEq = eq.trim().toUpperCase();
     
     // Handles cases like X100 -> X*100 and 100X -> 100*X
-    sanitizedEq = sanitizedEq.replace(/(\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d+)/g, '$1*$2');
+    sanitizedEq = sanitizedEq.replace(/(\d*\.?\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d*\.?\d+)/g, '$1*$2');
     
     return sanitizedEq.replace(/x/g, 'X');
 }
@@ -184,7 +198,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
         originalIndices: Array.from({ length: count }, (_, i) => i),
     };
 
-    if (!axisDef || !binBuffer || (!axisDef.address && axisDef.address !== 0)) {
+    if (!axisDef || !binBuffer || (axisDef.address === undefined || axisDef.address === null)) {
         return defaultState;
     }
 
@@ -223,7 +237,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
             calculated.push(equationFunc(rawValue));
         } catch (e) {
             console.error(`Erro ao aplicar equação "${equation}" ao valor raw ${rawValue} para o eixo "${axisDef.label}"`);
-            calculated.push(rawValue);
+            calculated.push(rawValue); // Fallback to raw value on error
         }
         originalIndices.push(i);
     }
@@ -310,11 +324,20 @@ export function invertEquation(
     
     sanitizedEq = normalizeEquation(sanitizedEq);
 
-    const parts = sanitizedEq.split(/([*\/+-])/).map(p => p.trim());
+    // This is a simplified symbolic inverter. It handles simple arithmetic.
+    // E.g., "X * 0.1" or "X / 10" or "X + 5" or "X - 5" or "5 - X"
+    
+    // Case: "X"
+    if (sanitizedEq.toUpperCase() === 'X') {
+        return finalValue;
+    }
 
+    const parts = sanitizedEq.split(/([*\/+-])/).map(p => p.trim());
+    
     if (parts.length === 3) {
       const operator = parts[1];
-      const operandStr = parts[0].toUpperCase() === 'X' ? parts[2] : parts[0];
+      const isXFirst = parts[0].toUpperCase() === 'X';
+      const operandStr = isXFirst ? parts[2] : parts[0];
       const operand = parseFloat(operandStr);
 
       if (isNaN(operand)) {
@@ -327,18 +350,14 @@ export function invertEquation(
         case '+': return finalValue - operand;
         case '-':
             // Handle both "X - num" and "num - X"
-            if (parts[0].toUpperCase() === 'X') {
+            if (isXFirst) { // X - num
                 return finalValue + operand;
-            } else {
+            } else { // num - X
                 return operand - finalValue;
             }
       }
     }
     
-    if (sanitizedEq.toUpperCase() === 'X') {
-        return finalValue;
-    }
-
     console.warn(`A equação "${eq}" é demasiado complexa para ser invertida. A utilizar o valor final como valor raw.`);
     return Math.round(finalValue);
 }
