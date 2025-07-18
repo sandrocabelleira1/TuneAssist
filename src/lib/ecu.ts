@@ -1,5 +1,4 @@
 
-
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -51,14 +50,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     allTablesMap.forEach(table => {
         try {
             const tableName = findNode(table, 'title')?.textContent || getAttr(table, 'name');
-            if (!tableName) return; // Skip tables without a name
+            if (!tableName) return;
 
-            // Z-Axis (main data) validation
             const zAxisNode = findNode(table, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-            if (!zAxisNode) return; // Skip if no Z-axis definition
+            if (!zAxisNode) return;
             
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
-            if (!embeddedData) return; // Skip if no embedded data for Z-axis
+            if (!embeddedData) return;
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             const rows = parseInt(getAttr(embeddedData, 'mmedrowcount') || '', 10);
@@ -70,7 +68,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const equation = getAttr(mathNode, 'equation')?.replace(/x/g, 'X') || 'X';
 
             if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSizeBits)) {
-                // If essential data is missing, skip this definition
                 return;
             }
 
@@ -82,12 +79,10 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if(axisId === 'x') count = cols;
                 if(axisId === 'y') count = rows;
                 
-                // Robustly get the label/name for the axis
                 const label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || (axisId === 'x' ? 'Eixo X' : 'Eixo Y');
                 
                 const axisDef: Partial<AxisDefinition> = { label, count, node: axisNode };
 
-                // NEW LOGIC: Prioritize explicit <LABEL> tags for axis values ("breakpoints")
                 const labelNodes = axisNode.querySelectorAll(':scope > label');
                 if (labelNodes.length > 0) {
                     const values: (string|number)[] = [];
@@ -98,38 +93,36 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     });
                     
                     axisDef.values = values;
-                    axisDef.count = values.length; // Count should match number of labels
-                    // For explicitly defined axes, the other properties are not needed for calculation
+                    axisDef.count = values.length;
                     axisDef.address = 0;
                     axisDef.dataSize = 0;
                     axisDef.isBigEndian = false;
                     axisDef.equation = 'X';
                 
                 } else {
-                    // FALLBACK LOGIC: If no <LABEL> tags, read from BIN
                     const axisEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+                    const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name');
+                    const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
+
+                    let sourceNodeForEquation: Element | null = axisNode;
+                    
                     if (axisEmbeddedData) {
                         axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
                         axisDef.dataSize = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
                         axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
-                        axisDef.equation = findNode(axisNode, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
-                    } else {
-                        const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name');
-                        const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
-                        if(linkedTableNode) {
-                            const linkedAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]'); // Linked axes point to the Z axis of another table
-                            const linkedEmbeddedData = findNode(linkedAxis, 'embeddeddata');
-                             if (linkedEmbeddedData && linkedAxis) {
-                                axisDef.address = parseInt(getAttr(linkedEmbeddedData, 'mmedaddress') || '', 16);
-                                axisDef.dataSize = parseInt(getAttr(linkedEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
-                                axisDef.isBigEndian = getAttr(linkedEmbeddedData, 'bigendian') === '1';
-                                axisDef.equation = findNode(linkedAxis, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
-                             }
-                        }
+                    } else if(linkedTableNode) {
+                        const linkedAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]');
+                        const linkedEmbeddedData = findNode(linkedAxis, 'embeddeddata');
+                         if (linkedEmbeddedData && linkedAxis) {
+                            axisDef.address = parseInt(getAttr(linkedEmbeddedData, 'mmedaddress') || '', 16);
+                            axisDef.dataSize = parseInt(getAttr(linkedEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
+                            axisDef.isBigEndian = getAttr(linkedEmbeddedData, 'bigendian') === '1';
+                            sourceNodeForEquation = linkedAxis;
+                         }
                     }
+                     axisDef.equation = findNode(sourceNodeForEquation, 'math')?.getAttribute('equation')?.replace(/x/g, 'X') || 'X';
                 }
                 
-                // Ensure essential properties are not NaN before casting
                 if ((axisDef.values === undefined) && (isNaN(axisDef.address!) || isNaN(axisDef.dataSize!) || !axisDef.equation)) {
                     return null;
                 }
@@ -140,7 +133,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
             const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
 
-            // If axes are not properly defined, we cannot use this table
             if (!xAxisDef || !yAxisDef) return;
             
             definitions.push({
@@ -167,13 +159,10 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 function normalizeEquation(eq: string): string {
     let sanitizedEq = (eq || 'X').trim().toUpperCase();
     
-    // Test for "X<number>" or "<number>X" and add a multiplication operator
-    // Example: "X100" -> "X*100", "100X" -> "100*X"
-    // Does not affect "X/10" or "X+10"
     if (/^X\d/.test(sanitizedEq)) {
         sanitizedEq = sanitizedEq.replace('X', 'X*');
     } else if (/\dX$/.test(sanitizedEq)) {
-        sanitizedEq = sanitizedEq.replace('X', '*X');
+        sanitizedEq = sanitizedEq.replace(/(\d+)(X)/, '$1*$2');
     }
 
     return sanitizedEq.replace(/x/g, 'X');
@@ -184,17 +173,15 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const count = axisDef?.count || 0;
     const label = axisDef?.label || 'Eixo Desconhecido';
     
-    // If values are defined directly in the XDF, use them and return.
     if (axisDef?.values && axisDef.values.length > 0) {
         return {
             label: label,
-            raw: axisDef.values.map(v => typeof v === 'number' ? v : 0), // Use 0 for non-numeric raw values
+            raw: axisDef.values.map(v => typeof v === 'number' ? v : 0),
             calculated: axisDef.values,
             originalIndices: Array.from({ length: axisDef.values.length }, (_, i) => i),
         };
     }
     
-    // Fallback to default if no values and no address
     const defaultState: AxisDataState = {
         label: label,
         raw: Array.from({ length: count }, (_, i) => i + 1),
@@ -220,7 +207,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
         equationFunc = new Function('X', `return ${equation}`) as (val: number) => number;
     } catch (e) {
         console.error(`Equação de eixo inválida para "${axisDef.label}": ${equation}`);
-        equationFunc = (X: number) => X; // Fallback to identity
+        equationFunc = (X: number) => X;
     }
 
     const raw: number[] = [];
@@ -241,7 +228,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
             calculated.push(equationFunc(rawValue));
         } catch (e) {
             console.error(`Erro ao aplicar equação "${equation}" ao valor raw ${rawValue} para o eixo "${axisDef.label}"`);
-            calculated.push(rawValue); // Fallback to raw value on error
+            calculated.push(rawValue);
         }
         originalIndices.push(i);
     }
@@ -259,11 +246,9 @@ export function readAndCalculateMapFromBin(
   const view = new DataView(binBuffer);
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
   
-  // 1. Read and calculate axes first. This is where the core logic resides now.
   const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
   const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
   
-  // 2. Read the raw Z-data map from the ECU binary
   const rawMap: MapData = [];
   for (let r = 0; r < def.rows; r++) {
     const rawRow: (number|null)[] = [];
@@ -282,7 +267,6 @@ export function readAndCalculateMapFromBin(
     rawMap.push(rawRow);
   }
 
-  // 3. Create a Z-map calculator function
   let zEquationFunc: (val: number) => number | string;
   try {
     const normalizedEquation = normalizeEquation(def.equation);
@@ -291,7 +275,6 @@ export function readAndCalculateMapFromBin(
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida.`);
   }
 
-  // 4. Calculate the Z-map values from the raw map
   const calculatedMap: MapData = rawMap.map(row => 
     row.map(cell => (cell !== null ? zEquationFunc(cell) : null))
   );
@@ -318,7 +301,6 @@ export function bufferToHex(buffer: ArrayBuffer): string {
     .join('');
 }
 
-// Inverts a simple math equation string.
 export function invertEquation(
   eq: string,
   finalValue: number
@@ -327,33 +309,37 @@ export function invertEquation(
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
-    // Sanitize equation string
     let sanitizedEq = (eq || 'X').trim()
         .replace(/,/g, '.')
         .replace(/\b(value|x)\b/gi, 'X');
     
-    // Normalize equation (e.g., X100 to X*100)
     sanitizedEq = normalizeEquation(sanitizedEq);
 
-    // This is a very basic implementation and will fail on complex equations.
-    // It handles simple arithmetic like `X * 0.1` or `X - 40`.
-    // It does NOT handle order of operations, e.g. `X * 0.1 + 5`.
-    if (sanitizedEq.includes('/') && !sanitizedEq.includes('+') && !sanitizedEq.includes('-')) {
-        const factor = parseFloat(sanitizedEq.split('/')[1]);
-        if (!isNaN(factor)) return finalValue * factor;
+    const parts = sanitizedEq.split(/([*\/+-])/).map(p => p.trim());
+
+    if (parts.length === 3) {
+      const operator = parts[1];
+      const operandStr = parts[0].toUpperCase() === 'X' ? parts[2] : parts[0];
+      const operand = parseFloat(operandStr);
+
+      if (isNaN(operand)) {
+          throw new Error(`Operando inválido na equação "${eq}".`);
+      }
+
+      switch (operator) {
+        case '*': return finalValue / operand;
+        case '/': return finalValue * operand;
+        case '+': return finalValue - operand;
+        case '-':
+            // Handle both "X - num" and "num - X"
+            if (parts[0].toUpperCase() === 'X') {
+                return finalValue + operand;
+            } else {
+                return operand - finalValue;
+            }
+      }
     }
-    if (sanitizedEq.includes('*') && !sanitizedEq.includes('+') && !sanitizedEq.includes('-')) {
-        const factor = parseFloat(sanitizedEq.split('*')[1]);
-        if (!isNaN(factor)) return finalValue / factor;
-    }
-    if (sanitizedEq.includes('+')) {
-        const factor = parseFloat(sanitizedEq.split('+')[1]);
-        if (!isNaN(factor)) return finalValue - factor;
-    }
-    if (sanitizedEq.includes('-')) {
-        const factor = parseFloat(sanitizedEq.split('-')[1]);
-        if (!isNaN(factor)) return finalValue - factor;
-    }
+    
     if (sanitizedEq.toUpperCase() === 'X') {
         return finalValue;
     }
@@ -366,7 +352,6 @@ export function invertEquation(
 export function recalculateRawMapFromCalculated(
     calculatedMap: MapData,
     def: XDFDefinition,
-    // The sorting information is now passed in here
     sourceAxes: { x: AxisDataState, y: AxisDataState },
     isEndianSwapped = false
 ): MapData {
@@ -374,18 +359,15 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
 
-    // Unsort the calculated map to match the binary file's layout
     const unsortedCalculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
-            // Find where the displayed cell [r, c] came from in the original matrix
             const originalRowIndex = sourceAxes.y.originalIndices[r];
             const originalColIndex = sourceAxes.x.originalIndices[c];
             unsortedCalculatedMap[originalRowIndex][originalColIndex] = calculatedMap[r][c];
         }
     }
 
-    // Now, iterate through the unsorted map and invert the equation for each cell
     const newRawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
         const newRawRow: (number | null)[] = [];
@@ -398,12 +380,12 @@ export function recalculateRawMapFromCalculated(
             }
 
             try {
-                const newRawValue = invertEquation(def.equation, calculatedValue);
+                const newRawValue = invertEquation(def.equation, calculatedValue as number);
                 newRawRow.push(newRawValue);
             } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : "Erro desconhecido";
                 console.error(`Não foi possível recalcular o valor raw para a célula [${r}, ${c}]: ${errorMsg}. A utilizar NaN.`);
-                newRawRow.push(NaN); // Push NaN or handle error as appropriate
+                newRawRow.push(NaN);
             }
         }
         newRawMap.push(newRawRow);
@@ -415,7 +397,6 @@ export function recalculateRawMapFromCalculated(
 export function writeMapToBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-    // This function expects the final raw map, already in the correct (unsorted) order
     rawMapData: MapData,
     isEndianSwapped = false
 ): ArrayBuffer {
@@ -432,7 +413,6 @@ export function writeMapToBin(
         for (let c = 0; c < def.cols; c++) {
             const rawValue = rawMapData[r][c];
             if (rawValue === null || isNaN(rawValue)) {
-                // If a cell is invalid, skip it to avoid corrupting the file
                 continue;
             }
 
