@@ -4,15 +4,19 @@ export type AxisDataState = {
 };
 
 export type AxisDefinition = {
-  address: number | null;
+  // This is a direct reference to the <XDFAXIS> DOM element during parsing.
+  // It's a temporary structure and not stored long-term.
+  node: Element | null;
   count: number;
-  dataSize: number;
-  isBigEndian: boolean;
-  equation: string;
-  equationVar: string;
   label: string;
-  majorStride: number; // in bytes
-  minorStride: number; // in bytes
+  // These are added after parsing for use in the app
+  address?: number | null;
+  dataSize?: number;
+  isBigEndian?: boolean;
+  equation?: string;
+  equationVar?: string;
+  majorStride?: number; 
+  minorStride?: number;
   staticLabels?: (string | number)[];
 } | null;
 
@@ -45,3 +49,5 @@ export type OriginalSortOrder = {
   x: { value: string | number; index: number }[];
   y: { value: string | number; index: number }[];
 };
+
+    

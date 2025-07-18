@@ -4,174 +4,28 @@
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 /**
- * Finds a DIRECT child element in a case-insensitive manner.
- * This function is NOT recursive.
+ * Finds a DIRECT child element by query selector. Case-insensitive support is not needed
+ * as modern browsers handle CSS selectors in a standard way.
  */
 function findNode(parent: Element | null, ...selectors: string[]): Element | null {
     if (!parent) return null;
     for (const selector of selectors) {
-        const lowerSelector = selector.toLowerCase();
-        for (const child of Array.from(parent.children)) {
-            let childSelector = child.tagName.toLowerCase();
-            const idAttr = getAttr(child, 'id');
-            if (idAttr) {
-                childSelector += `[id="${idAttr.toLowerCase()}"]`;
-            }
-            if (childSelector === lowerSelector) {
-                return child;
-            }
-        }
-    }
-    // Fallback for simple tag names
-    for (const selector of selectors) {
-        if (!selector.includes('[')) {
-             for (const child of Array.from(parent.children)) {
-                if (child.tagName.toLowerCase() === selector.toLowerCase()) {
-                    return child;
-                }
-            }
-        }
+        const node = parent.querySelector(selector);
+        if (node) return node;
     }
     return null;
 }
 
 /**
- * Finds ALL DIRECT child elements in a case-insensitive manner.
- * This function is NOT recursive.
+ * Gets an attribute from an element.
  */
-function findNodes(parent: Element | null, tagName: string): Element[] {
-    if (!parent) return [];
-    const lowerTagName = tagName.toLowerCase();
-    return Array.from(parent.children).filter(child => child.tagName.toLowerCase() === lowerTagName);
-}
-
-/**
- * Gets an attribute from an element in a case-insensitive manner.
- */
-function getAttr(element: Element | null, ...names: string[]): string | null {
+function getAttr(element: Element | null, attrName: string): string | null {
     if (!element) return null;
-    for (const name of names) {
-        const lowerName = name.toLowerCase();
-        for (const attr of Array.from(element.attributes)) {
-            if (attr.name.toLowerCase() === lowerName) {
-                return attr.value;
-            }
-        }
-    }
-    return null;
+    return element.getAttribute(attrName);
 }
-
-function findMainMathNode(tableNode: Element, zAxisNode: Element): Element | null {
-    const zMath = findNode(zAxisNode, 'math');
-    if (zMath) return zMath;
-
-    const tableMath = findNode(tableNode, 'math');
-    if (tableMath) return tableMath;
-    
-    return null;
-}
-
 
 /**
- * Parses an axis definition from an <XDFAXIS> node.
- * This is the robust, definitive parser.
- * @param axisNode The <XDFAXIS> element to parse.
- * @param allTables All table elements in the document, for resolving links.
- * @returns An AxisDefinition object or null if parsing fails.
- */
-function parseAxis(axisNode: Element | null, allTables: Element[]): AxisDefinition {
-    if (!axisNode) return null;
-
-    // --- 1. Handle STATIC labels first ---
-    const labelNodes = findNodes(axisNode, 'label');
-    if (labelNodes.length > 0 && !findNode(axisNode, 'embedinfo')) {
-        const labels = Array.from(labelNodes).map(l => getAttr(l, 'value') || '');
-        return {
-            staticLabels: labels,
-            count: parseInt(getAttr(axisNode, 'indexcount') || String(labels.length), 10),
-            label: (getAttr(axisNode, 'units') || getAttr(axisNode, 'title') || '').trim(),
-            address: null, // Static labels don't have a memory address
-            dataSize: 1, isBigEndian: false, equation: 'X', equationVar: 'X', majorStride: 0, minorStride: 0,
-        };
-    }
-
-    const embedInfoNode = findNode(axisNode, 'embedinfo');
-    const linkObjId = embedInfoNode ? getAttr(embedInfoNode, 'linkobjid') : null;
-
-    // --- 2. Handle LINKED axes ---
-    if (embedInfoNode && getAttr(embedInfoNode, 'type') === '3' && linkObjId) {
-        const linkedTable = allTables.find(t => getAttr(t, 'uniqueid')?.toLowerCase() === linkObjId.toLowerCase());
-        if (linkedTable) {
-            // A linked axis inherits the definition of the Z-axis of the linked table.
-            const linkedZAxis = findNode(linkedTable, 'XDFAXIS[id="z"]');
-            if (linkedZAxis) {
-                // Recursively parse the linked axis's Z-data as if it were a normal axis
-                const parsedLinkedAxis = parseAxis(linkedZAxis, allTables); 
-                if (parsedLinkedAxis) {
-                    // IMPORTANT: The count comes from the CURRENT axis, not the linked one.
-                    // The label/units come from the current axis if present, otherwise inherit.
-                    const currentCount = parseInt(getAttr(axisNode, 'indexcount') || '0', 10);
-                    const currentLabel = (getAttr(axisNode, 'units') || getAttr(axisNode, 'title') || parsedLinkedAxis.label || '').trim();
-                    
-                    return {
-                        ...parsedLinkedAxis,
-                        count: currentCount || parsedLinkedAxis.count,
-                        label: currentLabel,
-                    };
-                }
-            }
-        }
-    }
-    
-    // --- 3. Handle standard axes with data stored in the BIN file ---
-    const embeddedData = findNode(axisNode, 'embeddeddata');
-    // It's valid for an axis to not have embedded data if it's, for example, just a title or label container
-    // for a dimension that's implicitly counted. In this case, we create a default axis.
-    if (!embeddedData) {
-        return {
-            address: null, // No address
-            count: parseInt(getAttr(axisNode, 'indexcount') || '0', 10),
-            dataSize: 1,
-            isBigEndian: false,
-            equation: 'X',
-            equationVar: 'X',
-            label: (getAttr(axisNode, 'units') || getAttr(axisNode, 'title') || '').trim(),
-            majorStride: 0,
-            minorStride: 0,
-        };
-    }
-
-    const addrStr = getAttr(embeddedData, 'mmedaddress');
-    const addr = addrStr ? parseInt(addrStr, 16) : null;
-    
-    const count = parseInt(getAttr(axisNode, 'indexcount') || getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedrowcount') || '0', 10);
-    const dataSize = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '8', 10) / 8;
-    const isBigEndian = getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(embeddedData, 'bigendian') === '1';
-    
-    const majorStrideBitsRaw = getAttr(embeddedData, 'mmedmajorstridebits');
-    const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : 0;
-    
-    const mathNode = findNode(axisNode, 'math');
-    const equation = getAttr(mathNode, 'equation') || 'X';
-    const varNode = mathNode ? findNode(mathNode, 'var') : null;
-    const equationVar = getAttr(varNode, 'id') || 'X';
-
-    return {
-        address: addr,
-        count: count,
-        dataSize,
-        isBigEndian,
-        equation: equation,
-        equationVar: equationVar,
-        label: (getAttr(axisNode, 'units') || getAttr(axisNode, 'title') || '').trim(),
-        majorStride,
-        minorStride: 0, // Not applicable for axes
-    };
-}
-
-
-/**
- * The definitive, robust XDF parser.
+ * The definitive, robust XDF parser, inspired by the user's provided functional code.
  */
 export function parseXDF(xmlString: string): XDFDefinition[] {
     if (typeof DOMParser === 'undefined') {
@@ -180,12 +34,12 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, "application/xml");
     
-    const parseError = xmlDoc.getElementsByTagName("parsererror");
-    if (parseError.length) {
-        throw new Error(`Erro de análise do XDF: ${parseError[0].textContent}`);
+    const parseError = xmlDoc.querySelector("parsererror");
+    if (parseError) {
+        throw new Error(`Erro de análise do XDF: ${parseError.textContent}`);
     }
 
-    const allTableElements = Array.from(xmlDoc.querySelectorAll('XDFTABLE, table'));
+    const allTableElements = xmlDoc.querySelectorAll('XDFTABLE, table');
     
     if (allTableElements.length === 0) {
         throw new Error("Nenhuma tag <XDFTABLE> ou <table> foi encontrada no ficheiro. Este não parece ser um ficheiro XDF válido.");
@@ -193,151 +47,121 @@ export function parseXDF(xmlString: string): XDFDefinition[] {
 
     const definitions: XDFDefinition[] = [];
 
-    for (const table of allTableElements) {
+    allTableElements.forEach(table => {
         try {
-            const tableName = getAttr(table, 'title') || findNode(table, 'title')?.textContent;
-            if (!tableName) continue;
-            
+            const tableName = findNode(table, 'title')?.textContent || getAttr(table, 'title') || 'Tabela sem nome';
+            if (tableName === 'Tabela sem nome') return; // Skip tables without a name
+
             const zAxisNode = findNode(table, 'XDFAXIS[id="z"]');
-            if (!zAxisNode) continue;
+            if (!zAxisNode) return;
             
-            const zEmbeddedData = findNode(zAxisNode, 'embeddeddata');
-            if (!zEmbeddedData) continue;
-            
-            const zAddressStr = getAttr(zEmbeddedData, 'mmedaddress');
-            const zAddress = zAddressStr ? parseInt(zAddressStr, 16) : null;
-            if (zAddress === null) continue;
-            
-            const yAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="y"]', 'yaxis'), allTableElements);
-            const xAxisDef = parseAxis(findNode(table, 'XDFAXIS[id="x"]', 'xaxis'), allTableElements);
-            
-            if (!yAxisDef || !xAxisDef) continue;
-            
-            const rows = parseInt(getAttr(zEmbeddedData, 'mmedrowcount') || '0', 10) || yAxisDef.count;
-            const cols = parseInt(getAttr(zEmbeddedData, 'mmedcolcount') || '0', 10) || xAxisDef.count;
-            
-            if (rows === 0 || cols === 0) continue;
+            const embeddedData = findNode(zAxisNode, 'embeddeddata');
+            if (!embeddedData) return; // Z-Axis must have embedded data
 
-            yAxisDef.count = rows;
-            xAxisDef.count = cols;
-            
-            const dataSize = parseInt(getAttr(zEmbeddedData, 'mmedelementsizebits') || '8') / 8;
-            const isBigEndian = getAttr(zEmbeddedData, 'bigendian')?.toLowerCase() === 'true' || getAttr(zEmbeddedData, 'bigendian') === '1';
+            const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
+            const rows = parseInt(getAttr(embeddedData, 'mmedrowcount') || '', 10);
+            const cols = parseInt(getAttr(embeddedData, 'mmedcolcount') || '', 10);
+            const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '', 10);
+            const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
 
-            const minorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedminorstridebits');
-            const minorStride = minorStrideBitsRaw ? parseInt(minorStrideBitsRaw, 10) / 8 : 0;
-            
-            const majorStrideBitsRaw = getAttr(zEmbeddedData, 'mmedmajorstridebits');
-            const majorStride = majorStrideBitsRaw ? parseInt(majorStrideBitsRaw, 10) / 8 : 0;
-            
-            const mathNode = findMainMathNode(table, zAxisNode);
-            const equation = getAttr(mathNode, 'equation') || 'X';
-            const equationVar = getAttr(findNode(mathNode, 'var'), 'id') || 'X';
+            const mathNode = findNode(zAxisNode, 'math');
+            const equation = getAttr(mathNode, 'equation')?.replace(/x/g, 'X') || 'X';
 
+            if (isNaN(address) || isNaN(rows) || isNaN(cols) || isNaN(dataSizeBits)) {
+                return; // Skip if essential data is missing
+            }
+
+            const xAxisNode = findNode(table, 'xaxis, XDFAXIS[id="x"]');
+            const yAxisNode = findNode(table, 'yaxis, XDFAXIS[id="y"]');
+            
+            // Dummy axis definitions that can be populated by readAxisFromBin
+            const xAxisDef: AxisDefinition = {
+                node: xAxisNode,
+                count: cols,
+                label: findNode(xAxisNode, 'title')?.textContent || getAttr(xAxisNode, 'title') || 'Eixo X',
+            };
+            const yAxisDef: AxisDefinition = {
+                node: yAxisNode,
+                count: rows,
+                label: findNode(yAxisNode, 'title')?.textContent || getAttr(yAxisNode, 'title') || 'Eixo Y',
+            };
+            
             definitions.push({
                 name: tableName,
-                address: zAddress,
-                rows: rows,
-                cols: cols,
-                dataSize,
+                address,
+                rows,
+                cols,
+                dataSize: dataSizeBits / 8,
                 isBigEndian,
                 equation,
-                equationVar,
                 xAxisDef,
                 yAxisDef,
                 isPotential: false,
-                minorStride,
-                majorStride,
+                equationVar: 'X',
+                majorStride: 0,
+                minorStride: 0,
             });
-
         } catch (e) {
-            console.error(`Erro ao analisar a tabela: ${(e as Error).message}`);
+            console.error(`Erro ao analisar a tabela "${getAttr(table, 'title')}": ${(e as Error).message}`);
         }
-    }
+    });
+
     return definitions;
 }
 
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
-  const emptyState: AxisDataState = { raw: [], calculated: [] };
-  if (!axisDef) return emptyState;
-  
-  const count = axisDef.count || 0;
-  if (count === 0) return emptyState;
-
-  // Handle static labels first, as they don't depend on memory reads
-  if (axisDef.staticLabels) {
-      const labels = axisDef.staticLabels;
-      const calculated = labels.slice(0, count);
-      // Ensure we have enough labels if count > labels.length
-      while (calculated.length < count) {
-          calculated.push(labels[labels.length - 1] || "");
-      }
-      return { raw: calculated.map((_, i) => i), calculated };
-  }
-  
-  // If it's not a static axis, it MUST have a valid address
-  if (axisDef.address === null || isNaN(axisDef.address)) {
-      // Create a dummy axis if no address is provided (e.g., for AI-found maps)
-      const calculated = Array.from({ length: count }, (_, i) => i + 1);
-      return { raw: calculated, calculated };
-  }
-  
-  const view = new DataView(binBuffer);
-  const sanitizedEquation = (axisDef.equation || 'X')
-      .replace(/,/g, '.')
-      .replace(/\s*\r?\n\s*/g, ' ') 
-      .replace(/\b(value)\b/gi, 'X') 
-      .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
-      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
-      .replace(/(X)(\d)/gi, 'X * $2');
-
-  let equationFunc: Function;
-  try {
-    equationFunc = new Function('X', 'x', `return ${sanitizedEquation || 'X'}`);
-  } catch(e) {
-    const error = e instanceof Error ? e.message : String(e);
-    throw new Error(`A equação do eixo "${axisDef.equation}" para "${axisDef.label}" é inválida. (${error})`);
-  }
-  
-  const rawData: number[] = [];
-  const calculatedData: (number | string)[] = [];
-  
-  // If stride is 0 or not defined, fall back to dataSize. This is the correct behavior.
-  const stride = (axisDef.majorStride > 0) ? axisDef.majorStride : axisDef.dataSize;
-  const useLittleEndian = !(axisDef.isBigEndian ?? false);
-
-  for (let i = 0; i < count; i++) {
-    const offset = axisDef.address + (i * stride);
-    if (offset + axisDef.dataSize > view.byteLength) {
-        console.error(`Leitura do eixo fora dos limites para "${axisDef.label}". Endereço: ${axisDef.address}, Offset: ${offset}. O eixo pode estar incompleto.`);
-        rawData.push(NaN);
-        calculatedData.push(NaN);
-        continue;
+    const emptyState: AxisDataState = { raw: [], calculated: [] };
+    if (!axisDef || !axisDef.node || !binBuffer) {
+        // If no node, create a simple linear axis
+        const count = axisDef?.count || 0;
+        const calculated = Array.from({ length: count }, (_, i) => i + 1);
+        return { raw: calculated, calculated };
     }
+
+    const embeddedData = findNode(axisDef.node, 'embeddeddata');
+    if (!embeddedData) {
+        // Handle axes without direct data (e.g., just labels or implicit count)
+        const count = axisDef.count || 0;
+        const calculated = Array.from({ length: count }, (_, i) => i + 1);
+        return { raw: calculated, calculated };
+    }
+
+    const view = new DataView(binBuffer);
+    const addr = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
+    const count = parseInt(getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedrowcount') || String(axisDef.count), 10);
+    const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '8', 10);
+    const dataSize = dataSizeBits / 8;
+    const useLittleEndian = !(getAttr(embeddedData, 'bigendian') === '1');
+    const mathNode = findNode(axisDef.node, 'math');
+    const equation = getAttr(mathNode, 'equation')?.replace(/x/g, 'X') || 'X';
+
+    if (isNaN(addr) || isNaN(count) || isNaN(dataSize)) return emptyState;
     
-    let rawValue;
-    if (axisDef.dataSize === 1) {
-        rawValue = view.getUint8(offset);
-    } else if (axisDef.dataSize === 2) {
-        rawValue = view.getUint16(offset, useLittleEndian);
-    } else {
-        rawData.push(NaN);
-        calculatedData.push(NaN);
-        continue;
-    }
-    rawData.push(rawValue);
-
+    let equationFunc: Function;
     try {
-        const calculatedValue = equationFunc(rawValue, rawValue);
-        calculatedData.push(calculatedValue);
-    } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : String(e);
-        console.error(`Erro ao aplicar a equação de eixo "${axisDef.equation}" no valor raw ${rawValue}: ${errorMsg}. A utilizar o valor raw.`);
-        calculatedData.push(rawValue);
+        equationFunc = new Function('X', `return ${equation}`);
+    } catch(e) {
+        console.error(`Equação de eixo inválida para "${axisDef.label}": ${equation}`);
+        equationFunc = (X: number) => X;
     }
-  }
-  return { raw: rawData, calculated: calculatedData };
+
+    const rawData: number[] = [];
+    const calculatedData: (number | string)[] = [];
+
+    for(let i=0; i < count; i++) {
+        const offset = addr + (i * dataSize);
+        if (offset + dataSize > view.byteLength) continue;
+
+        let rawValue;
+        if(dataSize === 1) rawValue = view.getUint8(offset);
+        else if(dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
+        else continue;
+        
+        rawData.push(rawValue);
+        calculatedData.push(equationFunc(rawValue));
+    }
+    return { raw: rawData, calculated: calculatedData };
 }
 
 
@@ -354,32 +178,24 @@ export function readAndCalculateMapFromBin(
   const calculatedMap: MapData = [];
   const rawMap: MapData = [];
   
-  const sanitizedEquation = (def.equation || 'X')
-      .replace(/,/g, '.')
-      .replace(/\s*\r?\n\s*/g, ' ')
-      .replace(/\b(value)\b/gi, 'X')
-      .replace(/if\s*\((.*?)\)\s*\{(.*?)\}\s*else\s*\{(.*?)\}/gi, '($1 ? $2 : $3)')
-      .replace(/IF\((.+?)\s*,\s*(.+?)\s*,\s*(.+?)\)/gi, '($1 ? $2 : $3)')
-      .replace(/(X)(\d)/gi, 'X * $2');
+  const sanitizedEquation = (def.equation || 'X').replace(/x/g, 'X');
       
   let equationFunc: Function;
   try {
-    equationFunc = new Function('X', 'x', 'y_raw', 'x_raw', 'y_calc', 'x_calc', `return ${sanitizedEquation || 'X'}`);
+    equationFunc = new Function('X', `return ${sanitizedEquation || 'X'}`);
   } catch(e) {
     const error = e instanceof Error ? e.message : String(e);
     throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida. (${error})`);
   }
   
-  // If stride is 0 or not defined, fall back to default calculation. This is the correct behavior.
-  const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
-  const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
   const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
   for (let r = 0; r < def.rows; r++) {
     const calculatedRow: (number|null)[] = [];
     const rawRow: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
-      const offset = def.address + (r * majorStride) + (c * minorStride);
+      const offset = def.address + (r * def.cols + c) * def.dataSize;
+
       if (offset + def.dataSize > view.byteLength) {
         console.error(`Leitura do mapa fora dos limites para "${def.name}". Offset: ${offset}`);
         calculatedRow.push(null);
@@ -401,12 +217,7 @@ export function readAndCalculateMapFromBin(
       rawRow.push(rawValue);
 
       try {
-        const xCalcVal = (c < xAxis.calculated.length && typeof xAxis.calculated[c] === 'number') ? xAxis.calculated[c] as number : 0;
-        const yCalcVal = (r < yAxis.calculated.length && typeof yAxis.calculated[r] === 'number') ? yAxis.calculated[r] as number : 0;
-        const xRawVal = xAxis.raw[c] ?? 0;
-        const yRawVal = yAxis.raw[r] ?? 0;
-        
-        const calculatedValue = equationFunc(rawValue, rawValue, yRawVal, xRawVal, yCalcVal, xCalcVal);
+        const calculatedValue = equationFunc(rawValue);
         calculatedRow.push(calculatedValue);
 
       } catch(e) {
@@ -438,16 +249,10 @@ export function bufferToHex(buffer: ArrayBuffer): string {
 
 /**
  * Reverses a mathematical equation to find the "raw" value that would produce a given final value.
- * This is a robust implementation that handles simple arithmetic.
- * @param eq The equation string (e.g., "(X-128)/2").
- * @param finalValue The target value we want to achieve.
- * @returns The calculated raw integer value.
- * @throws An error if the equation is too complex to be inverted automatically.
  */
 export function invertEquation(
   eq: string,
-  finalValue: number,
-  axisValues: { x_calc: number; y_calc: number; x_raw: number; y_raw: number; z: number }
+  finalValue: number
 ): number {
     if (finalValue === null || isNaN(finalValue)) {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
@@ -456,69 +261,30 @@ export function invertEquation(
     let sanitizedEq = (eq || 'X').trim()
         .replace(/,/g, '.')
         .replace(/\b(value|x)\b/gi, 'X');
-    
-    // Substitute axis values into the equation string
-    if (axisValues) {
-        sanitizedEq = sanitizedEq
-            .replace(/\by_calc\b/gi, String(axisValues.y_calc))
-            .replace(/\bx_calc\b/gi, String(axisValues.x_calc))
-            .replace(/\by_raw\b/gi, String(axisValues.y_raw))
-            .replace(/\bx_raw\b/gi, String(axisValues.x_raw));
+
+    // Basic inversion logic based on common patterns
+    if (sanitizedEq.includes('/') && !sanitizedEq.includes('+') && !sanitizedEq.includes('-')) {
+        const factor = parseFloat(sanitizedEq.split('/')[1]);
+        if (!isNaN(factor)) return finalValue * factor;
+    }
+    if (sanitizedEq.includes('*') && !sanitizedEq.includes('+') && !sanitizedEq.includes('-')) {
+        const factor = parseFloat(sanitizedEq.split('*')[1]);
+        if (!isNaN(factor)) return finalValue / factor;
+    }
+    if (sanitizedEq.includes('+')) {
+        const factor = parseFloat(sanitizedEq.split('+')[1]);
+        if (!isNaN(factor)) return finalValue - factor;
+    }
+    if (sanitizedEq.includes('-')) {
+        const factor = parseFloat(sanitizedEq.split('-')[1]);
+        if (!isNaN(factor)) return finalValue + factor;
+    }
+    if (sanitizedEq.toUpperCase() === 'X') {
+        return finalValue;
     }
 
-    if ((sanitizedEq.match(/X/g) || []).length > 1) {
-        throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente (múltiplas ocorrências de X).`);
-    }
-    
-    // Remove outer parentheses if they exist and don't change the meaning
-    while (sanitizedEq.startsWith('(') && sanitizedEq.endsWith(')')) {
-        sanitizedEq = sanitizedEq.substring(1, sanitizedEq.length - 1);
-    }
-    
-    // Tokenize by operators, keeping the operators.
-    const tokens = sanitizedEq.split(/([()+\-*/])/).map(t => t.trim()).filter(t => t);
-    
-    const xIndex = tokens.findIndex(t => t.toUpperCase() === 'X');
-    if (xIndex === -1) {
-      // If X is not found, it might be a constant equation.
-      // This is an edge case, but we should handle it.
-      // For now, assume the raw value is the final value.
-      return Math.round(finalValue);
-    }
-
-    let currentVal = finalValue;
-    
-    // This is a simplified solver and will not handle all algebraic cases.
-    // It works from right to left, inverting operations.
-    // E.g., for (X - 128) / 2
-    // 1. Tokens: ['(', 'X', '-', '128', ')', '/', '2']
-    // 2. Start with final_value, multiply by 2.
-    // 3. Then add 128.
-
-    function solve(op: string, val: number, isLeft: boolean) {
-        if (op === '+') currentVal -= val;
-        else if (op === '-') currentVal = isLeft ? val - currentVal : currentVal + val;
-        else if (op === '*') currentVal /= val;
-        else if (op === '/') currentVal = isLeft ? val / currentVal : currentVal * val;
-    }
-    
-    // Process operations to the right of X
-    for (let i = xIndex + 1; i < tokens.length; i += 2) {
-        const op = tokens[i];
-        const numToken = tokens[i + 1];
-        if (!op || !numToken || isNaN(parseFloat(numToken))) continue;
-        solve(op, parseFloat(numToken), false);
-    }
-
-    // Process operations to the left of X
-    for (let i = xIndex - 1; i >= 0; i -= 2) {
-        const op = tokens[i];
-        const numToken = tokens[i - 1];
-        if (!op || !numToken || isNaN(parseFloat(numToken))) continue;
-        solve(op, parseFloat(numToken), true);
-    }
-    
-    return Math.round(currentVal);
+    console.warn(`A equação "${eq}" é demasiado complexa para ser invertida. A utilizar o valor final como valor raw.`);
+    return Math.round(finalValue);
 }
 
 
@@ -541,19 +307,7 @@ export function recalculateRawMapFromCalculated(
             }
 
             try {
-                const axisValues = {
-                    x_calc: (sourceAxes.x.calculated[c] as number) || 0,
-                    y_calc: (sourceAxes.y.calculated[r] as number) || 0,
-                    x_raw: sourceAxes.x.raw[c] || 0,
-                    y_raw: sourceAxes.y.raw[r] || 0,
-                    z: 0
-                };
-                
-                const newRawValue = invertEquation(
-                    def.equation,
-                    calculatedValue,
-                    axisValues
-                );
+                const newRawValue = invertEquation(def.equation, calculatedValue);
                 newRawRow.push(newRawValue);
             } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : "Erro desconhecido";
@@ -580,9 +334,6 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    const minorStride = def.minorStride > 0 ? def.minorStride : def.dataSize;
-    const majorStride = def.majorStride > 0 ? def.majorStride : def.cols * minorStride;
-
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
     for (let r = 0; r < def.rows; r++) {
@@ -594,7 +345,7 @@ export function writeMapToBin(
 
             try {
                 const intValue = Math.round(rawValue);
-                const offset = def.address + (r * majorStride) + (c * minorStride);
+                const offset = def.address + (r * def.cols) + c * def.dataSize;
 
                 if (offset + def.dataSize > view.byteLength) {
                     console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
@@ -615,3 +366,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    

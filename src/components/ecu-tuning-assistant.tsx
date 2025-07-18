@@ -473,8 +473,13 @@ export default function EcuTuningAssistant() {
         const reader = new FileReader();
         reader.onload = async (event) => {
             try {
-                const buffer = event.target?.result as ArrayBuffer;
+                const buffer = event.target?.result;
+                if (!buffer) throw new Error("Não foi possível ler o conteúdo do ficheiro.");
+
                 if (type === 'bin') {
+                    if (!(buffer instanceof ArrayBuffer)) {
+                        throw new Error("O ficheiro BIN não foi lido como ArrayBuffer.");
+                    }
                     setXdfFile(null); 
                     setSelectedMapName('');
                     setDisplayMap(null);
@@ -492,15 +497,16 @@ export default function EcuTuningAssistant() {
                     addLog(`Ficheiro BIN carregado: ${file.name}`, 'success');
 
                 } else { // XDF
-                    const text = new TextDecoder().decode(buffer);
+                    if (typeof buffer !== 'string') {
+                        throw new Error("O ficheiro XDF não foi lido como texto.");
+                    }
+                    const text = buffer;
                     let definitions = parseXDF(text);
                     if (definitions.length === 0) {
                         throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     }
-                    const brandValue = selectedBrandForNewXdf === 'no-brand' ? '' : selectedBrandForNewXdf;
                     
                     setXdfFile({ name: file.name, definitions: definitions });
-                    setActiveXdfBrand(brandValue);
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
                 }
             } catch (error) {
@@ -518,7 +524,6 @@ export default function EcuTuningAssistant() {
              toast({ variant: 'destructive', title: "Erro no Ficheiro", description: `Não foi possível ler o ficheiro ${file.name}` });
         }
         
-        // This was the source of the error, it should read XDF as text.
         if (type === 'xdf') {
             reader.readAsText(file);
         } else {
@@ -1439,7 +1444,6 @@ export default function EcuTuningAssistant() {
                     <h1 className="text-3xl md:text-4xl font-bold text-white flex items-center justify-center gap-3">
                         <Sparkles className="text-primary w-8 h-8"/> TuneAssist AI
                     </h1>
-                    <p className="text-lg text-muted-foreground mt-2 absolute top-full">Assistente de Afinação de ECU Potenciado por IA</p>
                 </header>
                 
                 <div className="flex flex-1 flex-col md:flex-row gap-4 min-h-0">
@@ -1472,39 +1476,17 @@ export default function EcuTuningAssistant() {
                                 
                                 <Separator />
 
-                                <div className="space-y-2">
-                                     <Label className="text-sm font-medium">Informação da ECU (para IA)</Label>
-                                     <p className="text-xs text-muted-foreground">Fornecer isto ajuda a IA a ser mais precisa.</p>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Select value={selectedBrandForNewXdf} onValueChange={setSelectedBrandForNewXdf}>
-                                            <SelectTrigger className="h-10"><SelectValue placeholder="Marca..." /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="no-brand">Nenhuma</SelectItem>
-                                                <SelectItem value="Yamaha">Yamaha</SelectItem>
-                                                <SelectItem value="Honda">Honda</SelectItem>
-                                                <SelectItem value="Suzuki">Suzuki</SelectItem>
-                                                <SelectItem value="Kawasaki">Kawasaki</SelectItem>
-                                                <SelectItem value="BMW">BMW</SelectItem>
-                                                <SelectItem value="Ducati">Ducati</SelectItem>
-                                                <SelectItem value="Triumph">Triumph</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <Input 
-                                            className="h-10"
-                                            placeholder="Modelo (ex: R3)" 
-                                            value={motorcycleModel} 
-                                            onChange={(e) => setMotorcycleModel(e.target.value)} 
-                                        />
-                                    </div>
-                                </div>
-
-                                <Separator />
-                                
-                                <div className="space-y-2">
+                                 <div className="space-y-2">
                                     <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
                                     <div className="flex items-center gap-2">
-                                        <Select onValueChange={handleMapSelect} disabled={availableMaps.length === 0} value={selectedMapName} >
-                                            <SelectTrigger className="flex-1"><SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : availableMaps.length === 0 ? "Nenhum mapa disponível" : "Selecione um mapa"} /></SelectTrigger>
+                                        <Select onValueChange={handleMapSelect} disabled={!binFile || !xdfFile || availableMaps.length === 0} value={selectedMapName} >
+                                            <SelectTrigger className="flex-1">
+                                                <SelectValue placeholder={
+                                                    !binFile ? "Carregue um ficheiro BIN" :
+                                                    !xdfFile ? "Carregue um ficheiro XDF" :
+                                                    "Selecione um mapa"
+                                                } />
+                                            </SelectTrigger>
                                             <SelectContent>
                                                 {availableMaps.map(def => (
                                                   <SelectItem key={def.name} value={def.name}>
@@ -1551,24 +1533,6 @@ export default function EcuTuningAssistant() {
                                         <GitCompareArrows className="mr-2 h-4 w-4" />
                                         Corrigir Equações Man.
                                     </Button>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <h3 className="font-semibold text-primary">4. Análise com IA</h3>
-                                    <div className="space-y-2">
-                                        <Button variant="outline" className="w-full" onClick={handleScanForMaps} disabled={!binFile || isScanning || selectedBrandForNewXdf === 'no-brand'}>
-                                            {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                                            Procurar Mapas Novos
-                                        </Button>
-                                         <Button variant="default" size="sm" className="w-full" onClick={handleValidateMap} disabled={!displayMap || mapValidationStatus === 'loading'}>
-                                            {mapValidationStatus === 'loading' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                                            {mapValidationStatus === 'suggestion' ? 'Ver Sugestão de Correção (Eixo Z)' : 'Analisar Eixo Z'}
-                                        </Button>
-                                        <Button variant="outline" className="w-full" onClick={handleExplainMap} disabled={!displayMap || isExplaining}>
-                                            {isExplaining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <AudioLines className="mr-2 h-4 w-4" />}
-                                            {isExplaining ? 'A Gerar...' : isPlaying ? 'Pausar' : audioUrl ? 'Ouvir Novamente' : 'Ouvir Explicação'}
-                                        </Button>
-                                    </div>
                                 </div>
                                 
                                 <div className="space-y-2">
@@ -2011,3 +1975,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+    
