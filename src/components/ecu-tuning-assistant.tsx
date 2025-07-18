@@ -680,8 +680,8 @@ export default function EcuTuningAssistant() {
                     </h1>
                 </header>
                 
-                <div className="flex flex-1 flex-col md:flex-row gap-4 min-h-0">
-                    <div className="md:w-[400px] shrink-0">
+                <div className="flex flex-1 flex-col gap-4 min-h-0">
+                    <div className="w-full shrink-0">
                         <Card className="h-full">
                             <CardHeader>
                                 <CardTitle>Painel de Controlo</CardTitle>
