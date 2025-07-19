@@ -763,101 +763,102 @@ export default function EcuTuningAssistant() {
                         </CardContent>
                     </Card>
 
-                    <Card className="flex flex-1 flex-col min-h-0">
-                        <CardHeader className="flex-shrink-0">
-                            <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                    <CardTitle className="flex items-center gap-2">
-                                        Visualizador de Mapas
-                                        {mapValidationStatus === 'loading' && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-                                        {mapValidationStatus === 'valid' && <Tooltip><TooltipTrigger><CheckCircle className="h-5 w-5 text-green-500" /></TooltipTrigger><TooltipContent>A IA confirmou que as equações parecem corretas.</TooltipContent></Tooltip>}
-                                        {mapValidationStatus === 'suggestion' && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:text-primary" onClick={() => setIsSuggestionModalOpen(true)}><Sparkles className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>A IA tem uma sugestão de correção. Clique para ver.</TooltipContent></Tooltip>}
-                                        {mapValidationStatus === 'error' && <Tooltip><TooltipTrigger><AlertCircle className="h-5 w-5 text-destructive" /></TooltipTrigger><TooltipContent>A análise da IA falhou. Verifique o log.</TooltipContent></Tooltip>}
-                                    </CardTitle>
-                                    <CardDescription>
-                                        {selectedMapDefinition ? <span dangerouslySetInnerHTML={{ __html: `${selectedMapDefinition.name} <span class="font-mono text-xs text-muted-foreground ml-2">(0x${selectedMapDefinition.address.toString(16).toUpperCase()})</span>` }} /> : "Carregue os ficheiros e selecione um mapa para começar"}
-                                    </CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="flex-1 p-6 pt-0 min-h-0">
-                            {displayMap && displayAxes ? (
-                                <Tabs defaultValue="2d" className="flex-1 flex flex-col min-h-0 h-full">
-                                    <TabsList className="mb-2">
-                                        <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
-                                        <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
-                                        <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
-                                    </TabsList>
-                                    <TabsContent value="2d" className="flex-1 flex flex-col min-h-0">
-                                        <MapTable
-                                            key={mapRenderKey}
-                                            mapData={displayMap || []} 
-                                            rawMapData={displayRawMap || []}
-                                            xAxis={displayAxes.x} 
-                                            yAxis={displayAxes.y} 
-                                            definition={selectedMapDefinition}
-                                            onSortAxis={handleSortAxis}
-                                            onResetSort={handleResetSort}
-                                            onCellChange={handleCellChange}
-                                            valueFormat={valueFormat}
-                                            selectedCells={selectedCells}
-                                            onCellSelect={handleCellSelect}
-                                            viewMode={mapViewMode}
-                                            onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
-                                        />
-                                        <div className="border-t pt-4 flex justify-end mt-auto flex-shrink-0">
-                                            {saveButton}
-                                        </div>
-                                    </TabsContent>
-                                    <TabsContent value="plot-2d" className="flex-1 flex flex-col min-h-0">
-                                        <div className="flex-1 relative">
-                                            <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} className="absolute inset-0" />
-                                        </div>
-                                        <div className="border-t pt-4 flex justify-end mt-auto flex-shrink-0">
-                                            {saveButton}
-                                        </div>
-                                    </TabsContent>
-                                    <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
-                                      <div className="flex-1 relative">
-                                        <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'}/>
-                                      </div>
-                                    </TabsContent>
-                                </Tabs>
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-12">
-                                    <FileUp className="w-16 h-16 mb-4"/>
-                                    <p className="font-semibold">Nenhum mapa carregado</p>
-                                    <p className="text-sm">Por favor carregue um ficheiro .BIN e um .XDF para começar.</p>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <div className="flex justify-between items-center">
-                                <CardTitle>Log de Operações</CardTitle>
-                                <div className="flex items-center space-x-2">
-                                    <Label htmlFor="debugMode" className="text-xs">Debug</Label>
-                                    <Switch id="debugMode" checked={debugMode} onCheckedChange={setDebugMode} />
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <ScrollArea id="log-container" className="h-40 w-full rounded-md border p-2 font-mono text-xs">
-                                {visibleLogs.map(log => (
-                                    <div key={log.id} className="flex items-start gap-2">
-                                        <span className="text-muted-foreground shrink-0">{log.timestamp}</span>
-                                        <span className={cn('min-w-0 break-words', {
-                                            'text-green-400': log.type === 'success',
-                                            'text-red-400': log.type === 'error',
-                                            'text-yellow-400': log.type === 'debug',
-                                        })}>{log.message}</span>
+                    <div className="flex flex-1 flex-col gap-4 min-h-0">
+                        <Card className="flex flex-1 flex-col min-h-0">
+                            <CardHeader className="flex-shrink-0">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                        <CardTitle className="flex items-center gap-2">
+                                            Visualizador de Mapas
+                                            {mapValidationStatus === 'loading' && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+                                            {mapValidationStatus === 'valid' && <Tooltip><TooltipTrigger><CheckCircle className="h-5 w-5 text-green-500" /></TooltipTrigger><TooltipContent>A IA confirmou que as equações parecem corretas.</TooltipContent></Tooltip>}
+                                            {mapValidationStatus === 'suggestion' && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:text-primary" onClick={() => setIsSuggestionModalOpen(true)}><Sparkles className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>A IA tem uma sugestão de correção. Clique para ver.</TooltipContent></Tooltip>}
+                                            {mapValidationStatus === 'error' && <Tooltip><TooltipTrigger><AlertCircle className="h-5 w-5 text-destructive" /></TooltipTrigger><TooltipContent>A análise da IA falhou. Verifique o log.</TooltipContent></Tooltip>}
+                                        </CardTitle>
+                                        <CardDescription>
+                                            {selectedMapDefinition ? <span dangerouslySetInnerHTML={{ __html: `${selectedMapDefinition.name} <span class="font-mono text-xs text-muted-foreground ml-2">(0x${selectedMapDefinition.address.toString(16).toUpperCase()})</span>` }} /> : "Carregue os ficheiros e selecione um mapa para começar"}
+                                        </CardDescription>
                                     </div>
-                                ))}
-                            </ScrollArea>
-                        </CardContent>
-                    </Card>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="flex-1 p-6 pt-0 min-h-0">
+                                {displayMap && displayAxes ? (
+                                    <Tabs defaultValue="2d" className="flex-1 flex flex-col min-h-0 h-full">
+                                        <TabsList className="mb-2">
+                                            <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
+                                            <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
+                                            <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
+                                        </TabsList>
+                                        <TabsContent value="2d" className="flex-1 flex flex-col min-h-0">
+                                            <MapTable
+                                                key={mapRenderKey}
+                                                mapData={displayMap || []} 
+                                                rawMapData={displayRawMap || []}
+                                                xAxis={displayAxes.x} 
+                                                yAxis={displayAxes.y} 
+                                                definition={selectedMapDefinition}
+                                                onSortAxis={handleSortAxis}
+                                                onResetSort={handleResetSort}
+                                                onCellChange={handleCellChange}
+                                                valueFormat={valueFormat}
+                                                selectedCells={selectedCells}
+                                                onCellSelect={handleCellSelect}
+                                                viewMode={mapViewMode}
+                                                onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
+                                            />
+                                            <div className="border-t pt-4 flex justify-end mt-auto flex-shrink-0">
+                                                {saveButton}
+                                            </div>
+                                        </TabsContent>
+                                        <TabsContent value="plot-2d" className="flex-1 flex flex-col min-h-0">
+                                            <div className="flex-1 relative">
+                                                <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} className="absolute inset-0" />
+                                            </div>
+                                            <div className="border-t pt-4 flex justify-end mt-auto flex-shrink-0">
+                                                {saveButton}
+                                            </div>
+                                        </TabsContent>
+                                        <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
+                                          <div className="flex-1 relative">
+                                            <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'}/>
+                                          </div>
+                                        </TabsContent>
+                                    </Tabs>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-12">
+                                        <FileUp className="w-16 h-16 mb-4"/>
+                                        <p className="font-semibold">Nenhum mapa carregado</p>
+                                        <p className="text-sm">Por favor carregue um ficheiro .BIN e um .XDF para começar.</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                        <Card className="flex-shrink-0">
+                            <CardHeader>
+                                <div className="flex justify-between items-center">
+                                    <CardTitle>Log de Operações</CardTitle>
+                                    <div className="flex items-center space-x-2">
+                                        <Label htmlFor="debugMode" className="text-xs">Debug</Label>
+                                        <Switch id="debugMode" checked={debugMode} onCheckedChange={setDebugMode} />
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <ScrollArea id="log-container" className="h-40 w-full rounded-md border p-2 font-mono text-xs">
+                                    {visibleLogs.map(log => (
+                                        <div key={log.id} className="flex items-start gap-2">
+                                            <span className="text-muted-foreground shrink-0">{log.timestamp}</span>
+                                            <span className={cn('min-w-0 break-words', {
+                                                'text-green-400': log.type === 'success',
+                                                'text-red-400': log.type === 'error',
+                                                'text-yellow-400': log.type === 'debug',
+                                            })}>{log.message}</span>
+                                        </div>
+                                    ))}
+                                </ScrollArea>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </main>
                 
                 {/* Modals */}
