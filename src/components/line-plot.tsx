@@ -40,17 +40,23 @@ export default function LinePlot2D({
 
     const yDataSlice = mapData[sliceIndex];
 
-    // Create pairs of [x, y] to sort them together
+    // Create pairs of [x, y] to sort them together, ensuring data validity
     const pairedData = xAxis
       .map((xVal, index) => ({
         x: xVal,
-        y: yDataSlice[index] ?? null,
+        y: yDataSlice[index],
       }))
-      // Filter out non-numeric x values for sorting
-      .filter(pair => typeof pair.x === 'number' && isFinite(pair.x));
+      // Filter out non-numeric x values or null y values for sorting and plotting
+      .filter(pair => 
+        typeof pair.x === 'number' && 
+        isFinite(pair.x) &&
+        typeof pair.y === 'number' &&
+        pair.y !== null &&
+        isFinite(pair.y)
+      ) as { x: number; y: number }[];
 
     // Sort pairs based on the numeric x value
-    pairedData.sort((a, b) => (a.x as number) - (b.x as number));
+    pairedData.sort((a, b) => a.x - b.x);
     
     // Separate back into x and y arrays
     const sortedX = pairedData.map(pair => pair.x);
@@ -63,7 +69,7 @@ export default function LinePlot2D({
   }, [mapData, xAxis, yAxis, sliceIndex]);
 
 
-  if (!plotData) {
+  if (!plotData || plotData.x.length === 0) {
     return (
       <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
         <div>
