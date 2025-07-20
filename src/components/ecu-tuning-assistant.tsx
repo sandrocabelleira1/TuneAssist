@@ -21,6 +21,7 @@ import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/comp
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, Table, Undo2, Box, LineChart } from 'lucide-react';
 import { Separator } from "@/components/ui/separator";
+import { Slider } from '@/components/ui/slider';
 import dynamic from 'next/dynamic';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -292,6 +293,7 @@ export default function EcuTuningAssistant() {
     const [mapRenderKey, setMapRenderKey] = useState(0);
     const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
     const [isEndianSwapped, setIsEndianSwapped] = useState(false);
+    const [linePlotSliceIndex, setLinePlotSliceIndex] = useState(0);
 
     // AI state
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
@@ -455,6 +457,7 @@ export default function EcuTuningAssistant() {
         setAiSuggestion(null);
         setSelectedMapName(name);
         setSelectedCells(new Set());
+        setLinePlotSliceIndex(0);
 
         try {
             const { calculatedMap, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, definition, isEndianSwapped);
@@ -813,16 +816,37 @@ export default function EcuTuningAssistant() {
                                     </div>
                                 </TabsContent>
                                 <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0">
-                                   <div className="flex-1 min-h-0">
-                                        <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} />
+                                    <div className="relative flex-1">
+                                        <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={linePlotSliceIndex} />
                                     </div>
-                                    <div className="border-t pt-4 flex justify-end mt-4 flex-shrink-0">
-                                        {saveButton}
+                                    <div className="border-t pt-4 mt-4 flex-shrink-0 space-y-4">
+                                        {displayAxes && displayAxes.y.calculated.length > 1 && (
+                                            <div className="flex items-center gap-4">
+                                                <Label htmlFor="line-plot-slider" className="flex-shrink-0 text-sm">
+                                                    A visualizar linha para {displayAxes.y.label}: <span className="font-bold">{displayAxes.y.calculated[linePlotSliceIndex]}</span>
+                                                </Label>
+                                                <Slider
+                                                    id="line-plot-slider"
+                                                    min={0}
+                                                    max={displayAxes.y.calculated.length - 1}
+                                                    step={1}
+                                                    value={[linePlotSliceIndex]}
+                                                    onValueChange={(value) => setLinePlotSliceIndex(value[0])}
+                                                    className="flex-1"
+                                                />
+                                            </div>
+                                        )}
+                                        <div className="flex justify-end">
+                                            {saveButton}
+                                        </div>
                                     </div>
                                 </TabsContent>
                                 <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
-                                    <div className="flex-1 min-h-0">
+                                    <div className="relative flex-1">
                                       <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} />
+                                    </div>
+                                    <div className="border-t pt-4 flex justify-end mt-4 flex-shrink-0">
+                                        {/* No save button in 3D view as it's for observation */}
                                     </div>
                                 </TabsContent>
                             </Tabs>
@@ -1094,5 +1118,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-    
