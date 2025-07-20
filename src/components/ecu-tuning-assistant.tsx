@@ -681,7 +681,7 @@ export default function EcuTuningAssistant() {
 
     return (
         <TooltipProvider>
-            <div className="flex h-screen flex-col gap-4 p-4">
+            <div className="flex flex-col p-4 gap-4 h-[calc(100vh-theme(height.14))]">
                 <Card className="flex-shrink-0">
                     <CardHeader>
                         <CardTitle>Painel de Controlo</CardTitle>
@@ -814,16 +814,16 @@ export default function EcuTuningAssistant() {
                                         </div>
                                     </TabsContent>
                                     <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0">
-                                        <div className="flex-1 min-h-0">
-                                            <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} />
+                                       <div className="flex-1 min-h-0 relative">
+                                            <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} className="absolute inset-0" />
                                         </div>
                                         <div className="border-t pt-4 flex justify-end mt-4 flex-shrink-0">
                                             {saveButton}
                                         </div>
                                     </TabsContent>
-                                    <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
+                                    <TabsContent value="3d" className="flex-1 flex flex-col min-h-0 relative">
                                         <div className="flex-1 min-h-0">
-                                          <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} />
+                                          <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} className="absolute inset-0" />
                                         </div>
                                     </TabsContent>
                                 </Tabs>
