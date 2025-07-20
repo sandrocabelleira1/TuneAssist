@@ -681,7 +681,7 @@ export default function EcuTuningAssistant() {
 
     return (
         <TooltipProvider>
-            <div className="flex flex-col p-4 gap-4 h-[calc(100vh-theme(height.14))]">
+            <div className="flex flex-1 flex-col p-4 gap-4 min-h-0">
                 <Card className="flex-shrink-0">
                     <CardHeader>
                         <CardTitle>Painel de Controlo</CardTitle>
@@ -764,7 +764,7 @@ export default function EcuTuningAssistant() {
                     </CardContent>
                 </Card>
 
-                <main className="flex flex-1 flex-col gap-4 min-h-0">
+                <div className="flex flex-1 flex-col gap-4 min-h-0">
                     <Card className="flex flex-1 flex-col min-h-0">
                         <CardHeader className="flex-shrink-0">
                             <div className="flex items-center justify-between">
@@ -861,7 +861,7 @@ export default function EcuTuningAssistant() {
                             </ScrollArea>
                         </CardContent>
                     </Card>
-                </main>
+                </div>
                 
                 {/* Modals */}
                 <EditAxesModal
