@@ -29,6 +29,7 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
 
   const chartData = useMemo(() => {
+    // 1. Validate inputs: ensure all required data exists.
     if (
       !mapData || !xAxis ||
       sliceIndex < 0 || sliceIndex >= mapData.length ||
@@ -39,10 +40,11 @@ export default function LinePlot2D({
 
     const yDataSlice = mapData[sliceIndex];
 
+    // 2. Create combined data points and filter for valid numbers.
     const data = xAxis
       .map((x, index) => {
         const y = yDataSlice[index];
-        // Only include data points where both x and y are valid numbers
+        // Only include data points where both x and y are valid numbers.
         if (typeof x === 'number' && isFinite(x) && typeof y === 'number' && isFinite(y)) {
           return {
             xValue: x,
@@ -51,14 +53,15 @@ export default function LinePlot2D({
         }
         return null;
       })
-      .filter(Boolean); // Remove null entries
+      .filter((point): point is { xValue: number; yValue: number } => point !== null); // Type guard to ensure we have an array of valid points.
 
-    // Recharts requires the data to be sorted by the x-axis value for lines to connect properly
-    if (data && data.length > 0) {
-        (data as {xValue: number, yValue: number}[]).sort((a, b) => a.xValue - b.xValue);
+    // 3. Recharts requires the data to be sorted by the x-axis value for lines to connect properly.
+    if (data.length > 0) {
+        data.sort((a, b) => a.xValue - b.xValue);
     }
 
-    return data && data.length > 0 ? data : null;
+    // 4. Return null if no valid data points are left after filtering.
+    return data.length > 0 ? data : null;
   }, [mapData, xAxis, sliceIndex]);
 
 
@@ -77,6 +80,13 @@ export default function LinePlot2D({
   const selectedYValue = yAxis[sliceIndex];
   const formattedYValue = typeof selectedYValue === 'number' ? selectedYValue.toFixed(1) : selectedYValue;
   const legendName = `${yAxisLabel}: ${formattedYValue}`;
+  
+  const yAxisTickFormatter = (value: any) => {
+    if (typeof value === 'number') {
+      return value.toFixed(2);
+    }
+    return value;
+  };
 
   return (
     <div className={cn("h-full w-full", className)} {...props}>
@@ -86,7 +96,7 @@ export default function LinePlot2D({
           data={chartData}
           margin={{
             top: 20,
-            right: 20,
+            right: 30,
             bottom: 20,
             left: 20,
           }}
@@ -102,11 +112,13 @@ export default function LinePlot2D({
             label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
           />
           <YAxis
+            dataKey="yValue"
             tickLine={true}
             axisLine={true}
             tickMargin={8}
             domain={['auto', 'auto']}
-            label={{ value: 'Valor (Z)', angle: -90, position: 'insideLeft', offset: 0 }}
+            tickFormatter={yAxisTickFormatter}
+            label={{ value: 'Valor (Z)', angle: -90, position: 'insideLeft', offset: -5 }}
           />
           <Tooltip
             cursor
