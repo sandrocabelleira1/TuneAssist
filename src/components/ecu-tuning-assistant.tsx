@@ -784,14 +784,14 @@ export default function EcuTuningAssistant() {
                         </CardHeader>
                         <CardContent className="flex flex-1 flex-col p-6 pt-0 min-h-0">
                             {displayMap && displayAxes ? (
-                                <Tabs defaultValue="2d" className="flex flex-1 flex-col min-h-0 h-full">
+                                <Tabs defaultValue="2d" className="flex flex-1 flex-col min-h-0">
                                     <TabsList className="mb-2 shrink-0">
                                         <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
                                         <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
                                         <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
                                     </TabsList>
-                                    <TabsContent value="2d" className="flex flex-1 flex-col min-h-0 overflow-hidden">
-                                       <div className="flex-1 relative overflow-auto">
+                                    <TabsContent value="2d" className="flex flex-1 flex-col min-h-0">
+                                        <div className="flex-1 min-h-0 overflow-auto">
                                             <MapTable
                                                 key={mapRenderKey}
                                                 mapData={displayMap || []} 
@@ -809,18 +809,22 @@ export default function EcuTuningAssistant() {
                                                 onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
                                             />
                                         </div>
-                                        <div className="border-t pt-4 flex justify-end mt-auto flex-shrink-0">
+                                        <div className="border-t pt-4 flex justify-end mt-4 flex-shrink-0">
                                             {saveButton}
                                         </div>
                                     </TabsContent>
-                                    <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0 overflow-hidden relative">
-                                        <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} className="absolute inset-0" />
-                                        <div className="border-t pt-4 flex justify-end mt-auto flex-shrink-0">
+                                    <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0">
+                                        <div className="flex-1 min-h-0">
+                                            <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} />
+                                        </div>
+                                        <div className="border-t pt-4 flex justify-end mt-4 flex-shrink-0">
                                             {saveButton}
                                         </div>
                                     </TabsContent>
-                                    <TabsContent value="3d" className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-                                      <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} className="absolute inset-0" />
+                                    <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
+                                        <div className="flex-1 min-h-0">
+                                          <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} />
+                                        </div>
                                     </TabsContent>
                                 </Tabs>
                             ) : (
