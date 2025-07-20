@@ -682,89 +682,89 @@ export default function EcuTuningAssistant() {
     return (
         <TooltipProvider>
             <div className="flex h-screen flex-col gap-4 p-4">
-                <main className="flex min-h-0 flex-1 flex-col gap-4">
-                    <Card className="flex-shrink-0">
-                        <CardHeader>
-                            <CardTitle>Painel de Controlo</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                                <div className="space-y-2">
-                                    <h3 className="font-semibold text-primary">1. Carregar Ficheiros</h3>
-                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                        <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}>
-                                            <FileUp className="mr-2 h-4 w-4" />
-                                            Carregar .BIN
-                                        </Button>
-                                        <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
-
-                                        <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}>
-                                            <FileUp className="mr-2 h-4 w-4" />
-                                            Carregar .XDF
-                                        </Button>
-                                        <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
-                                    </div>
-                                    <div className="space-y-1 pt-2 text-xs">
-                                        {binFile && <p className="truncate text-green-400">BIN Ativo: {binFile.name}</p>}
-                                        {xdfFile && <p className="truncate text-green-400">XDF Ativo: {xdfFile.name}</p>}
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
-                                    <div className="flex items-center gap-2">
-                                        <Select onValueChange={handleMapSelect} disabled={!binFile || availableMaps.length === 0} value={selectedMapName} >
-                                            <SelectTrigger className="flex-1">
-                                                <SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : availableMaps.length === 0 ? "Carregue um ficheiro XDF" : "Selecione um mapa"} />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {availableMaps.map(def => (
-                                                  <SelectItem key={def.name} value={def.name}>
-                                                      <div className="flex w-full items-center justify-between">
-                                                          <span className="truncate">{def.name}</span>
-                                                          <span className="ml-4 flex-shrink-0 font-mono text-xs text-muted-foreground">0x{def.address.toString(16).toUpperCase()}</span>
-                                                      </div>
-                                                  </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleOpenEditNameModal} disabled={!selectedMapName}>
-                                                    <Pencil className="h-4 w-4" />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent><p>Editar Nome do Mapa</p></TooltipContent>
-                                        </Tooltip>
-                                    </div>
-                                    <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={!selectedMapDefinition || selectedMapDefinition.dataSize !== 2}>
-                                        <RefreshCw className="mr-2 h-4 w-4" />
-                                        Inverter Ordem de Bytes (Endian)
+                <Card className="flex-shrink-0">
+                    <CardHeader>
+                        <CardTitle>Painel de Controlo</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                            <div className="space-y-2">
+                                <h3 className="font-semibold text-primary">1. Carregar Ficheiros</h3>
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}>
+                                        <FileUp className="mr-2 h-4 w-4" />
+                                        Carregar .BIN
                                     </Button>
-                                </div>
+                                    <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
 
-                                <div className="space-y-2">
-                                    <h3 className="font-semibold text-primary">3. Corrigir Mapa (Opcional)</h3>
-                                    <p className="text-xs text-muted-foreground">
-                                        Ajuste as equações se os eixos ou os valores dos dados parecerem incorretos.
-                                    </p>
-                                    <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!displayMap}>
-                                        <GitCompareArrows className="mr-2 h-4 w-4" />
-                                        Corrigir Equações Man.
+                                    <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}>
+                                        <FileUp className="mr-2 h-4 w-4" />
+                                        Carregar .XDF
                                     </Button>
+                                    <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
                                 </div>
-
-                                <div className="space-y-2">
-                                    <h3 className="font-semibold text-primary">4. Sessão</h3>
-                                    <p className="text-xs text-muted-foreground">
-                                        Reinicie o estado para começar do zero com novos ficheiros.
-                                    </p>
-                                    <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
+                                <div className="space-y-1 pt-2 text-xs">
+                                    {binFile && <p className="truncate text-green-400">BIN Ativo: {binFile.name}</p>}
+                                    {xdfFile && <p className="truncate text-green-400">XDF Ativo: {xdfFile.name}</p>}
                                 </div>
                             </div>
-                        </CardContent>
-                    </Card>
 
+                            <div className="space-y-2">
+                                <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
+                                <div className="flex items-center gap-2">
+                                    <Select onValueChange={handleMapSelect} disabled={!binFile || availableMaps.length === 0} value={selectedMapName} >
+                                        <SelectTrigger className="flex-1">
+                                            <SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : availableMaps.length === 0 ? "Carregue um ficheiro XDF" : "Selecione um mapa"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableMaps.map(def => (
+                                              <SelectItem key={def.name} value={def.name}>
+                                                  <div className="flex w-full items-center justify-between">
+                                                      <span className="truncate">{def.name}</span>
+                                                      <span className="ml-4 flex-shrink-0 font-mono text-xs text-muted-foreground">0x{def.address.toString(16).toUpperCase()}</span>
+                                                  </div>
+                                              </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleOpenEditNameModal} disabled={!selectedMapName}>
+                                                <Pencil className="h-4 w-4" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>Editar Nome do Mapa</p></TooltipContent>
+                                    </Tooltip>
+                                </div>
+                                <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={!selectedMapDefinition || selectedMapDefinition.dataSize !== 2}>
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Inverter Ordem de Bytes (Endian)
+                                </Button>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h3 className="font-semibold text-primary">3. Corrigir Mapa (Opcional)</h3>
+                                <p className="text-xs text-muted-foreground">
+                                    Ajuste as equações se os eixos ou os valores dos dados parecerem incorretos.
+                                </p>
+                                <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!displayMap}>
+                                    <GitCompareArrows className="mr-2 h-4 w-4" />
+                                    Corrigir Equações Man.
+                                </Button>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h3 className="font-semibold text-primary">4. Sessão</h3>
+                                <p className="text-xs text-muted-foreground">
+                                    Reinicie o estado para começar do zero com novos ficheiros.
+                                </p>
+                                <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <main className="flex flex-1 flex-col gap-4 min-h-0">
                     <Card className="flex flex-1 flex-col min-h-0">
                         <CardHeader className="flex-shrink-0">
                             <div className="flex items-center justify-between">
