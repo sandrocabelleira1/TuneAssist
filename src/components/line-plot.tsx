@@ -55,7 +55,7 @@ export default function LinePlot2D({
 
     // Recharts requires the data to be sorted by the x-axis value for lines to connect properly
     if (data && data.length > 0) {
-        data.sort((a, b) => a!.xValue - b!.xValue);
+        (data as {xValue: number, yValue: number}[]).sort((a, b) => a.xValue - b.xValue);
     }
 
     return data && data.length > 0 ? data : null;
