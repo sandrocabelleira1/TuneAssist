@@ -32,17 +32,35 @@ export default function LinePlot2D({
     if (
       !mapData || !xAxis || !yAxis ||
       sliceIndex < 0 || sliceIndex >= mapData.length ||
-      !mapData[sliceIndex] ||
-      xAxis.length !== mapData[sliceIndex].length
+      !mapData[sliceIndex]
     ) {
       return null;
     }
 
     const yDataSlice = mapData[sliceIndex];
 
+    // Robust data preparation: Pair X and Y, filter out invalid data, and sort by X.
+    const pairedData = xAxis
+      .map((x, index) => ({ x: x, y: yDataSlice[index] }))
+      // Ensure both x and y are valid numbers for plotting
+      .filter(pair => 
+          typeof pair.x === 'number' && isFinite(pair.x) &&
+          typeof pair.y === 'number' && isFinite(pair.y)
+      )
+      // Sort by the numeric x-axis value
+      .sort((a, b) => (a.x as number) - (b.x as number));
+
+    if (pairedData.length === 0) {
+      return null;
+    }
+
+    // Unzip the sorted and filtered data
+    const finalX = pairedData.map(p => p.x);
+    const finalY = pairedData.map(p => p.y);
+
     return {
-      x: xAxis,
-      y: yDataSlice,
+      x: finalX,
+      y: finalY,
     };
   }, [mapData, xAxis, yAxis, sliceIndex]);
 
@@ -53,7 +71,7 @@ export default function LinePlot2D({
         <div>
           <AlertCircle className="mx-auto h-12 w-12" />
           <p className="mt-4 font-semibold">Dados de Gráfico Indisponíveis</p>
-          <p className="text-sm">Selecione uma linha válida para visualizar no gráfico.</p>
+          <p className="text-sm">A linha selecionada não contém dados numéricos válidos para exibir.</p>
         </div>
       </div>
     );
