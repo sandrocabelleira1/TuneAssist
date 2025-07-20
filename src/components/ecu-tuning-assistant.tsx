@@ -107,6 +107,7 @@ function MapTable({
   onCellSelect,
   viewMode,
   onViewModeChange,
+  className,
 }: {
   mapData: MapData;
   rawMapData: MapData;
@@ -122,6 +123,7 @@ function MapTable({
   onCellSelect: (rowIndex: number, colIndex: number, isCtrlOrCmd: boolean) => void;
   viewMode: 'calculated' | 'raw';
   onViewModeChange?: (isRaw: boolean) => void;
+  className?: string;
 }) {
   const { min, max } = useMemo(() => {
     let minVal = Infinity;
@@ -155,7 +157,7 @@ function MapTable({
   };
 
   return (
-    <div className="overflow-auto relative flex-1">
+    <div className={cn("overflow-auto", className)}>
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="bg-card">
@@ -681,7 +683,7 @@ export default function EcuTuningAssistant() {
         <TooltipProvider>
             <div className="flex h-screen flex-col gap-4 p-4">
                 <main className="flex min-h-0 flex-1 flex-col gap-4">
-                    <Card>
+                    <Card className="flex-shrink-0">
                         <CardHeader>
                             <CardTitle>Painel de Controlo</CardTitle>
                         </CardHeader>
@@ -789,38 +791,36 @@ export default function EcuTuningAssistant() {
                                         <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
                                     </TabsList>
                                     <TabsContent value="2d" className="flex flex-1 flex-col min-h-0 overflow-hidden">
-                                        <MapTable
-                                            key={mapRenderKey}
-                                            mapData={displayMap || []} 
-                                            rawMapData={displayRawMap || []}
-                                            xAxis={displayAxes.x} 
-                                            yAxis={displayAxes.y} 
-                                            definition={selectedMapDefinition}
-                                            onSortAxis={handleSortAxis}
-                                            onResetSort={handleResetSort}
-                                            onCellChange={handleCellChange}
-                                            valueFormat={valueFormat}
-                                            selectedCells={selectedCells}
-                                            onCellSelect={handleCellSelect}
-                                            viewMode={mapViewMode}
-                                            onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
-                                        />
-                                        <div className="border-t pt-4 flex justify-end mt-auto flex-shrink-0">
-                                            {saveButton}
-                                        </div>
-                                    </TabsContent>
-                                    <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0 overflow-hidden">
-                                        <div className="flex-1 relative">
-                                            <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} className="absolute inset-0" />
+                                       <div className="flex-1 relative overflow-auto">
+                                            <MapTable
+                                                key={mapRenderKey}
+                                                mapData={displayMap || []} 
+                                                rawMapData={displayRawMap || []}
+                                                xAxis={displayAxes.x} 
+                                                yAxis={displayAxes.y} 
+                                                definition={selectedMapDefinition}
+                                                onSortAxis={handleSortAxis}
+                                                onResetSort={handleResetSort}
+                                                onCellChange={handleCellChange}
+                                                valueFormat={valueFormat}
+                                                selectedCells={selectedCells}
+                                                onCellSelect={handleCellSelect}
+                                                viewMode={mapViewMode}
+                                                onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
+                                            />
                                         </div>
                                         <div className="border-t pt-4 flex justify-end mt-auto flex-shrink-0">
                                             {saveButton}
                                         </div>
                                     </TabsContent>
-                                    <TabsContent value="3d" className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                                      <div className="flex-1 relative">
-                                        <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'}/>
-                                      </div>
+                                    <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0 overflow-hidden relative">
+                                        <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={0} className="absolute inset-0" />
+                                        <div className="border-t pt-4 flex justify-end mt-auto flex-shrink-0">
+                                            {saveButton}
+                                        </div>
+                                    </TabsContent>
+                                    <TabsContent value="3d" className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+                                      <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} className="absolute inset-0" />
                                     </TabsContent>
                                 </Tabs>
                             ) : (

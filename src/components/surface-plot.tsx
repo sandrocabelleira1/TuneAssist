@@ -6,8 +6,9 @@ import Plot from 'react-plotly.js';
 import type { PlotlyProps } from 'react-plotly.js';
 import { AlertCircle } from 'lucide-react';
 import type { MapData } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
-interface SurfacePlot3DProps {
+interface SurfacePlot3DProps extends React.HTMLAttributes<HTMLDivElement> {
   mapData: MapData; 
   xAxis: (string | number)[]; 
   yAxis: (string | number)[]; 
@@ -15,7 +16,7 @@ interface SurfacePlot3DProps {
   yAxisLabel: string;
 }
 
-export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel }: SurfacePlot3DProps) {
+export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel, className, ...props }: SurfacePlot3DProps) {
   const plotData = useMemo(() => {
     // A 3D surface plot requires numeric axes.
     const isXNumeric = xAxis.every(v => typeof v === 'number' && isFinite(v));
@@ -97,13 +98,13 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
   };
 
   return (
-    <div className="h-full w-full">
+    <div className={cn("h-full w-full", className)} {...props}>
       <Plot
         data={data}
         layout={layout}
         useResizeHandler
         className="h-full w-full"
-        config={{ responsive: true }}
+        config={{ responsive: true, displaylogo: false }}
       />
     </div>
   );
