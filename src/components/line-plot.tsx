@@ -54,9 +54,11 @@ export default function LinePlot2D({
       .filter(Boolean); // Remove null entries
 
     // Recharts requires the data to be sorted by the x-axis value for lines to connect properly
-    data.sort((a, b) => a!.xValue - b!.xValue);
+    if (data) {
+        data.sort((a, b) => a!.xValue - b!.xValue);
+    }
 
-    return data.length > 0 ? data : null;
+    return data && data.length > 0 ? data : null;
   }, [mapData, xAxis, sliceIndex]);
 
 
