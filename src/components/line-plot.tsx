@@ -54,7 +54,7 @@ export default function LinePlot2D({
       .filter(Boolean); // Remove null entries
 
     // Recharts requires the data to be sorted by the x-axis value for lines to connect properly
-    if (data) {
+    if (data && data.length > 0) {
         data.sort((a, b) => a!.xValue - b!.xValue);
     }
 
@@ -112,7 +112,7 @@ export default function LinePlot2D({
             cursor
             content={<ChartTooltipContent indicator="dot" />}
           />
-          <Legend verticalAlign="top" align="right" height={36} formatter={() => legendName}/>
+          <Legend verticalAlign="top" align="right" height={36} />
           <Line
             dataKey="yValue"
             type="monotone"
