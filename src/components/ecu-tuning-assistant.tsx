@@ -283,6 +283,7 @@ export default function EcuTuningAssistant() {
     const [availableMaps, setAvailableMaps] = useState<XDFDefinition[]>([]);
     const [selectedMapName, setSelectedMapName] = useState<string>('');
     const [selectedCells, setSelectedCells] = useState(new Set<string>());
+    const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(null);
 
     // State for map data. "working" is the editable source of truth, "display" is for rendering (can be sorted)
     const [rawMap, setRawMap] = useState<MapData | null>(null);
@@ -392,6 +393,7 @@ export default function EcuTuningAssistant() {
         setAiSuggestion(null);
         setAvailableMaps([]);
         setSelectedCells(new Set());
+        setSelectedLineIndex(null);
         setLogs([]);
         setIsEndianSwapped(false);
 
@@ -457,6 +459,7 @@ export default function EcuTuningAssistant() {
         setAiSuggestion(null);
         setSelectedMapName(name);
         setSelectedCells(new Set());
+        setSelectedLineIndex(null);
 
         try {
             const { calculatedMap, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, definition, isEndianSwapped);
@@ -816,14 +819,15 @@ export default function EcuTuningAssistant() {
                                 </TabsContent>
                                 <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0">
                                     <div className="relative flex-1 overflow-hidden min-h-0">
-                                        <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} />
-                                    </div>
-                                    <div className="border-t pt-4 flex-shrink-0 mt-4">
-                                        <div className="flex items-center gap-4 justify-between">
-                                            <div className="flex-shrink-0 ml-auto">
-                                                {saveButton}
-                                            </div>
-                                        </div>
+                                        <LinePlot2D
+                                            mapData={displayMap}
+                                            xAxis={displayAxes.x}
+                                            yAxis={displayAxes.y}
+                                            selectedLineIndex={selectedLineIndex}
+                                            onLineSelect={setSelectedLineIndex}
+                                            yAxisLabel={selectedMapDefinition?.yAxisDef?.label}
+                                            xAxisLabel={selectedMapDefinition?.xAxisDef?.label}
+                                        />
                                     </div>
                                 </TabsContent>
                                 <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
@@ -1103,3 +1107,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+    
