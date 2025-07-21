@@ -172,7 +172,7 @@ export default function LinePlot2D({
         const { cx, cy } = props;
 
         return (
-            <g>
+            <g onMouseDown={(e) => handleMouseDown(e, props)}>
                 <circle
                     cx={cx}
                     cy={cy}
@@ -189,7 +189,6 @@ export default function LinePlot2D({
                     stroke="hsl(var(--background))"
                     strokeWidth={1.5}
                     className="cursor-ns-resize"
-                    onMouseDown={(e) => handleMouseDown(e, props)}
                 />
             </g>
         );
