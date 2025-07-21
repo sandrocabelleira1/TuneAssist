@@ -184,5 +184,3 @@ export default function LinePlot2D({
     </div>
   );
 }
-
-    
