@@ -68,34 +68,6 @@ const RPMSelector = ({ yAxis, selectedLineIndex, onLineSelect }: {
     );
 };
 
-const CustomDot = (props: any) => {
-    const { cx, cy, onMouseDown } = props;
-
-    return (
-        <g>
-            <circle
-                cx={cx}
-                cy={cy}
-                r={8}
-                fill="hsl(var(--primary))"
-                fillOpacity={0.3}
-                className="cursor-ns-resize"
-            />
-            <circle
-                cx={cx}
-                cy={cy}
-                r={4}
-                fill="hsl(var(--primary))"
-                stroke="hsl(var(--background))"
-                strokeWidth={1.5}
-                className="cursor-ns-resize"
-                onMouseDown={(e) => onMouseDown(e, props)}
-            />
-        </g>
-    );
-};
-
-
 export default function LinePlot2D({
   mapData,
   xAxis,
@@ -184,11 +156,37 @@ export default function LinePlot2D({
           return d;
         });
       });
-      // Update dot payload for mouse up
       setActiveDot((prev:any) => ({ ...prev, payload: { ...prev.payload, y: newYValue } }));
     }
   }, [isDragging, activeDot]);
   
+  const CustomDot = (props: any) => {
+    const { cx, cy } = props;
+
+    return (
+        <g>
+            <circle
+                cx={cx}
+                cy={cy}
+                r={8}
+                fill="hsl(var(--primary))"
+                fillOpacity={0.3}
+                className="cursor-ns-resize"
+            />
+            <circle
+                cx={cx}
+                cy={cy}
+                r={4}
+                fill="hsl(var(--primary))"
+                stroke="hsl(var(--background))"
+                strokeWidth={1.5}
+                className="cursor-ns-resize"
+                onMouseDown={(e) => handleMouseDown(e, props)}
+            />
+        </g>
+    );
+};
+
 
   if (!mapData || !xAxis || !yAxis) {
      return (
@@ -255,8 +253,8 @@ export default function LinePlot2D({
                         type="monotone"
                         stroke="hsl(var(--primary))"
                         strokeWidth={2}
-                        dot={<CustomDot onMouseDown={handleMouseDown}/>}
-                        activeDot={<CustomDot onMouseDown={handleMouseDown}/>}
+                        dot={<CustomDot />}
+                        activeDot={<CustomDot />}
                         connectNulls
                     />
                     </LineChart>
