@@ -81,7 +81,6 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
 
   const chartRef = useRef<any>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [activeDot, setActiveDot] = useState<any>(null);
   const [currentChartData, setCurrentChartData] = useState<any[] | null>(null);
 
@@ -127,34 +126,29 @@ export default function LinePlot2D({
   }, [initialChartData]);
 
 
-  const handleMouseDown = useCallback((event: React.MouseEvent, dotProps: any) => {
-    event.preventDefault();
-    setIsDragging(true);
-    setActiveDot(dotProps);
-  }, []);
-
   const handleMouseUp = useCallback(() => {
-    if (isDragging && activeDot && selectedLineIndex !== null && currentChartData) {
+    if (activeDot && selectedLineIndex !== null && currentChartData) {
         const finalDot = currentChartData.find(d => d.originalIndex === activeDot.payload.originalIndex);
         if (finalDot) {
             onPointChange(selectedLineIndex, finalDot.originalIndex, finalDot.y);
         }
     }
-    setIsDragging(false);
     setActiveDot(null);
-  }, [isDragging, activeDot, onPointChange, selectedLineIndex, currentChartData]);
+  }, [activeDot, onPointChange, selectedLineIndex, currentChartData]);
 
-  const handleMouseMove = useCallback((e: any) => {
-      if (isDragging && activeDot && chartRef.current) {
-        if (e.chartY === undefined) return;
-
+  const handleMouseMove = useCallback((event: MouseEvent) => {
+      if (activeDot && chartRef.current) {
         const chart = chartRef.current.chart;
         if (!chart || !chart.props.margin) return;
-        const mainYAxis = chart.yAxisMap?.[0];
+        
+        const chartContainer = chartRef.current.container;
+        const chartRect = chartContainer.getBoundingClientRect();
 
+        const mainYAxis = chart.yAxisMap?.[0];
         if (!mainYAxis?.scale?.invert) return;
         
-        const newYValue = mainYAxis.scale.invert(e.chartY);
+        const mouseY = event.clientY - chartRect.top - chart.props.margin.top;
+        const newYValue = mainYAxis.scale.invert(mouseY);
         
         setCurrentChartData(prevData => {
             if (!prevData) return null;
@@ -166,33 +160,49 @@ export default function LinePlot2D({
             });
         });
       }
-  }, [isDragging, activeDot]);
-  
-    const CustomDot = (props: any) => {
-        const { cx, cy } = props;
+  }, [activeDot]);
 
-        return (
-            <g onMouseDown={(e) => handleMouseDown(e, props)}>
-                <circle
-                    cx={cx}
-                    cy={cy}
-                    r={8}
-                    fill="hsl(var(--primary))"
-                    fillOpacity={0.3}
-                    className="cursor-ns-resize"
-                />
-                <circle
-                    cx={cx}
-                    cy={cy}
-r={4}
-                    fill="hsl(var(--primary))"
-                    stroke="hsl(var(--background))"
-                    strokeWidth={1.5}
-                    className="cursor-ns-resize"
-                />
-            </g>
-        );
+  useEffect(() => {
+    if (activeDot) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
+  }, [activeDot, handleMouseMove, handleMouseUp]);
+
+
+  const CustomDot = (props: any) => {
+      const { cx, cy } = props;
+
+      return (
+          <g onMouseDown={() => setActiveDot(props)}>
+              <circle
+                  cx={cx}
+                  cy={cy}
+                  r={8}
+                  fill="hsl(var(--primary))"
+                  fillOpacity={0.3}
+                  className="cursor-ns-resize"
+              />
+              <circle
+                  cx={cx}
+                  cy={cy}
+                  r={4}
+                  fill="hsl(var(--primary))"
+                  stroke="hsl(var(--background))"
+                  strokeWidth={1.5}
+                  className="cursor-ns-resize"
+              />
+          </g>
+      );
+  };
 
 
   if (!mapData || !xAxis || !yAxis) {
@@ -233,9 +243,6 @@ r={4}
                         ref={chartRef} 
                         data={currentChartData} 
                         margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                        onMouseMove={isDragging ? handleMouseMove : undefined}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
                     >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
@@ -243,7 +250,7 @@ r={4}
                         dataKey="x"
                         tickFormatter={xAxisTickFormatter}
                         label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
-                        allowDuplicatedCategory={true}
+                        allowDuplicatedCategory={false}
                         ticks={xAxis.calculated.map(v => Number(v)).filter(isFinite).sort((a,b) => a-b)}
                     />
                     <YAxis
