@@ -89,7 +89,7 @@ const CustomDot = (props: any) => {
                 stroke="hsl(var(--background))"
                 strokeWidth={1.5}
                 className="cursor-ns-resize"
-                onMouseDown={(e) => onMouseDown(e, props)}
+                onMouseDown={(e) => onMouseDown(props, e)}
             />
         </g>
     );
@@ -156,7 +156,7 @@ export default function LinePlot2D({
   }, [initialChartData]);
 
 
-  const handleMouseDown = useCallback((event: React.MouseEvent, dotProps: any) => {
+  const handleMouseDown = useCallback((dotProps: any, event: React.MouseEvent) => {
     event.preventDefault();
     setIsDragging(true);
     setActiveDot(dotProps);
@@ -236,7 +236,7 @@ export default function LinePlot2D({
                     <XAxis
                         type="category"
                         dataKey="x"
-                        ticks={xAxis.calculated.map(v => Number(v)).sort((a, b) => a - b)}
+                        ticks={xAxis.calculated.map(v => Number(v)).filter(isFinite).sort((a, b) => a - b)}
                         tickFormatter={xAxisTickFormatter}
                         label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
                         allowDuplicatedCategory={true}
