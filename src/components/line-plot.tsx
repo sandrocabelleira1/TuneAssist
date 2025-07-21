@@ -89,7 +89,7 @@ const CustomDot = (props: any) => {
                 stroke="hsl(var(--background))"
                 strokeWidth={1.5}
                 className="cursor-ns-resize"
-                onMouseDown={(e) => onMouseDown(props, e)}
+                onMouseDown={(e) => onMouseDown(e, props)}
             />
         </g>
     );
@@ -156,7 +156,7 @@ export default function LinePlot2D({
   }, [initialChartData]);
 
 
-  const handleMouseDown = useCallback((dotProps: any, event: React.MouseEvent) => {
+  const handleMouseDown = useCallback((event: React.MouseEvent, dotProps: any) => {
     event.preventDefault();
     setIsDragging(true);
     setActiveDot(dotProps);
