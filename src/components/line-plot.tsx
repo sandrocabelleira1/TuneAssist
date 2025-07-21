@@ -69,11 +69,7 @@ const RPMSelector = ({ yAxis, selectedLineIndex, onLineSelect }: {
 };
 
 const CustomDot = (props: any) => {
-    const { cx, cy, payload, onMouseDown, onMouseUp } = props;
-    
-    if (!payload.isEditable) {
-        return <circle cx={cx} cy={cy} r={3} fill="hsl(var(--primary))" />;
-    }
+    const { cx, cy, onMouseDown } = props;
 
     return (
         <g>
@@ -94,7 +90,6 @@ const CustomDot = (props: any) => {
                 strokeWidth={1.5}
                 className="cursor-ns-resize"
                 onMouseDown={(e) => onMouseDown(e, props)}
-                onMouseUp={(e) => onMouseUp(e, props)}
             />
         </g>
     );
@@ -115,82 +110,22 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
 
   const chartRef = useRef<any>(null);
-  const [draggingDot, setDraggingDot] = useState<any>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [activeDot, setActiveDot] = useState<any>(null);
+  const [currentChartData, setCurrentChartData] = useState<any[] | null>(null);
 
-  const handleMouseDown = useCallback((event: React.MouseEvent, dotProps: any) => {
-    event.preventDefault();
-    setIsDragging(true);
-    setDraggingDot(dotProps);
-  }, []);
-
-  const handleMouseUp = useCallback(() => {
-    if (isDragging && draggingDot) {
-        const { index: colIndex } = draggingDot;
-        const rowIndex = selectedLineIndex;
-        
-        if (rowIndex !== null) {
-          const finalValue = draggingDot.payload.y;
-          onPointChange(rowIndex, colIndex, finalValue);
-        }
-    }
-    setIsDragging(false);
-    setDraggingDot(null);
-  }, [isDragging, draggingDot, onPointChange, selectedLineIndex]);
-
-  const handleMouseMove = useCallback((event: MouseEvent) => {
-    if (isDragging && draggingDot && chartRef.current) {
-        const chart = chartRef.current;
-        const chartElement = chart.container;
-        const chartCoords = chartElement.getBoundingClientRect();
-
-        // Get SVG coordinates relative to the chart container
-        const svgX = event.clientX - chartCoords.left - chart.props.margin.left;
-        const svgY = event.clientY - chartCoords.top - chart.props.margin.top;
-        
-        // This is a simplified way to get the new value. Recharts internal scales are not easily accessible.
-        // We find the y-value based on the mouse position.
-        const yAxisMap = chart.yAxisMap[0];
-        if (yAxisMap && yAxisMap.scale) {
-            const newValue = yAxisMap.scale.invert(svgY);
-
-            // Update the temporary dot position for visual feedback
-            setDraggingDot((prev: any) => ({
-                ...prev,
-                cy: svgY + chart.props.margin.top,
-                payload: { ...prev.payload, y: newValue }
-            }));
-        }
-    }
-  }, [isDragging, draggingDot]);
-  
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    } else {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, handleMouseMove, handleMouseUp]);
-
-
-  const { chartData, lineDataKey, error } = useMemo(() => {
+  const { initialChartData, lineDataKey, error } = useMemo(() => {
     if (
       !mapData || !xAxis?.calculated || !yAxis?.calculated ||
       selectedLineIndex === null ||
       selectedLineIndex >= mapData.length
     ) {
-      return { chartData: null, lineDataKey: null, error: null };
+      return { initialChartData: null, lineDataKey: null, error: null };
     }
 
     const lineData = mapData[selectedLineIndex];
     if (!lineData) {
-      return { chartData: null, lineDataKey: null, error: 'Linha de dados selecionada é inválida.' };
+      return { initialChartData: null, lineDataKey: null, error: 'Linha de dados selecionada é inválida.' };
     }
 
     const preparedData = xAxis.calculated
@@ -199,22 +134,61 @@ export default function LinePlot2D({
             const numX = Number(xVal);
             const numY = Number(yVal);
             if (isFinite(numX) && isFinite(numY)) {
-                return { x: numX, y: numY };
+                return { x: numX, y: numY, originalIndex: i };
             }
             return null;
         })
-        .filter(Boolean) as { x: number; y: number }[];
+        .filter(Boolean) as { x: number; y: number, originalIndex: number }[];
 
     if (preparedData.length === 0) {
-        return { chartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
+        return { initialChartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
     }
 
     preparedData.sort((a, b) => a.x - b.x);
 
-    const lineDataKey = `RPM ${yAxis.calculated[selectedLineIndex]}`;
+    const lineDataKey = `RPM ${yAxisTickFormatter(yAxis.calculated[selectedLineIndex])}`;
 
-    return { chartData: preparedData, lineDataKey, error: null };
+    return { initialChartData: preparedData, lineDataKey, error: null };
   }, [mapData, xAxis, yAxis, selectedLineIndex]);
+  
+  useEffect(() => {
+    setCurrentChartData(initialChartData);
+  }, [initialChartData]);
+
+
+  const handleMouseDown = useCallback((event: React.MouseEvent, dotProps: any) => {
+    event.preventDefault();
+    setIsDragging(true);
+    setActiveDot(dotProps);
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    if (isDragging && activeDot && selectedLineIndex !== null) {
+        const { originalIndex } = activeDot.payload;
+        const finalValue = activeDot.payload.y;
+        onPointChange(selectedLineIndex, originalIndex, finalValue);
+    }
+    setIsDragging(false);
+    setActiveDot(null);
+  }, [isDragging, activeDot, onPointChange, selectedLineIndex]);
+
+  const handleMouseMove = useCallback((e: any) => {
+    if (isDragging && activeDot && e.activeCoordinate) {
+      const newYValue = e.activeCoordinate.y;
+      setCurrentChartData(prevData => {
+        if (!prevData) return null;
+        return prevData.map(d => {
+          if (d.originalIndex === activeDot.payload.originalIndex) {
+            return { ...d, y: newYValue };
+          }
+          return d;
+        });
+      });
+      // Update dot payload for mouse up
+      setActiveDot((prev:any) => ({ ...prev, payload: { ...prev.payload, y: newYValue } }));
+    }
+  }, [isDragging, activeDot]);
+  
 
   if (!mapData || !xAxis || !yAxis) {
      return (
@@ -240,7 +214,7 @@ export default function LinePlot2D({
                         <p className="text-sm">Clique num valor de RPM à esquerda para visualizar os seus dados.</p>
                     </div>
                 </div>
-            ) : error || !chartData || !lineDataKey ? (
+            ) : error || !currentChartData || !lineDataKey ? (
                 <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
                     <div>
                         <AlertCircle className="mx-auto h-12 w-12" />
@@ -250,7 +224,14 @@ export default function LinePlot2D({
                 </div>
             ) : (
                 <ChartContainer config={{}} className="h-full w-full">
-                    <LineChart ref={chartRef} data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                    <LineChart 
+                        ref={chartRef} 
+                        data={currentChartData} 
+                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                        onMouseLeave={handleMouseUp}
+                    >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
                         type="category"
@@ -259,7 +240,7 @@ export default function LinePlot2D({
                         tickFormatter={xAxisTickFormatter}
                         label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
                         allowDuplicatedCategory={true}
-                        interval="preserveStartEnd"
+                        interval={0}
                     />
                     <YAxis
                         domain={['auto', 'auto']}
@@ -274,8 +255,8 @@ export default function LinePlot2D({
                         type="monotone"
                         stroke="hsl(var(--primary))"
                         strokeWidth={2}
-                        dot={<CustomDot onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} />}
-                        activeDot={<CustomDot onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} />}
+                        dot={<CustomDot />}
+                        activeDot={<CustomDot />}
                         connectNulls
                     />
                     </LineChart>
@@ -285,5 +266,3 @@ export default function LinePlot2D({
     </div>
   );
 }
-
-    
