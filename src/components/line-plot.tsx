@@ -145,47 +145,55 @@ export default function LinePlot2D({
   }, [isDragging, activeDot, onPointChange, selectedLineIndex]);
 
   const handleMouseMove = useCallback((e: any) => {
-    if (isDragging && activeDot && e.activeCoordinate) {
-      const newYValue = e.activeCoordinate.y;
-      setCurrentChartData(prevData => {
-        if (!prevData) return null;
-        return prevData.map(d => {
-          if (d.originalIndex === activeDot.payload.originalIndex) {
-            return { ...d, y: newYValue };
-          }
-          return d;
+      if (isDragging && activeDot && chartRef.current) {
+        // Access the internal state of the chart to get scales
+        const chart = chartRef.current.chart;
+        if (!chart || !chart.props.margin) return;
+        const { yAxisMap } = chart;
+        const mainYAxis = yAxisMap[0];
+        
+        // Calculate the value from the mouse position
+        const newYValue = mainYAxis.scale.invert(e.chartY);
+        
+        setCurrentChartData(prevData => {
+            if (!prevData) return null;
+            return prevData.map(d => {
+                if (d.originalIndex === activeDot.payload.originalIndex) {
+                    return { ...d, y: newYValue };
+                }
+                return d;
+            });
         });
-      });
-      setActiveDot((prev:any) => ({ ...prev, payload: { ...prev.payload, y: newYValue } }));
-    }
+        setActiveDot((prev: any) => ({ ...prev, payload: { ...prev.payload, y: newYValue } }));
+      }
   }, [isDragging, activeDot]);
   
-  const CustomDot = (props: any) => {
-    const { cx, cy } = props;
+    const CustomDot = (props: any) => {
+        const { cx, cy } = props;
 
-    return (
-        <g>
-            <circle
-                cx={cx}
-                cy={cy}
-                r={8}
-                fill="hsl(var(--primary))"
-                fillOpacity={0.3}
-                className="cursor-ns-resize"
-            />
-            <circle
-                cx={cx}
-                cy={cy}
-                r={4}
-                fill="hsl(var(--primary))"
-                stroke="hsl(var(--background))"
-                strokeWidth={1.5}
-                className="cursor-ns-resize"
-                onMouseDown={(e) => handleMouseDown(e, props)}
-            />
-        </g>
-    );
-};
+        return (
+            <g>
+                <circle
+                    cx={cx}
+                    cy={cy}
+                    r={8}
+                    fill="hsl(var(--primary))"
+                    fillOpacity={0.3}
+                    className="cursor-ns-resize"
+                />
+                <circle
+                    cx={cx}
+                    cy={cy}
+                    r={4}
+                    fill="hsl(var(--primary))"
+                    stroke="hsl(var(--background))"
+                    strokeWidth={1.5}
+                    className="cursor-ns-resize"
+                    onMouseDown={(e) => handleMouseDown(e, props)}
+                />
+            </g>
+        );
+    };
 
 
   if (!mapData || !xAxis || !yAxis) {
