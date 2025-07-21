@@ -135,7 +135,6 @@ export default function LinePlot2D({
 
   const handleMouseUp = useCallback(() => {
     if (isDragging && activeDot && selectedLineIndex !== null && currentChartData) {
-        // Find the dot in the temporary data to get its final value
         const finalDot = currentChartData.find(d => d.originalIndex === activeDot.payload.originalIndex);
         if (finalDot) {
             onPointChange(selectedLineIndex, finalDot.originalIndex, finalDot.y);
@@ -147,17 +146,14 @@ export default function LinePlot2D({
 
   const handleMouseMove = useCallback((e: any) => {
       if (isDragging && activeDot && chartRef.current) {
-        // e.chartY is provided by recharts onMouseMove event on the chart
         if (e.chartY === undefined) return;
 
-        // Access the internal chart instance to get the scale function
         const chart = chartRef.current.chart;
         if (!chart || !chart.props.margin) return;
         const mainYAxis = chart.yAxisMap?.[0];
 
         if (!mainYAxis?.scale?.invert) return;
         
-        // Convert the mouse y-coordinate to a value on the Y-axis
         const newYValue = mainYAxis.scale.invert(e.chartY);
         
         setCurrentChartData(prevData => {
@@ -175,7 +171,6 @@ export default function LinePlot2D({
     const CustomDot = (props: any) => {
         const { cx, cy } = props;
 
-        // The onMouseDown here is the native DOM event handler for the <g> element
         return (
             <g onMouseDown={(e) => handleMouseDown(e, props)}>
                 <circle
@@ -189,7 +184,7 @@ export default function LinePlot2D({
                 <circle
                     cx={cx}
                     cy={cy}
-                    r={4}
+r={4}
                     fill="hsl(var(--primary))"
                     stroke="hsl(var(--background))"
                     strokeWidth={1.5}
@@ -238,7 +233,7 @@ export default function LinePlot2D({
                         ref={chartRef} 
                         data={currentChartData} 
                         margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                        onMouseMove={handleMouseMove}
+                        onMouseMove={isDragging ? handleMouseMove : undefined}
                         onMouseUp={handleMouseUp}
                         onMouseLeave={handleMouseUp}
                     >
@@ -249,7 +244,6 @@ export default function LinePlot2D({
                         tickFormatter={xAxisTickFormatter}
                         label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
                         allowDuplicatedCategory={true}
-                        interval="preserveStartEnd"
                         ticks={xAxis.calculated.map(v => Number(v)).filter(isFinite).sort((a,b) => a-b)}
                     />
                     <YAxis
