@@ -10,7 +10,6 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ReferenceArea,
 } from 'recharts';
 import {
   ChartContainer,
@@ -128,7 +127,7 @@ export default function LinePlot2D({
   }, [initialChartData]);
 
 
-  const handleMouseDown = useCallback((dotProps: any, event: React.MouseEvent) => {
+  const handleMouseDown = useCallback((event: React.MouseEvent, dotProps: any) => {
     event.preventDefault();
     setIsDragging(true);
     setActiveDot(dotProps);
@@ -146,19 +145,15 @@ export default function LinePlot2D({
 
   const handleMouseMove = useCallback((e: any) => {
       if (isDragging && activeDot && chartRef.current) {
-        // e.chartY is the y-coordinate of the mouse relative to the chart area.
         if (e.chartY === undefined) return;
 
-        // Access the internal state of the chart to get scales
         const chart = chartRef.current.chart;
         if (!chart || !chart.props.margin) return;
         const { yAxisMap } = chart;
         const mainYAxis = yAxisMap[0];
         
-        // Calculate the value from the mouse position by inverting the scale
         const newYValue = mainYAxis.scale.invert(e.chartY);
         
-        // Update the temporary data for visual feedback
         setCurrentChartData(prevData => {
             if (!prevData) return null;
             return prevData.map(d => {
@@ -169,7 +164,6 @@ export default function LinePlot2D({
             });
         });
 
-        // Also update the activeDot payload so the value is correct onMouseUp
         setActiveDot((prev: any) => ({ ...prev, payload: { ...prev.payload, y: newYValue } }));
       }
   }, [isDragging, activeDot]);
@@ -178,7 +172,7 @@ export default function LinePlot2D({
         const { cx, cy } = props;
 
         return (
-            <g onMouseDown={(e) => handleMouseDown(props, e)}>
+            <g onMouseDown={(e) => handleMouseDown(e, props)}>
                 <circle
                     cx={cx}
                     cy={cy}
