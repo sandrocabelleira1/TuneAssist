@@ -255,8 +255,8 @@ export default function LinePlot2D({
                         type="monotone"
                         stroke="hsl(var(--primary))"
                         strokeWidth={2}
-                        dot={<CustomDot />}
-                        activeDot={<CustomDot />}
+                        dot={<CustomDot onMouseDown={handleMouseDown}/>}
+                        activeDot={<CustomDot onMouseDown={handleMouseDown}/>}
                         connectNulls
                     />
                     </LineChart>
