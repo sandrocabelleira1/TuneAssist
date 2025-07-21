@@ -294,7 +294,6 @@ export default function EcuTuningAssistant() {
     const [mapRenderKey, setMapRenderKey] = useState(0);
     const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
     const [isEndianSwapped, setIsEndianSwapped] = useState(false);
-    const [linePlotSliceIndex, setLinePlotSliceIndex] = useState(0);
 
     // AI state
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
@@ -458,7 +457,6 @@ export default function EcuTuningAssistant() {
         setAiSuggestion(null);
         setSelectedMapName(name);
         setSelectedCells(new Set());
-        setLinePlotSliceIndex(0);
 
         try {
             const { calculatedMap, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, definition, isEndianSwapped);
@@ -818,27 +816,11 @@ export default function EcuTuningAssistant() {
                                 </TabsContent>
                                 <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0">
                                     <div className="relative flex-1 overflow-hidden min-h-0">
-                                        <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} sliceIndex={linePlotSliceIndex} />
+                                        <LinePlot2D mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} />
                                     </div>
                                     <div className="border-t pt-4 flex-shrink-0 mt-4">
                                         <div className="flex items-center gap-4 justify-between">
-                                            {displayAxes && displayAxes.y.calculated.length > 1 && (
-                                                <div className="flex-1 flex items-center gap-4">
-                                                    <Label htmlFor="line-plot-slider" className="flex-shrink-0 text-sm">
-                                                        A visualizar linha para {displayAxes.y.label}: <span className="font-bold">{displayAxes.y.calculated[linePlotSliceIndex]}</span>
-                                                    </Label>
-                                                    <Slider
-                                                        id="line-plot-slider"
-                                                        min={0}
-                                                        max={displayAxes.y.calculated.length - 1}
-                                                        step={1}
-                                                        value={[linePlotSliceIndex]}
-                                                        onValueChange={(value) => setLinePlotSliceIndex(value[0])}
-                                                        className="flex-1"
-                                                    />
-                                                </div>
-                                            )}
-                                            <div className="flex-shrink-0">
+                                            <div className="flex-shrink-0 ml-auto">
                                                 {saveButton}
                                             </div>
                                         </div>

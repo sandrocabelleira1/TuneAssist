@@ -2,184 +2,153 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Line, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts';
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from '@/components/ui/chart';
 import type { MapData } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
-  mapData: MapData;
-  xAxis: (string | number)[];
-  yAxis: (string | number)[];
-  xAxisLabel: string;
-  yAxisLabel: string;
-  sliceIndex: number;
+  mapData: MapData | null;
+  xAxis: (string | number)[] | null;
+  yAxis: (string | number)[] | null;
+  xAxisLabel?: string;
+  yAxisLabel?: string;
 }
 
-const formatNumber = (num: number | null) => {
-    if (num === null || isNaN(num)) return '-';
-    // Format with 1 decimal place if it has a decimal part, otherwise as an integer.
-    return num % 1 !== 0 ? num.toFixed(1) : String(num);
-};
-
-function DataPointTable({ data }: { data: { xValue: number; yValue: number }[] }) {
-    if (!data || data.length === 0) return null;
-    return (
-        <div className="overflow-x-auto pb-4">
-            <table className="w-full border-collapse text-xs text-center">
-                <thead>
-                    <tr>
-                        <th className="bg-destructive text-white p-2 border border-border font-semibold" colSpan={data.length}>
-                            Valores do Ponto de Ignição
-                        </th>
-                    </tr>
-                    <tr>
-                        {data.map(({ xValue }, index) => (
-                            <th key={`head-${index}`} className="p-1 border border-border font-semibold bg-card">
-                                {Math.round(xValue)}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        {data.map(({ yValue }, index) => (
-                            <td 
-                              key={`cell-${index}`} 
-                              className={cn(
-                                "p-1 border border-border",
-                                // Example of highlighting a specific cell like in the reference
-                                index === 2 ? 'bg-green-300/20' : 'bg-card'
-                              )}
-                            >
-                                {formatNumber(yValue)}
-                            </td>
-                        ))}
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    );
-}
+const COLORS = [
+  'hsl(var(--chart-1))',
+  'hsl(var(--chart-2))',
+  'hsl(var(--chart-3))',
+  'hsl(var(--chart-4))',
+  'hsl(var(--chart-5))',
+  '#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#00C49F', 
+  '#FFBB28', '#FF8042', '#0088FE', '#00C49F', '#FFBB28', '#FF8042'
+];
 
 export default function LinePlot2D({
   mapData,
   xAxis,
   yAxis,
-  yAxisLabel,
-  xAxisLabel,
-  sliceIndex,
+  xAxisLabel = 'Eixo X',
+  yAxisLabel = 'Eixo Y',
   className,
   ...props
 }: LinePlot2DProps) {
 
-  const chartData = useMemo(() => {
+  const { chartData, series, error } = useMemo(() => {
     if (
-      !mapData || !xAxis ||
-      sliceIndex < 0 || sliceIndex >= mapData.length ||
-      !mapData[sliceIndex]
+      !mapData || !xAxis || !yAxis ||
+      mapData.length !== yAxis.length ||
+      mapData.some(row => row.length !== xAxis.length)
     ) {
-      return null;
+      return { error: 'Os dados do mapa são inconsistentes ou estão em falta.' };
     }
 
-    const yDataSlice = mapData[sliceIndex];
-
-    const data = xAxis
-      .map((x, index) => {
-        const y = yDataSlice[index];
-        if (typeof x === 'number' && isFinite(x) && typeof y === 'number' && isFinite(y)) {
-          return {
-            xValue: x,
-            yValue: y,
-          };
-        }
-        return null;
-      })
-      .filter((point): point is { xValue: number; yValue: number } => point !== null);
-
-    if (data.length > 0) {
-        data.sort((a, b) => a.xValue - b.xValue);
+    const numericXAxis = xAxis.map(Number).filter(v => isFinite(v));
+    if (numericXAxis.length !== xAxis.length) {
+        return { error: 'O eixo X contém valores não numéricos.'}
     }
 
-    return data.length > 0 ? data : null;
-  }, [mapData, xAxis, sliceIndex]);
+    const preparedData = xAxis.map((x, i) => {
+        const dataPoint: { [key: string]: number | string } = { x: Number(x) };
+        if (!isFinite(dataPoint.x as number)) return null;
 
+        yAxis.forEach((y, j) => {
+            const yValue = mapData[j][i];
+            if (yValue !== null && isFinite(yValue)) {
+                dataPoint[`y-${j}`] = yValue;
+            }
+        });
+        return dataPoint;
+    }).filter(Boolean) as { [key: string]: number }[];
 
-  if (!chartData) {
+    if (preparedData.length === 0) {
+        return { error: 'Não há pontos de dados válidos para exibir.'}
+    }
+
+    preparedData.sort((a, b) => a.x - b.x);
+
+    const series = yAxis.map((y, index) => ({
+      name: `${yAxisLabel}: ${typeof y === 'number' ? y.toFixed(1) : y}`,
+      dataKey: `y-${index}`,
+      stroke: COLORS[index % COLORS.length],
+    }));
+
+    return { chartData: preparedData, series, error: null };
+  }, [mapData, xAxis, yAxis, yAxisLabel]);
+
+  if (error || !chartData || !series) {
     return (
       <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
         <div>
           <AlertCircle className="mx-auto h-12 w-12" />
-          <p className="mt-4 font-semibold">Dados de Gráfico Indisponíveis</p>
-          <p className="text-sm">A linha selecionada não contém dados numéricos válidos para exibir.</p>
+          <p className="mt-4 font-semibold">Não é Possível Apresentar o Gráfico</p>
+          <p className="text-sm">{error || 'Ocorreu um erro inesperado.'}</p>
         </div>
       </div>
     );
   }
   
-  const selectedYValue = yAxis[sliceIndex];
-  const formattedYValue = typeof selectedYValue === 'number' ? selectedYValue.toFixed(1) : selectedYValue;
-  const legendName = `${yAxisLabel}: ${formattedYValue}`;
-  
   const yAxisTickFormatter = (value: any) => {
-    if (typeof value === 'number') {
-      return value.toFixed(2);
-    }
-    return value;
+    return typeof value === 'number' ? value.toFixed(1) : value;
+  };
+
+  const xAxisTickFormatter = (value: any) => {
+    return typeof value === 'number' ? Math.round(value) : value;
   };
 
   return (
-    <div className={cn("h-full w-full flex flex-col", className)} {...props}>
-        <DataPointTable data={chartData} />
-        <div className="flex-1 min-h-0">
-          <ChartContainer config={{}} className="h-full w-full">
-            <LineChart
-              accessibilityLayer
-              data={chartData}
-              margin={{
-                top: 5,
-                right: 30,
-                bottom: 20,
-                left: 20,
-              }}
-            >
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="xValue"
-                type="number"
-                tickLine={true}
-                axisLine={true}
-                tickMargin={8}
-                domain={['dataMin', 'dataMax']}
-                label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
-              />
-              <YAxis
-                dataKey="yValue"
-                tickLine={true}
-                axisLine={true}
-                tickMargin={8}
-                domain={['auto', 'auto']}
-                tickFormatter={yAxisTickFormatter}
-                label={{ value: 'Valor (Z)', angle: -90, position: 'insideLeft', offset: -5 }}
-              />
-              <Tooltip
-                cursor
-                content={<ChartTooltipContent indicator="dot" />}
-              />
-              <Legend verticalAlign="top" align="right" height={36} />
-              <Line
-                dataKey="yValue"
-                type="monotone"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                dot={true}
-                name={legendName}
-                connectNulls={false}
-              />
-            </LineChart>
-          </ChartContainer>
-      </div>
+    <div className={cn('h-full w-full', className)} {...props}>
+      <ChartContainer config={{}} className="h-full w-full">
+        <LineChart
+          data={chartData}
+          margin={{ top: 5, right: 30, left: 20, bottom: 20 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis
+            type="number"
+            dataKey="x"
+            domain={['dataMin', 'dataMax']}
+            tickFormatter={xAxisTickFormatter}
+            label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
+            allowDuplicatedCategory={false}
+          />
+          <YAxis
+            domain={['auto', 'auto']}
+            tickFormatter={yAxisTickFormatter}
+            label={{ value: 'Valor (Z)', angle: -90, position: 'insideLeft', offset: -5 }}
+          />
+          <Tooltip
+            content={<ChartTooltipContent indicator="dot" />}
+          />
+          <Legend verticalAlign="top" align="center" wrapperStyle={{paddingBottom: '20px'}} />
+          {series.map((s) => (
+            <Line
+              key={s.name}
+              type="monotone"
+              dataKey={s.dataKey}
+              name={s.name}
+              stroke={s.stroke}
+              dot={false}
+              strokeWidth={2}
+              connectNulls
+            />
+          ))}
+        </LineChart>
+      </ChartContainer>
     </div>
   );
 }
