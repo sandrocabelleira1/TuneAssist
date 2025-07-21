@@ -107,7 +107,7 @@ export default function LinePlot2D({
         .filter(Boolean) as { x: number; y: number }[];
 
     if (preparedData.length === 0) {
-        return { error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
+        return { chartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
     }
 
     preparedData.sort((a, b) => a.x - b.x);
