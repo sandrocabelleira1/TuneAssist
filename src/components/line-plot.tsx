@@ -126,7 +126,6 @@ export default function LinePlot2D({
     setCurrentChartData(initialChartData);
   }, [initialChartData]);
 
-
   const handleMouseDown = useCallback((dotProps: any) => {
     setIsDragging(true);
     setActiveDot(dotProps);
@@ -171,13 +170,13 @@ export default function LinePlot2D({
 
   useEffect(() => {
     if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp, { once: true });
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp, { once: true });
     }
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
