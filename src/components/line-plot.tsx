@@ -82,6 +82,7 @@ export default function LinePlot2D({
 
   const chartRef = useRef<any>(null);
   const [activeDot, setActiveDot] = useState<any>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [currentChartData, setCurrentChartData] = useState<any[] | null>(null);
 
   const { initialChartData, lineDataKey, error } = useMemo(() => {
@@ -126,24 +127,19 @@ export default function LinePlot2D({
   }, [initialChartData]);
 
 
-  const handleMouseUp = useCallback(() => {
-    if (activeDot && selectedLineIndex !== null && currentChartData) {
-        const finalDot = currentChartData.find(d => d.originalIndex === activeDot.payload.originalIndex);
-        if (finalDot) {
-            onPointChange(selectedLineIndex, finalDot.originalIndex, finalDot.y);
-        }
-    }
-    setActiveDot(null);
-  }, [activeDot, onPointChange, selectedLineIndex, currentChartData]);
+  const handleMouseDown = useCallback((dotProps: any) => {
+    setIsDragging(true);
+    setActiveDot(dotProps);
+  }, []);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
-      if (activeDot && chartRef.current) {
+      if (isDragging && activeDot && chartRef.current) {
         const chart = chartRef.current.chart;
         if (!chart || !chart.props.margin) return;
         
         const chartContainer = chartRef.current.container;
         const chartRect = chartContainer.getBoundingClientRect();
-
+        
         const mainYAxis = chart.yAxisMap?.[0];
         if (!mainYAxis?.scale?.invert) return;
         
@@ -160,29 +156,37 @@ export default function LinePlot2D({
             });
         });
       }
-  }, [activeDot]);
+  }, [isDragging, activeDot]);
+
+  const handleMouseUp = useCallback(() => {
+    if (isDragging && activeDot && selectedLineIndex !== null && currentChartData) {
+        const finalDot = currentChartData.find(d => d.originalIndex === activeDot.payload.originalIndex);
+        if (finalDot) {
+            onPointChange(selectedLineIndex, finalDot.originalIndex, finalDot.y);
+        }
+    }
+    setIsDragging(false);
+    setActiveDot(null);
+  }, [isDragging, activeDot, onPointChange, selectedLineIndex, currentChartData]);
 
   useEffect(() => {
-    if (activeDot) {
+    if (isDragging) {
       window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    } else {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.addEventListener('mouseup', handleMouseUp, { once: true });
     }
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [activeDot, handleMouseMove, handleMouseUp]);
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
 
   const CustomDot = (props: any) => {
       const { cx, cy } = props;
 
       return (
-          <g onMouseDown={() => setActiveDot(props)}>
+          <g onMouseDown={() => handleMouseDown(props)}>
               <circle
                   cx={cx}
                   cy={cy}
@@ -246,8 +250,9 @@ export default function LinePlot2D({
                     >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
-                        type="category"
+                        type="number"
                         dataKey="x"
+                        domain={['dataMin', 'dataMax']}
                         tickFormatter={xAxisTickFormatter}
                         label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
                         allowDuplicatedCategory={false}
