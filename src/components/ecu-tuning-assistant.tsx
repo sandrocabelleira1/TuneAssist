@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -582,6 +581,26 @@ export default function EcuTuningAssistant() {
       setMapValidationStatus('idle');
     };
 
+    const handlePointChange = useCallback((rowIndex: number, colIndex: number, newValue: number) => {
+        if (!workingMap || !displayMap) return;
+
+        // Update the working map (source of truth for saving)
+        const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
+        if (newWorkingMap[rowIndex] !== undefined && newWorkingMap[rowIndex][colIndex] !== undefined) {
+             newWorkingMap[rowIndex][colIndex] = newValue;
+             setWorkingMap(newWorkingMap);
+        }
+
+        // Update the display map to reflect the change immediately
+        const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
+        if (newDisplayMap[rowIndex] !== undefined && newDisplayMap[rowIndex][colIndex] !== undefined) {
+             newDisplayMap[rowIndex][colIndex] = newValue;
+             setDisplayMap(newDisplayMap);
+        }
+        
+        setMapValidationStatus('idle'); // Any manual change invalidates AI suggestions
+    }, [workingMap, displayMap]);
+
     const handleCellSelect = useCallback((rowIndex: number, colIndex: number, isCtrlOrCmd: boolean) => {
         const newSelection = new Set(selectedCells);
         const key = `${rowIndex}-${colIndex}`;
@@ -825,6 +844,7 @@ export default function EcuTuningAssistant() {
                                             yAxis={displayAxes.y}
                                             selectedLineIndex={selectedLineIndex}
                                             onLineSelect={setSelectedLineIndex}
+                                            onPointChange={handlePointChange}
                                             yAxisLabel={selectedMapDefinition?.yAxisDef?.label}
                                             xAxisLabel={selectedMapDefinition?.xAxisDef?.label}
                                         />
@@ -1107,3 +1127,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+    
