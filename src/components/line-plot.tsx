@@ -154,12 +154,13 @@ export default function LinePlot2D({
                     <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
-                        type="number"
+                        type="category"
                         dataKey="x"
-                        domain={['dataMin', 'dataMax']}
+                        ticks={xAxis.calculated}
                         tickFormatter={xAxisTickFormatter}
                         label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
-                        allowDuplicatedCategory={false}
+                        allowDuplicatedCategory={true}
+                        interval="preserveStartEnd"
                     />
                     <YAxis
                         domain={['auto', 'auto']}
