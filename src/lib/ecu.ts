@@ -278,13 +278,13 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // Isolate the endian swap to only affect the Z-axis (map data)
+    // Read axes with their own endianness, ignoring the global swap toggle
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
     
     const view = new DataView(binBuffer);
     
-    // For the Z-axis, the swap is determined by the toggle button
+    // For the Z-axis (map data), the swap is determined by the toggle button
     const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
     const equation = normalizeEquation(def.equation);
