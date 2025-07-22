@@ -81,6 +81,7 @@ export default function LinePlot2D({
 }: LinePlot2DProps) {
 
   const chartRef = useRef<any>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
   const [activeDot, setActiveDot] = useState<any>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [currentChartData, setCurrentChartData] = useState<any[] | null>(null);
@@ -132,15 +133,14 @@ export default function LinePlot2D({
   }, []);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
-      if (isDragging && activeDot && chartRef.current) {
+      if (isDragging && activeDot && chartRef.current && chartContainerRef.current) {
         const chart = chartRef.current.chart;
         if (!chart || !chart.props.margin) return;
-        
-        const chartContainer = chartRef.current.container;
-        const chartRect = chartContainer.getBoundingClientRect();
-        
+
         const mainYAxis = chart.yAxisMap?.[0];
         if (!mainYAxis?.scale?.invert) return;
+
+        const chartRect = chartContainerRef.current.getBoundingClientRect();
         
         const mouseY = event.clientY - chartRect.top - chart.props.margin.top;
         const newYValue = mainYAxis.scale.invert(mouseY);
@@ -223,7 +223,7 @@ export default function LinePlot2D({
   return (
     <div className={cn('h-full w-full flex', className)} {...props}>
         <RPMSelector yAxis={yAxis} selectedLineIndex={selectedLineIndex} onLineSelect={onLineSelect} />
-        <div className="flex-1 min-w-0">
+        <div ref={chartContainerRef} className="flex-1 min-w-0">
             {selectedLineIndex === null ? (
                 <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
                     <div>
