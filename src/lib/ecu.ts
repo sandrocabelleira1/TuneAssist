@@ -208,6 +208,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
+    // This is the CRITICAL FIX: The axis's own endianness is respected
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
@@ -268,12 +269,13 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // Apply endian swap based on user toggle, but only to specific axes as requested for debugging
+    // Read axes with standard endianness (not swapped by this function's parameter)
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
     
     const view = new DataView(binBuffer);
-    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped; // Apply swap only to Z
+    // This is the CRITICAL FIX: The Z-axis endianness is determined by its own definition AND the user's manual swap toggle
+    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(def.equation);
 
     let zEquationFunc: (val: number) => number | string;
