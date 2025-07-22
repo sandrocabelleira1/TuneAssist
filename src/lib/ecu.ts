@@ -269,9 +269,8 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // Read axes, but IGNORE manual swap by forcing `isEndianSwapped` to false
-    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
-    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
+    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
+    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     
     const view = new DataView(binBuffer);
     
@@ -333,7 +332,6 @@ export function readAndCalculateMapFromBin(
         calculatedMap.push(calculatedRow);
     }
     
-    // Return axes and map in original order from the file
     return { 
         calculatedMap: calculatedMap, 
         rawMap: rawMap, 
@@ -484,5 +482,6 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
 

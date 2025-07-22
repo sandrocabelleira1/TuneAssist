@@ -685,12 +685,17 @@ export default function EcuTuningAssistant() {
         setMapToEdit(null);
     };
 
-    const handleToggleEndianness = () => {
-        const newIsEndianSwapped = !isEndianSwapped;
-        setIsEndianSwapped(newIsEndianSwapped);
-        if (selectedMapName) handleMapSelect(selectedMapName);
-        addLog(`Ordem de bytes de 16-bit invertida. Swap está ${newIsEndianSwapped ? 'ATIVO' : 'INATIVO'}.`, 'info');
-    };
+    const handleToggleEndianness = useCallback(() => {
+      const newIsEndianSwapped = !isEndianSwapped;
+      setIsEndianSwapped(newIsEndianSwapped);
+      addLog(`Ordem de bytes de 16-bit invertida. Swap está ${newIsEndianSwapped ? 'ATIVO' : 'INATIVO'}. A recalcular o mapa...`, 'info');
+      // Use a timeout to ensure state update is processed before reloading map
+      setTimeout(() => {
+          if (selectedMapName) {
+              handleMapSelect(selectedMapName);
+          }
+      }, 0);
+    }, [isEndianSwapped, selectedMapName, handleMapSelect, addLog]);
 
 
     const selectedMapDefinition = useMemo(() => {
@@ -1128,3 +1133,4 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
