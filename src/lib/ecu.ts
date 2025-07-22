@@ -78,7 +78,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             
-            const dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
+            let dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '0', 10);
+            if (dataSizeBits === 0) {
+                const dataType = parseInt(getAttr(embeddedData, 'mmeddatatype') || '0', 10);
+                if (dataType === 1) dataSizeBits = 8;
+                else if (dataType === 2) dataSizeBits = 16;
+                else dataSizeBits = 16; // Default to 16 if completely unspecified
+            }
             
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
@@ -124,7 +130,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                         const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
                         if (axisDataType === 1) axisDataSizeBits = 8;
                         else if (axisDataType === 2) axisDataSizeBits = 16;
-                        else axisDataSizeBits = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10);
+                        else axisDataSizeBits = 16;
                     }
                     
                     axisDef.dataSize = axisDataSizeBits / 8;
@@ -208,9 +214,9 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
-    // CORRECTED LOGIC: XOR (^) is the correct operator for "one or the other, but not both".
+    // XOR logic: invert if one OR the other is true, but not both.
     // This correctly combines the file definition with the user's manual override.
-    const useLittleEndian = (axisDef.isBigEndian ?? false) ? !isEndianSwapped : isEndianSwapped;
+    const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
 
@@ -277,7 +283,7 @@ export function readAndCalculateMapFromBin(
     const view = new DataView(binBuffer);
     
     // For the Z-axis, use the same corrected logic.
-    const useLittleEndianForZ = (def.isBigEndian ?? false) ? !isEndianSwapped : isEndianSwapped;
+    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
     const equation = normalizeEquation(def.equation);
 
@@ -468,7 +474,7 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    const useLittleEndian = (def.isBigEndian ?? false) ? !isEndianSwapped : isEndianSwapped;
+    const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
     const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
