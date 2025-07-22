@@ -78,7 +78,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             
             let dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || '0', 10);
-            if (dataSizeBits === 0) {
+             if (dataSizeBits === 0) {
                  const embeddedSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '0', 10);
                  if (embeddedSizeBits !== 0) dataSizeBits = embeddedSizeBits;
             }
@@ -87,7 +87,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if (dataType === 1) dataSizeBits = 8;
                 else if (dataType === 2) dataSizeBits = 16;
             }
-            if (dataSizeBits === 0) dataSizeBits = 16;
+            if (dataSizeBits === 0) dataSizeBits = 16; // Fallback
 
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
 
@@ -171,7 +171,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 rows,
                 cols,
                 dataSize: dataSizeBits / 8,
-                minorStrideBits: minorStrideBits > 0 ? minorStrideBits : dataSizeBits,
+                minorStrideBits: minorStrideBits > 0 ? minorStrideBits : (dataSizeBits),
                 isBigEndian,
                 equation,
                 xAxisDef,
@@ -268,16 +268,17 @@ export function readAndCalculateMapFromBin(
   const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
   const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
   
-  // Stride is the distance between columns in BITS. Default to dataSize in bits if not present.
-  const strideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
+  // Stride is the distance between elements in BITS. Default to dataSize in bits if not present.
+  const colStrideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
+  const rowStrideBytes = def.cols * colStrideBytes;
 
   const rawMap: MapData = [];
   for (let r = 0; r < def.rows; r++) {
     const rawRow: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
-      // The offset calculation now respects the stride.
-      // Offset = start_address + (row_index * num_columns * stride_in_bytes) + (col_index * stride_in_bytes)
-      const offset = def.address + (r * def.cols * strideBytes) + (c * strideBytes);
+      // Correct offset calculation using row and column strides.
+      const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
+      
       if (offset + def.dataSize > view.byteLength) {
         rawRow.push(null);
         continue;
@@ -287,8 +288,7 @@ export function readAndCalculateMapFromBin(
         rawValue = view.getUint8(offset);
       } else if (def.dataSize === 2) {
         rawValue = view.getUint16(offset, useLittleEndian);
-      }
-      else { 
+      } else { 
         rawRow.push(null); 
         continue; 
       }
@@ -439,7 +439,8 @@ export function writeMapToBin(
     const view = new DataView(newBuffer);
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
-    const strideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
+    const colStrideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
+    const rowStrideBytes = def.cols * colStrideBytes;
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
@@ -450,7 +451,7 @@ export function writeMapToBin(
 
             try {
                 const intValue = Math.round(rawValue);
-                const offset = def.address + (r * def.cols * strideBytes) + (c * strideBytes);
+                const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
 
                 if (offset + def.dataSize > view.byteLength) {
                     console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
