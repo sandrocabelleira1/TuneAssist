@@ -1,4 +1,5 @@
 
+
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -207,7 +208,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
-    // CRITICAL FIX: The axis has its own endianness setting. The `isEndianSwapped` is a global override from the UI.
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
@@ -268,8 +268,9 @@ export function readAndCalculateMapFromBin(
         };
     }
 
+    // Apply endian swap only to X axis, not Y axis.
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
-    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
+    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
     
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
