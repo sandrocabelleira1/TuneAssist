@@ -77,7 +77,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             
-            // This is the most reliable source for the data size of the Z-axis
             const dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
@@ -104,8 +103,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 let sourceNodeForCalcs = axisNode;
                 let label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
-                // ** CRITICAL FIX **
-                // If the axis is a link, the real properties (address, equation, etc.) are in the linked table's Z-axis.
                 if (linkedTableNode) {
                     const linkedTitle = findNode(linkedTableNode, 'title')?.textContent?.trim();
                     if (linkedTitle) label = linkedTitle;
@@ -130,7 +127,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     }
                     
                     axisDef.dataSize = axisDataSizeBits / 8;
-                    axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
+                    axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
                 }
                 
                 const axisMathNode = findNode(sourceNodeForCalcs, 'math', 'MATH');
@@ -210,6 +207,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
+    // CRITICAL FIX: The axis has its own endianness setting. The `isEndianSwapped` is a global override from the UI.
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
@@ -233,9 +231,13 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
         if (offset + dataSize > view.byteLength) continue;
 
         let rawValue;
-        if (dataSize === 1) rawValue = view.getUint8(offset);
-        else if (dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
-        else continue;
+        if (dataSize === 1) {
+            rawValue = view.getUint8(offset);
+        } else if (dataSize === 2) {
+            rawValue = view.getUint16(offset, useLittleEndian);
+        } else {
+            continue;
+        }
 
         raw.push(rawValue);
         try {
@@ -266,11 +268,9 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // 1. Read and calculate axis data correctly.
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     
-    // 2. Prepare for reading Z-data from the BIN file.
     const view = new DataView(binBuffer);
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(def.equation);
@@ -282,11 +282,9 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
-    // 3. Calculate correct strides in BYTES.
-    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
+    const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
-    // 4. Read the raw and calculated Z-data, using the correct strides and data size.
     const rawMap: MapData = [];
     const calculatedMap: MapData = [];
 
@@ -320,7 +318,7 @@ export function readAndCalculateMapFromBin(
                 try {
                     calculatedRow.push(zEquationFunc(rawValue) as number);
                 } catch (e) {
-                    calculatedRow.push(rawValue); // Fallback
+                    calculatedRow.push(rawValue);
                 }
             } else {
                 calculatedRow.push(null);
@@ -330,8 +328,6 @@ export function readAndCalculateMapFromBin(
         calculatedMap.push(calculatedRow);
     }
     
-    // 5. Return everything in its original order. No sorting is done here.
-    // The UI is responsible for displaying the data as-is.
     return { 
         calculatedMap: calculatedMap, 
         rawMap: rawMap, 
@@ -364,10 +360,6 @@ export function invertEquation(
 
     const sanitizedEq = normalizeEquation(eq);
 
-    // This is a simplified symbolic inverter. It handles simple arithmetic.
-    // E.g., "X * 0.1" or "X / 10" or "X + 5" or "X - 5" or "5 - X"
-    
-    // Case: "X"
     if (sanitizedEq.toUpperCase() === 'X') {
         return finalValue;
     }
@@ -389,10 +381,9 @@ export function invertEquation(
         case '/': return finalValue * operand;
         case '+': return finalValue - operand;
         case '-':
-            // Handle both "X - num" and "num - X"
-            if (isXFirst) { // X - num
+            if (isXFirst) {
                 return finalValue + operand;
-            } else { // num - X
+            } else {
                 return operand - finalValue;
             }
       }
@@ -412,9 +403,6 @@ export function recalculateRawMapFromCalculated(
     if (!sourceAxes.x.originalIndices || !sourceAxes.y.originalIndices) {
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
-
-    // The map is already in original order, so no unsorting is needed.
-    // We just need to apply the inverted equation.
     
     const newRawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
@@ -457,8 +445,8 @@ export function writeMapToBin(
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
-    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
+    const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
