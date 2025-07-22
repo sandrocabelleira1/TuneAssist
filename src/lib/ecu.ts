@@ -269,8 +269,9 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
-    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
+    // Read axes WITHOUT applying the manual swap, so they remain fixed.
+    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
+    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
     
     const view = new DataView(binBuffer);
     
@@ -482,6 +483,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-
-
