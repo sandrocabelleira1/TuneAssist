@@ -21,6 +21,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import type { MapData, AxisDataState } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
 
 interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   mapData: MapData | null;
@@ -32,6 +36,15 @@ interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   onLineSelect: (index: number) => void;
   onPointChange: (rowIndex: number, colIndex: number, newValue: number) => void;
 }
+
+// State for the editing modal
+type EditingPoint = {
+  rowIndex: number;
+  colIndex: number;
+  currentValue: number;
+  xValue: number;
+} | null;
+
 
 const yAxisTickFormatter = (value: any) => {
     return typeof value === 'number' ? value.toFixed(1) : value;
@@ -80,24 +93,21 @@ export default function LinePlot2D({
   ...props
 }: LinePlot2DProps) {
 
-  const chartRef = useRef<any>(null);
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const [activeDot, setActiveDot] = useState<any>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [currentChartData, setCurrentChartData] = useState<any[] | null>(null);
+  const [editingPoint, setEditingPoint] = useState<EditingPoint>(null);
 
-  const { initialChartData, lineDataKey, error } = useMemo(() => {
+  const { chartData, lineDataKey, error } = useMemo(() => {
     if (
       !mapData || !xAxis?.calculated || !yAxis?.calculated ||
       selectedLineIndex === null ||
       selectedLineIndex >= mapData.length
     ) {
-      return { initialChartData: null, lineDataKey: null, error: null };
+      return { chartData: null, lineDataKey: null, error: null };
     }
 
     const lineData = mapData[selectedLineIndex];
     if (!lineData) {
-      return { initialChartData: null, lineDataKey: null, error: 'Linha de dados selecionada é inválida.' };
+      return { chartData: null, lineDataKey: null, error: 'Linha de dados selecionada é inválida.' };
     }
 
     const preparedData = xAxis.calculated
@@ -113,94 +123,49 @@ export default function LinePlot2D({
         .filter(Boolean) as { x: number; y: number, originalIndex: number }[];
 
     if (preparedData.length === 0) {
-        return { initialChartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
+        return { chartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
     }
 
     preparedData.sort((a, b) => a.x - b.x);
 
     const lineDataKey = `RPM ${yAxisTickFormatter(yAxis.calculated[selectedLineIndex])}`;
 
-    return { initialChartData: preparedData, lineDataKey, error: null };
+    return { chartData: preparedData, lineDataKey, error: null };
   }, [mapData, xAxis, yAxis, selectedLineIndex]);
   
   useEffect(() => {
-    setCurrentChartData(initialChartData);
-  }, [initialChartData]);
+    setCurrentChartData(chartData);
+  }, [chartData]);
 
-  const handleMouseDown = useCallback((dotProps: any) => {
-    setIsDragging(true);
-    setActiveDot(dotProps);
-  }, []);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (isDragging && activeDot && chartRef.current && chartContainerRef.current) {
-        const chart = chartRef.current;
-        const yAxisMap = chart.yAxisMap;
-        if (!chart || !yAxisMap || !yAxisMap[0]) return;
-        
-        const yAxisScale = yAxisMap[0].scale;
-        if (!yAxisScale || typeof yAxisScale.invert !== 'function') return;
+  const handlePointClick = (dotProps: any) => {
+    if (selectedLineIndex === null) return;
+    const { payload } = dotProps;
+    setEditingPoint({
+      rowIndex: selectedLineIndex,
+      colIndex: payload.originalIndex,
+      currentValue: payload.y,
+      xValue: payload.x
+    });
+  };
 
-        const chartRect = chartContainerRef.current.getBoundingClientRect();
-        
-        const mouseY = e.clientY - chartRect.top - chart.props.margin.top;
-        
-        const plotAreaHeight = chart.props.height - chart.props.margin.top - chart.props.margin.bottom;
-        const clampedMouseY = Math.max(0, Math.min(plotAreaHeight, mouseY));
-        
-        const newYValue = yAxisScale.invert(clampedMouseY);
-        
-        setCurrentChartData(prevData => {
-            if (!prevData) return null;
-            return prevData.map(d => {
-                if (d.originalIndex === activeDot.payload.originalIndex) {
-                    return { ...d, y: newYValue };
-                }
-                return d;
-            });
-        });
-      }
-  }, [isDragging, activeDot]);
-
-  const handleMouseUp = useCallback(() => {
-    if (isDragging && activeDot && selectedLineIndex !== null && currentChartData) {
-        const finalDot = currentChartData.find(d => d.originalIndex === activeDot.payload.originalIndex);
-        if (finalDot) {
-            onPointChange(selectedLineIndex, finalDot.originalIndex, finalDot.y);
-        }
+  const handleSavePointChange = (newValue: number) => {
+    if (editingPoint) {
+      onPointChange(editingPoint.rowIndex, editingPoint.colIndex, newValue);
+      setEditingPoint(null);
     }
-    setIsDragging(false);
-    setActiveDot(null);
-  }, [isDragging, activeDot, onPointChange, selectedLineIndex, currentChartData]);
-
-  useEffect(() => {
-    // These listeners are added to the document so that the drag continues
-    // even if the mouse leaves the chart area.
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp, { once: true });
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, handleMouseMove, handleMouseUp]);
-
+  };
 
   const CustomDot = (props: any) => {
       const { cx, cy } = props;
-
-      // The 'g' element is used as a larger, transparent target area for the mouse events.
       return (
-          <g onMouseDown={() => handleMouseDown(props)}>
+          <g onClick={() => handlePointClick(props)} className="cursor-pointer">
               <circle
                   cx={cx}
                   cy={cy}
                   r={8}
                   fill="hsl(var(--primary))"
                   fillOpacity={0.3}
-                  className="cursor-ns-resize"
               />
               <circle
                   cx={cx}
@@ -209,7 +174,6 @@ export default function LinePlot2D({
                   fill="hsl(var(--primary))"
                   stroke="hsl(var(--background))"
                   strokeWidth={1.5}
-                  className="cursor-ns-resize"
               />
           </g>
       );
@@ -231,7 +195,7 @@ export default function LinePlot2D({
   return (
     <div className={cn('h-full w-full flex', className)} {...props}>
         <RPMSelector yAxis={yAxis} selectedLineIndex={selectedLineIndex} onLineSelect={onLineSelect} />
-        <div ref={chartContainerRef} className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0">
             {selectedLineIndex === null ? (
                 <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
                     <div>
@@ -251,7 +215,6 @@ export default function LinePlot2D({
             ) : (
                 <ChartContainer config={{}} className="h-full w-full">
                     <LineChart 
-                        ref={chartRef} 
                         data={currentChartData} 
                         margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                     >
@@ -263,7 +226,6 @@ export default function LinePlot2D({
                         tickFormatter={xAxisTickFormatter}
                         label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
                         allowDuplicatedCategory={false}
-                        ticks={xAxis.calculated.map(v => Number(v)).filter(isFinite).sort((a,b) => a-b)}
                     />
                     <YAxis
                         type="number"
@@ -281,13 +243,72 @@ export default function LinePlot2D({
                         strokeWidth={2}
                         dot={<CustomDot />}
                         activeDot={false}
-                        isAnimationActive={false}
+                        isAnimationActive={true}
                         connectNulls
                     />
                     </LineChart>
                 </ChartContainer>
             )}
         </div>
+        {editingPoint && (
+            <EditPointModal 
+                point={editingPoint}
+                onSave={handleSavePointChange}
+                onClose={() => setEditingPoint(null)}
+                yAxisLabel={yAxisLabel}
+                xAxisLabel={xAxisLabel}
+            />
+        )}
     </div>
   );
+}
+
+function EditPointModal({ point, onSave, onClose, yAxisLabel, xAxisLabel }: {
+    point: EditingPoint;
+    onSave: (newValue: number) => void;
+    onClose: () => void;
+    yAxisLabel: string;
+    xAxisLabel: string;
+}) {
+    const [newValue, setNewValue] = useState(String(point?.currentValue ?? ''));
+
+    const handleConfirm = () => {
+        const numValue = parseFloat(newValue);
+        if (!isNaN(numValue)) {
+            onSave(numValue);
+        } else {
+            // Optional: show an error if the input is not a valid number
+            console.error("Valor inválido");
+        }
+    };
+    
+    if (!point) return null;
+
+    return (
+        <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Editar Ponto do Gráfico</DialogTitle>
+                    <DialogDescription>
+                        Modifique o valor para o ponto em {xAxisLabel} = {xAxisTickFormatter(point.xValue)}.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    <Label htmlFor="pointValue">{yAxisLabel}</Label>
+                    <Input 
+                        id="pointValue"
+                        type="number"
+                        value={newValue}
+                        onChange={(e) => setNewValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); }}
+                        autoFocus
+                    />
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose}>Cancelar</Button>
+                    <Button onClick={handleConfirm}>Guardar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
 }
