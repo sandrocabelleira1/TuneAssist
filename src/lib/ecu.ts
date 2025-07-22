@@ -264,7 +264,7 @@ export function readAndCalculateMapFromBin(
 
     // 2. Read the raw Z-data from the BIN based on its defined layout.
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
-    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
+    const colStrideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
     const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
     
     const originalRawMap: MapData = [];
@@ -496,6 +496,7 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
 
 
