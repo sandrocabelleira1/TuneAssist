@@ -1,5 +1,4 @@
 
-
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -252,73 +251,90 @@ export function readAndCalculateMapFromBin(
     def: XDFDefinition,
     isEndianSwapped = false
 ): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
-    if (!def || !binBuffer) return { calculatedMap: [], rawMap: [], sortedAxes: { x: { raw: [], calculated: [], originalIndices:[], label: 'X'}, y: { raw: [], calculated: [], originalIndices:[], label: 'Y'} } };
+    if (!def || !binBuffer) {
+        return { 
+            calculatedMap: [], 
+            rawMap: [], 
+            sortedAxes: { 
+                x: { raw: [], calculated: [], originalIndices:[], label: 'X'}, 
+                y: { raw: [], calculated: [], originalIndices:[], label: 'Y'} 
+            } 
+        };
+    }
 
-    const view = new DataView(binBuffer);
-
-    // 1. Read and calculate axis data INDEPENDENTLY.
-    // This returns the axes in the order they are in the BIN file.
+    // 1. Read and calculate axis data. This is now correct and applies equations.
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
-
-    // 2. Read the raw Z-data from the BIN based on its defined layout.
+    
+    // 2. Prepare for reading Z-data from the BIN file.
+    const view = new DataView(binBuffer);
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    const equation = normalizeEquation(def.equation);
+
+    let zEquationFunc: (val: number) => number | string;
+    try {
+        zEquationFunc = new Function('X', `return ${equation}`) as (val: number) => number;
+    } catch(e) {
+        throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
+    }
     
-    // Determine the stride (step in bytes) between elements in the same row
+    // 3. Calculate correct strides in BYTES.
+    // Use minor stride if specified, otherwise default to dataSize.
     const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
-    
-    // Determine the stride (step in bytes) between rows
+    // Use major stride if specified, otherwise default to a full row based on col stride.
     const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
-    
+
+    // 4. Read the raw and calculated Z-data, using the correct strides and data size.
     const rawMap: MapData = [];
+    const calculatedMap: MapData = [];
+
     for (let r = 0; r < def.rows; r++) {
         const rawRow: (number|null)[] = [];
+        const calculatedRow: (number|null)[] = [];
+
         for (let c = 0; c < def.cols; c++) {
+            // This is the corrected address calculation.
             const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
             
             if (offset + def.dataSize > view.byteLength) {
                 rawRow.push(null);
+                calculatedRow.push(null);
                 continue;
             }
             
-            let rawValue;
-            if (def.dataSize === 1) {
-                rawValue = view.getUint8(offset);
-            } else if (def.dataSize === 2) {
-                rawValue = view.getUint16(offset, useLittleEndian);
-            } else { 
-                rawRow.push(null); 
-                continue; 
+            let rawValue: number | null = null;
+            try {
+                if (def.dataSize === 1) {
+                    rawValue = view.getUint8(offset);
+                } else if (def.dataSize === 2) {
+                    rawValue = view.getUint16(offset, useLittleEndian);
+                }
+            } catch (e) {
+                console.error(`Erro ao ler o BIN no offset ${offset}`);
             }
+
             rawRow.push(rawValue);
+
+            if (rawValue !== null) {
+                try {
+                    calculatedRow.push(zEquationFunc(rawValue) as number);
+                } catch (e) {
+                    calculatedRow.push(rawValue); // Fallback
+                }
+            } else {
+                calculatedRow.push(null);
+            }
         }
         rawMap.push(rawRow);
-    }
-
-    // 3. Create a calculated version of the Z-data by applying the equation.
-    let zEquationFunc: (val: number) => number | string;
-    try {
-        const normalizedEquation = normalizeEquation(def.equation);
-        zEquationFunc = new Function('X', `return ${normalizedEquation}`) as (val: number) => number;
-    } catch(e) {
-        throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida.`);
+        calculatedMap.push(calculatedRow);
     }
     
-    const calculatedMap: MapData = rawMap.map(row => 
-        row.map(cell => (cell !== null ? zEquationFunc(cell) as number : null))
-    );
-    
-    // 4. Return the data in its original, unsorted order from the BIN file.
-    // The UI will be responsible for any sorting if needed.
-    const finalAxes = {
-        x: axisXData,
-        y: axisYData
-    };
-    
+    // 5. Return everything in its original order. NO sorting is done here.
+    // The UI is responsible for displaying the data as-is.
     return { 
         calculatedMap: calculatedMap, 
         rawMap: rawMap, 
-        sortedAxes: finalAxes 
+        sortedAxes: { x: axisXData, y: axisYData } 
     };
 }
 
@@ -473,8 +489,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-
-
-
-
