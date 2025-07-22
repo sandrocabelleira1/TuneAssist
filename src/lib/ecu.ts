@@ -1,5 +1,4 @@
 
-
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -218,7 +217,9 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
-    const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
+    // Use little endian if (isBigEndian from XDF is false AND global swap is false) OR (isBigEndian is true AND global swap is true)
+    // This is equivalent to XOR: (A XOR B) is true if they are different. We want to use little endian if they are the same.
+    const useLittleEndian = (axisDef.isBigEndian ?? false) === isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
 
@@ -278,14 +279,12 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // Read axes with their own endianness, ignoring the global swap toggle
-    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
-    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
+    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
+    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     
     const view = new DataView(binBuffer);
     
-    // For the Z-axis (map data), the swap is determined by the toggle button
-    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    const useLittleEndianForZ = (def.isBigEndian ?? false) === isEndianSwapped;
 
     const equation = normalizeEquation(def.equation);
 
@@ -476,7 +475,7 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    const useLittleEndian = (def.isBigEndian ?? false) === isEndianSwapped;
     
     const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
@@ -511,4 +510,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
