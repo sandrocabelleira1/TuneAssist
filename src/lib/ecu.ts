@@ -268,12 +268,12 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // Apply endian swap only to X axis, not Y axis.
-    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
+    // Apply endian swap based on user toggle, but only to specific axes as requested for debugging
+    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
     
     const view = new DataView(binBuffer);
-    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped; // Apply swap only to Z
     const equation = normalizeEquation(def.equation);
 
     let zEquationFunc: (val: number) => number | string;
