@@ -269,7 +269,7 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // Read axes WITHOUT applying the manual swap, so they remain fixed.
+    // Axes are read WITHOUT applying the manual swap, to keep them isolated for testing.
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
     
@@ -394,6 +394,25 @@ export function invertEquation(
       }
     }
     
+    // This is a simple attempt to handle more complex but common cases like (X-128)/2
+    const match = sanitizedEq.match(/\(\s*X\s*([+\-])\s*(\d+\.?\d*)\s*\)\s*([*\/])\s*(\d+\.?\d*)/);
+    if(match) {
+        const [, innerOp, innerValStr, outerOp, outerValStr] = match;
+        const innerVal = parseFloat(innerValStr);
+        const outerVal = parseFloat(outerValStr);
+        
+        if (!isNaN(innerVal) && !isNaN(outerVal)) {
+            let result = finalValue;
+            // Reverse outer operation
+            if (outerOp === '*') result /= outerVal;
+            if (outerOp === '/') result *= outerVal;
+            // Reverse inner operation
+            if (innerOp === '+') result -= innerVal;
+            if (innerOp === '-') result += innerVal;
+            return result;
+        }
+    }
+
     console.warn(`A equação "${eq}" é demasiado complexa para ser invertida. A utilizar o valor final como valor raw.`);
     return Math.round(finalValue);
 }
@@ -448,6 +467,7 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
+    // For the Z-axis, respect both its own definition AND the user's manual swap toggle
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
     const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
