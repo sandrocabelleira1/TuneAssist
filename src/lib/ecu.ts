@@ -76,13 +76,14 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             }
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            let dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '0', 10);
-            const dataType = parseInt(getAttr(embeddedData, 'mmeddatatype') || '0', 10);
-
-            // Prioritize datatype if elementsizebits is missing or ambiguous
-            if (dataSizeBits === 0 && dataType > 0) {
-                if (dataType === 1) dataSizeBits = 8; // 8-bit
-                else if (dataType === 2) dataSizeBits = 16; // 16-bit
+            
+            // CRITICAL FIX: Read data size directly from the Z-axis node itself, as it's the most reliable source.
+            // This overrides any potentially misleading values in the parent table node.
+            let dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || '0', 10);
+            if (dataSizeBits === 0) { // Fallback for older XDFs if 'elementsizebits' is not on the axis node
+                const dataType = parseInt(getAttr(embeddedData, 'mmeddatatype') || '0', 10);
+                if (dataType === 1) dataSizeBits = 8;
+                else if (dataType === 2) dataSizeBits = 16;
             }
             if (dataSizeBits === 0) dataSizeBits = 16; // Default to 16 if still unknown
 
@@ -121,11 +122,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const axisEmbeddedData = findNode(sourceNodeForCalcs, 'embeddeddata', 'EMBEDDEDDATA');
                 if (axisEmbeddedData) {
                     axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                    let axisDataSizeBits = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
-                    const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
-                    if (axisDataSizeBits === 0 && axisDataType > 0) {
-                         if (axisDataType === 1) axisDataSizeBits = 8;
-                         else if (axisDataType === 2) axisDataSizeBits = 16;
+                    let axisDataSizeBits = parseInt(getAttr(sourceNodeForCalcs, 'elementsizebits') || '0', 10);
+
+                    if (axisDataSizeBits === 0) {
+                        const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
+                        if (axisDataType === 1) axisDataSizeBits = 8;
+                        else if (axisDataType === 2) axisDataSizeBits = 16;
                     }
                     if (axisDataSizeBits === 0) axisDataSizeBits = 16;
                     
