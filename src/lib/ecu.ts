@@ -77,10 +77,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             }
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            let dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || '0', 10);
-            if (dataSizeBits === 0) {
-                dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
-            }
+            
+            const dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
@@ -259,15 +257,20 @@ export function readAndCalculateMapFromBin(
     const view = new DataView(binBuffer);
 
     // 1. Read and calculate axis data INDEPENDENTLY.
+    // This returns the axes in the order they are in the BIN file.
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
 
     // 2. Read the raw Z-data from the BIN based on its defined layout.
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
-    const colStrideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
+    
+    // Determine the stride (step in bytes) between elements in the same row
+    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
+    
+    // Determine the stride (step in bytes) between rows
     const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
     
-    const originalRawMap: MapData = [];
+    const rawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
         const rawRow: (number|null)[] = [];
         for (let c = 0; c < def.cols; c++) {
@@ -277,13 +280,19 @@ export function readAndCalculateMapFromBin(
                 rawRow.push(null);
                 continue;
             }
+            
             let rawValue;
-            if (def.dataSize === 1) rawValue = view.getUint8(offset);
-            else if (def.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
-            else { rawRow.push(null); continue; }
+            if (def.dataSize === 1) {
+                rawValue = view.getUint8(offset);
+            } else if (def.dataSize === 2) {
+                rawValue = view.getUint16(offset, useLittleEndian);
+            } else { 
+                rawRow.push(null); 
+                continue; 
+            }
             rawRow.push(rawValue);
         }
-        originalRawMap.push(rawRow);
+        rawMap.push(rawRow);
     }
 
     // 3. Create a calculated version of the Z-data by applying the equation.
@@ -294,47 +303,22 @@ export function readAndCalculateMapFromBin(
     } catch(e) {
         throw new Error(`A equação do mapa "${def.equation}" para "${def.name}" é inválida.`);
     }
-    const originalCalculatedMap: MapData = originalRawMap.map(row => 
+    
+    const calculatedMap: MapData = rawMap.map(row => 
         row.map(cell => (cell !== null ? zEquationFunc(cell) as number : null))
     );
-
-    // 4. Sort axes and create index maps to know how to reorder the Z data.
-    const createSortedAxis = (axisData: AxisDataState): { sortedValues: (string|number)[], indexMap: number[] } => {
-        const indexed = axisData.calculated.map((value, index) => ({ value, originalIndex: index }));
-        indexed.sort((a, b) => {
-            const valA = Number(a.value);
-            const valB = Number(b.value);
-            if (!isNaN(valA) && !isNaN(valB)) return valA - valB;
-            return String(a.value).localeCompare(String(b.value));
-        });
-        return {
-            sortedValues: indexed.map(item => item.value),
-            indexMap: indexed.map(item => item.originalIndex)
-        };
-    };
-
-    const { sortedValues: sortedXValues, indexMap: xIndexMap } = createSortedAxis(axisXData);
-    const { sortedValues: sortedYValues, indexMap: yIndexMap } = createSortedAxis(axisYData);
     
-    // 5. Reorder the Z data (both raw and calculated) according to the sorted axes.
-    // This is the crucial step to align Z data with the sorted X and Y axes.
-    const finalCalculatedMap: MapData = yIndexMap.map(originalYIndex =>
-        xIndexMap.map(originalXIndex => originalCalculatedMap[originalYIndex][originalXIndex])
-    );
-    const finalRawMap: MapData = yIndexMap.map(originalYIndex =>
-        xIndexMap.map(originalXIndex => originalRawMap[originalYIndex][originalXIndex])
-    );
-
-    // 6. Return the sorted maps and axes.
-    const sortedAxes = {
-        x: { ...axisXData, calculated: sortedXValues, originalIndices: xIndexMap },
-        y: { ...axisYData, calculated: sortedYValues, originalIndices: yIndexMap }
+    // 4. Return the data in its original, unsorted order from the BIN file.
+    // The UI will be responsible for any sorting if needed.
+    const finalAxes = {
+        x: axisXData,
+        y: axisYData
     };
     
     return { 
-        calculatedMap: finalCalculatedMap, 
-        rawMap: finalRawMap, 
-        sortedAxes: sortedAxes
+        calculatedMap: calculatedMap, 
+        rawMap: rawMap, 
+        sortedAxes: finalAxes 
     };
 }
 
@@ -412,21 +396,14 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
 
-    // Unsort the map from display order to original bin order
-    const unsortedCalculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
-    for (let r = 0; r < def.rows; r++) {
-        for (let c = 0; c < def.cols; c++) {
-            const originalRowIndex = sourceAxes.y.originalIndices[r];
-            const originalColIndex = sourceAxes.x.originalIndices[c];
-            unsortedCalculatedMap[originalRowIndex][originalColIndex] = calculatedMap[r][c];
-        }
-    }
+    // The map is already in original order, so no unsorting is needed.
+    // We just need to apply the inverted equation.
     
     const newRawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
         const newRawRow: (number | null)[] = [];
         for (let c = 0; c < def.cols; c++) {
-            const calculatedValue = unsortedCalculatedMap[r]?.[c];
+            const calculatedValue = calculatedMap[r]?.[c];
 
             if (calculatedValue === null || calculatedValue === undefined) {
                 newRawRow.push(null);
@@ -463,7 +440,7 @@ export function writeMapToBin(
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
-    const colStrideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
+    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
     let rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
     for (let r = 0; r < def.rows; r++) {
@@ -496,6 +473,7 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
 
 
