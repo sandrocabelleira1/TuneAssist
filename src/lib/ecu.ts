@@ -69,8 +69,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             if (!embeddedData) return;
 
-            const rows = parseInt(getAttr(embeddedData, 'mmedrowcount') || '', 10);
-            const cols = parseInt(getAttr(embeddedData, 'mmedcolcount') || '', 10);
+            // Corrected logic to determine rows and cols
+            const rowsStr = getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedmajorcount');
+            const colsStr = getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedminorcount');
+
+            const rows = parseInt(rowsStr || '', 10);
+            const cols = parseInt(colsStr || '', 10);
             
             if (isNaN(rows) || isNaN(cols) || rows <= 1 || cols <= 1) {
                 return;
@@ -214,8 +218,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
-    // XOR logic: invert if one OR the other is true, but not both.
-    // This correctly combines the file definition with the user's manual override.
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
@@ -276,13 +278,13 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // Axes are now read WITH the manual swap applied, ensuring consistency.
-    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
-    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
+    // Isolate the endian swap to only affect the Z-axis (map data)
+    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
+    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
     
     const view = new DataView(binBuffer);
     
-    // For the Z-axis, use the same corrected logic.
+    // For the Z-axis, the swap is determined by the toggle button
     const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
     const equation = normalizeEquation(def.equation);
@@ -509,3 +511,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
