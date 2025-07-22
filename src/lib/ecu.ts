@@ -77,6 +77,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             
+            // This is the most reliable source for the data size of the Z-axis
             const dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
@@ -103,12 +104,14 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 let sourceNodeForCalcs = axisNode;
                 let label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
+                // ** CRITICAL FIX **
+                // If the axis is a link, the real properties (address, equation, etc.) are in the linked table's Z-axis.
                 if (linkedTableNode) {
                     const linkedTitle = findNode(linkedTableNode, 'title')?.textContent?.trim();
                     if (linkedTitle) label = linkedTitle;
                     
                     const linkedZAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-                    if(linkedZAxis) {
+                    if (linkedZAxis) {
                       sourceNodeForCalcs = linkedZAxis;
                     }
                 }
@@ -118,6 +121,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if (axisEmbeddedData) {
                     axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
                     let axisDataSizeBits = parseInt(getAttr(sourceNodeForCalcs, 'elementsizebits') || '0', 10);
+                    
                     if (axisDataSizeBits === 0) {
                         const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
                         if (axisDataType === 1) axisDataSizeBits = 8;
@@ -262,7 +266,7 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // 1. Read and calculate axis data. This is now correct and applies equations.
+    // 1. Read and calculate axis data correctly.
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     
@@ -279,10 +283,8 @@ export function readAndCalculateMapFromBin(
     }
     
     // 3. Calculate correct strides in BYTES.
-    // Use minor stride if specified, otherwise default to dataSize.
     const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
-    // Use major stride if specified, otherwise default to a full row based on col stride.
-    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
+    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
     // 4. Read the raw and calculated Z-data, using the correct strides and data size.
     const rawMap: MapData = [];
@@ -293,7 +295,6 @@ export function readAndCalculateMapFromBin(
         const calculatedRow: (number|null)[] = [];
 
         for (let c = 0; c < def.cols; c++) {
-            // This is the corrected address calculation.
             const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
             
             if (offset + def.dataSize > view.byteLength) {
@@ -329,7 +330,7 @@ export function readAndCalculateMapFromBin(
         calculatedMap.push(calculatedRow);
     }
     
-    // 5. Return everything in its original order. NO sorting is done here.
+    // 5. Return everything in its original order. No sorting is done here.
     // The UI is responsible for displaying the data as-is.
     return { 
         calculatedMap: calculatedMap, 
@@ -457,7 +458,7 @@ export function writeMapToBin(
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
     const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
-    let rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
+    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
