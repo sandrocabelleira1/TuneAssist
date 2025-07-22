@@ -135,22 +135,19 @@ export default function LinePlot2D({
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isDragging && activeDot && chartRef.current && chartContainerRef.current) {
         const chart = chartRef.current;
-        if (!chart || !chart.props.margin) return;
-
-        // Access the y-axis scale function
-        const yAxisScale = chart.yAxisMap?.[0]?.scale;
+        const yAxisMap = chart.yAxisMap;
+        if (!chart || !yAxisMap || !yAxisMap[0]) return;
+        
+        const yAxisScale = yAxisMap[0].scale;
         if (!yAxisScale || typeof yAxisScale.invert !== 'function') return;
 
         const chartRect = chartContainerRef.current.getBoundingClientRect();
         
-        // Calculate mouse position relative to the chart's plotting area
         const mouseY = e.clientY - chartRect.top - chart.props.margin.top;
         
-        // Clamp the Y position to be within the plotting area
         const plotAreaHeight = chart.props.height - chart.props.margin.top - chart.props.margin.bottom;
         const clampedMouseY = Math.max(0, Math.min(plotAreaHeight, mouseY));
         
-        // Convert the clamped pixel value back to a data value
         const newYValue = yAxisScale.invert(clampedMouseY);
         
         setCurrentChartData(prevData => {
@@ -177,6 +174,8 @@ export default function LinePlot2D({
   }, [isDragging, activeDot, onPointChange, selectedLineIndex, currentChartData]);
 
   useEffect(() => {
+    // These listeners are added to the document so that the drag continues
+    // even if the mouse leaves the chart area.
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp, { once: true });
@@ -192,6 +191,7 @@ export default function LinePlot2D({
   const CustomDot = (props: any) => {
       const { cx, cy } = props;
 
+      // The 'g' element is used as a larger, transparent target area for the mouse events.
       return (
           <g onMouseDown={() => handleMouseDown(props)}>
               <circle
