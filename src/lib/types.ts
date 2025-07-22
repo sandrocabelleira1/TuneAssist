@@ -21,7 +21,7 @@ export type XDFDefinition = {
   address: number;
   rows: number;
   cols: number;
-  dataSize: number;
+  dataSize: number; // in bytes
   isBigEndian: boolean;
   equation: string;
   xAxisDef: AxisDefinition;

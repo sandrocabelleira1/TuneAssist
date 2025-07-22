@@ -76,7 +76,16 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             }
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '', 10);
+            let dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '0', 10);
+            const dataType = parseInt(getAttr(embeddedData, 'mmeddatatype') || '0', 10);
+
+            // Prioritize datatype if elementsizebits is missing or ambiguous
+            if (dataSizeBits === 0 && dataType > 0) {
+                if (dataType === 1) dataSizeBits = 8; // 8-bit
+                else if (dataType === 2) dataSizeBits = 16; // 16-bit
+            }
+            if (dataSizeBits === 0) dataSizeBits = 16; // Default to 16 if still unknown
+
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
@@ -112,7 +121,15 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const axisEmbeddedData = findNode(sourceNodeForCalcs, 'embeddeddata', 'EMBEDDEDDATA');
                 if (axisEmbeddedData) {
                     axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                    axisDef.dataSize = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10) / 8;
+                    let axisDataSizeBits = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
+                    const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
+                    if (axisDataSizeBits === 0 && axisDataType > 0) {
+                         if (axisDataType === 1) axisDataSizeBits = 8;
+                         else if (axisDataType === 2) axisDataSizeBits = 16;
+                    }
+                    if (axisDataSizeBits === 0) axisDataSizeBits = 16;
+                    
+                    axisDef.dataSize = axisDataSizeBits / 8;
                     axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
                 }
                 
@@ -248,15 +265,21 @@ export function readAndCalculateMapFromBin(
   for (let r = 0; r < def.rows; r++) {
     const rawRow: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
-      const offset = def.address + (r * def.cols + c) * def.dataSize;
+      const offset = def.address + (r * def.cols * def.dataSize) + (c * def.dataSize);
       if (offset + def.dataSize > view.byteLength) {
         rawRow.push(null);
         continue;
       }
       let rawValue;
-      if (def.dataSize === 1) rawValue = view.getUint8(offset);
-      else if (def.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
-      else { rawRow.push(null); continue; }
+      if (def.dataSize === 1) {
+        rawValue = view.getUint8(offset);
+      } else if (def.dataSize === 2) {
+        rawValue = view.getUint16(offset, useLittleEndian);
+      }
+      else { 
+        rawRow.push(null); 
+        continue; 
+      }
       rawRow.push(rawValue);
     }
     rawMap.push(rawRow);
