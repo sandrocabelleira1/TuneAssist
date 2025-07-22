@@ -134,7 +134,7 @@ export default function LinePlot2D({
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
       if (isDragging && activeDot && chartRef.current && chartContainerRef.current) {
-        const chart = chartRef.current.chart;
+        const chart = chartRef.current;
         if (!chart || !chart.props.margin) return;
 
         const mainYAxis = chart.yAxisMap?.[0];
@@ -170,6 +170,7 @@ export default function LinePlot2D({
 
   useEffect(() => {
     if (isDragging) {
+      // Use document to capture mouse move and up everywhere
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp, { once: true });
     }
