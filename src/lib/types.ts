@@ -22,6 +22,7 @@ export type XDFDefinition = {
   rows: number;
   cols: number;
   dataSize: number; // in bytes
+  minorStrideBits?: number; // Distance in BITS between columns
   isBigEndian: boolean;
   equation: string;
   xAxisDef: AxisDefinition;
