@@ -181,7 +181,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 }
 
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped = false): AxisDataState {
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped: boolean): AxisDataState {
     const count = axisDef?.count || 0;
     const label = axisDef?.label || 'Eixo Desconhecido';
     
@@ -208,8 +208,9 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
-    // CRITICAL FIX: The axis's own endianness is respected, and the manual swap is applied.
-    const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
+    // CORRECTED LOGIC: XOR (^) is the correct operator for "one or the other, but not both".
+    // This correctly combines the file definition with the user's manual override.
+    const useLittleEndian = (axisDef.isBigEndian ?? false) ? !isEndianSwapped : isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
 
@@ -256,7 +257,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
 export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-    isEndianSwapped = false
+    isEndianSwapped: boolean
 ): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
     if (!def || !binBuffer) {
         return { 
@@ -269,14 +270,14 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // Axes are read WITHOUT applying the manual swap, to keep them isolated for testing.
-    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
-    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
+    // Axes are now read WITH the manual swap applied, ensuring consistency.
+    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
+    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     
     const view = new DataView(binBuffer);
     
-    // For the Z-axis, respect both its own definition AND the user's manual swap toggle
-    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    // For the Z-axis, use the same corrected logic.
+    const useLittleEndianForZ = (def.isBigEndian ?? false) ? !isEndianSwapped : isEndianSwapped;
 
     const equation = normalizeEquation(def.equation);
 
@@ -422,7 +423,7 @@ export function recalculateRawMapFromCalculated(
     calculatedMap: MapData,
     def: XDFDefinition,
     sourceAxes: { x: AxisDataState, y: AxisDataState },
-    isEndianSwapped = false
+    isEndianSwapped: boolean
 ): MapData {
     if (!sourceAxes.x.originalIndices || !sourceAxes.y.originalIndices) {
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
@@ -458,7 +459,7 @@ export function writeMapToBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
     rawMapData: MapData,
-    isEndianSwapped = false
+    isEndianSwapped: boolean
 ): ArrayBuffer {
     if (!def || !binBuffer || !rawMapData) {
         throw new Error('Parâmetros inválidos fornecidos para writeMapToBin.');
@@ -467,8 +468,7 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    // For the Z-axis, respect both its own definition AND the user's manual swap toggle
-    const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    const useLittleEndian = (def.isBigEndian ?? false) ? !isEndianSwapped : isEndianSwapped;
     
     const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
