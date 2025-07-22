@@ -208,7 +208,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
-    // This is the CRITICAL FIX: The axis's own endianness is respected
+    // CRITICAL FIX: The axis's own endianness is respected, and the manual swap is applied.
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
@@ -269,12 +269,12 @@ export function readAndCalculateMapFromBin(
         };
     }
 
-    // Read axes with standard endianness (not swapped by this function's parameter)
-    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, false);
-    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, false);
+    // Read axes respecting their own endianness and the manual swap
+    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
+    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     
     const view = new DataView(binBuffer);
-    // This is the CRITICAL FIX: The Z-axis endianness is determined by its own definition AND the user's manual swap toggle
+    // The Z-axis endianness is determined by its own definition AND the user's manual swap toggle
     const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(def.equation);
 
@@ -331,6 +331,7 @@ export function readAndCalculateMapFromBin(
         calculatedMap.push(calculatedRow);
     }
     
+    // Return axes and map in original order from the file
     return { 
         calculatedMap: calculatedMap, 
         rawMap: rawMap, 
@@ -481,3 +482,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
