@@ -76,26 +76,15 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             }
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            
-            let dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || '0', 10);
-             if (dataSizeBits === 0) {
-                 const embeddedSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '0', 10);
-                 if (embeddedSizeBits !== 0) dataSizeBits = embeddedSizeBits;
-            }
-            if (dataSizeBits === 0) {
-                const dataType = parseInt(getAttr(embeddedData, 'mmeddatatype') || '0', 10);
-                if (dataType === 1) dataSizeBits = 8;
-                else if (dataType === 2) dataSizeBits = 16;
-            }
-            if (dataSizeBits === 0) dataSizeBits = 16; // Fallback
-
+            const dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || '0', 10) || parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
+            const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
 
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
 
-            if (isNaN(address) || isNaN(dataSizeBits)) {
+            if (isNaN(address)) {
                 return;
             }
 
@@ -171,7 +160,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 rows,
                 cols,
                 dataSize: dataSizeBits / 8,
-                minorStrideBits: minorStrideBits > 0 ? minorStrideBits : (dataSizeBits),
+                minorStrideBits: minorStrideBits,
+                majorStrideBits: majorStrideBits,
                 isBigEndian,
                 equation,
                 xAxisDef,
@@ -268,15 +258,16 @@ export function readAndCalculateMapFromBin(
   const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
   const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
   
-  // Stride is the distance between elements in BITS. Default to dataSize in bits if not present.
   const colStrideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
-  const rowStrideBytes = def.cols * colStrideBytes;
-
+  let rowStrideBytes = (def.majorStrideBits || 0) / 8;
+  if (rowStrideBytes === 0) {
+      rowStrideBytes = def.cols * colStrideBytes;
+  }
+  
   const rawMap: MapData = [];
   for (let r = 0; r < def.rows; r++) {
     const rawRow: (number|null)[] = [];
     for (let c = 0; c < def.cols; c++) {
-      // Correct offset calculation using row and column strides.
       const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
       
       if (offset + def.dataSize > view.byteLength) {
@@ -439,8 +430,12 @@ export function writeMapToBin(
     const view = new DataView(newBuffer);
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    
     const colStrideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
-    const rowStrideBytes = def.cols * colStrideBytes;
+    let rowStrideBytes = (def.majorStrideBits || 0) / 8;
+    if (rowStrideBytes === 0) {
+        rowStrideBytes = def.cols * colStrideBytes;
+    }
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
