@@ -272,7 +272,7 @@ export function readAndCalculateMapFromBin(
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     
     const view = new DataView(binBuffer);
-    const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(def.equation);
 
     let zEquationFunc: (val: number) => number | string;
@@ -306,7 +306,7 @@ export function readAndCalculateMapFromBin(
                 if (def.dataSize === 1) {
                     rawValue = view.getUint8(offset);
                 } else if (def.dataSize === 2) {
-                    rawValue = view.getUint16(offset, useLittleEndian);
+                    rawValue = view.getUint16(offset, useLittleEndianForZ);
                 }
             } catch (e) {
                 console.error(`Erro ao ler o BIN no offset ${offset}`);
