@@ -132,18 +132,26 @@ export default function LinePlot2D({
     setActiveDot(dotProps);
   }, []);
 
-  const handleMouseMove = useCallback((event: MouseEvent) => {
-      if (isDragging && activeDot && chartRef.current && chartContainerRef.current) {
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (isDragging && activeDot && chartRef.current && chartContainerRef.current) {
         const chart = chartRef.current;
         if (!chart || !chart.props.margin) return;
 
-        const mainYAxis = chart.yAxisMap?.[0];
-        if (!mainYAxis?.scale?.invert) return;
+        // Access the y-axis scale function
+        const yAxisScale = chart.yAxisMap?.[0]?.scale;
+        if (!yAxisScale || typeof yAxisScale.invert !== 'function') return;
 
         const chartRect = chartContainerRef.current.getBoundingClientRect();
         
-        const mouseY = event.clientY - chartRect.top - chart.props.margin.top;
-        const newYValue = mainYAxis.scale.invert(mouseY);
+        // Calculate mouse position relative to the chart's plotting area
+        const mouseY = e.clientY - chartRect.top - chart.props.margin.top;
+        
+        // Clamp the Y position to be within the plotting area
+        const plotAreaHeight = chart.props.height - chart.props.margin.top - chart.props.margin.bottom;
+        const clampedMouseY = Math.max(0, Math.min(plotAreaHeight, mouseY));
+        
+        // Convert the clamped pixel value back to a data value
+        const newYValue = yAxisScale.invert(clampedMouseY);
         
         setCurrentChartData(prevData => {
             if (!prevData) return null;
@@ -170,7 +178,6 @@ export default function LinePlot2D({
 
   useEffect(() => {
     if (isDragging) {
-      // Use document to capture mouse move and up everywhere
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp, { once: true });
     }
