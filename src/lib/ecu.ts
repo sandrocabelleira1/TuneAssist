@@ -121,13 +121,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if (axisEmbeddedData) {
                     axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
                     let axisDataSizeBits = parseInt(getAttr(sourceNodeForCalcs, 'elementsizebits') || '0', 10);
-
                     if (axisDataSizeBits === 0) {
                         const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
                         if (axisDataType === 1) axisDataSizeBits = 8;
                         else if (axisDataType === 2) axisDataSizeBits = 16;
+                        else axisDataSizeBits = parseInt(getAttr(axisEmbeddedData, 'mmedelementsizebits') || '16', 10);
                     }
-                    if (axisDataSizeBits === 0) axisDataSizeBits = 16;
                     
                     axisDef.dataSize = axisDataSizeBits / 8;
                     axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1';
@@ -258,15 +257,15 @@ export function readAndCalculateMapFromBin(
     if (!def || !binBuffer) return { calculatedMap: [], rawMap: [], sortedAxes: { x: { raw: [], calculated: [], originalIndices:[], label: 'X'}, y: { raw: [], calculated: [], originalIndices:[], label: 'Y'} } };
 
     const view = new DataView(binBuffer);
-    const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
-    // 1. Read and calculate axis data.
+    // 1. Read and calculate axis data INDEPENDENTLY.
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
 
     // 2. Read the raw Z-data from the BIN based on its defined layout.
-    const colStrideBytes = (def.minorStrideBits || (def.dataSize * 8)) / 8;
-    let rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
+    const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
     
     const originalRawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
@@ -299,7 +298,7 @@ export function readAndCalculateMapFromBin(
         row.map(cell => (cell !== null ? zEquationFunc(cell) as number : null))
     );
 
-    // 4. Sort axes and create index maps.
+    // 4. Sort axes and create index maps to know how to reorder the Z data.
     const createSortedAxis = (axisData: AxisDataState): { sortedValues: (string|number)[], indexMap: number[] } => {
         const indexed = axisData.calculated.map((value, index) => ({ value, originalIndex: index }));
         indexed.sort((a, b) => {
@@ -318,6 +317,7 @@ export function readAndCalculateMapFromBin(
     const { sortedValues: sortedYValues, indexMap: yIndexMap } = createSortedAxis(axisYData);
     
     // 5. Reorder the Z data (both raw and calculated) according to the sorted axes.
+    // This is the crucial step to align Z data with the sorted X and Y axes.
     const finalCalculatedMap: MapData = yIndexMap.map(originalYIndex =>
         xIndexMap.map(originalXIndex => originalCalculatedMap[originalYIndex][originalXIndex])
     );
@@ -496,5 +496,6 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
 
