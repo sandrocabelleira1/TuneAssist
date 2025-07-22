@@ -146,7 +146,7 @@ function MapTable({
   
   const xAxisFormatter = (val: string | number) => {
     if (typeof val !== 'number' || isNaN(val)) return val;
-    return Math.round(val);
+    return val.toFixed(1);
   };
 
   if (!mapData || mapData.length === 0 || !definition || !xAxis || !yAxis) {
