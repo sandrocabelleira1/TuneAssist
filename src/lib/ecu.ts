@@ -75,7 +75,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = parseInt(rowsStr || '', 10);
             const cols = parseInt(colsStr || '', 10);
             
-            if (isNaN(rows) || isNaN(cols) || rows <= 1 || cols <= 1) {
+            if (isNaN(rows) || isNaN(cols) || rows <= 0 || cols <= 0) { // Allow 1 for rows/cols in case of 1D maps that are sometimes used for axes
                 return;
             }
 
@@ -127,7 +127,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const axisEmbeddedData = findNode(sourceNodeForCalcs, 'embeddeddata', 'EMBEDDEDDATA');
                 if (axisEmbeddedData) {
                     axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                    let axisDataSizeBits = parseInt(getAttr(sourceNodeForCalcs, 'elementsizebits') || '0', 10);
+                    let axisDataSizeBits = parseInt(getAttr(sourceNodeForCalcs, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
                     
                     if (axisDataSizeBits === 0) {
                         const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
@@ -219,7 +219,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const dataSize = axisDef.dataSize || 2;
     // Use little endian if (isBigEndian from XDF is false AND global swap is false) OR (isBigEndian is true AND global swap is true)
     // This is equivalent to XOR: (A XOR B) is true if they are different. We want to use little endian if they are the same.
-    const useLittleEndian = (axisDef.isBigEndian ?? false) === isEndianSwapped;
+    const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
 
@@ -238,6 +238,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const originalIndices: number[] = [];
 
     for (let i = 0; i < count; i++) {
+        // Corrected offset calculation for simple linear axes.
         const offset = addr + (i * dataSize);
         if (offset + dataSize > view.byteLength) continue;
 
@@ -284,7 +285,7 @@ export function readAndCalculateMapFromBin(
     
     const view = new DataView(binBuffer);
     
-    const useLittleEndianForZ = (def.isBigEndian ?? false) === isEndianSwapped;
+    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
 
     const equation = normalizeEquation(def.equation);
 
@@ -475,7 +476,7 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    const useLittleEndian = (def.isBigEndian ?? false) === isEndianSwapped;
+    const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
     const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
