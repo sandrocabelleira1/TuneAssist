@@ -86,9 +86,25 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const dataType = parseInt(getAttr(embeddedData, 'mmeddatatype') || '0', 10);
                 if (dataType === 1) dataSizeBits = 8;
                 else if (dataType === 2) dataSizeBits = 16;
-                else dataSizeBits = 16; // Default to 16 if completely unspecified
+                else {
+                    // Smart default based on name for ignition maps
+                    if (tableName.toLowerCase().includes('ign')) {
+                        dataSizeBits = 8; // Default ignition maps to 8-bit
+                    } else {
+                        dataSizeBits = 16; // Default other maps to 16-bit
+                    }
+                }
             }
             
+            // Override for ignition maps if not explicitly set otherwise
+            if (tableName.toLowerCase().includes('ign') && dataSizeBits !== 8) {
+                const explicitSize = getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits');
+                if (!explicitSize) { // Only override if not explicitly set
+                     dataSizeBits = 8;
+                }
+            }
+
+
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
 
