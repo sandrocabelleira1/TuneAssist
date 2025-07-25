@@ -86,15 +86,14 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if (dataType === 1) dataSizeBits = 8;
                 else if (dataType === 2) dataSizeBits = 16;
                 else {
-                    // Fallback logic
                     if (tableName.toLowerCase().includes('ign')) {
                         dataSizeBits = 8;
                     } else {
-                        dataSizeBits = 16; // Default other maps to 16-bit
+                        dataSizeBits = 16;
                     }
                 }
             }
-
+            
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
             
@@ -307,7 +306,7 @@ export function readAndCalculateMapFromBin(
     
     // Correctly determine strides in BYTES. Prioritize XDF, then calculate.
     const colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
+    const rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
@@ -500,8 +499,8 @@ export function writeMapToBin(
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
-    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
+    const colStrideBytes = def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = def.majorStrideBits > 0 ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
@@ -515,10 +514,6 @@ export function writeMapToBin(
                 let offset: number;
 
                  if (def.dataOrganization === 'COL_MAJOR') {
-                    // This logic is complex because the rawMapData is already in row-major format from the UI.
-                    // We need to find the correct cell in the rawMapData and write it to the correct column-major offset in the buffer.
-                    // This is handled by recalculateRawMapFromCalculated which gives us a row-major raw map.
-                    // The writing logic needs to use the correct strides.
                     offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
                  } else { // ROW_MAJOR
                     offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
@@ -543,8 +538,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-
-
-
-    
