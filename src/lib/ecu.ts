@@ -89,11 +89,16 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     dataSizeBits = 16; // Default other maps to 16-bit
                 }
             }
+             // Specific override for ignition maps to ensure they are 8-bit
+            if (tableName.toLowerCase().includes('ign')) {
+                dataSizeBits = 8;
+            }
 
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
-
-            const dataOrganization = getAttr(embeddedData, 'mmeddataorganization') as 'ROW_MAJOR' | 'COL_MAJOR' | null || 'ROW_MAJOR';
+            
+            const dataOrganizationAttr = getAttr(embeddedData, 'mmeddataorganization');
+            const dataOrganization = (dataOrganizationAttr === 'COL_MAJOR' || dataOrganizationAttr === 'COLMAJOR') ? 'COL_MAJOR' : 'ROW_MAJOR';
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
@@ -143,7 +148,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
                 }
                 
-                axisDef.dataSize = axisDataSizeBits / 8;
+                axisDef.dataSize = axisDataSizeBits > 0 ? axisDataSizeBits / 8 : 2; // Default to 2 bytes if not specified
                 
                 const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
                 axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
@@ -299,36 +304,17 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
-    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
+    const colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
-    const rawMap: MapData = [];
-    const calculatedMap: MapData = [];
+    const flatRawData: (number|null)[] = [];
 
-    for (let r = 0; r < def.rows; r++) {
-        const rawRow: (number|null)[] = [];
-        const calculatedRow: (number|null)[] = [];
-        for (let c = 0; c < def.cols; c++) {
-            rawRow.push(null);
-            calculatedRow.push(null);
-        }
-        rawMap.push(rawRow);
-        calculatedMap.push(calculatedRow);
-    }
-    
+    // Read all data points sequentially into a flat array
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
-            let offset: number;
-            if (def.dataOrganization === 'COL_MAJOR') {
-                // Column-major: Iterate through columns first
-                offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
-            } else {
-                // Row-major: Iterate through rows first
-                offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
-            }
-            
+            const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
             if (offset + def.dataSize > view.byteLength) {
-                // Out of bounds, already handled by initialization
+                flatRawData.push(null);
                 continue;
             }
             
@@ -339,20 +325,48 @@ export function readAndCalculateMapFromBin(
                 } else if (def.dataSize === 2) {
                     rawValue = view.getUint16(offset, useLittleEndianForZ);
                 }
+                flatRawData.push(rawValue);
             } catch (e) {
                 console.error(`Erro ao ler o BIN no offset ${offset}`);
+                flatRawData.push(null);
             }
+        }
+    }
 
-            rawMap[r][c] = rawValue;
+    // Initialize 2D arrays
+    const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
+    const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
 
-            if (rawValue !== null) {
-                try {
-                    calculatedMap[r][c] = zEquationFunc(rawValue) as number;
-                } catch (e) {
-                    calculatedMap[r][c] = rawValue;
+    // Populate the 2D arrays based on data organization
+    let flatIndex = 0;
+    if (def.dataOrganization === 'COL_MAJOR') {
+        // Fill column by column
+        for (let c = 0; c < def.cols; c++) {
+            for (let r = 0; r < def.rows; r++) {
+                const rawValue = flatRawData[flatIndex++];
+                rawMap[r][c] = rawValue;
+                if (rawValue !== null) {
+                    try {
+                        calculatedMap[r][c] = zEquationFunc(rawValue) as number;
+                    } catch {
+                        calculatedMap[r][c] = rawValue;
+                    }
                 }
-            } else {
-                calculatedMap[r][c] = null;
+            }
+        }
+    } else { // ROW_MAJOR
+        // Fill row by row
+        for (let r = 0; r < def.rows; r++) {
+            for (let c = 0; c < def.cols; c++) {
+                const rawValue = flatRawData[flatIndex++];
+                rawMap[r][c] = rawValue;
+                if (rawValue !== null) {
+                    try {
+                        calculatedMap[r][c] = zEquationFunc(rawValue) as number;
+                    } catch {
+                        calculatedMap[r][c] = rawValue;
+                    }
+                }
             }
         }
     }
@@ -507,10 +521,14 @@ export function writeMapToBin(
                 let offset: number;
 
                  if (def.dataOrganization === 'COL_MAJOR') {
+                    // This logic is complex because the rawMapData is already in row-major format from the UI.
+                    // We need to find the correct cell in the rawMapData and write it to the correct column-major offset in the buffer.
+                    // This is handled by recalculateRawMapFromCalculated which gives us a row-major raw map.
+                    // The writing logic needs to use the correct strides.
                     offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
-                } else {
+                 } else { // ROW_MAJOR
                     offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
-                }
+                 }
 
                 if (offset + def.dataSize > view.byteLength) {
                     console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
@@ -531,3 +549,4 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
