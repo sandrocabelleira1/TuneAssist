@@ -68,14 +68,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             if (!embeddedData) return;
 
-            // Corrected logic to determine rows and cols
             const rowsStr = getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedmajorcount');
             const colsStr = getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedminorcount');
 
             const rows = parseInt(rowsStr || '', 10);
             const cols = parseInt(colsStr || '', 10);
             
-            if (isNaN(rows) || isNaN(cols) || rows <= 0 || cols <= 0) { // Allow 1 for rows/cols in case of 1D maps that are sometimes used for axes
+            if (isNaN(rows) || isNaN(cols)) { 
                 return;
             }
 
@@ -87,24 +86,18 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if (dataType === 1) dataSizeBits = 8;
                 else if (dataType === 2) dataSizeBits = 16;
                 else {
-                    // Smart default based on name for ignition maps
-                    if (tableName.toLowerCase().includes('ign')) {
-                        dataSizeBits = 8; // Default ignition maps to 8-bit
-                    } else {
-                        dataSizeBits = 16; // Default other maps to 16-bit
-                    }
+                    dataSizeBits = 16; // Default other maps to 16-bit
                 }
             }
             
             // Override for ignition maps if not explicitly set otherwise
             if (tableName.toLowerCase().includes('ign')) {
                 const explicitSize = getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits');
-                if (!explicitSize) { // Only override if not explicitly set
+                if (!explicitSize) {
                      dataSizeBits = 8;
                 }
             }
 
-            // Correctly parse strides from XDF, converting from bytes if necessary
             let minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             if (minorStrideBits === 0) {
                 const minorStrideBytes = parseInt(getAttr(embeddedData, 'mmedminorstridebytes') || '0', 10);
@@ -116,7 +109,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const majorStrideBytes = parseInt(getAttr(embeddedData, 'mmedmajorstridebytes') || '0', 10);
                 if (majorStrideBytes > 0) majorStrideBits = majorStrideBytes * 8;
             }
-
 
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
@@ -136,10 +128,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name')?.trim();
                 const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
                 
-                let sourceNodeForData = axisNode; // Where to look for embeddeddata, math, etc.
+                let sourceNodeForData = axisNode; 
                 let label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
-                // If axis is linked to another table, use that table's Z-axis as the source for data properties
                 if (linkedTableNode) {
                     const linkedTitle = findNode(linkedTableNode, 'title')?.textContent?.trim();
                     if (linkedTitle) label = linkedTitle;
@@ -152,21 +143,23 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 
                 axisDef.label = label;
                 const axisEmbeddedData = findNode(sourceNodeForData, 'embeddeddata', 'EMBEDDEDDATA');
+                let axisDataSizeBits = 0;
 
                 if (axisEmbeddedData) {
                     axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                    let axisDataSizeBits = parseInt(getAttr(sourceNodeForData, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
+                    axisDataSizeBits = parseInt(getAttr(sourceNodeForData, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
                     
                     if (axisDataSizeBits === 0) {
                         const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
                         if (axisDataType === 1) axisDataSizeBits = 8;
                         else if (axisDataType === 2) axisDataSizeBits = 16;
-                        else axisDataSizeBits = 16; // Default to 16-bit for axes if unspecified
+                        else axisDataSizeBits = 16; 
                     }
                     
-                    axisDef.dataSize = axisDataSizeBits / 8;
                     axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
                 }
+                
+                axisDef.dataSize = axisDataSizeBits / 8;
                 
                 const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
                 axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
@@ -245,8 +238,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
-    // Use little endian if (isBigEndian from XDF is false AND global swap is false) OR (isBigEndian is true AND global swap is true)
-    // This is equivalent to XOR: (A XOR B) is true if they are different. We want to use little endian if they are the same.
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
@@ -266,7 +257,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const originalIndices: number[] = [];
 
     for (let i = 0; i < count; i++) {
-        // Corrected offset calculation for simple linear axes.
         const offset = addr + (i * dataSize);
         if (offset + dataSize > view.byteLength) continue;
 
@@ -284,7 +274,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
             calculated.push(equationFunc(rawValue));
         } catch (e) {
             console.error(`Erro ao aplicar equação "${equation}" ao valor raw ${rawValue} para o eixo "${axisDef.label}"`);
-            calculated.push(rawValue); // Fallback to raw value on error
+            calculated.push(rawValue); 
         }
         originalIndices.push(i);
     }
@@ -324,7 +314,6 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
-    // Robust stride calculation
     const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
@@ -432,7 +421,6 @@ export function invertEquation(
       }
     }
     
-    // This is a simple attempt to handle more complex but common cases like (X-128)/2
     const match = sanitizedEq.match(/\(\s*X\s*([+\-])\s*(\d+\.?\d*)\s*\)\s*([*\/])\s*(\d+\.?\d*)/);
     if(match) {
         const [, innerOp, innerValStr, outerOp, outerValStr] = match;
