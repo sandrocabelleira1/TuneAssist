@@ -86,12 +86,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if (dataType === 1) dataSizeBits = 8;
                 else if (dataType === 2) dataSizeBits = 16;
                 else {
-                    dataSizeBits = 16; // Default other maps to 16-bit
+                    // Fallback logic
+                    if (tableName.toLowerCase().includes('ign')) {
+                        dataSizeBits = 8;
+                    } else {
+                        dataSizeBits = 16; // Default other maps to 16-bit
+                    }
                 }
-            }
-             // Specific override for ignition maps to ensure they are 8-bit
-            if (tableName.toLowerCase().includes('ign')) {
-                dataSizeBits = 8;
             }
 
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
