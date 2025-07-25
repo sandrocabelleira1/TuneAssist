@@ -304,21 +304,8 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
-    // --- Start of Stride Calculation Logic ---
-    let colStrideBytes: number;
-    if (def.minorStrideBits && def.minorStrideBits > 0) {
-        colStrideBytes = def.minorStrideBits / 8;
-    } else {
-        colStrideBytes = def.dataSize;
-    }
-
-    let rowStrideBytes: number;
-    if (def.majorStrideBits && def.majorStrideBits > 0) {
-        rowStrideBytes = def.majorStrideBits / 8;
-    } else {
-        rowStrideBytes = def.cols * colStrideBytes;
-    }
-    // --- End of Stride Calculation Logic ---
+    const colStrideBytes = def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = def.majorStrideBits > 0 ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
@@ -327,16 +314,11 @@ export function readAndCalculateMapFromBin(
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             let offset: number;
-
-            // --- Start of Offset Calculation Logic ---
             if (def.dataOrganization === 'COL_MAJOR') {
-                // For column-major, we iterate through columns first in memory.
                 offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
             } else { // ROW_MAJOR (default)
-                // For row-major, we iterate through rows first in memory.
                 offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
             }
-            // --- End of Offset Calculation Logic ---
             
             if (offset + def.dataSize > view.byteLength) {
                 console.error(`Offset de leitura ${offset} está fora dos limites do ficheiro BIN. A saltar.`);
@@ -495,21 +477,8 @@ export function writeMapToBin(
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
-    // --- Start of Stride Calculation Logic ---
-    let colStrideBytes: number;
-    if (def.minorStrideBits && def.minorStrideBits > 0) {
-        colStrideBytes = def.minorStrideBits / 8;
-    } else {
-        colStrideBytes = def.dataSize;
-    }
-
-    let rowStrideBytes: number;
-    if (def.majorStrideBits && def.majorStrideBits > 0) {
-        rowStrideBytes = def.majorStrideBits / 8;
-    } else {
-        rowStrideBytes = def.cols * colStrideBytes;
-    }
-    // --- End of Stride Calculation Logic ---
+    const colStrideBytes = def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = def.majorStrideBits > 0 ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
