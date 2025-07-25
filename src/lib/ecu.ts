@@ -126,40 +126,42 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name')?.trim();
                 const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
                 
-                let sourceNodeForCalcs = axisNode;
+                let sourceNodeForData = axisNode; // Where to look for embeddeddata, math, etc.
                 let label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
+                // If axis is linked to another table, use that table's Z-axis as the source for data properties
                 if (linkedTableNode) {
                     const linkedTitle = findNode(linkedTableNode, 'title')?.textContent?.trim();
                     if (linkedTitle) label = linkedTitle;
                     
                     const linkedZAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
                     if (linkedZAxis) {
-                      sourceNodeForCalcs = linkedZAxis;
+                      sourceNodeForData = linkedZAxis;
                     }
                 }
                 
                 axisDef.label = label;
-                const axisEmbeddedData = findNode(sourceNodeForCalcs, 'embeddeddata', 'EMBEDDEDDATA');
+                const axisEmbeddedData = findNode(sourceNodeForData, 'embeddeddata', 'EMBEDDEDDATA');
+
                 if (axisEmbeddedData) {
                     axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                    let axisDataSizeBits = parseInt(getAttr(sourceNodeForCalcs, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
+                    let axisDataSizeBits = parseInt(getAttr(sourceNodeForData, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
                     
                     if (axisDataSizeBits === 0) {
                         const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
                         if (axisDataType === 1) axisDataSizeBits = 8;
                         else if (axisDataType === 2) axisDataSizeBits = 16;
-                        else axisDataSizeBits = 16;
+                        else axisDataSizeBits = 16; // Default to 16-bit for axes if unspecified
                     }
                     
                     axisDef.dataSize = axisDataSizeBits / 8;
                     axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
                 }
                 
-                const axisMathNode = findNode(sourceNodeForCalcs, 'math', 'MATH');
+                const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
                 axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
 
-                const labelNodes = sourceNodeForCalcs.querySelectorAll(':scope > label, :scope > LABEL');
+                const labelNodes = sourceNodeForData.querySelectorAll(':scope > label, :scope > LABEL');
                 if (labelNodes.length > 0) {
                     const values: (string|number)[] = [];
                     labelNodes.forEach(ln => {
