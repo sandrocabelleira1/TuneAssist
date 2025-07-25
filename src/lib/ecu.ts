@@ -305,6 +305,7 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
+    // Correctly determine strides in BYTES. Prioritize XDF, then calculate.
     const colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
@@ -315,6 +316,7 @@ export function readAndCalculateMapFromBin(
     if (def.dataOrganization === 'COL_MAJOR') {
         for (let c = 0; c < def.cols; c++) {
             for (let r = 0; r < def.rows; r++) {
+                // For COL_MAJOR, the major stride moves to the next column, and the minor stride moves to the next row within that column.
                 const offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
                 if (offset + def.dataSize > view.byteLength) {
                     continue;
@@ -339,6 +341,7 @@ export function readAndCalculateMapFromBin(
     } else { // ROW_MAJOR (default)
         for (let r = 0; r < def.rows; r++) {
             for (let c = 0; c < def.cols; c++) {
+                // For ROW_MAJOR, the major stride moves to the next row, and the minor stride moves to the next column.
                 const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
                 if (offset + def.dataSize > view.byteLength) {
                     continue;
@@ -542,3 +545,6 @@ export function writeMapToBin(
 }
 
 
+
+
+    
