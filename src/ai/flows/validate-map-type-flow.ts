@@ -43,7 +43,7 @@ const prompt = ai.definePrompt({
 
 2.  **Analise os Dados (Eixo Z) com Base no Nome do Mapa:**
     -   **ETV (Acelerador):** Os valores devem ser 0-100. Se estiverem na casa dos milhares (ex: 0-65535), sugira a correção \`X / 655.35\` no campo \`suggestedEquation\`.
-    -   **Ignição (Avanço):** Os valores devem estar num intervalo razoável, geralmente entre -20 e 60. Se os valores estiverem fora deste intervalo (ex: 128-190), sugira uma equação como \`(X - 128) / 2\` no campo \`suggestedEquation\`.
+    -   **Ignição (Avanço):** Se o nome do mapa contém "Ign" ou "ignição", e os valores estão na faixa de 0-255, sugira a equação \`(X / 2) - 10\` no campo \`suggestedEquation\`. Esta é uma fórmula de conversão comum para graus de avanço.
     -   **Combustível (VE):** Os valores devem estar num intervalo razoável para Eficiência Volumétrica, geralmente entre 30 e 120. Se os valores estiverem fora deste intervalo, considere o que podem representar.
 
 3.  **Lógica Especial para Mapas de Combustível (Aplica-se ao Eixo Z):**
