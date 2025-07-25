@@ -104,9 +104,19 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 }
             }
 
+            // Correctly parse strides from XDF, converting from bytes if necessary
+            let minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
+            if (minorStrideBits === 0) {
+                const minorStrideBytes = parseInt(getAttr(embeddedData, 'mmedminorstridebytes') || '0', 10);
+                if (minorStrideBytes > 0) minorStrideBits = minorStrideBytes * 8;
+            }
+            
+            let majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
+            if (majorStrideBits === 0) {
+                const majorStrideBytes = parseInt(getAttr(embeddedData, 'mmedmajorstridebytes') || '0', 10);
+                if (majorStrideBytes > 0) majorStrideBits = majorStrideBytes * 8;
+            }
 
-            const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
-            const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
 
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
