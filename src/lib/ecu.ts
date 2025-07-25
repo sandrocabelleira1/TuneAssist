@@ -307,65 +307,55 @@ export function readAndCalculateMapFromBin(
     const colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
-    const flatRawData: (number|null)[] = [];
-
-    // Read all data points sequentially into a flat array
-    for (let r = 0; r < def.rows; r++) {
-        for (let c = 0; c < def.cols; c++) {
-            const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
-            if (offset + def.dataSize > view.byteLength) {
-                flatRawData.push(null);
-                continue;
-            }
-            
-            let rawValue: number | null = null;
-            try {
-                if (def.dataSize === 1) {
-                    rawValue = view.getUint8(offset);
-                } else if (def.dataSize === 2) {
-                    rawValue = view.getUint16(offset, useLittleEndianForZ);
-                }
-                flatRawData.push(rawValue);
-            } catch (e) {
-                console.error(`Erro ao ler o BIN no offset ${offset}`);
-                flatRawData.push(null);
-            }
-        }
-    }
-
-    // Initialize 2D arrays
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
 
-    // Populate the 2D arrays based on data organization
-    let flatIndex = 0;
+    // Read all data points based on organization
     if (def.dataOrganization === 'COL_MAJOR') {
-        // Fill column by column
         for (let c = 0; c < def.cols; c++) {
             for (let r = 0; r < def.rows; r++) {
-                const rawValue = flatRawData[flatIndex++];
-                rawMap[r][c] = rawValue;
-                if (rawValue !== null) {
-                    try {
-                        calculatedMap[r][c] = zEquationFunc(rawValue) as number;
-                    } catch {
-                        calculatedMap[r][c] = rawValue;
+                const offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
+                if (offset + def.dataSize > view.byteLength) {
+                    continue;
+                }
+                
+                let rawValue: number | null = null;
+                try {
+                    if (def.dataSize === 1) {
+                        rawValue = view.getUint8(offset);
+                    } else if (def.dataSize === 2) {
+                        rawValue = view.getUint16(offset, useLittleEndianForZ);
                     }
+                    rawMap[r][c] = rawValue;
+                    if (rawValue !== null) {
+                        calculatedMap[r][c] = zEquationFunc(rawValue) as number;
+                    }
+                } catch (e) {
+                    console.error(`Erro ao ler o BIN no offset ${offset}`);
                 }
             }
         }
-    } else { // ROW_MAJOR
-        // Fill row by row
+    } else { // ROW_MAJOR (default)
         for (let r = 0; r < def.rows; r++) {
             for (let c = 0; c < def.cols; c++) {
-                const rawValue = flatRawData[flatIndex++];
-                rawMap[r][c] = rawValue;
-                if (rawValue !== null) {
-                    try {
-                        calculatedMap[r][c] = zEquationFunc(rawValue) as number;
-                    } catch {
-                        calculatedMap[r][c] = rawValue;
+                const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
+                if (offset + def.dataSize > view.byteLength) {
+                    continue;
+                }
+                
+                let rawValue: number | null = null;
+                try {
+                    if (def.dataSize === 1) {
+                        rawValue = view.getUint8(offset);
+                    } else if (def.dataSize === 2) {
+                        rawValue = view.getUint16(offset, useLittleEndianForZ);
                     }
+                    rawMap[r][c] = rawValue;
+                    if (rawValue !== null) {
+                        calculatedMap[r][c] = zEquationFunc(rawValue) as number;
+                    }
+                } catch (e) {
+                    console.error(`Erro ao ler o BIN no offset ${offset}`);
                 }
             }
         }
@@ -549,4 +539,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
 
