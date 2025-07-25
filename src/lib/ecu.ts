@@ -304,59 +304,58 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
-    const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
+    // --- Start of Stride Calculation Logic ---
+    let colStrideBytes: number;
+    if (def.minorStrideBits && def.minorStrideBits > 0) {
+        colStrideBytes = def.minorStrideBits / 8;
+    } else {
+        colStrideBytes = def.dataSize;
+    }
+
+    let rowStrideBytes: number;
+    if (def.majorStrideBits && def.majorStrideBits > 0) {
+        rowStrideBytes = def.majorStrideBits / 8;
+    } else {
+        rowStrideBytes = def.cols * colStrideBytes;
+    }
+    // --- End of Stride Calculation Logic ---
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
 
     // Read all data points based on organization
-    if (def.dataOrganization === 'COL_MAJOR') {
+    for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
-            for (let r = 0; r < def.rows; r++) {
-                const offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
-                if (offset + def.dataSize > view.byteLength) {
-                    continue;
-                }
-                
-                let rawValue: number | null = null;
-                try {
-                    if (def.dataSize === 1) {
-                        rawValue = view.getUint8(offset);
-                    } else if (def.dataSize === 2) {
-                        rawValue = view.getUint16(offset, useLittleEndianForZ);
-                    }
-                    rawMap[r][c] = rawValue;
-                    if (rawValue !== null) {
-                        calculatedMap[r][c] = zEquationFunc(rawValue) as number;
-                    }
-                } catch (e) {
-                    console.error(`Erro ao ler o BIN no offset ${offset}`);
-                }
+            let offset: number;
+
+            // --- Start of Offset Calculation Logic ---
+            if (def.dataOrganization === 'COL_MAJOR') {
+                // For column-major, we iterate through columns first in memory.
+                offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
+            } else { // ROW_MAJOR (default)
+                // For row-major, we iterate through rows first in memory.
+                offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
             }
-        }
-    } else { // ROW_MAJOR (default)
-        for (let r = 0; r < def.rows; r++) {
-            for (let c = 0; c < def.cols; c++) {
-                const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
-                if (offset + def.dataSize > view.byteLength) {
-                    continue;
+            // --- End of Offset Calculation Logic ---
+            
+            if (offset + def.dataSize > view.byteLength) {
+                console.error(`Offset de leitura ${offset} está fora dos limites do ficheiro BIN. A saltar.`);
+                continue;
+            }
+            
+            let rawValue: number | null = null;
+            try {
+                if (def.dataSize === 1) {
+                    rawValue = view.getUint8(offset);
+                } else if (def.dataSize === 2) {
+                    rawValue = view.getUint16(offset, useLittleEndianForZ);
                 }
-                
-                let rawValue: number | null = null;
-                try {
-                    if (def.dataSize === 1) {
-                        rawValue = view.getUint8(offset);
-                    } else if (def.dataSize === 2) {
-                        rawValue = view.getUint16(offset, useLittleEndianForZ);
-                    }
-                    rawMap[r][c] = rawValue;
-                    if (rawValue !== null) {
-                        calculatedMap[r][c] = zEquationFunc(rawValue) as number;
-                    }
-                } catch (e) {
-                    console.error(`Erro ao ler o BIN no offset ${offset}`);
+                rawMap[r][c] = rawValue;
+                if (rawValue !== null) {
+                    calculatedMap[r][c] = zEquationFunc(rawValue) as number;
                 }
+            } catch (e) {
+                console.error(`Erro ao ler o BIN no offset ${offset}: ${(e as Error).message}`);
             }
         }
     }
@@ -496,8 +495,21 @@ export function writeMapToBin(
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
-    const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
+    // --- Start of Stride Calculation Logic ---
+    let colStrideBytes: number;
+    if (def.minorStrideBits && def.minorStrideBits > 0) {
+        colStrideBytes = def.minorStrideBits / 8;
+    } else {
+        colStrideBytes = def.dataSize;
+    }
+
+    let rowStrideBytes: number;
+    if (def.majorStrideBits && def.majorStrideBits > 0) {
+        rowStrideBytes = def.majorStrideBits / 8;
+    } else {
+        rowStrideBytes = def.cols * colStrideBytes;
+    }
+    // --- End of Stride Calculation Logic ---
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
