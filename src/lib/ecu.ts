@@ -89,18 +89,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     dataSizeBits = 16; // Default other maps to 16-bit
                 }
             }
-            
-            // Override for ignition maps if not explicitly set otherwise
-            if (tableName.toLowerCase().includes('ign')) {
-                const explicitSize = getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits');
-                if (!explicitSize) {
-                     dataSizeBits = 8;
-                }
-            }
 
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
 
+            const dataOrganization = getAttr(embeddedData, 'mmeddataorganization') as 'ROW_MAJOR' | 'COL_MAJOR' | null || 'ROW_MAJOR';
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
@@ -184,8 +177,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 rows,
                 cols,
                 dataSize: dataSizeBits / 8,
-                minorStrideBits: minorStrideBits,
-                majorStrideBits: majorStrideBits,
+                minorStrideBits,
+                majorStrideBits,
+                dataOrganization,
                 isBigEndian,
                 equation,
                 xAxisDef,
@@ -305,8 +299,8 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
-    const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
+    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
     const rawMap: MapData = [];
     const calculatedMap: MapData = [];
@@ -314,13 +308,27 @@ export function readAndCalculateMapFromBin(
     for (let r = 0; r < def.rows; r++) {
         const rawRow: (number|null)[] = [];
         const calculatedRow: (number|null)[] = [];
-
         for (let c = 0; c < def.cols; c++) {
-            const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
+            rawRow.push(null);
+            calculatedRow.push(null);
+        }
+        rawMap.push(rawRow);
+        calculatedMap.push(calculatedRow);
+    }
+    
+    for (let r = 0; r < def.rows; r++) {
+        for (let c = 0; c < def.cols; c++) {
+            let offset: number;
+            if (def.dataOrganization === 'COL_MAJOR') {
+                // Column-major: Iterate through columns first
+                offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
+            } else {
+                // Row-major: Iterate through rows first
+                offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
+            }
             
             if (offset + def.dataSize > view.byteLength) {
-                rawRow.push(null);
-                calculatedRow.push(null);
+                // Out of bounds, already handled by initialization
                 continue;
             }
             
@@ -335,20 +343,18 @@ export function readAndCalculateMapFromBin(
                 console.error(`Erro ao ler o BIN no offset ${offset}`);
             }
 
-            rawRow.push(rawValue);
+            rawMap[r][c] = rawValue;
 
             if (rawValue !== null) {
                 try {
-                    calculatedRow.push(zEquationFunc(rawValue) as number);
+                    calculatedMap[r][c] = zEquationFunc(rawValue) as number;
                 } catch (e) {
-                    calculatedRow.push(rawValue);
+                    calculatedMap[r][c] = rawValue;
                 }
             } else {
-                calculatedRow.push(null);
+                calculatedMap[r][c] = null;
             }
         }
-        rawMap.push(rawRow);
-        calculatedMap.push(calculatedRow);
     }
     
     return { 
@@ -486,8 +492,8 @@ export function writeMapToBin(
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
-    const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
+    const colStrideBytes = def.minorStrideBits ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = def.majorStrideBits ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
@@ -498,7 +504,13 @@ export function writeMapToBin(
 
             try {
                 const intValue = Math.round(rawValue);
-                const offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
+                let offset: number;
+
+                 if (def.dataOrganization === 'COL_MAJOR') {
+                    offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
+                } else {
+                    offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
+                }
 
                 if (offset + def.dataSize > view.byteLength) {
                     console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
