@@ -97,7 +97,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             }
             
             // Override for ignition maps if not explicitly set otherwise
-            if (tableName.toLowerCase().includes('ign') && dataSizeBits !== 8) {
+            if (tableName.toLowerCase().includes('ign')) {
                 const explicitSize = getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits');
                 if (!explicitSize) { // Only override if not explicitly set
                      dataSizeBits = 8;
@@ -314,6 +314,7 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
+    // Robust stride calculation
     const colStrideBytes = (def.minorStrideBits && def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = (def.majorStrideBits && def.majorStrideBits > 0) ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
