@@ -300,6 +300,7 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
+    // Correct stride calculation
     const colStrideBytes = def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
