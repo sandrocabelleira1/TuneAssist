@@ -113,7 +113,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
                 
                 let sourceNodeForData = axisNode; 
-                let label = findNode(axisNode, 'title')?.textContent || findNode(axisNode, 'units')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
+                let label = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
                 if (linkedTableNode) {
                     const linkedTitle = findNode(linkedTableNode, 'title')?.textContent?.trim();
