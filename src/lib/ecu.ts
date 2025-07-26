@@ -85,7 +85,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const dataType = parseInt(getAttr(embeddedData, 'mmeddatatype') || '0', 10);
                 if (dataType === 1) dataSizeBits = 8;
                 else if (dataType === 2) dataSizeBits = 16;
-                else dataSizeBits = 16; // Default to 16-bit if unspecified
+                else if (tableName.toLowerCase().includes('ign')) dataSizeBits = 8;
+                else dataSizeBits = 16;
             }
             
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
@@ -112,11 +113,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
                 
                 let sourceNodeForData = axisNode; 
-                let label = findNode(axisNode, 'title')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
+                let label = findNode(axisNode, 'title')?.textContent || findNode(axisNode, 'units')?.textContent || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
                 if (linkedTableNode) {
                     const linkedTitle = findNode(linkedTableNode, 'title')?.textContent?.trim();
-                    if (linkedTitle) label = linkedTitle;
+                    const linkedUnits = findNode(linkedTableNode, 'units')?.textContent?.trim();
+                    if (linkedTitle || linkedUnits) label = linkedTitle || linkedUnits || label;
                     
                     const linkedZAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
                     if (linkedZAxis) {
