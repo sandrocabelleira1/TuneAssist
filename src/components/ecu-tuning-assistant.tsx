@@ -20,7 +20,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, Table, Undo2, Box, LineChart } from 'lucide-react';
+import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, Table, Undo2, Box, LineChart, Volume2 } from 'lucide-react';
 import { Separator } from "@/components/ui/separator";
 import { Slider } from '@/components/ui/slider';
 import dynamic from 'next/dynamic';
@@ -279,7 +279,7 @@ export default function EcuTuningAssistant() {
     
     // File & map state
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer; checksum: string } | null>(null);
-    const [xdfFile, setXdfFile] = useState<{ name: string; definitions: XDFDefinition[] } | null>(null);
+    const [xdfFile, setXdfFile] = useState<{ name: string; definitions: XDFDefinition[], brand: string | null } | null>(null);
     const [availableMaps, setAvailableMaps] = useState<XDFDefinition[]>([]);
     const [selectedMapName, setSelectedMapName] = useState<string>('');
     const [selectedCells, setSelectedCells] = useState(new Set<string>());
@@ -299,16 +299,23 @@ export default function EcuTuningAssistant() {
     // AI state
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
     const [mapValidationStatus, setMapValidationStatus] = useState<'idle' | 'loading' | 'valid' | 'suggestion' | 'error'>('idle');
+    const [potentialMapsResult, setPotentialMapsResult] = useState<{ maps: XDFDefinition[], analysis: string } | null>(null);
+    const [isFindingMaps, setIsFindingMaps] = useState(false);
+    const [explanationResult, setExplanationResult] = useState<{ text: string, audio: string | null } | null>(null);
+    const [isExplaining, setIsExplaining] = useState(false);
 
     // Modal state
     const [isAxesModalOpen, setIsAxesModalOpen] = useState(false);
     const [isXdfErrorModalOpen, setIsXdfErrorModalOpen] = useState(false);
     const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
     const [isEditNameModalOpen, setIsEditNameModalOpen] = useState(false);
+    const [isMapFinderModalOpen, setIsMapFinderModalOpen] = useState(false);
+    const [isExplanationModalOpen, setIsExplanationModalOpen] = useState(false);
     const [mapToEdit, setMapToEdit] = useState<XDFDefinition | null>(null);
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     const valueFormat = useMemo<'integer' | 'decimal'>(() => {
         if (!selectedMapName) return 'decimal';
@@ -329,6 +336,10 @@ export default function EcuTuningAssistant() {
     const visibleLogs = useMemo(() => {
         return debugMode ? logs : logs.filter(log => log.type !== 'debug');
     }, [logs, debugMode]);
+
+    const selectedMapDefinition = useMemo(() => {
+        return availableMaps.find(m => m.name === selectedMapName);
+    }, [availableMaps, selectedMapName]);
 
     useEffect(() => {
         if (!binFile) {
@@ -396,6 +407,8 @@ export default function EcuTuningAssistant() {
         setSelectedLineIndex(null);
         setLogs([]);
         setIsEndianSwapped(false);
+        setPotentialMapsResult(null);
+        setExplanationResult(null);
 
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
@@ -427,7 +440,7 @@ export default function EcuTuningAssistant() {
                     const { definitions, brand } = parseXDF(buffer);
                     if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     if (brand) addLog(`Marca da ECU detetada no XDF: ${brand}`, 'info');
-                    setXdfFile({ name: file.name, definitions: definitions });
+                    setXdfFile({ name: file.name, definitions, brand });
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
                 }
             } catch (error) {
@@ -690,8 +703,6 @@ export default function EcuTuningAssistant() {
         setIsEndianSwapped(newIsEndianSwapped);
         addLog(`Ordem de bytes de 16-bit invertida. Swap está ${newIsEndianSwapped ? 'ATIVO' : 'INATIVO'}. A recalcular o mapa...`, 'info');
         
-        // Use a timeout to ensure the state update is processed before reloading the map.
-        // This is crucial for React's state update batching.
         setTimeout(() => {
             if (selectedMapName) {
                 handleMapSelect(selectedMapName);
@@ -700,9 +711,202 @@ export default function EcuTuningAssistant() {
     }, [isEndianSwapped, selectedMapName, handleMapSelect, addLog]);
 
 
-    const selectedMapDefinition = useMemo(() => {
-        return availableMaps.find(m => m.name === selectedMapName);
-    }, [availableMaps, selectedMapName]);
+    const handleValidateMap = useCallback(async () => {
+        if (!selectedMapDefinition || !displayMap || !displayAxes) return;
+
+        setMapValidationStatus('loading');
+        addLog(`A iniciar validação do mapa "${selectedMapDefinition.name}" com a IA...`, 'info');
+        
+        try {
+            const input = {
+                mapName: selectedMapDefinition.name,
+                mapData: displayMap,
+                xAxis: displayAxes.x.calculated,
+                yAxis: displayAxes.y.calculated,
+                equation: selectedMapDefinition.equation,
+                brand: xdfFile?.brand,
+            };
+            
+            const result = await validateMapType(input);
+
+            if (result.success && result.data) {
+                const { data } = result;
+                addLog(`Validação concluída: ${data.reasoning}`, 'success');
+
+                if (data.suggestedEquation || data.suggestedXAxisEquation || data.suggestedYAxisEquation) {
+                    setMapValidationStatus('suggestion');
+                    
+                    const newDef = JSON.parse(JSON.stringify(selectedMapDefinition)) as XDFDefinition;
+                    if(data.suggestedEquation) newDef.equation = data.suggestedEquation;
+                    if(data.suggestedXAxisEquation && newDef.xAxisDef) newDef.xAxisDef.equation = data.suggestedXAxisEquation;
+                    if(data.suggestedYAxisEquation && newDef.yAxisDef) newDef.yAxisDef.equation = data.suggestedYAxisEquation;
+
+                    const { calculatedMap: correctedMap, sortedAxes: correctedAxesData } = readAndCalculateMapFromBin(binFile!.buffer, newDef, isEndianSwapped);
+                    
+                    const suggestionData: AISuggestion = {
+                        reasoning: data.reasoning,
+                        originalMap: displayMap,
+                        correctedMap: correctedMap,
+                        originalAxes: {
+                            x: displayAxes.x.calculated,
+                            y: displayAxes.y.calculated,
+                            xLabel: displayAxes.x.label,
+                            yLabel: displayAxes.y.label
+                        },
+                        correctedAxes: {
+                            x: correctedAxesData.x.calculated,
+                            y: correctedAxesData.y.calculated,
+                            xLabel: correctedAxesData.x.label,
+                            yLabel: correctedAxesData.y.label
+                        },
+                        newDefinition: newDef,
+                        originalDefinition: selectedMapDefinition
+                    };
+
+                    setAiSuggestion(suggestionData);
+                    setIsSuggestionModalOpen(true);
+                } else {
+                    setMapValidationStatus('valid');
+                    toast({ title: "Mapa Validado", description: "A IA confirmou que as equações e o tipo do mapa parecem estar corretos." });
+                }
+            } else {
+                throw new Error(result.error || "A IA não devolveu uma resposta válida.");
+            }
+        } catch (error) {
+            setMapValidationStatus('error');
+            const msg = `Falha na validação do mapa: ${(error as Error).message}`;
+            addLog(msg, 'error');
+            toast({ variant: 'destructive', title: "Erro na IA", description: msg });
+        }
+    }, [selectedMapDefinition, displayMap, displayAxes, binFile, xdfFile?.brand, isEndianSwapped, addLog, toast]);
+    
+    const handleAcceptSuggestion = useCallback(() => {
+        if (!aiSuggestion) return;
+        
+        const { newDefinition } = aiSuggestion;
+        const newAvailableMaps = availableMaps.map(def => 
+            def.name === newDefinition.name ? newDefinition : def
+        );
+        
+        setAvailableMaps(newAvailableMaps);
+
+        setTimeout(() => {
+            handleMapSelect(newDefinition.name);
+            addLog(`Sugestão da IA aplicada ao mapa "${newDefinition.name}".`, 'success');
+            toast({ title: 'Sugestão Aplicada', description: 'O mapa foi recalculado com as equações sugeridas pela IA.' });
+            setIsSuggestionModalOpen(false);
+            setAiSuggestion(null);
+            setMapValidationStatus('idle');
+        }, 0);
+    }, [aiSuggestion, availableMaps, handleMapSelect, addLog, toast]);
+
+    const handleFindPotentialMaps = async () => {
+        if (!binFile) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, carregue um ficheiro BIN primeiro.' });
+            return;
+        }
+
+        setIsFindingMaps(true);
+        setIsMapFinderModalOpen(true);
+        addLog('A procurar por mapas potenciais no ficheiro BIN...', 'info');
+
+        try {
+            const firstChunk = binFile.buffer.slice(0, 8192);
+            const hexData = bufferToHex(firstChunk);
+
+            const result = await findPotentialMaps({ 
+                binHexData: hexData,
+                brand: xdfFile?.brand || undefined,
+                existingMaps: availableMaps.map(m => ({
+                    name: m.name,
+                    address: m.address,
+                    sizeInBytes: m.rows * m.cols * m.dataSize // Simplistic size
+                }))
+            });
+
+            if (result.success && result.data) {
+                addLog(`Procura concluída. Encontrados ${result.data.maps.length} mapas potenciais.`, 'success');
+                const newPotentialMaps = result.data.maps.map(pMap => ({
+                    ...pMap,
+                    isPotential: true,
+                    equation: 'X',
+                    isBigEndian: false,
+                    dataOrganization: 'ROW_MAJOR',
+                    minorStrideBits: 0,
+                    majorStrideBits: 0,
+                    xAxisDef: { node: null, count: pMap.cols, label: 'Eixo X', equation: 'X' },
+                    yAxisDef: { node: null, count: pMap.rows, label: 'Eixo Y', equation: 'X' },
+                } as XDFDefinition));
+                setPotentialMapsResult({ maps: newPotentialMaps, analysis: result.data.analysis || '' });
+            } else {
+                throw new Error(result.error || "A IA não devolveu uma resposta válida.");
+            }
+        } catch (error) {
+            const msg = `Falha na procura de mapas: ${(error as Error).message}`;
+            addLog(msg, 'error');
+            toast({ variant: 'destructive', title: "Erro na Procura da IA", description: msg });
+            setPotentialMapsResult(null);
+        } finally {
+            setIsFindingMaps(false);
+        }
+    };
+    
+    const handleAddPotentialMap = (potentialMap: XDFDefinition) => {
+        if (availableMaps.some(m => m.name === potentialMap.name)) {
+            toast({ variant: 'destructive', title: "Mapa Duplicado", description: `Já existe um mapa com o nome "${potentialMap.name}".`});
+            return;
+        }
+        setAvailableMaps(prev => [...prev, potentialMap]);
+        toast({ title: "Mapa Adicionado", description: `Mapa potencial "${potentialMap.name}" adicionado à lista.`});
+    };
+
+    const handleExplainMap = async () => {
+        if (!selectedMapDefinition || !displayMap || !displayAxes) {
+             toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, carregue um mapa para obter uma explicação.' });
+            return;
+        }
+        
+        setIsExplaining(true);
+        setIsExplanationModalOpen(true);
+        setExplanationResult(null);
+        addLog(`A gerar explicação para o mapa "${selectedMapDefinition.name}"...`, 'info');
+
+        try {
+            const input = {
+                mapName: selectedMapDefinition.name,
+                mapData: displayMap,
+                xAxis: displayAxes.x.calculated,
+                yAxis: displayAxes.y.calculated,
+                xAxisLabel: displayAxes.x.label,
+                yAxisLabel: displayAxes.y.label
+            };
+            
+            const explanationResponse = await explainMap(input);
+            if (!explanationResponse.success || !explanationResponse.data) {
+                throw new Error(explanationResponse.error || "Falha ao gerar a explicação.");
+            }
+            const explanationText = explanationResponse.data.explanation;
+            addLog('Explicação gerada com sucesso.', 'success');
+            setExplanationResult({ text: explanationText, audio: null });
+
+            addLog('A gerar áudio para a explicação...', 'info');
+            const speechResponse = await generateSpeech(explanationText);
+            if (speechResponse.success && speechResponse.data) {
+                addLog('Áudio gerado com sucesso.', 'success');
+                setExplanationResult({ text: explanationText, audio: speechResponse.data.media });
+            } else {
+                 throw new Error(speechResponse.error || "Falha ao gerar áudio.");
+            }
+
+        } catch (error) {
+             const msg = `Falha na explicação do mapa: ${(error as Error).message}`;
+             addLog(msg, 'error');
+             toast({ variant: 'destructive', title: "Erro na Explicação da IA", description: msg });
+             setExplanationResult({ text: 'Ocorreu um erro ao gerar a explicação.', audio: null });
+        } finally {
+            setIsExplaining(false);
+        }
+    };
 
     const saveButton = (
         <Button onClick={handleSaveModifiedBin} disabled={!binFile || !workingMap}>
@@ -746,7 +950,7 @@ export default function EcuTuningAssistant() {
                                 <div className="flex items-center gap-2">
                                     <Select onValueChange={handleMapSelect} disabled={!binFile || availableMaps.length === 0} value={selectedMapName} >
                                         <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : availableMaps.length === 0 ? "Carregue um ficheiro XDF" : "Selecione um mapa"} />
+                                            <SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : (xdfFile ? "Selecione um mapa" : "Carregue um XDF ou use a IA")} />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {availableMaps.map(def => (
@@ -768,21 +972,43 @@ export default function EcuTuningAssistant() {
                                         <TooltipContent><p>Editar Nome do Mapa</p></TooltipContent>
                                     </Tooltip>
                                 </div>
-                                <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={!selectedMapDefinition}>
+                                <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={!selectedMapDefinition || selectedMapDefinition.dataSize < 2}>
                                     <RefreshCw className="mr-2 h-4 w-4" />
                                     Inverter Ordem de Bytes (Endian)
                                 </Button>
                             </div>
 
                             <div className="space-y-2">
-                                <h3 className="font-semibold text-primary">3. Corrigir Mapa (Opcional)</h3>
-                                <p className="text-xs text-muted-foreground">
-                                    Ajuste as equações se os eixos ou os valores dos dados parecerem incorretos.
-                                </p>
-                                <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!displayMap}>
-                                    <GitCompareArrows className="mr-2 h-4 w-4" />
-                                    Corrigir Equações Man.
-                                </Button>
+                                <h3 className="font-semibold text-primary">3. Assistência da IA</h3>
+                                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                             <Button variant="secondary" className="w-full" onClick={handleFindPotentialMaps} disabled={!binFile}>
+                                                <Sparkles className="mr-2 h-4 w-4" />
+                                                Procurar
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Procurar por mapas não definidos no ficheiro BIN.</TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                             <Button variant="secondary" className="w-full" onClick={handleValidateMap} disabled={!displayMap}>
+                                                <GitCompareArrows className="mr-2 h-4 w-4" />
+                                                Validar
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Verificar se o tipo e as equações do mapa estão corretos.</TooltipContent>
+                                    </Tooltip>
+                                </div>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                         <Button variant="secondary" className="w-full" onClick={handleExplainMap} disabled={!displayMap}>
+                                            <Volume2 className="mr-2 h-4 w-4" />
+                                            Explicar Mapa
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Gerar uma explicação textual e em áudio do mapa selecionado.</TooltipContent>
+                                </Tooltip>
                             </div>
 
                             <div className="space-y-2">
@@ -872,6 +1098,7 @@ export default function EcuTuningAssistant() {
                                 <FileUp className="w-16 h-16 mb-4"/>
                                 <p className="font-semibold">Nenhum mapa carregado</p>
                                 <p className="text-sm">Por favor carregue um ficheiro .BIN e um .XDF para começar.</p>
+                                <p className="text-sm mt-2">Ou carregue um .BIN e use o botão <span className="font-bold text-primary">Procurar</span> da IA.</p>
                             </div>
                         )}
                     </CardContent>
@@ -913,9 +1140,30 @@ export default function EcuTuningAssistant() {
                     open={isSuggestionModalOpen} 
                     onOpenChange={setIsSuggestionModalOpen} 
                     suggestion={aiSuggestion} 
-                    onAccept={() => {}}
+                    onAccept={handleAcceptSuggestion}
                     binBuffer={binFile?.buffer || null}
                     mapRenderKey={mapRenderKey}
+                />
+                 <PotentialMapFinderModal
+                    open={isMapFinderModalOpen}
+                    onOpenChange={setIsMapFinderModalOpen}
+                    isLoading={isFindingMaps}
+                    result={potentialMapsResult}
+                    onAddMap={handleAddPotentialMap}
+                />
+                <ExplanationModal
+                    open={isExplanationModalOpen}
+                    onOpenChange={(open) => {
+                        setIsExplanationModalOpen(open);
+                        if (!open && audioRef.current) {
+                           audioRef.current.pause(); // Stop audio when closing
+                        }
+                    }}
+                    isLoading={isExplaining}
+                    explanation={explanationResult?.text}
+                    audioDataUri={explanationResult?.audio}
+                    audioRef={audioRef}
+                    mapName={selectedMapDefinition?.name}
                 />
                 <EditNameModal
                     open={isEditNameModalOpen}
@@ -1010,7 +1258,9 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
     if (!suggestion) return null;
 
     const { originalDefinition, newDefinition, reasoning } = suggestion;
-    const hasZCorrection = !!newDefinition.equation && newDefinition.equation !== originalDefinition.equation;
+    const hasCorrection = (newDefinition.equation && newDefinition.equation !== originalDefinition.equation) || 
+                          (newDefinition.xAxisDef?.equation && newDefinition.xAxisDef.equation !== originalDefinition.xAxisDef?.equation) ||
+                          (newDefinition.yAxisDef?.equation && newDefinition.yAxisDef.equation !== originalDefinition.yAxisDef?.equation);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1018,10 +1268,10 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <GitCompareArrows className="text-primary"/>
-                        Sugestão de Correção para o Eixo Z
+                        Sugestão de Correção da IA
                     </DialogTitle>
                     <DialogDescription>
-                         A IA analisou os dados do mapa (Eixo Z) e sugere uma melhoria.
+                         A IA analisou os dados e sugere melhorias. Veja a pré-visualização abaixo.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -1075,21 +1325,35 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                             <p className="text-sm p-3 bg-muted rounded-md border">{reasoning}</p>
                         </div>
                         
-                        {hasZCorrection && (
-                           <div className="p-3 rounded-lg border bg-card">
-                              <p className="text-sm font-medium">Alteração da Equação do Eixo Z</p>
-                               <div className="text-xs space-y-1 mt-1">
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            {newDefinition.yAxisDef?.equation !== originalDefinition.yAxisDef?.equation && (
+                                <div className="p-2 rounded-lg border bg-card text-xs">
+                                    <p className="font-medium mb-1">Eixo Y ({newDefinition.yAxisDef?.label})</p>
+                                    <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.yAxisDef?.equation}</code></p>
+                                    <p>Sugerida: <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.yAxisDef?.equation}</code></p>
+                                </div>
+                            )}
+                             {newDefinition.xAxisDef?.equation !== originalDefinition.xAxisDef?.equation && (
+                                <div className="p-2 rounded-lg border bg-card text-xs">
+                                    <p className="font-medium mb-1">Eixo X ({newDefinition.xAxisDef?.label})</p>
+                                    <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.xAxisDef?.equation}</code></p>
+                                    <p>Sugerida: <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.xAxisDef?.equation}</code></p>
+                                </div>
+                            )}
+                            {newDefinition.equation !== originalDefinition.equation && (
+                               <div className="p-2 rounded-lg border bg-card text-xs">
+                                  <p className="font-medium mb-1">Eixo Z ({newDefinition.name})</p>
                                   <p>Original: <code className="bg-muted px-1 py-0.5 rounded">{originalDefinition.equation}</code></p>
-                                  <p className="flex items-center gap-2">Sugerida: <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
-                              </div>
-                           </div>
-                        )}
+                                  <p>Sugerida: <code className="bg-primary/20 font-semibold px-1 py-0.5 rounded">{newDefinition.equation}</code></p>
+                               </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
                 <DialogFooter className="mt-auto pt-4 border-t shrink-0">
                     <Button variant="ghost" onClick={() => onOpenChange(false)}>Rejeitar</Button>
-                    <Button onClick={onAccept} disabled={!hasZCorrection}>
+                    <Button onClick={onAccept} disabled={!hasCorrection}>
                         <CheckCircle className="mr-2"/>
                         Aplicar Correção
                     </Button>
@@ -1099,6 +1363,125 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
     );
 }
 
+function PotentialMapFinderModal({ open, onOpenChange, isLoading, result, onAddMap }: { open: boolean, onOpenChange: (open: boolean) => void, isLoading: boolean, result: { maps: XDFDefinition[], analysis: string } | null, onAddMap: (map: XDFDefinition) => void }) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>Procura de Mapas Potenciais por IA</DialogTitle>
+                    <DialogDescription>
+                        A IA analisou os primeiros 8KB do seu ficheiro BIN para encontrar regiões que parecem mapas de dados.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="flex-1 overflow-y-auto">
+                    {isLoading && (
+                        <div className="flex flex-col items-center justify-center h-full text-center">
+                            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+                            <p className="font-semibold">A analisar o ficheiro BIN...</p>
+                            <p className="text-sm text-muted-foreground">Isto pode demorar alguns segundos.</p>
+                        </div>
+                    )}
+                    {!isLoading && result && (
+                         <div className="space-y-4">
+                            {result.analysis && (
+                                <div className="p-3 bg-muted rounded-md border text-sm">
+                                    <h4 className="font-semibold mb-1">Análise da IA:</h4>
+                                    <p>{result.analysis}</p>
+                                </div>
+                            )}
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Nome Sugerido</TableHead>
+                                        <TableHead>Endereço</TableHead>
+                                        <TableHead>Dimensões</TableHead>
+                                        <TableHead>Tam. Dado</TableHead>
+                                        <TableHead className="text-right">Ação</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {result.maps.length > 0 ? result.maps.map((map, index) => (
+                                        <TableRow key={index}>
+                                            <TableCell>{map.name}</TableCell>
+                                            <TableCell>0x{map.address.toString(16).toUpperCase()}</TableCell>
+                                            <TableCell>{map.rows} x {map.cols}</TableCell>
+                                            <TableCell>{map.dataSize * 8}-bit</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="sm" onClick={() => onAddMap(map)}>Adicionar</Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    )) : (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="text-center">A IA não conseguiu encontrar nenhum candidato a mapa credível.</TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                         </div>
+                    )}
+                    {!isLoading && !result && (
+                         <div className="flex flex-col items-center justify-center h-full text-center">
+                            <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+                            <p className="font-semibold">Ocorreu um erro</p>
+                            <p className="text-sm text-muted-foreground">Não foi possível concluir a procura por mapas. Verifique o log para mais detalhes.</p>
+                        </div>
+                    )}
+                </div>
+                <DialogFooter className="mt-4">
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function ExplanationModal({ open, onOpenChange, isLoading, explanation, audioDataUri, audioRef, mapName }: { 
+    open: boolean, 
+    onOpenChange: (open: boolean) => void, 
+    isLoading: boolean, 
+    explanation: string | null | undefined, 
+    audioDataUri: string | null | undefined, 
+    audioRef: React.RefObject<HTMLAudioElement>,
+    mapName: string | undefined
+}) {
+    return (
+         <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Explicação do Mapa: {mapName || 'Mapa Atual'}</DialogTitle>
+                     <DialogDescription>A IA gerou a seguinte explicação.</DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4">
+                    {isLoading && !explanation && (
+                        <div className="flex flex-col items-center justify-center h-full text-center space-y-2">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            <p className="font-semibold">A gerar explicação...</p>
+                        </div>
+                    )}
+                     {explanation && (
+                        <ScrollArea className="h-60 w-full rounded-md border p-4">
+                            {explanation}
+                        </ScrollArea>
+                    )}
+                    {audioDataUri && (
+                        <div className="flex items-center justify-center">
+                           <audio ref={audioRef} src={audioDataUri} controls className="w-full" />
+                        </div>
+                    )}
+                     {isLoading && explanation && !audioDataUri && (
+                        <div className="flex items-center justify-center space-x-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>A gerar áudio...</span>
+                        </div>
+                    )}
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 function EditNameModal({ open, onOpenChange, onConfirm, currentName }: { 
     open: boolean;

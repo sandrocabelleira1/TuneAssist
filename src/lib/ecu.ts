@@ -71,8 +71,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rowsStr = getAttr(embeddedData, 'mmedrowcount');
             const colsStr = getAttr(embeddedData, 'mmedcolcount');
 
-            const rows = parseInt(rowsStr || '0', 10);
-            const cols = parseInt(colsStr || '0', 10);
+            const rows = parseInt(rowsStr || getAttr(table, 'rows') || '0', 10);
+            const cols = parseInt(colsStr || getAttr(table, 'cols') || '0', 10);
             
             if (isNaN(rows) || isNaN(cols) || rows === 0 || cols === 0) { 
                 return;
