@@ -20,7 +20,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, Table, Undo2, Box, LineChart, Volume2 } from 'lucide-react';
+import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, TableIcon, Undo2, Box, LineChart, Volume2 } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from '@/components/ui/slider';
 import dynamic from 'next/dynamic';
@@ -317,6 +318,10 @@ export default function EcuTuningAssistant() {
     const xdfInputRef = useRef<HTMLInputElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
+    const selectedMapDefinition = useMemo(() => {
+        return availableMaps.find(m => m.name === selectedMapName);
+    }, [availableMaps, selectedMapName]);
+
     const valueFormat = useMemo<'integer' | 'decimal'>(() => {
         if (!selectedMapName) return 'decimal';
         const lowerCaseName = selectedMapName.toLowerCase();
@@ -336,10 +341,6 @@ export default function EcuTuningAssistant() {
     const visibleLogs = useMemo(() => {
         return debugMode ? logs : logs.filter(log => log.type !== 'debug');
     }, [logs, debugMode]);
-
-    const selectedMapDefinition = useMemo(() => {
-        return availableMaps.find(m => m.name === selectedMapName);
-    }, [availableMaps, selectedMapName]);
 
     useEffect(() => {
         if (!binFile) {
@@ -1043,7 +1044,7 @@ export default function EcuTuningAssistant() {
                         {displayMap && displayAxes ? (
                             <Tabs defaultValue="2d" className="flex flex-1 flex-col min-h-0">
                                 <TabsList className="mb-2 shrink-0">
-                                    <TabsTrigger value="2d"><Table className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
+                                    <TabsTrigger value="2d"><TableIcon className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
                                     <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
                                     <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
                                 </TabsList>
