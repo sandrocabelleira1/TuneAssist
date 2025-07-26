@@ -68,13 +68,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             if (!embeddedData) return;
 
-            const rowsStr = getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedmajorcount');
-            const colsStr = getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedminorcount');
+            const rowsStr = getAttr(embeddedData, 'mmedrowcount');
+            const colsStr = getAttr(embeddedData, 'mmedcolcount');
 
-            const rows = parseInt(rowsStr || '', 10);
-            const cols = parseInt(colsStr || '', 10);
+            const rows = parseInt(rowsStr || '0', 10);
+            const cols = parseInt(colsStr || '0', 10);
             
-            if (isNaN(rows) || isNaN(cols)) { 
+            if (isNaN(rows) || isNaN(cols) || rows === 0 || cols === 0) { 
                 return;
             }
 
@@ -85,13 +85,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const dataType = parseInt(getAttr(embeddedData, 'mmeddatatype') || '0', 10);
                 if (dataType === 1) dataSizeBits = 8;
                 else if (dataType === 2) dataSizeBits = 16;
-                else {
-                    if (tableName.toLowerCase().includes('ign')) {
-                        dataSizeBits = 8;
-                    } else {
-                        dataSizeBits = 16;
-                    }
-                }
+                else dataSizeBits = 16; // Default to 16-bit if unspecified
             }
             
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
@@ -107,12 +101,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 return;
             }
 
-            const parseAxis = (axisNode: Element | null, dimensionSize: number): AxisDefinition => {
+            const parseAxis = (axisNode: Element | null): AxisDefinition => {
                 if (!axisNode) return null;
                 
                 const axisId = getAttr(axisNode, 'id')?.toLowerCase();
                 const defaultLabel = axisId === 'x' ? 'Eixo X' : 'Eixo Y';
-                const axisDef: Partial<AxisDefinition> = { node: axisNode, count: dimensionSize, label: defaultLabel };
+                const axisDef: Partial<AxisDefinition> = { node: axisNode, label: defaultLabel };
 
                 const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name')?.trim();
                 const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
@@ -132,24 +126,21 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 
                 axisDef.label = label;
                 const axisEmbeddedData = findNode(sourceNodeForData, 'embeddeddata', 'EMBEDDEDDATA');
-                let axisDataSizeBits = 0;
+                if (!axisEmbeddedData) return null;
 
-                if (axisEmbeddedData) {
-                    axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                    axisDataSizeBits = parseInt(getAttr(sourceNodeForData, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
-                    
-                    if (axisDataSizeBits === 0) {
-                        const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
-                        if (axisDataType === 1) axisDataSizeBits = 8;
-                        else if (axisDataType === 2) axisDataSizeBits = 16;
-                        else axisDataSizeBits = 16; 
-                    }
-                    
-                    axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
+                axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
+                axisDef.count = parseInt(getAttr(axisEmbeddedData, 'mmedcolcount') || getAttr(axisNode, 'indexcount') || '0', 10);
+                
+                let axisDataSizeBits = parseInt(getAttr(sourceNodeForData, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
+                if (axisDataSizeBits === 0) {
+                    const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
+                    if (axisDataType === 1) axisDataSizeBits = 8;
+                    else if (axisDataType === 2) axisDataSizeBits = 16;
+                    else axisDataSizeBits = 16; // Default
                 }
-                
-                axisDef.dataSize = axisDataSizeBits > 0 ? axisDataSizeBits / 8 : 2; // Default to 2 bytes if not specified
-                
+                axisDef.dataSize = axisDataSizeBits / 8;
+                axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
+
                 const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
                 axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
 
@@ -171,10 +162,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 return axisDef as AxisDefinition;
             };
 
-            const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'), cols);
-            const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'), rows);
+            const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
+            const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
             
             if (!xAxisDef || !yAxisDef) return;
+            // Ensure counts are correct for the main table definition
+            xAxisDef.count = cols;
+            yAxisDef.count = rows;
             
             definitions.push({
                 name: tableName,
@@ -304,6 +298,7 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
+    // Stride calculation
     const colStrideBytes = def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize;
     const rowStrideBytes = def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
@@ -516,4 +511,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
