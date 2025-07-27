@@ -3,7 +3,8 @@ import { validateMapType as validateMapTypeFlow, type ValidateMapTypeInput, type
 import { findMaps as findMapsFlow, type FindMapsInput, type FindMapsOutput } from '@/ai/flows/find-maps-flow';
 import { explainMap as explainMapFlow, type ExplainMapInput, type ExplainMapOutput } from '@/ai/flows/explain-map-flow';
 import { generateSpeech as generateSpeechFlow, type TextToSpeechInput, type TextToSpeechOutput } from '@/ai/flows/text-to-speech-flow';
-import { ValidateMapTypeInputSchema, FindMapsInputSchema, ExplainMapInputSchema, TextToSpeechInputSchema } from '@/ai/schemas';
+import { alignMap as alignMapFlow, type AlignMapInput, type AlignMapOutput } from '@/ai/flows/align-map-flow';
+import { ValidateMapTypeInputSchema, FindMapsInputSchema, ExplainMapInputSchema, TextToSpeechInputSchema, AlignMapInputSchema } from '@/ai/schemas';
 import { z } from 'zod';
 
 // Helper function for common AI error handling
@@ -91,5 +92,18 @@ export async function generateSpeech(text: TextToSpeechInput): Promise<{ success
     return { success: true, data: result };
   } catch (error) {
     return handleAiError(error, 'geração de áudio');
+  }
+}
+
+export async function alignMap(input: AlignMapInput): Promise<{ success: boolean; data?: AlignMapOutput; error?: string }> {
+  try {
+    const validatedInput = AlignMapInputSchema.parse(input);
+    const result = await alignMapFlow(validatedInput);
+     if (!result) {
+        throw new Error('A IA devolveu uma resposta vazia.');
+    }
+    return { success: true, data: result };
+  } catch (error) {
+    return handleAiError(error, 'alinhamento do mapa');
   }
 }

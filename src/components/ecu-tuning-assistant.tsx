@@ -1,12 +1,9 @@
-
-
-
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDefinition, AxisDataState } from '@/lib/types';
 import { parseXDF, readAndCalculateMapFromBin, generateChecksum, bufferToHex, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress } from '@/lib/ecu';
-import { validateMapType, findPotentialMaps, explainMap, generateSpeech } from '@/app/actions';
+import { validateMapType, findPotentialMaps, explainMap, generateSpeech, alignMap } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -21,7 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, TableIcon, Undo2, Box, LineChart, Volume2, Blend } from 'lucide-react';
+import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, TableIcon, Undo2, Box, LineChart, Volume2, Blend, Wand2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from '@/components/ui/slider';
@@ -324,6 +321,7 @@ export default function EcuTuningAssistant() {
     const [mapValidationStatus, setMapValidationStatus] = useState<'idle' | 'loading' | 'valid' | 'suggestion' | 'error'>('idle');
     const [potentialMapsResult, setPotentialMapsResult] = useState<{ maps: XDFDefinition[], analysis: string } | null>(null);
     const [isFindingMaps, setIsFindingMaps] = useState(false);
+    const [isAligningMap, setIsAligningMap] = useState(false);
     const [explanationResult, setExplanationResult] = useState<{ text: string, audio: string | null } | null>(null);
     const [isExplaining, setIsExplaining] = useState(false);
 
@@ -873,6 +871,47 @@ export default function EcuTuningAssistant() {
         toast({ title: "Mapa Adicionado", description: `Mapa potencial "${potentialMap.name}" adicionado à lista.`});
     };
 
+    const handleAlignMap = async () => {
+        if (!selectedMapDefinition || !displayMap || !displayAxes) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, carregue um mapa para o alinhar.' });
+            return;
+        }
+
+        setIsAligningMap(true);
+        addLog(`A iniciar alinhamento inteligente do mapa "${selectedMapDefinition.name}"...`, 'info');
+        toast({ title: 'A IA está a pensar...', description: 'A alinhar os dados do mapa. Isto pode demorar alguns segundos.' });
+
+        try {
+            const input = {
+                mapName: selectedMapDefinition.name,
+                mapData: displayMap,
+                xAxis: displayAxes.x.calculated,
+                yAxis: displayAxes.y.calculated,
+                xAxisLabel: displayAxes.x.label,
+                yAxisLabel: displayAxes.y.label
+            };
+
+            const result = await alignMap(input);
+
+            if (result.success && result.data) {
+                const { alignedMapData } = result.data;
+                setWorkingMap(alignedMapData);
+                setDisplayMap(alignedMapData);
+                setMapRenderKey(p => p + 1);
+                addLog('Mapa alinhado com sucesso pela IA.', 'success');
+                toast({ title: 'Mapa Alinhado!', description: 'A IA suavizou os dados do mapa.' });
+            } else {
+                throw new Error(result.error || "A IA não devolveu um mapa alinhado válido.");
+            }
+        } catch (error) {
+            const msg = `Falha no alinhamento do mapa: ${(error as Error).message}`;
+            addLog(msg, 'error');
+            toast({ variant: 'destructive', title: "Erro no Alinhamento da IA", description: msg });
+        } finally {
+            setIsAligningMap(false);
+        }
+    };
+
     const handleExplainMap = async () => {
         if (!selectedMapDefinition || !displayMap || !displayAxes) {
              toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, carregue um mapa para obter uma explicação.' });
@@ -1061,16 +1100,25 @@ export default function EcuTuningAssistant() {
                                         </TooltipTrigger>
                                         <TooltipContent>Verificar se o tipo e as equações do mapa estão corretos.</TooltipContent>
                                     </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                             <Button variant="secondary" className="w-full" onClick={handleAlignMap} disabled={!displayMap || isAligningMap}>
+                                                {isAligningMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                                                Alinhar
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Alinhar inteligentemente os dados do mapa (eixo Z) para transições suaves.</TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                             <Button variant="secondary" className="w-full" onClick={handleExplainMap} disabled={!displayMap}>
+                                                <Volume2 className="mr-2 h-4 w-4" />
+                                                Explicar
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Gerar uma explicação textual e em áudio do mapa selecionado.</TooltipContent>
+                                    </Tooltip>
                                 </div>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                         <Button variant="secondary" className="w-full" onClick={handleExplainMap} disabled={!displayMap}>
-                                            <Volume2 className="mr-2 h-4 w-4" />
-                                            Explicar Mapa
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Gerar uma explicação textual e em áudio do mapa selecionado.</TooltipContent>
-                                </Tooltip>
                             </div>
 
                             <div className="space-y-2">

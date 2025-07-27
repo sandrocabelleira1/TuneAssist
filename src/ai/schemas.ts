@@ -70,3 +70,18 @@ export const TextToSpeechOutputSchema = z.object({
     media: z.string().describe('A data URI para o ficheiro de áudio WAV gerado.'),
 });
 export type TextToSpeechOutput = z.infer<typeof TextToSpeechOutputSchema>;
+
+export const AlignMapInputSchema = z.object({
+    mapName: z.string().describe('O nome do mapa, ex: "Ignição Principal"'),
+    mapData: z.array(z.array(z.number().nullable())).describe('Os dados 2D do mapa a serem alinhados.'),
+    xAxis: z.array(z.union([z.string(), z.number()])).describe('Valores do eixo X (ex: TPS, Carga)'),
+    yAxis: z.array(z.union([z.string(), z.number()])).describe('Valores do eixo Y (ex: RPM)'),
+    xAxisLabel: z.string().describe('Rótulo do eixo X (ex: "Posição da Borboleta")'),
+    yAxisLabel: z.string().describe('Rótulo do eixo Y (ex: "RPM do Motor")'),
+});
+export type AlignMapInput = z.infer<typeof AlignMapInputSchema>;
+
+export const AlignMapOutputSchema = z.object({
+    alignedMapData: z.array(z.array(z.number().nullable())).describe('A nova grelha de dados do mapa 2D, suavizada e alinhada.'),
+});
+export type AlignMapOutput = z.infer<typeof AlignMapOutputSchema>;
