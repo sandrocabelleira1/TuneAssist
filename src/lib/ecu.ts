@@ -1,6 +1,5 @@
 
 
-
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -148,7 +147,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const axisMajorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedmajorstridebits') || '0', 10);
                 const axisMinorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10);
 
-                // Correct stride logic for axes: use major if available, otherwise minor, otherwise size.
+                // Correct stride logic for axes: use major if available, otherwise minor.
                 const strideBits = axisMajorStrideBits || axisMinorStrideBits;
                 axisDef.stride = (strideBits > 0 ? strideBits / 8 : axisDef.dataSize);
 
@@ -183,6 +182,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
             
             if (!xAxisDef || !yAxisDef) return;
+            
             // Correctly associate axis definitions with table dimensions
             xAxisDef.count = cols;
             yAxisDef.count = rows;
