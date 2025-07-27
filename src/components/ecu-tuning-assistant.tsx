@@ -915,27 +915,29 @@ export default function EcuTuningAssistant() {
             return;
         }
 
-        const rows = displayMap.length;
-        const cols = displayMap[0].length;
+        const currentMap = displayMap;
+        const rows = currentMap.length;
+        const cols = currentMap[0].length;
         if (rows < 2 || cols < 2) {
             toast({ variant: 'destructive', title: "Erro", description: "O mapa precisa de pelo menos 2x2 para ser interpolado." });
             return;
         }
-
-        const v00 = displayMap[0][0];
-        const v10 = displayMap[rows - 1][0];
-        const v01 = displayMap[0][cols - 1];
-        const v11 = displayMap[rows - 1][cols - 1];
+        
+        // Use the corner values from the currently displayed map
+        const v00 = currentMap[0][0]; // Top-left
+        const v10 = currentMap[rows - 1][0]; // Bottom-left
+        const v01 = currentMap[0][cols - 1]; // Top-right
+        const v11 = currentMap[rows - 1][cols - 1]; // Bottom-right
         
         if (v00 === null || v10 === null || v01 === null || v11 === null) {
             toast({ variant: 'destructive', title: "Erro", description: "Os quatro cantos do mapa devem ter valores para a interpolação." });
             return;
         }
 
-        const newMap = displayMap.map((row, r) => {
+        const newMap = currentMap.map((row, r) => {
             return row.map((_, c) => {
-                const xRatio = c / (cols - 1);
-                const yRatio = r / (rows - 1);
+                const xRatio = (cols > 1) ? c / (cols - 1) : 0;
+                const yRatio = (rows > 1) ? r / (rows - 1) : 0;
 
                 const vTop = v00 * (1 - xRatio) + v01 * xRatio;
                 const vBottom = v10 * (1 - xRatio) + v11 * xRatio;
