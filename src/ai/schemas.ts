@@ -6,8 +6,8 @@ export const ValidateMapTypeInputSchema = z.object({
     xAxis: z.array(z.number()).describe('Os valores do eixo X (horizontal).'),
     yAxis: z.array(z.number()).describe('Os valores do eixo Y (vertical).'),
     equation: z.string().optional().describe('A equação matemática atual para os dados do mapa (eixo Z). Ex: "X/128".'),
-    brand: z.string().optional().describe('A marca da ECU (ex: Yamaha, Honda).'),
-    model: z.string().optional().describe('O modelo da motocicleta (ex: R3, CBR600RR).'),
+    brand: z.string().nullable().optional().describe('A marca da ECU (ex: Yamaha, Honda).'),
+    model: z.string().nullable().optional().describe('O modelo da motocicleta (ex: R3, CBR600RR).'),
 });
 export type ValidateMapTypeInput = z.infer<typeof ValidateMapTypeInputSchema>;
 
