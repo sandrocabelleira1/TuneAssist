@@ -146,8 +146,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const axisMajorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedmajorstridebits') || '0', 10);
                 const axisMinorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10);
 
-                // Correct stride logic for axes
+                // Correct stride logic for axes: use major if available, otherwise minor, otherwise size.
                 axisDef.stride = (axisMajorStrideBits || axisMinorStrideBits || axisDef.dataSize * 8) / 8;
+
 
                 axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
 
@@ -309,8 +310,8 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
-    const colStrideBytes = (def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize);
-    const rowStrideBytes = (def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes));
+    const colStrideBytes = def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize;
+    const rowStrideBytes = def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
@@ -346,9 +347,12 @@ export function readAndCalculateMapFromBin(
         }
     }
     
-    // Invert the rows to match the visual representation where high RPM is at the top
-    calculatedMap.reverse();
-    rawMap.reverse();
+    const yCalculated = axisYData.calculated.filter(v => typeof v === 'number') as number[];
+    if (yCalculated.length > 1 && yCalculated[0] > yCalculated[yCalculated.length - 1]) {
+        calculatedMap.reverse();
+        rawMap.reverse();
+    }
+
 
     return { 
         calculatedMap: calculatedMap, 
@@ -444,8 +448,13 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
-    // As we reversed the map on reading, we need to reverse it back before calculating raw values
-    const mapForCalc = [...calculatedMap].reverse();
+    // We must reverse the map before writing if it was read reversed
+    const yCalculated = sourceAxes.y.calculated.filter(v => typeof v === 'number') as number[];
+    const mapForCalc = [...calculatedMap];
+    if (yCalculated.length > 1 && yCalculated[0] > yCalculated[yCalculated.length - 1]) {
+        mapForCalc.reverse();
+    }
+
 
     const newRawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
@@ -491,8 +500,13 @@ export function writeMapToBin(
     const colStrideBytes = (def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize);
     const rowStrideBytes = (def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes));
 
-    // We must reverse the raw map before writing if it was read reversed
-    const mapToWrite = [...rawMapData].reverse();
+    const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
+    const yCalculated = yAxisData.calculated.filter(v => typeof v === 'number') as number[];
+    const mapToWrite = [...rawMapData];
+
+    if (yCalculated.length > 1 && yCalculated[0] > yCalculated[yCalculated.length - 1]) {
+        mapToWrite.reverse();
+    }
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
