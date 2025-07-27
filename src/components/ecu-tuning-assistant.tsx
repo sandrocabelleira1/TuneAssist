@@ -213,13 +213,13 @@ function MapTable({
                                     <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Ordenar o eixo Y (RPM) e alinhar os dados.</TooltipContent>
+                                    <TooltipContent><p>Ordenar o eixo Y (ex: RPM) e alinhar os dados.</p></TooltipContent>
                                 </Tooltip>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('x')}><ArrowUpNarrowWide className="h-4 w-4 rotate-90" /></Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Ordenar o eixo X (TPS) e alinhar os dados.</TooltipContent>
+                                    <TooltipContent><p>Ordenar o eixo X (ex: TPS) e alinhar os dados.</p></TooltipContent>
                                 </Tooltip>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
