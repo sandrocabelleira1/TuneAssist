@@ -315,9 +315,10 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
-    // Robust stride calculation for the main map data (Z-axis)
-    const colStrideBytes = (def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize);
-    const rowStrideBytes = (def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes));
+    // START: Robust stride calculation for the main map data (Z-axis)
+    let colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
+    let rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
+    // END: Robust stride calculation
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
@@ -325,6 +326,7 @@ export function readAndCalculateMapFromBin(
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             let offset: number;
+            // Correct offset calculation based on data organization
             if (def.dataOrganization === 'COL_MAJOR') {
                 offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
             } else { // ROW_MAJOR (default)
@@ -371,8 +373,8 @@ export function readAndCalculateMapFromBin(
 
 export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: number): number | null {
     if (!def) return null;
-    const colStrideBytes = (def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize);
-    const rowStrideBytes = (def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes));
+    let colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
+    let rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
     if (def.dataOrganization === 'COL_MAJOR') {
         return def.address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
@@ -520,8 +522,8 @@ export function writeMapToBin(
     
     const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
     
-    const colStrideBytes = (def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize);
-    const rowStrideBytes = (def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes));
+    let colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
+    let rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
 
     const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     const yCalculated = yAxisData.calculated.filter(v => typeof v === 'number') as number[];
