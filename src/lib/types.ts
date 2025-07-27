@@ -14,6 +14,7 @@ export type AxisDefinition = {
   stride?: number;
   isBigEndian?: boolean;
   equation?: string;
+  decimalpl?: number;
   values?: (string | number)[]; // To hold explicit values from <LABEL> tags
 } | null;
 
@@ -28,6 +29,7 @@ export type XDFDefinition = {
   dataOrganization: 'ROW_MAJOR' | 'COL_MAJOR';
   isBigEndian: boolean;
   equation: string;
+  decimalpl: number;
   xAxisDef: AxisDefinition;
   yAxisDef: AxisDefinition;
   isPotential?: boolean;

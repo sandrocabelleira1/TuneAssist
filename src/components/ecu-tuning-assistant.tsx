@@ -1,5 +1,6 @@
 
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -39,7 +40,7 @@ const LinePlot2D = dynamic(() => import('@/components/line-plot'), {
 
 function EditableMapCell({ 
     value: initialValue, 
-    valueFormat, 
+    decimalPlaces,
     isEditable, 
     onCellChange, 
     rawValue, 
@@ -50,7 +51,7 @@ function EditableMapCell({
     value: number | null, 
     onCellChange: (value: string) => void, 
     isEditable: boolean, 
-    valueFormat: 'integer' | 'decimal', 
+    decimalPlaces: number, 
     rawValue: number | null, 
     viewMode: 'calculated' | 'raw',
     dataSize: number,
@@ -64,11 +65,8 @@ function EditableMapCell({
     }
 
     if (val === null || isNaN(val)) return '';
-    if (valueFormat === 'integer') {
-      return Math.round(val).toString();
-    }
-    return String(Number(val.toFixed(3)));
-  }, [valueFormat, viewMode, dataSize]);
+    return String(Number(val.toFixed(decimalPlaces)));
+  }, [decimalPlaces, viewMode, dataSize]);
     
   const [value, setValue] = useState(formatValue(viewMode === 'raw' ? rawValue : initialValue));
 
@@ -128,7 +126,6 @@ function MapTable({
   onResetSort,
   onCellChange,
   isEditable = true,
-  valueFormat = 'decimal',
   selectedCells,
   onCellSelect,
   viewMode,
@@ -144,7 +141,6 @@ function MapTable({
   onResetSort: () => void;
   onCellChange: (rowIndex: number, colIndex: number, value: string) => void;
   isEditable?: boolean;
-  valueFormat?: 'integer' | 'decimal';
   selectedCells: Set<string>;
   onCellSelect: (rowIndex: number, colIndex: number, isCtrlOrCmd: boolean) => void;
   viewMode: 'calculated' | 'raw';
@@ -163,15 +159,15 @@ function MapTable({
     return { min: minVal, max: maxVal };
   }, [mapData]);
 
-  const yAxisFormatter = (val: string | number) => {
+  const yAxisFormatter = useCallback((val: string | number) => {
     if (typeof val !== 'number' || isNaN(val)) return val;
-    return val.toFixed(1);
-  };
+    return val.toFixed(definition?.yAxisDef?.decimalpl ?? 1);
+  }, [definition]);
   
-  const xAxisFormatter = (val: string | number) => {
+  const xAxisFormatter = useCallback((val: string | number) => {
     if (typeof val !== 'number' || isNaN(val)) return val;
-    return val.toFixed(1);
-  };
+    return val.toFixed(definition?.xAxisDef?.decimalpl ?? 1);
+  }, [definition]);
 
   if (!mapData || mapData.length === 0 || !definition || !xAxis || !yAxis) {
     return null;
@@ -271,7 +267,7 @@ function MapTable({
                       rawValue={rawMapData?.[yi]?.[xi] ?? null}
                       onCellChange={(value) => onCellChange(yi, xi, value)}
                       isEditable={isEditable}
-                      valueFormat={valueFormat}
+                      decimalPlaces={definition.decimalpl}
                       viewMode={viewMode}
                       dataSize={definition.dataSize}
                       address={address}
@@ -347,16 +343,6 @@ export default function EcuTuningAssistant() {
     const selectedMapDefinition = useMemo(() => {
         return availableMaps.find(m => m.name === selectedMapName);
     }, [availableMaps, selectedMapName]);
-
-    const valueFormat = useMemo<'integer' | 'decimal'>(() => {
-        if (!selectedMapName) return 'decimal';
-        const lowerCaseName = selectedMapName.toLowerCase();
-        const decimalKeywords = ['ignição', 'ignition', 'avanço', 'spark', 'timing', 'comb', 'fuel', 'injeção'];
-        if (decimalKeywords.some(keyword => lowerCaseName.includes(keyword))) return 'decimal';
-        const integerKeywords = ['tps', 'map', 've', 'etv', 'borboleta'];
-        if (integerKeywords.some(keyword => lowerCaseName.includes(keyword))) return 'integer';
-        return 'decimal';
-    }, [selectedMapName]);
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         if (type === 'debug' && !debugMode) return;
@@ -861,8 +847,8 @@ export default function EcuTuningAssistant() {
                     dataOrganization: 'ROW_MAJOR',
                     minorStrideBits: 0,
                     majorStrideBits: 0,
-                    xAxisDef: { node: null, count: pMap.cols, label: 'Eixo X', equation: 'X' },
-                    yAxisDef: { node: null, count: pMap.rows, label: 'Eixo Y', equation: 'X' },
+                    xAxisDef: { node: null, count: pMap.cols, label: 'Eixo X', equation: 'X', decimalpl: 1 },
+                    yAxisDef: { node: null, count: pMap.rows, label: 'Eixo Y', equation: 'X', decimalpl: 1 },
                 } as XDFDefinition));
                 setPotentialMapsResult({ maps: newPotentialMaps, analysis: result.data.analysis || '' });
             } else {
@@ -1116,7 +1102,7 @@ export default function EcuTuningAssistant() {
                         </div>
                     </CardHeader>
                     <CardContent className="flex flex-1 flex-col p-6 pt-0 min-h-0">
-                        {displayMap && displayAxes ? (
+                        {displayMap && displayAxes && selectedMapDefinition ? (
                             <Tabs defaultValue="2d" className="flex flex-1 flex-col min-h-0">
                                 <TabsList className="mb-2 shrink-0">
                                     <TabsTrigger value="2d"><TableIcon className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
@@ -1135,7 +1121,6 @@ export default function EcuTuningAssistant() {
                                             onSortAxis={handleSortAxis}
                                             onResetSort={handleResetSort}
                                             onCellChange={handleCellChange}
-                                            valueFormat={valueFormat}
                                             selectedCells={selectedCells}
                                             onCellSelect={handleCellSelect}
                                             viewMode={mapViewMode}

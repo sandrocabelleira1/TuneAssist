@@ -1,5 +1,6 @@
 
 
+
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -98,6 +99,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
+            const decimalPlatesZ = parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10);
+
 
             if (isNaN(address)) {
                 return;
@@ -132,7 +135,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 if (!axisEmbeddedData) return null;
 
                 axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
-                axisDef.count = parseInt(getAttr(axisEmbeddedData, 'mmedcolcount') || getAttr(axisNode, 'indexcount') || '0', 10);
                 
                 let axisDataSizeBits = parseInt(getAttr(sourceNodeForData, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
                 if (axisDataSizeBits === 0) {
@@ -155,6 +157,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
                 const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
                 axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
+                
+                axisDef.decimalpl = parseInt(findNode(sourceNodeForData, 'decimalpl')?.textContent || '1', 10);
+
 
                 const labelNodes = sourceNodeForData.querySelectorAll(':scope > label, :scope > LABEL');
                 if (labelNodes.length > 0) {
@@ -193,6 +198,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 dataOrganization,
                 isBigEndian,
                 equation,
+                decimalpl: decimalPlatesZ,
                 xAxisDef,
                 yAxisDef,
                 isPotential: false,
