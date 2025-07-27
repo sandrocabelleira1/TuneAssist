@@ -346,6 +346,10 @@ export function readAndCalculateMapFromBin(
         }
     }
     
+    // Invert the rows to match the visual representation where high RPM is at the top
+    calculatedMap.reverse();
+    rawMap.reverse();
+
     return { 
         calculatedMap: calculatedMap, 
         rawMap: rawMap, 
@@ -440,11 +444,14 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
+    // As we reversed the map on reading, we need to reverse it back before calculating raw values
+    const mapForCalc = [...calculatedMap].reverse();
+
     const newRawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
         const newRawRow: (number | null)[] = [];
         for (let c = 0; c < def.cols; c++) {
-            const calculatedValue = calculatedMap[r]?.[c];
+            const calculatedValue = mapForCalc[r]?.[c];
 
             if (calculatedValue === null || calculatedValue === undefined) {
                 newRawRow.push(null);
@@ -484,9 +491,12 @@ export function writeMapToBin(
     const colStrideBytes = (def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize);
     const rowStrideBytes = (def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes));
 
+    // We must reverse the raw map before writing if it was read reversed
+    const mapToWrite = [...rawMapData].reverse();
+
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
-            const rawValue = rawMapData[r][c];
+            const rawValue = mapToWrite[r][c];
             if (rawValue === null || isNaN(rawValue)) {
                 continue;
             }
