@@ -141,6 +141,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     else axisDataSizeBits = 16; // Default
                 }
                 axisDef.dataSize = axisDataSizeBits / 8;
+                axisDef.stride = (parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8) || axisDef.dataSize;
                 axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
 
                 const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
@@ -224,6 +225,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
+    const stride = axisDef.stride || dataSize;
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
 
@@ -243,7 +245,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const originalIndices: number[] = [];
 
     for (let i = 0; i < count; i++) {
-        const offset = addr + (i * dataSize);
+        const offset = addr + (i * stride);
         if (offset + dataSize > view.byteLength) continue;
 
         let rawValue;

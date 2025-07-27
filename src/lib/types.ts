@@ -11,6 +11,7 @@ export type AxisDefinition = {
   label: string;
   address?: number | null;
   dataSize?: number;
+  stride?: number;
   isBigEndian?: boolean;
   equation?: string;
   values?: (string | number)[]; // To hold explicit values from <LABEL> tags
