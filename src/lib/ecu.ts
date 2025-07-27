@@ -177,7 +177,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
             
             if (!xAxisDef || !yAxisDef) return;
-            // Ensure counts are correct for the main table definition
+            // Correctly associate axis definitions with table dimensions
             xAxisDef.count = cols;
             yAxisDef.count = rows;
             
@@ -310,8 +310,8 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
-    const colStrideBytes = def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize;
-    const rowStrideBytes = def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes);
+    const colStrideBytes = (def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize);
+    const rowStrideBytes = (def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes));
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
