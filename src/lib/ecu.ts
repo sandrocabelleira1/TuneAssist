@@ -147,7 +147,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const axisMinorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10);
 
                 // Correct stride logic for axes: use major if available, otherwise minor, otherwise size.
-                axisDef.stride = (axisMajorStrideBits || axisMinorStrideBits || (axisDef.dataSize * 8)) / 8;
+                const strideBits = axisMajorStrideBits || axisMinorStrideBits;
+                axisDef.stride = (strideBits > 0 ? strideBits / 8 : axisDef.dataSize);
 
 
                 axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
