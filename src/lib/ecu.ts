@@ -39,11 +39,17 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     }
 
     const allTableElements = xmlDoc.querySelectorAll('XDFTABLE, table');
-    const allTablesMap = new Map<string, Element>();
+    const allTablesByName = new Map<string, Element>();
+    const allTablesById = new Map<string, Element>();
+
     allTableElements.forEach(table => {
         const name = findNode(table, 'title')?.textContent?.trim() || getAttr(table, 'name');
         if (name) {
-            allTablesMap.set(name, table);
+            allTablesByName.set(name, table);
+        }
+        const uniqueId = getAttr(table, 'uniqueid');
+        if (uniqueId) {
+            allTablesById.set(uniqueId, table);
         }
     });
 
@@ -103,8 +109,10 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const count = axisId === 'x' ? cols : rows;
                 const axisDef: Partial<AxisDimension> = { count, label: defaultLabel };
 
-                const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name')?.trim();
-                const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
+                const linkNode = findNode(axisNode, 'link');
+                const linkedTableId = getAttr(linkNode, 'uniqueid');
+                const linkedTableName = getAttr(linkNode, 'name')?.trim();
+                const linkedTableNode = (linkedTableId ? allTablesById.get(linkedTableId) : null) || (linkedTableName ? allTablesByName.get(linkedTableName) : null);
                 
                 let sourceNodeForData = axisNode; 
                 let label = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
@@ -135,8 +143,15 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
                 const axisMajorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedmajorstridebits') || '0', 10);
                 const axisMinorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10);
-                axisDef.stride = (axisMajorStrideBits > 0 ? axisMajorStrideBits / 8 : (axisMinorStrideBits > 0 ? axisMinorStrideBits / 8 : axisDef.dataSize));
 
+                if (axisMajorStrideBits > 0) {
+                    axisDef.stride = axisMajorStrideBits / 8;
+                } else if (axisMinorStrideBits > 0) {
+                    axisDef.stride = axisMinorStrideBits / 8;
+                } else {
+                    axisDef.stride = axisDef.dataSize;
+                }
+                
                 axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
 
                 const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
@@ -215,9 +230,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
     }
 
     const view = new DataView(binBuffer);
-    const { address: addr, dataSize = 2, stride = dataSize, equation: eq, isBigEndian } = axisDef;
+    const { address: addr, dataSize = 2, equation: eq, isBigEndian } = axisDef;
     const useLittleEndian = !(isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(eq);
+    const stride = axisDef.stride || dataSize;
 
     if (isNaN(addr) || isNaN(count) || isNaN(dataSize)) return defaultState;
 
@@ -255,8 +271,12 @@ export function readAndCalculateMapFromBin(
 ): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
     const {
         address, rows, cols, dataSize, isBigEndian, equation: eq,
-        colStrideBytes, rowStrideBytes, dataOrganization
+        dataOrganization
     } = def;
+    
+    // Use the strides from the definition, which are now correctly parsed.
+    const colStrideBytes = def.colStrideBytes;
+    const rowStrideBytes = def.rowStrideBytes;
 
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
