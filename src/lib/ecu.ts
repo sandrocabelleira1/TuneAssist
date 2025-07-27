@@ -533,6 +533,10 @@ export function writeMapToBin(
                 
                 if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
+                     // Handle padding: if colStride is 2 bytes for 1 byte data, zero out the next byte.
+                    if (colStrideBytes === 2 && offset + 1 < view.byteLength) {
+                        view.setUint8(offset + 1, 0);
+                    }
                 } else if (def.dataSize === 2) {
                      view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndian);
                 }
