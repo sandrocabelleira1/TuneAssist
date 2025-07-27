@@ -348,6 +348,7 @@ export function readAndCalculateMapFromBin(
         }
     }
     
+    // Check if the Y-axis is inverted and reverse the map rows if so
     const yCalculated = axisYData.calculated.filter(v => typeof v === 'number') as number[];
     if (yCalculated.length > 1 && yCalculated[0] > yCalculated[yCalculated.length - 1]) {
         calculatedMap.reverse();
@@ -361,6 +362,20 @@ export function readAndCalculateMapFromBin(
         sortedAxes: { x: axisXData, y: axisYData } 
     };
 }
+
+
+export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: number): number | null {
+    if (!def) return null;
+    const colStrideBytes = (def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize);
+    const rowStrideBytes = (def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes));
+
+    if (def.dataOrganization === 'COL_MAJOR') {
+        return def.address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
+    } 
+    // ROW_MAJOR (default)
+    return def.address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
+}
+
 
 export function generateChecksum(buffer: ArrayBuffer): string {
     const dataView = new DataView(buffer);

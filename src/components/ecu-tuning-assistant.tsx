@@ -4,7 +4,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDefinition, AxisDataState } from '@/lib/types';
-import { parseXDF, readAndCalculateMapFromBin, generateChecksum, bufferToHex, writeMapToBin, recalculateRawMapFromCalculated } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBin, generateChecksum, bufferToHex, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps, explainMap, generateSpeech } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
@@ -37,14 +37,24 @@ const LinePlot2D = dynamic(() => import('@/components/line-plot'), {
 });
 
 
-function EditableMapCell({ value: initialValue, valueFormat, isEditable, onCellChange, rawValue, viewMode, dataSize }: { 
+function EditableMapCell({ 
+    value: initialValue, 
+    valueFormat, 
+    isEditable, 
+    onCellChange, 
+    rawValue, 
+    viewMode, 
+    dataSize,
+    address,
+}: { 
     value: number | null, 
     onCellChange: (value: string) => void, 
     isEditable: boolean, 
     valueFormat: 'integer' | 'decimal', 
     rawValue: number | null, 
     viewMode: 'calculated' | 'raw',
-    dataSize: number
+    dataSize: number,
+    address: number | null
 }) {
   const formatValue = useCallback((val: number | null) => {
     if (viewMode === 'raw') {
@@ -77,20 +87,33 @@ function EditableMapCell({ value: initialValue, valueFormat, isEditable, onCellC
   }
 
   const effectiveIsEditable = isEditable && viewMode === 'calculated';
+  
+  const inputElement = (
+      <Input
+        type="text"
+        value={value}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        readOnly={!effectiveIsEditable}
+        className={cn(
+            "w-[60px] h-8 p-0 text-center bg-transparent border-none rounded-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-background/80",
+            !effectiveIsEditable && "cursor-default focus-visible:ring-0"
+        )}
+        inputMode={!effectiveIsEditable ? 'none' : 'decimal'}
+      />
+  );
+  
+  if (address === null) {
+      return inputElement;
+  }
 
   return (
-    <Input
-      type="text"
-      value={value}
-      onChange={handleChange}
-      onBlur={handleBlur}
-      readOnly={!effectiveIsEditable}
-      className={cn(
-          "w-[60px] h-8 p-0 text-center bg-transparent border-none rounded-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:bg-background/80",
-          !effectiveIsEditable && "cursor-default focus-visible:ring-0"
-      )}
-      inputMode={!effectiveIsEditable ? 'none' : 'decimal'}
-    />
+    <Tooltip>
+        <TooltipTrigger asChild>{inputElement}</TooltipTrigger>
+        <TooltipContent>
+            <p>Endereço: <span className="font-mono">0x{address.toString(16).toUpperCase()}</span></p>
+        </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -231,6 +254,8 @@ function MapTable({
               </td>
               {mapData[yi]?.map((cellValue, xi) => {
                 const isSelected = selectedCells.has(`${yi}-${xi}`);
+                const address = getCellAddress(definition, yi, xi);
+
                 return (
                   <td 
                     key={`cell-container-${yi}-${xi}`}
@@ -249,6 +274,7 @@ function MapTable({
                       valueFormat={valueFormat}
                       viewMode={viewMode}
                       dataSize={definition.dataSize}
+                      address={address}
                     />
                   </td>
                 );
@@ -1577,4 +1603,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
