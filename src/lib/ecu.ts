@@ -326,21 +326,16 @@ export function readAndCalculateMapFromBin(
                 offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
             }
             
-            // EXPERIMENTAL: Read the next byte instead
-            const readOffset = offset + 1;
-            
-            if (readOffset + def.dataSize > view.byteLength) {
-                console.error(`Offset de leitura ${readOffset} está fora dos limites do ficheiro BIN. A saltar.`);
+            if (offset + def.dataSize > view.byteLength) {
+                console.error(`Offset de leitura ${offset} está fora dos limites do ficheiro BIN. A saltar.`);
                 continue;
             }
             
             let rawValue: number | null = null;
             try {
                 if (def.dataSize === 1) {
-                    rawValue = view.getUint8(readOffset);
+                    rawValue = view.getUint8(offset);
                 } else if (def.dataSize === 2) {
-                    // For 16-bit, this experiment might not make sense unless we read from offset+1 and offset+2
-                    // Sticking to original logic for 16-bit for now.
                     rawValue = view.getUint16(offset, useLittleEndianForZ);
                 }
                 rawMap[r][c] = rawValue;
@@ -348,7 +343,7 @@ export function readAndCalculateMapFromBin(
                     calculatedMap[r][c] = zEquationFunc(rawValue) as number;
                 }
             } catch (e) {
-                console.error(`Erro ao ler o BIN no offset ${readOffset}: ${(e as Error).message}`);
+                console.error(`Erro ao ler o BIN no offset ${offset}: ${(e as Error).message}`);
             }
         }
     }
