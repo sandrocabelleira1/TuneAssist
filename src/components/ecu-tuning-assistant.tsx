@@ -936,6 +936,11 @@ export default function EcuTuningAssistant() {
 
         const newMap = currentMap.map((row, r) => {
             return row.map((_, c) => {
+                if (r === 0 && c === 0) return v00;
+                if (r === rows - 1 && c === 0) return v10;
+                if (r === 0 && c === cols - 1) return v01;
+                if (r === rows - 1 && c === cols - 1) return v11;
+                
                 const xRatio = (cols > 1) ? c / (cols - 1) : 0;
                 const yRatio = (rows > 1) ? r / (rows - 1) : 0;
 
@@ -1572,3 +1577,4 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
