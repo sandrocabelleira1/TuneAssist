@@ -1,4 +1,4 @@
-import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
+import type { XDFDefinition, AxisDefinition, MapData, AxisDataState, AxisDimension } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
     if (!parent) return null;
@@ -67,29 +67,26 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             if (!embeddedData) return;
 
-            const rowsStr = getAttr(embeddedData, 'mmedrowcount');
-            const colsStr = getAttr(embeddedData, 'mmedcolcount');
-
-            const rows = parseInt(rowsStr || getAttr(table, 'rows') || '0', 10);
-            const cols = parseInt(colsStr || getAttr(table, 'cols') || '0', 10);
+            const rows = parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(table, 'rows') || '0', 10);
+            const cols = parseInt(getAttr(embeddedData, 'mmedcolcount') || getAttr(table, 'cols') || '0', 10);
             
-            if (isNaN(rows) || isNaN(cols) || rows === 0 || cols === 0) { 
-                return;
-            }
+            if (isNaN(rows) || isNaN(cols) || rows === 0 || cols === 0) return;
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            
+            if (isNaN(address)) return;
+
             let dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '0', 10);
             if (dataSizeBits === 0) {
                 const dataType = parseInt(getAttr(embeddedData, 'mmeddatatype') || '0', 10);
-                if (dataType === 1) dataSizeBits = 8;
-                else if (dataType === 2) dataSizeBits = 16;
-                else if (tableName.toLowerCase().includes('ign')) dataSizeBits = 8;
-                else dataSizeBits = 16;
+                if (dataType === 1) dataSizeBits = 8; else if (dataType === 2) dataSizeBits = 16; else dataSizeBits = 16;
             }
+            const dataSize = dataSizeBits / 8;
             
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
+
+            const colStrideBytes = (minorStrideBits > 0) ? minorStrideBits / 8 : dataSize;
+            const rowStrideBytes = (majorStrideBits > 0) ? majorStrideBits / 8 : cols * colStrideBytes;
             
             const dataOrganizationAttr = getAttr(embeddedData, 'mmeddataorganization');
             const dataOrganization = (dataOrganizationAttr === 'COL_MAJOR' || dataOrganizationAttr === 'COLMAJOR') ? 'COL_MAJOR' : 'ROW_MAJOR';
@@ -98,17 +95,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const equation = getAttr(mathNode, 'equation') || 'X';
             const decimalplZ = parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10);
 
-
-            if (isNaN(address)) {
-                return;
-            }
-
-            const parseAxis = (axisNode: Element | null): AxisDefinition => {
+            const parseAxis = (axisNode: Element | null): AxisDimension | null => {
                 if (!axisNode) return null;
                 
                 const axisId = getAttr(axisNode, 'id')?.toLowerCase();
                 const defaultLabel = axisId === 'x' ? 'Eixo X' : 'Eixo Y';
-                const axisDef: Partial<AxisDefinition> = { node: axisNode, label: defaultLabel };
+                const count = axisId === 'x' ? cols : rows;
+                const axisDef: Partial<AxisDimension> = { count, label: defaultLabel };
 
                 const linkedTableName = findNode(axisNode, 'link')?.getAttribute('name')?.trim();
                 const linkedTableNode = linkedTableName ? allTablesMap.get(linkedTableName) : null;
@@ -136,19 +129,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 let axisDataSizeBits = parseInt(getAttr(sourceNodeForData, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
                 if (axisDataSizeBits === 0) {
                     const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
-                    if (axisDataType === 1) axisDataSizeBits = 8;
-                    else if (axisDataType === 2) axisDataSizeBits = 16;
-                    else axisDataSizeBits = 16; // Default
+                    if (axisDataType === 1) axisDataSizeBits = 8; else axisDataSizeBits = 16;
                 }
                 axisDef.dataSize = axisDataSizeBits / 8;
 
-                // Robust stride calculation for axes
                 const axisMajorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedmajorstridebits') || '0', 10);
                 const axisMinorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10);
-                
-                // An axis is a 1D array. It can have a major or minor stride defined. We prioritize major.
-                const strideBits = axisMajorStrideBits > 0 ? axisMajorStrideBits : axisMinorStrideBits;
-                axisDef.stride = (strideBits > 0 ? strideBits / 8 : axisDef.dataSize);
+                axisDef.stride = (axisMajorStrideBits > 0 ? axisMajorStrideBits / 8 : (axisMinorStrideBits > 0 ? axisMinorStrideBits / 8 : axisDef.dataSize));
 
                 axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
 
@@ -168,30 +155,24 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     axisDef.values = values;
                 }
 
-                if (!axisDef.values && (axisDef.address === undefined || isNaN(axisDef.address))) {
-                   return null; 
-                }
+                if (!axisDef.values && (axisDef.address === undefined || isNaN(axisDef.address))) return null; 
 
-                return axisDef as AxisDefinition;
+                return axisDef as AxisDimension;
             };
             
             const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
             const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
 
             if (!xAxisDef || !yAxisDef) return;
-
-            // Correctly associate axis definitions with table dimensions
-            xAxisDef.count = cols;
-            yAxisDef.count = rows;
             
             definitions.push({
                 name: tableName,
                 address,
                 rows,
                 cols,
-                dataSize: dataSizeBits / 8,
-                minorStrideBits,
-                majorStrideBits,
+                dataSize,
+                colStrideBytes,
+                rowStrideBytes,
                 dataOrganization,
                 isBigEndian,
                 equation,
@@ -210,13 +191,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 }
 
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition, isEndianSwapped: boolean): AxisDataState {
-    const count = axisDef?.count || 0;
-    const label = axisDef?.label || 'Eixo Desconhecido';
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, isEndianSwapped: boolean): AxisDataState {
+    const { count = 0, label = 'Eixo Desconhecido' } = axisDef || {};
     
-    if (axisDef?.values && axisDef.values.length > 0) {
+    if (axisDef?.values?.length > 0) {
         return {
-            label: label,
+            label,
             raw: axisDef.values.map(v => typeof v === 'number' ? v : 0),
             calculated: axisDef.values,
             originalIndices: Array.from({ length: axisDef.values.length }, (_, i) => i),
@@ -224,24 +204,20 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     }
     
     const defaultState: AxisDataState = {
-        label: label,
+        label,
         raw: Array.from({ length: count }, (_, i) => i + 1),
         calculated: Array.from({ length: count }, (_, i) => i + 1),
         originalIndices: Array.from({ length: count }, (_, i) => i),
     };
 
-    if (!axisDef || !binBuffer || (axisDef.address === undefined || axisDef.address === null)) {
+    if (!axisDef || !binBuffer || axisDef.address === undefined || axisDef.address === null) {
         return defaultState;
     }
 
     const view = new DataView(binBuffer);
-    const addr = axisDef.address;
-    const dataSize = axisDef.dataSize || 2;
-    // Use the pre-calculated stride from parseXDF. This is the key fix.
-    const stride = axisDef.stride || dataSize;
-    const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
-    const equation = normalizeEquation(axisDef.equation);
-
+    const { address: addr, dataSize = 2, stride = dataSize, equation: eq, isBigEndian } = axisDef;
+    const useLittleEndian = !(isBigEndian ?? false) !== !isEndianSwapped;
+    const equation = normalizeEquation(eq);
 
     if (isNaN(addr) || isNaN(count) || isNaN(dataSize)) return defaultState;
 
@@ -249,37 +225,26 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     try {
         equationFunc = new Function('X', `return ${equation}`) as (val: number) => number;
     } catch (e) {
-        console.error(`Equação de eixo inválida para "${axisDef.label}": ${equation}`);
+        console.error(`Equação de eixo inválida para "${label}": ${equation}`);
         equationFunc = (X: number) => X;
     }
 
     const raw: number[] = [];
     const calculated: (number | string)[] = [];
-    const originalIndices: number[] = [];
 
     for (let i = 0; i < count; i++) {
         const offset = addr + (i * stride);
         if (offset + dataSize > view.byteLength) continue;
 
-        let rawValue;
-        if (dataSize === 1) {
-            rawValue = view.getUint8(offset);
-        } else if (dataSize === 2) {
-            rawValue = view.getUint16(offset, useLittleEndian);
-        } else {
-            continue;
-        }
-
+        let rawValue = dataSize === 1 ? view.getUint8(offset) : view.getUint16(offset, useLittleEndian);
         raw.push(rawValue);
         try {
             calculated.push(equationFunc(rawValue));
         } catch (e) {
-            console.error(`Erro ao aplicar equação "${equation}" ao valor raw ${rawValue} para o eixo "${axisDef.label}"`);
             calculated.push(rawValue); 
         }
-        originalIndices.push(i);
     }
-    return { raw, calculated, originalIndices, label };
+    return { raw, calculated, originalIndices: Array.from({ length: calculated.length }, (_, i) => i), label };
 }
 
 
@@ -288,25 +253,17 @@ export function readAndCalculateMapFromBin(
     def: XDFDefinition,
     isEndianSwapped: boolean
 ): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
-    if (!def || !binBuffer) {
-        return { 
-            calculatedMap: [], 
-            rawMap: [], 
-            sortedAxes: { 
-                x: { raw: [], calculated: [], originalIndices:[], label: 'X'}, 
-                y: { raw: [], calculated: [], originalIndices:[], label: 'Y'} 
-            } 
-        };
-    }
+    const {
+        address, rows, cols, dataSize, isBigEndian, equation: eq,
+        colStrideBytes, rowStrideBytes, dataOrganization
+    } = def;
 
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     
     const view = new DataView(binBuffer);
-    
-    const useLittleEndianForZ = !(def.isBigEndian ?? false) !== !isEndianSwapped;
-
-    const equation = normalizeEquation(def.equation);
+    const useLittleEndianForZ = !(isBigEndian ?? false) !== !isEndianSwapped;
+    const equation = normalizeEquation(eq);
 
     let zEquationFunc: (val: number) => number | string;
     try {
@@ -314,58 +271,37 @@ export function readAndCalculateMapFromBin(
     } catch(e) {
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
-    
-    // START: Robust stride calculation for the main map data (Z-axis)
-    let colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
-    let rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
-    // END: Robust stride calculation
 
-    const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
-    const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
+    const rawMap: MapData = Array.from({ length: rows }, () => Array(cols).fill(null));
+    const calculatedMap: MapData = Array.from({ length: rows }, () => Array(cols).fill(null));
 
-    for (let r = 0; r < def.rows; r++) {
-        for (let c = 0; c < def.cols; c++) {
-            let offset: number;
-            // Correct offset calculation based on data organization
-            if (def.dataOrganization === 'COL_MAJOR') {
-                offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
-            } else { // ROW_MAJOR (default)
-                offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
-            }
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const offset = dataOrganization === 'COL_MAJOR'
+                ? address + (c * rowStrideBytes) + (r * colStrideBytes)
+                : address + (r * rowStrideBytes) + (c * colStrideBytes);
             
-            if (offset + def.dataSize > view.byteLength) {
-                console.error(`Offset de leitura ${offset} está fora dos limites do ficheiro BIN. A saltar.`);
-                continue;
-            }
+            if (offset + dataSize > view.byteLength) continue;
             
-            let rawValue: number | null = null;
             try {
-                if (def.dataSize === 1) {
-                    rawValue = view.getUint8(offset);
-                } else if (def.dataSize === 2) {
-                    rawValue = view.getUint16(offset, useLittleEndianForZ);
-                }
+                const rawValue = dataSize === 1 ? view.getUint8(offset) : view.getUint16(offset, useLittleEndianForZ);
                 rawMap[r][c] = rawValue;
-                if (rawValue !== null) {
-                    calculatedMap[r][c] = zEquationFunc(rawValue) as number;
-                }
+                calculatedMap[r][c] = zEquationFunc(rawValue) as number;
             } catch (e) {
                 console.error(`Erro ao ler o BIN no offset ${offset}: ${(e as Error).message}`);
             }
         }
     }
     
-    // Check if the Y-axis is inverted and reverse the map rows if so
     const yCalculated = axisYData.calculated.filter(v => typeof v === 'number') as number[];
     if (yCalculated.length > 1 && yCalculated[0] > yCalculated[yCalculated.length - 1]) {
         calculatedMap.reverse();
         rawMap.reverse();
     }
 
-
     return { 
-        calculatedMap: calculatedMap, 
-        rawMap: rawMap, 
+        calculatedMap, 
+        rawMap, 
         sortedAxes: { x: axisXData, y: axisYData } 
     };
 }
@@ -373,14 +309,12 @@ export function readAndCalculateMapFromBin(
 
 export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: number): number | null {
     if (!def) return null;
-    let colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
-    let rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
+    const { address, rowStrideBytes, colStrideBytes, dataOrganization } = def;
 
-    if (def.dataOrganization === 'COL_MAJOR') {
-        return def.address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
+    if (dataOrganization === 'COL_MAJOR') {
+        return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
     } 
-    // ROW_MAJOR (default)
-    return def.address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
+    return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
 
@@ -446,18 +380,14 @@ export function invertEquation(
         
         if (!isNaN(innerVal) && !isNaN(outerVal)) {
             let result = finalValue;
-            // Reverse outer operation
             if (outerOp === '*') result /= outerVal;
             if (outerOp === '/') result *= outerVal;
-            // Reverse inner operation
             if (innerOp === '+') result -= innerVal;
             if (innerOp === '-') result += innerVal;
             return result;
         }
     }
 
-    // Do not warn, as this can be a common case for complex, non-invertible equations.
-    // The calling function should handle the case where inversion is not possible.
     throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente.`);
 }
 
@@ -472,7 +402,6 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
-    // We must reverse the map before writing if it was read reversed
     const yCalculated = sourceAxes.y.calculated.filter(v => typeof v === 'number') as number[];
     const mapForCalc = [...calculatedMap];
     if (yCalculated.length > 1 && yCalculated[0] > yCalculated[yCalculated.length - 1]) {
@@ -492,7 +421,6 @@ export function recalculateRawMapFromCalculated(
             }
 
             try {
-                // Do not round here. Let the writing function handle final conversion.
                 const newRawValue = invertEquation(def.equation, calculatedValue as number);
                 newRawRow.push(newRawValue);
             } catch (e) {
@@ -517,14 +445,16 @@ export function writeMapToBin(
         throw new Error('Parâmetros inválidos fornecidos para writeMapToBin.');
     }
 
+    const {
+        address, rows, cols, dataSize, isBigEndian,
+        colStrideBytes, rowStrideBytes, dataOrganization
+    } = def;
+
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    const useLittleEndian = !(def.isBigEndian ?? false) !== !isEndianSwapped;
+    const useLittleEndian = !(isBigEndian ?? false) !== !isEndianSwapped;
     
-    let colStrideBytes = (def.minorStrideBits > 0) ? def.minorStrideBits / 8 : def.dataSize;
-    let rowStrideBytes = (def.majorStrideBits > 0) ? def.majorStrideBits / 8 : def.cols * colStrideBytes;
-
     const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     const yCalculated = yAxisData.calculated.filter(v => typeof v === 'number') as number[];
     const mapToWrite = [...rawMapData];
@@ -533,36 +463,29 @@ export function writeMapToBin(
         mapToWrite.reverse();
     }
 
-    for (let r = 0; r < def.rows; r++) {
-        for (let c = 0; c < def.cols; c++) {
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
             const rawValue = mapToWrite[r][c];
-            if (rawValue === null || isNaN(rawValue)) {
+            if (rawValue === null || isNaN(rawValue)) continue;
+
+            const offset = dataOrganization === 'COL_MAJOR'
+                ? address + (c * rowStrideBytes) + (r * colStrideBytes)
+                : address + (r * rowStrideBytes) + (c * colStrideBytes);
+
+            if (offset + dataSize > view.byteLength) {
+                console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
                 continue;
             }
-
+            
             try {
                 const intValue = Math.round(rawValue);
-                let offset: number;
-
-                 if (def.dataOrganization === 'COL_MAJOR') {
-                    offset = def.address + (c * rowStrideBytes) + (r * colStrideBytes);
-                 } else { // ROW_MAJOR
-                    offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
-                 }
-
-                if (offset + def.dataSize > view.byteLength) {
-                    console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
-                    continue;
-                }
-                
-                if (def.dataSize === 1) {
+                if (dataSize === 1) {
                     const writeValue = Math.max(0, Math.min(255, intValue));
                     view.setUint8(offset, writeValue);
-                     // Handle padding: if colStride is 2 bytes for 1 byte data, zero out the next byte.
                     if (colStrideBytes === 2 && offset + 1 < view.byteLength) {
                         view.setUint8(offset + 1, 0);
                     }
-                } else if (def.dataSize === 2) {
+                } else if (dataSize === 2) {
                      view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndian);
                 }
             } catch (e) {

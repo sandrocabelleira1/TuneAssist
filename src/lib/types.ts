@@ -5,6 +5,18 @@ export type AxisDataState = {
   originalIndices: number[];
 };
 
+export type AxisDimension = {
+  count: number;
+  label: string;
+  address?: number | null;
+  dataSize?: number;
+  stride?: number;
+  isBigEndian?: boolean;
+  equation?: string;
+  decimalpl?: number;
+  values?: (string | number)[];
+};
+
 export type AxisDefinition = {
   node: Element | null;
   count: number;
@@ -24,14 +36,14 @@ export type XDFDefinition = {
   rows: number;
   cols: number;
   dataSize: number; // in bytes
-  minorStrideBits: number;
-  majorStrideBits: number;
+  colStrideBytes: number;
+  rowStrideBytes: number;
   dataOrganization: 'ROW_MAJOR' | 'COL_MAJOR';
   isBigEndian: boolean;
   equation: string;
   decimalpl: number;
-  xAxisDef: AxisDefinition;
-  yAxisDef: AxisDefinition;
+  xAxisDef: AxisDimension;
+  yAxisDef: AxisDimension;
   isPotential?: boolean;
 };
 
