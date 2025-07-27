@@ -98,7 +98,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
-            const decimalPlatesZ = parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10);
+            const decimalplZ = parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10);
 
 
             if (isNaN(address)) {
@@ -198,7 +198,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 dataOrganization,
                 isBigEndian,
                 equation,
-                decimalpl: decimalPlatesZ,
+                decimalpl: decimalplZ,
                 xAxisDef,
                 yAxisDef,
                 isPotential: false,
@@ -456,7 +456,7 @@ export function invertEquation(
     }
 
     console.warn(`A equação "${eq}" é demasiado complexa para ser invertida. A utilizar o valor final como valor raw.`);
-    return Math.round(finalValue);
+    return finalValue;
 }
 
 
