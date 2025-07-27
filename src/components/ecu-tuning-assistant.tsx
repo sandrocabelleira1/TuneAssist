@@ -20,7 +20,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, TableIcon, Undo2, Box, LineChart, Volume2 } from 'lucide-react';
+import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, TableIcon, Undo2, Box, LineChart, Volume2, Blend } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from '@/components/ui/slider';
@@ -909,6 +909,48 @@ export default function EcuTuningAssistant() {
         }
     };
 
+    const handleInterpolateMap = () => {
+        if (!displayMap || displayMap.length === 0) {
+            toast({ variant: 'destructive', title: "Erro", description: "Nenhum mapa para interpolar." });
+            return;
+        }
+
+        const rows = displayMap.length;
+        const cols = displayMap[0].length;
+        if (rows < 2 || cols < 2) {
+            toast({ variant: 'destructive', title: "Erro", description: "O mapa precisa de pelo menos 2x2 para ser interpolado." });
+            return;
+        }
+
+        const v00 = displayMap[0][0];
+        const v10 = displayMap[rows - 1][0];
+        const v01 = displayMap[0][cols - 1];
+        const v11 = displayMap[rows - 1][cols - 1];
+        
+        if (v00 === null || v10 === null || v01 === null || v11 === null) {
+            toast({ variant: 'destructive', title: "Erro", description: "Os quatro cantos do mapa devem ter valores para a interpolação." });
+            return;
+        }
+
+        const newMap = displayMap.map((row, r) => {
+            return row.map((_, c) => {
+                const xRatio = c / (cols - 1);
+                const yRatio = r / (rows - 1);
+
+                const vTop = v00 * (1 - xRatio) + v01 * xRatio;
+                const vBottom = v10 * (1 - xRatio) + v11 * xRatio;
+
+                return vTop * (1 - yRatio) + vBottom * yRatio;
+            });
+        });
+        
+        setWorkingMap(newMap);
+        setDisplayMap(newMap);
+        setMapRenderKey(p => p + 1);
+        addLog("Mapa de dados (eixo Z) alinhado usando interpolação bilinear.", "success");
+        toast({ title: "Mapa Alinhado", description: "Os dados do mapa foram suavizados." });
+    };
+
     const saveButton = (
         <Button onClick={handleSaveModifiedBin} disabled={!binFile || !workingMap}>
             <Save className="mr-2 h-4 w-4" />
@@ -1067,7 +1109,16 @@ export default function EcuTuningAssistant() {
                                             onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
                                         />
                                     </div>
-                                    <div className="border-t pt-4 flex justify-end mt-4 flex-shrink-0">
+                                    <div className="border-t pt-4 flex justify-between items-center mt-4 flex-shrink-0">
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button variant="outline" onClick={handleInterpolateMap} disabled={!displayMap}>
+                                                    <Blend className="mr-2 h-4 w-4" />
+                                                    Alinhar Dados (Interpolar)
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Suaviza os dados do mapa usando interpolação linear entre os quatro cantos.</TooltipContent>
+                                        </Tooltip>
                                         {saveButton}
                                     </div>
                                 </TabsContent>
