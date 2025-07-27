@@ -1,5 +1,3 @@
-
-
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -143,14 +141,14 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     else axisDataSizeBits = 16; // Default
                 }
                 axisDef.dataSize = axisDataSizeBits / 8;
-                
+
+                // Robust stride calculation for axes
                 const axisMajorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedmajorstridebits') || '0', 10);
                 const axisMinorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10);
-
-                // Correct stride logic for axes: use major if available, otherwise minor.
-                const strideBits = axisMajorStrideBits || axisMinorStrideBits;
+                
+                // An axis is a 1D array. It can have a major or minor stride defined. We prioritize major.
+                const strideBits = axisMajorStrideBits > 0 ? axisMajorStrideBits : axisMinorStrideBits;
                 axisDef.stride = (strideBits > 0 ? strideBits / 8 : axisDef.dataSize);
-
 
                 axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
 
@@ -158,7 +156,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
                 
                 axisDef.decimalpl = parseInt(findNode(sourceNodeForData, 'decimalpl')?.textContent || '1', 10);
-
 
                 const labelNodes = sourceNodeForData.querySelectorAll(':scope > label, :scope > LABEL');
                 if (labelNodes.length > 0) {
@@ -177,12 +174,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
                 return axisDef as AxisDefinition;
             };
-
+            
             const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
             const yAxisDef = parseAxis(findNode(table, 'yaxis', 'XDFAXIS[id="y"]'));
-            
+
             if (!xAxisDef || !yAxisDef) return;
-            
+
             // Correctly associate axis definitions with table dimensions
             xAxisDef.count = cols;
             yAxisDef.count = rows;
@@ -240,6 +237,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDefinition,
     const view = new DataView(binBuffer);
     const addr = axisDef.address;
     const dataSize = axisDef.dataSize || 2;
+    // Use the pre-calculated stride from parseXDF. This is the key fix.
     const stride = axisDef.stride || dataSize;
     const useLittleEndian = !(axisDef.isBigEndian ?? false) !== !isEndianSwapped;
     const equation = normalizeEquation(axisDef.equation);
@@ -317,6 +315,7 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
     
+    // Robust stride calculation for the main map data (Z-axis)
     const colStrideBytes = (def.minorStrideBits > 0 ? def.minorStrideBits / 8 : def.dataSize);
     const rowStrideBytes = (def.majorStrideBits > 0 ? def.majorStrideBits / 8 : (def.cols * colStrideBytes));
 
@@ -455,8 +454,9 @@ export function invertEquation(
         }
     }
 
-    console.warn(`A equação "${eq}" é demasiado complexa para ser invertida. A utilizar o valor final como valor raw.`);
-    return finalValue;
+    // Do not warn, as this can be a common case for complex, non-invertible equations.
+    // The calling function should handle the case where inversion is not possible.
+    throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente.`);
 }
 
 
@@ -490,6 +490,7 @@ export function recalculateRawMapFromCalculated(
             }
 
             try {
+                // Do not round here. Let the writing function handle final conversion.
                 const newRawValue = invertEquation(def.equation, calculatedValue as number);
                 newRawRow.push(newRawValue);
             } catch (e) {
@@ -571,5 +572,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-    
