@@ -213,13 +213,13 @@ function MapTable({
                                     <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Ordenar o eixo Y e alinhar os dados das linhas em conformidade.</TooltipContent>
+                                    <TooltipContent>Ordenar o eixo Y (RPM) e alinhar os dados.</TooltipContent>
                                 </Tooltip>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('x')}><ArrowUpNarrowWide className="h-4 w-4 rotate-90" /></Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Ordenar o eixo X e alinhar os dados das colunas em conformidade.</TooltipContent>
+                                    <TooltipContent>Ordenar o eixo X (TPS) e alinhar os dados.</TooltipContent>
                                 </Tooltip>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
@@ -736,6 +736,7 @@ export default function EcuTuningAssistant() {
                 yAxis: displayAxes.y.calculated,
                 equation: selectedMapDefinition.equation,
                 brand: xdfFile?.brand,
+                model: undefined
             };
             
             const result = await validateMapType(input);
