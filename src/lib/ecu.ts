@@ -1,4 +1,5 @@
 
+
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -141,7 +142,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     else axisDataSizeBits = 16; // Default
                 }
                 axisDef.dataSize = axisDataSizeBits / 8;
-                axisDef.stride = (parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10) / 8) || axisDef.dataSize;
+                
+                const axisMajorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedmajorstridebits') || '0', 10);
+                const axisMinorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10);
+
+                // Correct stride logic for axes
+                axisDef.stride = (axisMajorStrideBits || axisMinorStrideBits || axisDef.dataSize * 8) / 8;
+
                 axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
 
                 const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
