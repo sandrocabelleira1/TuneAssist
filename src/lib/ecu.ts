@@ -326,16 +326,21 @@ export function readAndCalculateMapFromBin(
                 offset = def.address + (r * rowStrideBytes) + (c * colStrideBytes);
             }
             
-            if (offset + def.dataSize > view.byteLength) {
-                console.error(`Offset de leitura ${offset} está fora dos limites do ficheiro BIN. A saltar.`);
+            // EXPERIMENTAL: Read the next byte instead
+            const readOffset = offset + 1;
+            
+            if (readOffset + def.dataSize > view.byteLength) {
+                console.error(`Offset de leitura ${readOffset} está fora dos limites do ficheiro BIN. A saltar.`);
                 continue;
             }
             
             let rawValue: number | null = null;
             try {
                 if (def.dataSize === 1) {
-                    rawValue = view.getUint8(offset);
+                    rawValue = view.getUint8(readOffset);
                 } else if (def.dataSize === 2) {
+                    // For 16-bit, this experiment might not make sense unless we read from offset+1 and offset+2
+                    // Sticking to original logic for 16-bit for now.
                     rawValue = view.getUint16(offset, useLittleEndianForZ);
                 }
                 rawMap[r][c] = rawValue;
@@ -343,7 +348,7 @@ export function readAndCalculateMapFromBin(
                     calculatedMap[r][c] = zEquationFunc(rawValue) as number;
                 }
             } catch (e) {
-                console.error(`Erro ao ler o BIN no offset ${offset}: ${(e as Error).message}`);
+                console.error(`Erro ao ler o BIN no offset ${readOffset}: ${(e as Error).message}`);
             }
         }
     }
@@ -532,7 +537,8 @@ export function writeMapToBin(
                 }
                 
                 if (def.dataSize === 1) {
-                    view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
+                    const writeValue = Math.max(0, Math.min(255, intValue));
+                    view.setUint8(offset, writeValue);
                      // Handle padding: if colStride is 2 bytes for 1 byte data, zero out the next byte.
                     if (colStrideBytes === 2 && offset + 1 < view.byteLength) {
                         view.setUint8(offset + 1, 0);
