@@ -722,6 +722,18 @@ export default function EcuTuningAssistant() {
         }, 0);
     }, [isEndianSwapped, selectedMapName, handleMapSelect, addLog]);
 
+    const isEndianButtonDisabled = useMemo(() => {
+        if (!selectedMapDefinition) return true;
+        
+        const zSize = selectedMapDefinition.dataSize ?? 1;
+        const xSize = selectedMapDefinition.xAxisDef?.dataSize ?? 1;
+        const ySize = selectedMapDefinition.yAxisDef?.dataSize ?? 1;
+
+        // Disable only if ALL relevant data sizes are 1 byte
+        return zSize < 2 && xSize < 2 && ySize < 2;
+
+    }, [selectedMapDefinition]);
+
 
     const handleValidateMap = useCallback(async () => {
         if (!selectedMapDefinition || !displayMap || !displayAxes) return;
@@ -1075,7 +1087,7 @@ export default function EcuTuningAssistant() {
                                         <TooltipContent><p>Editar Nome do Mapa</p></TooltipContent>
                                     </Tooltip>
                                 </div>
-                                <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={!selectedMapDefinition || selectedMapDefinition.dataSize < 2}>
+                                <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={isEndianButtonDisabled}>
                                     <RefreshCw className="mr-2 h-4 w-4" />
                                     Inverter Ordem de Bytes (Endian)
                                 </Button>
@@ -1638,3 +1650,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
+
+    
