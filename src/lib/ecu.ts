@@ -90,7 +90,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
-
+            
+            // Robust Stride Calculation
             const colStrideBytes = (minorStrideBits > 0) ? minorStrideBits / 8 : dataSize;
             const rowStrideBytes = (majorStrideBits > 0) ? majorStrideBits / 8 : cols * colStrideBytes;
             
@@ -271,13 +272,9 @@ export function readAndCalculateMapFromBin(
 ): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
     const {
         address, rows, cols, dataSize, isBigEndian, equation: eq,
-        dataOrganization
+        dataOrganization, colStrideBytes, rowStrideBytes
     } = def;
     
-    // Use the strides from the definition, which are now correctly parsed.
-    const colStrideBytes = def.colStrideBytes;
-    const rowStrideBytes = def.rowStrideBytes;
-
     const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
     
@@ -502,9 +499,6 @@ export function writeMapToBin(
                 if (dataSize === 1) {
                     const writeValue = Math.max(0, Math.min(255, intValue));
                     view.setUint8(offset, writeValue);
-                    if (colStrideBytes === 2 && offset + 1 < view.byteLength) {
-                        view.setUint8(offset + 1, 0);
-                    }
                 } else if (dataSize === 2) {
                      view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndian);
                 }
