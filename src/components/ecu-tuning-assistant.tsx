@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -843,11 +844,11 @@ export default function EcuTuningAssistant() {
                     isPotential: true,
                     equation: 'X',
                     isBigEndian: false,
+                    colStrideBytes: pMap.dataSize,
+                    rowStrideBytes: pMap.cols * pMap.dataSize,
                     dataOrganization: 'ROW_MAJOR',
-                    minorStrideBits: 0,
-                    majorStrideBits: 0,
-                    xAxisDef: { node: null, count: pMap.cols, label: 'Eixo X', equation: 'X', decimalpl: 1 },
-                    yAxisDef: { node: null, count: pMap.rows, label: 'Eixo Y', equation: 'X', decimalpl: 1 },
+                    xAxisDef: { count: pMap.cols, label: 'Eixo X', equation: 'X', decimalpl: 1 },
+                    yAxisDef: { count: pMap.rows, label: 'Eixo Y', equation: 'X', decimalpl: 1 },
                 } as XDFDefinition));
                 setPotentialMapsResult({ maps: newPotentialMaps, analysis: result.data.analysis || '' });
             } else {
