@@ -958,53 +958,84 @@ export default function EcuTuningAssistant() {
     };
 
     const handleInterpolateMap = () => {
-        if (!displayMap || displayMap.length === 0) {
-            toast({ variant: 'destructive', title: "Erro", description: "Nenhum mapa para interpolar." });
+        if (!workingMap || !sourceAxes) {
+            toast({ variant: "destructive", title: "Erro", description: "Nenhum mapa ou eixos de origem para interpolar." });
             return;
         }
-
-        const currentMap = displayMap;
-        const rows = currentMap.length;
-        const cols = currentMap[0].length;
+    
+        const rows = workingMap.length;
+        const cols = workingMap[0].length;
         if (rows < 2 || cols < 2) {
-            toast({ variant: 'destructive', title: "Erro", description: "O mapa precisa de pelo menos 2x2 para ser interpolado." });
+            toast({ variant: "destructive", title: "Erro", description: "O mapa precisa de pelo menos 2x2 para ser interpolado." });
             return;
         }
-        
-        // Use the corner values from the currently displayed map
-        const v00 = currentMap[0][0]; // Top-left
-        const v10 = currentMap[rows - 1][0]; // Bottom-left
-        const v01 = currentMap[0][cols - 1]; // Top-right
-        const v11 = currentMap[rows - 1][cols - 1]; // Bottom-right
-        
-        if (v00 === null || v10 === null || v01 === null || v11 === null) {
-            toast({ variant: 'destructive', title: "Erro", description: "Os quatro cantos do mapa devem ter valores para a interpolação." });
+    
+        // 1. Create a sortable representation of the original map
+        const indexedMap = sourceAxes.y.calculated.map((yVal, r) => {
+            return sourceAxes.x.calculated.map((xVal, c) => ({
+                y: Number(yVal),
+                x: Number(xVal),
+                z: workingMap[r][c],
+                originalR: r,
+                originalC: c,
+            }));
+        }).flat();
+    
+        if (indexedMap.some(p => isNaN(p.x) || isNaN(p.y))) {
+            toast({ variant: "destructive", title: "Erro de Interpolação", description: "Os eixos devem ter valores numéricos para a interpolação." });
             return;
         }
-
-        const newMap = currentMap.map((row, r) => {
-            return row.map((_, c) => {
-                if (r === 0 && c === 0) return v00;
-                if (r === rows - 1 && c === 0) return v10;
-                if (r === 0 && c === cols - 1) return v01;
-                if (r === rows - 1 && c === cols - 1) return v11;
-                
-                const xRatio = (cols > 1) ? c / (cols - 1) : 0;
-                const yRatio = (rows > 1) ? r / (rows - 1) : 0;
-
+    
+        // 2. Find the logical corners based on min/max axis values
+        const xMin = Math.min(...indexedMap.map(p => p.x));
+        const xMax = Math.max(...indexedMap.map(p => p.x));
+        const yMin = Math.min(...indexedMap.map(p => p.y));
+        const yMax = Math.max(...indexedMap.map(p => p.y));
+    
+        const findCornerValue = (x: number, y: number) => {
+            const point = indexedMap.find(p => p.x === x && p.y === y);
+            return point?.z;
+        };
+    
+        const v00 = findCornerValue(xMin, yMin); // Top-left (min x, min y)
+        const v10 = findCornerValue(xMin, yMax); // Bottom-left (min x, max y)
+        const v01 = findCornerValue(xMax, yMin); // Top-right (max x, min y)
+        const v11 = findCornerValue(xMax, yMax); // Bottom-right (max x, max y)
+    
+        if (v00 === null || v10 === null || v01 === null || v11 === null || v00 === undefined || v10 === undefined || v01 === undefined || v11 === undefined) {
+            toast({ variant: "destructive", title: "Erro", description: "Os quatro cantos lógicos do mapa devem ter valores para a interpolação." });
+            return;
+        }
+    
+        // 3. Create the new interpolated map in the original structure
+        const newMap = sourceAxes.y.calculated.map((yVal, r) => {
+            return sourceAxes.x.calculated.map((xVal, c) => {
+                const numY = Number(yVal);
+                const numX = Number(xVal);
+    
+                if (numY === yMin && numX === xMin) return v00;
+                if (numY === yMax && numX === xMin) return v10;
+                if (numY === yMin && numX === xMax) return v01;
+                if (numY === yMax && numX === xMax) return v11;
+    
+                const xRatio = (xMax - xMin === 0) ? 0 : (numX - xMin) / (xMax - xMin);
+                const yRatio = (yMax - yMin === 0) ? 0 : (numY - yMin) / (yMax - yMin);
+    
                 const vTop = v00 * (1 - xRatio) + v01 * xRatio;
                 const vBottom = v10 * (1 - xRatio) + v11 * xRatio;
-
+    
                 return vTop * (1 - yRatio) + vBottom * yRatio;
             });
         });
-        
+    
+        // 4. Update state
         setWorkingMap(newMap);
-        setDisplayMap(newMap);
+        setDisplayMap(newMap); // Also update display to show the change
         setMapRenderKey(p => p + 1);
         addLog("Mapa de dados (eixo Z) alinhado usando interpolação bilinear.", "success");
         toast({ title: "Mapa Alinhado", description: "Os dados do mapa foram suavizados." });
     };
+
 
     const saveButton = (
         <Button onClick={handleSaveModifiedBin} disabled={!binFile || !workingMap}>
@@ -1661,4 +1692,5 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
 }
 
     
+
 
