@@ -278,7 +278,7 @@ export function readAndCalculateMapFromBin(
     const axisYData = readAxisFromBin(binBuffer, def.yAxisDef);
     
     const view = new DataView(binBuffer);
-    const useLittleEndianForZ = !(isBigEndian ?? false);
+    const useLittleEndianForZ = !(def.isBigEndian ?? false);
     const equation = normalizeEquation(eq);
 
     let zEquationFunc: (val: number) => number | string;
@@ -307,12 +307,6 @@ export function readAndCalculateMapFromBin(
                 console.error(`Erro ao ler o BIN no offset ${offset}: ${(e as Error).message}`);
             }
         }
-    }
-    
-    const yCalculated = axisYData.calculated.filter(v => typeof v === 'number') as number[];
-    if (yCalculated.length > 1 && yCalculated[0] > yCalculated[yCalculated.length - 1]) {
-        calculatedMap.reverse();
-        rawMap.reverse();
     }
 
     return { 
@@ -417,12 +411,7 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
-    const yCalculated = sourceAxes.y.calculated.filter(v => typeof v === 'number') as number[];
     const mapForCalc = [...calculatedMap];
-    if (yCalculated.length > 1 && yCalculated[0] > yCalculated[yCalculated.length - 1]) {
-        mapForCalc.reverse();
-    }
-
 
     const newRawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
@@ -467,15 +456,9 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    const useLittleEndianForZ = !(isBigEndian ?? false);
+    const useLittleEndianForZ = !(def.isBigEndian ?? false);
     
-    const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef);
-    const yCalculated = yAxisData.calculated.filter(v => typeof v === 'number') as number[];
     const mapToWrite = [...rawMapData];
-
-    if (yCalculated.length > 1 && yCalculated[0] > yCalculated[yCalculated.length - 1]) {
-        mapToWrite.reverse();
-    }
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -484,7 +467,7 @@ export function writeMapToBin(
 
             const offset = dataOrganization === 'COL_MAJOR'
                 ? address + (c * rowStrideBytes) + (r * colStrideBytes)
-                : address + (r * colStrideBytes) + (c * colStrideBytes);
+                : address + (r * rowStrideBytes) + (c * colStrideBytes);
 
             if (offset + dataSize > view.byteLength) {
                 console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
