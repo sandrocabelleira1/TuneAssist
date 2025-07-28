@@ -31,7 +31,7 @@ function getIsBigEndian(element: Element | null): boolean {
     if (attr === '0' || attr?.toLowerCase() === 'false') {
         return false; // Explicitly Little Endian
     }
-    // Default to Big Endian if attribute is missing, "1", "true", or anything else.
+    // Default to Big Endian if attribute is missing, "1", "true", or anything else. This seems to be more common.
     return true; 
 }
 
@@ -101,6 +101,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
             
+            // Correct Stride Calculation
             const colStrideBytes = (minorStrideBits > 0) ? minorStrideBits / 8 : dataSize;
             const rowStrideBytes = (majorStrideBits > 0) ? majorStrideBits / 8 : cols * colStrideBytes;
             
