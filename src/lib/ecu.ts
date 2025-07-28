@@ -26,6 +26,16 @@ function normalizeEquation(eq: string | null | undefined): string {
     return sanitizedEq.replace(/x/g, 'X');
 }
 
+function getIsBigEndian(element: Element | null): boolean {
+    const attr = getAttr(element, 'bigendian');
+    if (attr === '0' || attr?.toLowerCase() === 'false') {
+        return false; // Explicitly Little Endian
+    }
+    // Default to Big Endian if attribute is missing, "1", "true", or anything else.
+    return true; 
+}
+
+
 export function parseXDF(xmlString: string): { definitions: XDFDefinition[], brand: string | null } {
     if (typeof DOMParser === 'undefined') {
         throw new Error("O ambiente não suporta DOMParser.");
@@ -91,13 +101,14 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
             const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
             
-            // Robust Stride Calculation
             const colStrideBytes = (minorStrideBits > 0) ? minorStrideBits / 8 : dataSize;
             const rowStrideBytes = (majorStrideBits > 0) ? majorStrideBits / 8 : cols * colStrideBytes;
             
             const dataOrganizationAttr = getAttr(embeddedData, 'mmeddataorganization');
             const dataOrganization = (dataOrganizationAttr === 'COL_MAJOR' || dataOrganizationAttr === 'COLMAJOR') ? 'COL_MAJOR' : 'ROW_MAJOR';
-            const isBigEndian = getAttr(embeddedData, 'bigendian') === '1' || getAttr(embeddedData, 'bigendian')?.toLowerCase() === 'true';
+            
+            const isBigEndian = getIsBigEndian(embeddedData);
+
             const mathNode = findNode(zAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
             const decimalplZ = parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10);
@@ -153,7 +164,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     axisDef.stride = axisDef.dataSize;
                 }
                 
-                axisDef.isBigEndian = getAttr(axisEmbeddedData, 'bigendian') === '1' || getAttr(axisEmbeddedData, 'bigendian')?.toLowerCase() === 'true';
+                axisDef.isBigEndian = getIsBigEndian(axisEmbeddedData);
 
                 const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
                 axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
