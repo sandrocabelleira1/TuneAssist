@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import type { LogMessage, XDFDefinition, MapData, AxisDefinition, AxisDataState } from '@/lib/types';
+import type { LogMessage, XDFDefinition, MapData, AxisDataState, AxisDimension } from '@/lib/types';
 import { parseXDF, readAndCalculateMapFromBin, generateChecksum, bufferToHex, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress } from '@/lib/ecu';
 import { validateMapType, findPotentialMaps, explainMap, generateSpeech, alignMap } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
@@ -19,11 +19,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, TableIcon, Undo2, Box, LineChart, Volume2, Blend, Wand2 } from 'lucide-react';
+import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, TableIcon, Undo2, Box, LineChart, Volume2, Blend, Wand2, Settings } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from '@/components/ui/slider';
 import dynamic from 'next/dynamic';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -315,7 +316,6 @@ export default function EcuTuningAssistant() {
     const [displayAxes, setDisplayAxes] = useState<{ x: AxisDataState, y: AxisDataState } | null>(null);
     const [mapRenderKey, setMapRenderKey] = useState(0);
     const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
-    const [isEndianSwapped, setIsEndianSwapped] = useState(false);
 
     // AI state
     const [aiSuggestion, setAiSuggestion] = useState<AISuggestion | null>(null);
@@ -418,7 +418,6 @@ export default function EcuTuningAssistant() {
         setSelectedCells(new Set());
         setSelectedLineIndex(null);
         setLogs([]);
-        setIsEndianSwapped(false);
         setPotentialMapsResult(null);
         setExplanationResult(null);
 
@@ -487,7 +486,7 @@ export default function EcuTuningAssistant() {
         setSelectedLineIndex(null);
 
         try {
-            const { calculatedMap, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, definition, isEndianSwapped);
+            const { calculatedMap, rawMap: newRawMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, definition);
             
             setWorkingMap(calculatedMap);
             setRawMap(newRawMap); 
@@ -508,9 +507,12 @@ export default function EcuTuningAssistant() {
             setDisplayRawMap(null);
             setDisplayAxes(null);
         }
-    }, [binFile, availableMaps, addLog, toast, isEndianSwapped]);
+    }, [binFile, availableMaps, addLog, toast]);
     
-    const handleConfirmAxes = useCallback((data: { xEquation: string, yEquation: string, zEquation: string }) => {
+    const handleConfirmAxes = useCallback((data: { 
+        xEquation: string, yEquation: string, zEquation: string,
+        zIsBigEndian: boolean, xIsBigEndian: boolean, yIsBigEndian: boolean,
+    }) => {
         if (!selectedMapName || !binFile) return;
 
         const currentDef = availableMaps.find(d => d.name === selectedMapName);
@@ -523,8 +525,13 @@ export default function EcuTuningAssistant() {
         
         const newDef = JSON.parse(JSON.stringify(currentDef)) as XDFDefinition;
         newDef.equation = data.zEquation;
+        newDef.isBigEndian = data.zIsBigEndian;
+
         newDef.xAxisDef.equation = data.xEquation;
+        newDef.xAxisDef.isBigEndian = data.xIsBigEndian;
+
         newDef.yAxisDef.equation = data.yEquation;
+        newDef.yAxisDef.isBigEndian = data.yIsBigEndian;
         
         const newAvailableMaps = availableMaps.map(def => 
             def.name === selectedMapName ? newDef : def
@@ -534,9 +541,9 @@ export default function EcuTuningAssistant() {
         
         setTimeout(() => {
             handleMapSelect(selectedMapName);
-            addLog(`Equações atualizadas para "${selectedMapName}".`, 'success');
+            addLog(`Equações e ordem de bytes atualizadas para "${selectedMapName}".`, 'success');
             setIsAxesModalOpen(false);
-            toast({ title: 'Equações Aplicadas', description: 'O mapa foi recalculado com as novas equações.' });
+            toast({ title: 'Configurações Aplicadas', description: 'O mapa foi recalculado com as novas configurações.' });
         }, 0);
 
     }, [selectedMapName, availableMaps, binFile, handleMapSelect, addLog, toast]);
@@ -655,8 +662,8 @@ export default function EcuTuningAssistant() {
         addLog('A iniciar a modificação do ficheiro BIN...', 'info');
 
         try {
-            const finalRawMap = recalculateRawMapFromCalculated(workingMap, definition, sourceAxes, isEndianSwapped);
-            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, finalRawMap, isEndianSwapped);
+            const finalRawMap = recalculateRawMapFromCalculated(workingMap, definition, sourceAxes);
+            const modifiedBuffer = writeMapToBin(binFile.buffer, definition, finalRawMap);
             const newChecksum = generateChecksum(modifiedBuffer);
             
             addLog(`Modificação concluída. Novo checksum: ${newChecksum}`, 'success');
@@ -710,31 +717,6 @@ export default function EcuTuningAssistant() {
         setMapToEdit(null);
     };
 
-    const handleToggleEndianness = useCallback(() => {
-        const newIsEndianSwapped = !isEndianSwapped;
-        setIsEndianSwapped(newIsEndianSwapped);
-        addLog(`Ordem de bytes de 16-bit invertida. Swap está ${newIsEndianSwapped ? 'ATIVO' : 'INATIVO'}. A recalcular o mapa...`, 'info');
-        
-        setTimeout(() => {
-            if (selectedMapName) {
-                handleMapSelect(selectedMapName);
-            }
-        }, 0);
-    }, [isEndianSwapped, selectedMapName, handleMapSelect, addLog]);
-
-    const isEndianButtonDisabled = useMemo(() => {
-        if (!selectedMapDefinition) return true;
-        
-        const zSize = selectedMapDefinition.dataSize ?? 1;
-        const xSize = selectedMapDefinition.xAxisDef?.dataSize ?? 1;
-        const ySize = selectedMapDefinition.yAxisDef?.dataSize ?? 1;
-
-        // Disable only if ALL relevant data sizes are 1 byte
-        return zSize < 2 && xSize < 2 && ySize < 2;
-
-    }, [selectedMapDefinition]);
-
-
     const handleValidateMap = useCallback(async () => {
         if (!selectedMapDefinition || !displayMap || !displayAxes) return;
 
@@ -766,7 +748,7 @@ export default function EcuTuningAssistant() {
                     if(data.suggestedXAxisEquation && newDef.xAxisDef) newDef.xAxisDef.equation = data.suggestedXAxisEquation;
                     if(data.suggestedYAxisEquation && newDef.yAxisDef) newDef.yAxisDef.equation = data.suggestedYAxisEquation;
 
-                    const { calculatedMap: correctedMap, sortedAxes: correctedAxesData } = readAndCalculateMapFromBin(binFile!.buffer, newDef, isEndianSwapped);
+                    const { calculatedMap: correctedMap, sortedAxes: correctedAxesData } = readAndCalculateMapFromBin(binFile!.buffer, newDef);
                     
                     const suggestionData: AISuggestion = {
                         reasoning: data.reasoning,
@@ -803,7 +785,7 @@ export default function EcuTuningAssistant() {
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro na IA", description: msg });
         }
-    }, [selectedMapDefinition, displayMap, displayAxes, binFile, xdfFile?.brand, isEndianSwapped, addLog, toast]);
+    }, [selectedMapDefinition, displayMap, displayAxes, binFile, xdfFile?.brand, addLog, toast]);
     
     const handleAcceptSuggestion = useCallback(() => {
         if (!aiSuggestion) return;
@@ -859,8 +841,8 @@ export default function EcuTuningAssistant() {
                     colStrideBytes: pMap.dataSize,
                     rowStrideBytes: pMap.cols * pMap.dataSize,
                     dataOrganization: 'ROW_MAJOR',
-                    xAxisDef: { count: pMap.cols, label: 'Eixo X', equation: 'X', decimalpl: 1 },
-                    yAxisDef: { count: pMap.rows, label: 'Eixo Y', equation: 'X', decimalpl: 1 },
+                    xAxisDef: { count: pMap.cols, label: 'Eixo X', equation: 'X', decimalpl: 1, isBigEndian: false, dataSize: 2 },
+                    yAxisDef: { count: pMap.rows, label: 'Eixo Y', equation: 'X', decimalpl: 1, isBigEndian: false, dataSize: 2 },
                 } as XDFDefinition));
                 setPotentialMapsResult({ maps: newPotentialMaps, analysis: result.data.analysis || '' });
             } else {
@@ -1087,10 +1069,15 @@ export default function EcuTuningAssistant() {
                                         <TooltipContent><p>Editar Nome do Mapa</p></TooltipContent>
                                     </Tooltip>
                                 </div>
-                                <Button variant="secondary" className="w-full" onClick={handleToggleEndianness} disabled={isEndianButtonDisabled}>
-                                    <RefreshCw className="mr-2 h-4 w-4" />
-                                    Inverter Ordem de Bytes (Endian)
-                                </Button>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!selectedMapDefinition}>
+                                            <Settings className="mr-2 h-4 w-4" />
+                                            Configurações do Mapa
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Editar equações e ordem de bytes para cada eixo.</TooltipContent>
+                                </Tooltip>
                             </div>
 
                             <div className="space-y-2">
@@ -1329,18 +1316,27 @@ export default function EcuTuningAssistant() {
 function EditAxesModal({ open, onOpenChange, onConfirm, currentDefinition }: { 
     open: boolean, 
     onOpenChange: (open: boolean) => void, 
-    onConfirm: (data: { xEquation: string, yEquation: string, zEquation: string }) => void, 
+    onConfirm: (data: { 
+        xEquation: string, yEquation: string, zEquation: string,
+        zIsBigEndian: boolean, xIsBigEndian: boolean, yIsBigEndian: boolean,
+    }) => void, 
     currentDefinition: XDFDefinition | undefined,
 }) {
     const [yEquation, setYEquation] = useState('');
     const [xEquation, setXEquation] = useState('');
     const [zEquation, setZEquation] = useState('');
+    const [zIsBigEndian, setZIsBigEndian] = useState(false);
+    const [xIsBigEndian, setXIsBigEndian] = useState(false);
+    const [yIsBigEndian, setYIsBigEndian] = useState(false);
 
     useEffect(() => {
         if(open && currentDefinition) {
             setYEquation(currentDefinition.yAxisDef?.equation || 'X');
             setXEquation(currentDefinition.xAxisDef?.equation || 'X');
             setZEquation(currentDefinition.equation || 'X');
+            setZIsBigEndian(currentDefinition.isBigEndian ?? false);
+            setXIsBigEndian(currentDefinition.xAxisDef?.isBigEndian ?? false);
+            setYIsBigEndian(currentDefinition.yAxisDef?.isBigEndian ?? false);
         }
     }, [open, currentDefinition]);
 
@@ -1351,30 +1347,42 @@ function EditAxesModal({ open, onOpenChange, onConfirm, currentDefinition }: {
     const zAxisLabel = currentDefinition.name || 'Dados Principais';
 
     const handleConfirm = () => {
-        onConfirm({ yEquation, xEquation, zEquation });
+        onConfirm({ yEquation, xEquation, zEquation, zIsBigEndian, xIsBigEndian, yIsBigEndian });
     };
+
+    const EndianCheckbox = ({ label, checked, onCheckedChange, disabled }: { label:string, checked: boolean, onCheckedChange: (checked: boolean) => void, disabled: boolean }) => (
+        <div className={cn("flex items-center space-x-2", disabled && "opacity-50")}>
+            <Checkbox id={`endian-${label}`} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+            <Label htmlFor={`endian-${label}`} className={cn(disabled && "text-muted-foreground")}>
+                Inverter Ordem de Bytes (Big Endian)
+            </Label>
+        </div>
+    );
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Editar Equações do Mapa</DialogTitle>
+                    <DialogTitle>Configurações Avançadas do Mapa</DialogTitle>
                     <DialogDescription>
-                        Ajuste as equações de cálculo para os eixos e para os dados do mapa. Use 'X' como a variável para o valor lido do ficheiro BIN.
+                        Ajuste as equações e a ordem de bytes (endianness) para cada eixo. Use 'X' como a variável.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="yEquationText">Equação do Eixo Y ({yAxisLabel})</Label>
-                        <Input id="yEquationText" value={yEquation} onChange={e => setYEquation(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="xEquationText">Equação do Eixo X ({xAxisLabel})</Label>
-                        <Input id="xEquationText" value={xEquation} onChange={e => setXEquation(e.target.value)} />
-                    </div>
-                     <div className="space-y-2">
-                        <Label htmlFor="zEquationText">Equação dos Dados Principais ({zAxisLabel})</Label>
+                <div className="space-y-6 py-4">
+                    <div className="space-y-2 p-3 border rounded-md">
+                        <Label htmlFor="zEquationText" className="font-semibold">Eixo Z ({zAxisLabel})</Label>
                         <Input id="zEquationText" value={zEquation} onChange={e => setZEquation(e.target.value)} />
+                        <EndianCheckbox label="z" checked={zIsBigEndian} onCheckedChange={setZIsBigEndian} disabled={currentDefinition.dataSize < 2} />
+                    </div>
+                     <div className="space-y-2 p-3 border rounded-md">
+                        <Label htmlFor="yEquationText" className="font-semibold">Eixo Y ({yAxisLabel})</Label>
+                        <Input id="yEquationText" value={yEquation} onChange={e => setYEquation(e.target.value)} />
+                         <EndianCheckbox label="y" checked={yIsBigEndian} onCheckedChange={setYIsBigEndian} disabled={(currentDefinition.yAxisDef?.dataSize ?? 1) < 2} />
+                    </div>
+                    <div className="space-y-2 p-3 border rounded-md">
+                        <Label htmlFor="xEquationText" className="font-semibold">Eixo X ({xAxisLabel})</Label>
+                        <Input id="xEquationText" value={xEquation} onChange={e => setXEquation(e.target.value)} />
+                         <EndianCheckbox label="x" checked={xIsBigEndian} onCheckedChange={setXIsBigEndian} disabled={(currentDefinition.xAxisDef?.dataSize ?? 1) < 2} />
                     </div>
                 </div>
                 <DialogFooter>

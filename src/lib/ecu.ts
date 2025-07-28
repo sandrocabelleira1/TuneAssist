@@ -207,7 +207,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 }
 
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, isEndianSwapped: boolean): AxisDataState {
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisDataState {
     const { count = 0, label = 'Eixo Desconhecido' } = axisDef || {};
     
     if (axisDef?.values?.length > 0) {
@@ -232,7 +232,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
 
     const view = new DataView(binBuffer);
     const { address: addr, dataSize = 2, equation: eq, isBigEndian } = axisDef;
-    const useLittleEndian = !(isBigEndian ?? false) !== !isEndianSwapped;
+    const useLittleEndian = !(isBigEndian ?? false);
     const equation = normalizeEquation(eq);
     const stride = axisDef.stride || dataSize;
 
@@ -268,18 +268,17 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
 export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-    isEndianSwapped: boolean
 ): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
     const {
         address, rows, cols, dataSize, isBigEndian, equation: eq,
         dataOrganization, colStrideBytes, rowStrideBytes
     } = def;
     
-    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef, isEndianSwapped);
-    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
+    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef);
+    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef);
     
     const view = new DataView(binBuffer);
-    const useLittleEndianForZ = !(isBigEndian ?? false) !== !isEndianSwapped;
+    const useLittleEndianForZ = !(isBigEndian ?? false);
     const equation = normalizeEquation(eq);
 
     let zEquationFunc: (val: number) => number | string;
@@ -413,7 +412,6 @@ export function recalculateRawMapFromCalculated(
     calculatedMap: MapData,
     def: XDFDefinition,
     sourceAxes: { x: AxisDataState, y: AxisDataState },
-    isEndianSwapped: boolean
 ): MapData {
     if (!sourceAxes.x.originalIndices || !sourceAxes.y.originalIndices) {
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
@@ -456,7 +454,6 @@ export function writeMapToBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
     rawMapData: MapData,
-    isEndianSwapped: boolean
 ): ArrayBuffer {
     if (!def || !binBuffer || !rawMapData) {
         throw new Error('Parâmetros inválidos fornecidos para writeMapToBin.');
@@ -470,9 +467,9 @@ export function writeMapToBin(
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
-    const useLittleEndian = !(isBigEndian ?? false) !== !isEndianSwapped;
+    const useLittleEndianForZ = !(isBigEndian ?? false);
     
-    const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef, isEndianSwapped);
+    const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef);
     const yCalculated = yAxisData.calculated.filter(v => typeof v === 'number') as number[];
     const mapToWrite = [...rawMapData];
 
@@ -487,7 +484,7 @@ export function writeMapToBin(
 
             const offset = dataOrganization === 'COL_MAJOR'
                 ? address + (c * rowStrideBytes) + (r * colStrideBytes)
-                : address + (r * rowStrideBytes) + (c * colStrideBytes);
+                : address + (r * colStrideBytes) + (c * colStrideBytes);
 
             if (offset + dataSize > view.byteLength) {
                 console.error(`Escrita do mapa fora dos limites. Offset: ${offset}. A saltar.`);
@@ -500,7 +497,7 @@ export function writeMapToBin(
                     const writeValue = Math.max(0, Math.min(255, intValue));
                     view.setUint8(offset, writeValue);
                 } else if (dataSize === 2) {
-                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndian);
+                     view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndianForZ);
                 }
             } catch (e) {
                  const errorMsg = e instanceof Error ? e.message : String(e);
