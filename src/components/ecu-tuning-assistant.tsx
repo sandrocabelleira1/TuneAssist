@@ -266,7 +266,7 @@ function MapTable({
                       onCellChange={(value) => onCellChange(yi, xi, value)}
                       isEditable={isEditable}
                       decimalPlaces={definition.decimalpl}
-                      viewMode={mapViewMode}
+                      viewMode={viewMode}
                       dataSize={definition.dataSize}
                       address={address}
                     />
