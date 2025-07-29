@@ -1,3 +1,4 @@
+
 import type { XDFDefinition, AxisDefinition, MapData, AxisDataState, AxisDimension } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -97,7 +98,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             
             const colStrideBytes = (minorStrideBits > 0) ? minorStrideBits / 8 : dataSize;
             if (majorStrideBits === 0) {
-                 majorStrideBits = cols * colStrideBytes * 8; // Calculate major stride if not provided
+                 // The size of a full row is the number of columns times the stride for each column.
+                 majorStrideBits = cols * colStrideBytes * 8;
             }
             const rowStrideBytes = majorStrideBits / 8;
             
@@ -116,62 +118,75 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const axisId = getAttr(axisNode, 'id')?.toLowerCase();
                 const defaultLabel = axisId === 'x' ? 'Eixo X' : 'Eixo Y';
                 const count = axisId === 'x' ? cols : rows;
-                const axisDef: Partial<AxisDimension> = { count, label: defaultLabel };
-
-                const linkInfoNode = findNode(axisNode, 'embedinfo');
-                const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
                 
                 let sourceNodeForData = axisNode; 
                 let label = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
+                const linkInfoNode = findNode(axisNode, 'embedinfo');
+                const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
+                
+                let linkedSourceNode: Element | null = null;
                 if (linkedTableId && allTablesById.has(linkedTableId)) {
                     const linkedTableNode = allTablesById.get(linkedTableId)!;
                     const linkedTitle = findNode(linkedTableNode, 'title')?.textContent?.trim();
-                    if(linkedTitle) label = linkedTitle;
+                    if(linkedTitle && (label === defaultLabel || label === '')) label = linkedTitle;
 
                     const linkedZAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
                     if(linkedZAxis) {
-                      sourceNodeForData = linkedZAxis;
+                      linkedSourceNode = linkedZAxis;
                     }
                 }
                 
-                axisDef.label = label;
+                if (linkedSourceNode) {
+                    sourceNodeForData = linkedSourceNode;
+                }
+                
                 const axisEmbeddedData = findNode(sourceNodeForData, 'embeddeddata', 'EMBEDDEDDATA');
                 if (!axisEmbeddedData) return null;
 
-                axisDef.address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
+                const address = parseInt(getAttr(axisEmbeddedData, 'mmedaddress') || '', 16);
                 
                 let axisDataSizeBits = parseInt(getAttr(sourceNodeForData, 'elementsizebits') || getAttr(axisEmbeddedData, 'mmedelementsizebits') || '0', 10);
                 if (axisDataSizeBits === 0) {
                     const axisDataType = parseInt(getAttr(axisEmbeddedData, 'mmeddatatype') || '0', 10);
                     if (axisDataType === 1) axisDataSizeBits = 8; else axisDataSizeBits = 16;
                 }
-                axisDef.dataSize = axisDataSizeBits / 8;
+                const dataSize = axisDataSizeBits / 8;
                 
                 const axisMinorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10);
-                axisDef.stride = (axisMinorStrideBits > 0) ? axisMinorStrideBits / 8 : axisDef.dataSize;
+                const stride = (axisMinorStrideBits > 0) ? axisMinorStrideBits / 8 : dataSize;
                 
-                axisDef.isBigEndian = getIsBigEndian(axisEmbeddedData);
+                const isBigEndian = getIsBigEndian(axisEmbeddedData);
 
                 const axisMathNode = findNode(sourceNodeForData, 'math', 'MATH');
-                axisDef.equation = getAttr(axisMathNode, 'equation') || 'X';
+                const equation = getAttr(axisMathNode, 'equation') || 'X';
                 
-                axisDef.decimalpl = parseInt(findNode(sourceNodeForData, 'decimalpl')?.textContent || '1', 10);
+                const decimalpl = parseInt(findNode(sourceNodeForData, 'decimalpl')?.textContent || '1', 10);
 
                 const labelNodes = sourceNodeForData.querySelectorAll(':scope > label, :scope > LABEL');
+                let values: (string|number)[] | undefined = undefined;
                 if (labelNodes.length > 0) {
-                    const values: (string|number)[] = [];
+                    values = [];
                     labelNodes.forEach(ln => {
                         const val = ln.getAttribute('value') || ln.textContent || '';
                         const numVal = parseFloat(val);
-                        values.push(isNaN(numVal) ? val : numVal);
+                        values!.push(isNaN(numVal) ? val : numVal);
                     });
-                    axisDef.values = values;
                 }
+                
+                if (!values && (address === undefined || isNaN(address))) return null; 
 
-                if (!axisDef.values && (axisDef.address === undefined || isNaN(axisDef.address))) return null; 
-
-                return axisDef as AxisDimension;
+                return {
+                    count,
+                    label,
+                    address,
+                    dataSize,
+                    stride,
+                    isBigEndian,
+                    equation,
+                    decimalpl,
+                    values,
+                };
             };
             
             const xAxisDef = parseAxis(findNode(table, 'xaxis', 'XDFAXIS[id="x"]'));
