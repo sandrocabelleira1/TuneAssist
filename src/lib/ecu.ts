@@ -32,7 +32,6 @@ function getIsBigEndian(element: Element | null): boolean {
     return true; 
 }
 
-
 export function parseXDF(xmlString: string): { definitions: XDFDefinition[], brand: string | null } {
     if (typeof DOMParser === 'undefined') {
         throw new Error("O ambiente não suporta DOMParser.");
@@ -50,7 +49,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         throw new Error("Nenhuma tag <XDFTABLE> ou <table> foi encontrada no ficheiro. Este não parece ser um ficheiro XDF válido.");
     }
     
-    // Step 1: Catalog all tables by their uniqueid for easy lookup
     const allTablesById = new Map<string, Element>();
     allTableElements.forEach(tableEl => {
         const uniqueId = getAttr(tableEl, 'uniqueid');
@@ -64,19 +62,17 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
     const definitions: XDFDefinition[] = [];
 
-    // Step 2: Define a robust axis parser
     const parseAxis = (axisNode: Element, defaultCount: number, defaultLabel: string): AxisDimension | null => {
         let label = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
         const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
         
-        // Priority 1: Check for linked object (breakpoint)
         const linkInfoNode = findNode(axisNode, 'embedinfo');
         const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
         if (linkedTableId && allTablesById.has(linkedTableId)) {
             const linkedTableElement = allTablesById.get(linkedTableId)!;
             const linkedZAxis = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             
-            if (linkedZAxis) { // It's a valid breakpoint table
+            if (linkedZAxis) { 
                 const embeddedData = findNode(linkedZAxis, 'embeddeddata', 'EMBEDDEDDATA');
                 if (embeddedData) {
                     const linkedTitle = findNode(linkedTableElement, 'title')?.textContent?.trim();
@@ -92,13 +88,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     const equation = getAttr(findNode(linkedZAxis, 'math', 'MATH'), 'equation') || 'X';
                     const decimalpl = parseInt(findNode(linkedZAxis, 'decimalpl')?.textContent || '1', 10);
 
-                    // For linked axes, the count comes from the axis we're currently parsing, not the breakpoint table itself.
                     return { count, label, address, dataSize, stride: dataSize, isBigEndian, equation, decimalpl };
                 }
             }
         }
 
-        // Priority 2: Check for embedded data directly in the axis
         const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
         if(embeddedData) {
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
@@ -113,7 +107,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             return { count, label, address, dataSize, stride: dataSize, isBigEndian, equation, decimalpl };
         }
         
-        // Priority 3: Check for hardcoded LABEL values
         const valuesNodeList = axisNode.querySelectorAll(':scope > label, :scope > LABEL');
         if (valuesNodeList.length > 0) {
             const values: (string | number)[] = [];
@@ -125,20 +118,17 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             return { count: values.length, label, values };
         }
 
-        // Fallback for simple axes with no data source
         return { count, label, values: Array.from({ length: count }, (_, i) => i + 1) };
     };
 
-    // Step 3: Iterate through all tables and parse them as potential maps
     allTableElements.forEach(tableEl => {
         try {
             const tableName = findNode(tableEl, 'title')?.textContent?.trim() || getAttr(tableEl, 'name');
             if (!tableName) return;
 
-            // A real map must have its own Z-axis data definition.
             const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             if (!zAxisNode || !findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA')) {
-                return; // This is likely a pure breakpoint table, so we skip it.
+                return; 
             }
 
             const xAxisNode = findNode(tableEl, 'xaxis', 'XDFAXIS[id="x"]');
@@ -156,7 +146,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = yAxisDef.count;
             const cols = xAxisDef.count;
 
-            const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA')!; // We already checked this exists
+            const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA')!; 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             if (isNaN(address)) return;
 
