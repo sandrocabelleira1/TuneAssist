@@ -195,10 +195,27 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     });
 
     const finalDefinitions = definitions.filter(def => {
-        // A table is considered a "pure breakpoint" to be filtered out if its unique ID
-        // is in the set of linked tables, AND it does not have its own X and Y axes defined.
-        const isPureBreakpoint = linkedTableIds.has(def.uniqueId) && (!findNode(allTablesById.get(def.uniqueId)!, 'xaxis') || !findNode(allTablesById.get(def.uniqueId)!, 'yaxis'));
-        return !isPureBreakpoint;
+        const tableElement = allTablesById.get(def.uniqueId);
+        // A table is considered a pure breakpoint if it doesn't have its own X and Y axes defined at its top level.
+        const isPureBreakpoint = !findNode(tableElement!, 'xaxis') && !findNode(tableElement!, 'yaxis');
+        
+        // However, we must keep it if it is a map that is being referenced, but also is a map itself.
+        // A real map always has its own Z-axis data.
+        const hasZAxisData = findNode(tableElement!, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+        
+        // Hide only if it's a pure breakpoint AND it's being used as a link by another table.
+        // This is a heuristic. A better one is to hide if it doesn't have its own x/y axes and a z axis.
+        if (isPureBreakpoint && linkedTableIds.has(def.uniqueId)) {
+            return false;
+        }
+
+        // The ultimate test: if a table doesn't have its own Z-axis embedded data, it's not a standalone map.
+        const zAxis = findNode(tableElement!, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+        if (!zAxis || !findNode(zAxis, 'embeddeddata', 'EMBEDDEDDATA')) {
+            return false;
+        }
+
+        return true;
     });
 
     return { definitions: finalDefinitions, brand };
