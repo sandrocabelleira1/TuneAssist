@@ -1,3 +1,4 @@
+
 export type AxisDataState = {
   label: string;
   raw: number[];
@@ -31,6 +32,7 @@ export type AxisDefinition = {
 } | null;
 
 export type XDFDefinition = {
+  uniqueId: string;
   name:string;
   address: number;
   rows: number;
