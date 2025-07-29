@@ -69,15 +69,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     
         if (linkedTableId && allTablesById.has(linkedTableId)) {
             const linkedTableElement = allTablesById.get(linkedTableId)!;
-            // Recursively parse the Z-axis of the linked table to get the true axis definition
             const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             if (linkedZAxisNode) {
-                // Pass the original axis's count as the default, in case the linked one doesn't have one
                 const axisCountFromOriginal = parseInt(findNode(axisNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
                 const recursiveAxisDef = parseAxis(linkedZAxisNode, axisCountFromOriginal, defaultLabel);
                 
                 if (recursiveAxisDef) {
-                    // Prioritize the original axis's label/title over the linked one
                     const originalLabel = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label');
                     recursiveAxisDef.label = originalLabel || recursiveAxisDef.label;
                     recursiveAxisDef.count = axisCountFromOriginal;
@@ -122,8 +119,37 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         try {
             const zAxis = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             
+            if (!zAxis) return;
+            
+            // This is the main change: find the ultimate Z-axis definition by following links
+            let finalZAxisNode = zAxis;
+            let finalZTableElement = tableEl;
+            const visited = new Set<string>(); // To prevent infinite loops
+            
+            let zLinkInfoNode = findNode(finalZAxisNode, 'embedinfo');
+            let zLinkedTableId = getAttr(zLinkInfoNode, 'linkobjid');
+            const uniqueId = getAttr(tableEl, 'uniqueid');
+
+            if (uniqueId) visited.add(uniqueId);
+
+            while(zLinkedTableId && allTablesById.has(zLinkedTableId) && !visited.has(zLinkedTableId)) {
+                visited.add(zLinkedTableId);
+                const parentTable = allTablesById.get(zLinkedTableId)!;
+                const parentZAxis = findNode(parentTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+                if (parentZAxis) {
+                    finalZAxisNode = parentZAxis;
+                    finalZTableElement = parentTable;
+                    zLinkInfoNode = findNode(finalZAxisNode, 'embedinfo');
+                    zLinkedTableId = getAttr(zLinkInfoNode, 'linkobjid');
+                } else {
+                    break;
+                }
+            }
+            
             // Only consider tables with their own Z-axis data as primary maps.
-            if (!zAxis || !findNode(zAxis, 'embeddeddata', 'EMBEDDEDDATA')) {
+            const embeddedData = findNode(zAxis, 'embeddeddata', 'EMBEDDEDDATA');
+            if (!embeddedData) {
+                 // It's likely a breakpoint table, so we don't add it to the list of selectable maps.
                 return;
             }
             
@@ -144,8 +170,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             
             const rows = yAxisDef.count;
             const cols = xAxisDef.count;
-
-            const embeddedData = findNode(zAxis, 'embeddeddata', 'EMBEDDEDDATA')!; 
+            
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             if (isNaN(address)) return;
 
@@ -156,15 +181,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rowStrideBytes = cols * colStrideBytes;
             
             const dataOrganization = 'ROW_MAJOR';
-
-            // Inherit Z-axis properties from linked table if necessary
-            const linkInfoNode = findNode(zAxis, 'embedinfo');
-            const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
-            const parentTable = linkedTableId ? allTablesById.get(linkedTableId) : null;
-            const parentZAxis = parentTable ? findNode(parentTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]') : null;
-
-            const finalZAxisNode = parentZAxis || zAxis;
             
+            // Inherit Z-axis properties from the final resolved Z-axis node
             const isBigEndian = getIsBigEndian(findNode(finalZAxisNode, 'embeddeddata', 'EMBEDDEDDATA'));
             const mathNode = findNode(finalZAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
