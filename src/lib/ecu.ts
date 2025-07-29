@@ -56,20 +56,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         }
     });
 
-    const linkedTableIds = new Set<string>();
-    allTableElements.forEach(tableEl => {
-        const xAxisNode = findNode(tableEl, 'xaxis', 'XDFAXIS[id="x"]');
-        const yAxisNode = findNode(tableEl, 'yaxis', 'XDFAXIS[id="y"]');
-        [xAxisNode, yAxisNode].forEach(axisNode => {
-            if (!axisNode) return;
-            const linkInfoNode = findNode(axisNode, 'embedinfo');
-            const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
-            if (linkedTableId) {
-                linkedTableIds.add(linkedTableId);
-            }
-        });
-    });
-    
     const header = findNode(xmlDoc, 'XDF', 'xdfile');
     const brand = findNode(header, 'DEFAULTS', 'defaults')?.querySelector('CATEGORY')?.textContent?.split(' ')[0] || null;
 
@@ -83,15 +69,18 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     
         if (linkedTableId && allTablesById.has(linkedTableId)) {
             const linkedTableElement = allTablesById.get(linkedTableId)!;
+            // Recursively parse the Z-axis of the linked table to get the true axis definition
             const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             if (linkedZAxisNode) {
-                const recursiveAxisDef = parseAxis(linkedZAxisNode, defaultCount, defaultLabel);
+                // Pass the original axis's count as the default, in case the linked one doesn't have one
+                const axisCountFromOriginal = parseInt(findNode(axisNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
+                const recursiveAxisDef = parseAxis(linkedZAxisNode, axisCountFromOriginal, defaultLabel);
+                
                 if (recursiveAxisDef) {
+                    // Prioritize the original axis's label/title over the linked one
                     const originalLabel = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label');
-                    const linkedLabel = findNode(linkedTableElement, 'title')?.textContent?.trim();
-                    
-                    recursiveAxisDef.label = originalLabel || linkedLabel || recursiveAxisDef.label;
-                    recursiveAxisDef.count = parseInt(findNode(axisNode, 'indexcount')?.textContent || `${recursiveAxisDef.count}`, 10);
+                    recursiveAxisDef.label = originalLabel || recursiveAxisDef.label;
+                    recursiveAxisDef.count = axisCountFromOriginal;
                     return recursiveAxisDef;
                 }
             }
@@ -131,7 +120,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
     allTableElements.forEach(tableEl => {
         try {
-            const uniqueId = getAttr(tableEl, 'uniqueid');
             const zAxis = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             
             // Only consider tables with their own Z-axis data as primary maps.
@@ -168,14 +156,22 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rowStrideBytes = cols * colStrideBytes;
             
             const dataOrganization = 'ROW_MAJOR';
-            const isBigEndian = getIsBigEndian(embeddedData);
 
-            const mathNode = findNode(zAxis, 'math', 'MATH');
+            // Inherit Z-axis properties from linked table if necessary
+            const linkInfoNode = findNode(zAxis, 'embedinfo');
+            const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
+            const parentTable = linkedTableId ? allTablesById.get(linkedTableId) : null;
+            const parentZAxis = parentTable ? findNode(parentTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]') : null;
+
+            const finalZAxisNode = parentZAxis || zAxis;
+            
+            const isBigEndian = getIsBigEndian(findNode(finalZAxisNode, 'embeddeddata', 'EMBEDDEDDATA'));
+            const mathNode = findNode(finalZAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
-            const decimalplZ = parseInt(findNode(zAxis, 'decimalpl')?.textContent || '2', 10);
+            const decimalplZ = parseInt(findNode(finalZAxisNode, 'decimalpl')?.textContent || '2', 10);
             
             definitions.push({
-                uniqueId: uniqueId || tableName,
+                uniqueId: getAttr(tableEl, 'uniqueid') || tableName,
                 name: tableName,
                 address,
                 rows,
@@ -266,7 +262,7 @@ export function readAndCalculateMapFromBin(
     def: XDFDefinition,
 ): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
     const {
-        address, rows, cols, dataSize, isBigEndian, equation: eq,
+        address, rows, cols, dataSize, equation: eq,
         dataOrganization, colStrideBytes, rowStrideBytes
     } = def;
     
@@ -451,7 +447,7 @@ export function writeMapToBin(
     }
 
     const {
-        address, rows, cols, dataSize, isBigEndian,
+        address, rows, cols, dataSize,
         colStrideBytes, rowStrideBytes, dataOrganization
     } = def;
 
