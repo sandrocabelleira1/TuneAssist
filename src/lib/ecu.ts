@@ -1,5 +1,6 @@
 
-import type { XDFDefinition, AxisDataState, AxisDimension } from './types';
+
+import type { XDFDefinition, AxisDataState, AxisDimension, MapData } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
     if (!parent) return null;
@@ -72,9 +73,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             if (linkedZAxisNode) {
                 const axisCountFromOriginal = parseInt(findNode(axisNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
+                // Recursively call parseAxis on the linked Z-axis
                 const recursiveAxisDef = parseAxis(linkedZAxisNode, axisCountFromOriginal, defaultLabel);
                 
                 if (recursiveAxisDef) {
+                    // The label from the original referring axis node takes precedence
                     const originalLabel = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label');
                     recursiveAxisDef.label = originalLabel || recursiveAxisDef.label;
                     recursiveAxisDef.count = axisCountFromOriginal;
@@ -118,19 +121,16 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     allTableElements.forEach(tableEl => {
         try {
             const zAxis = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-            
             if (!zAxis) return;
             
-            // This is the main change: find the ultimate Z-axis definition by following links
             let finalZAxisNode = zAxis;
             let finalZTableElement = tableEl;
-            const visited = new Set<string>(); // To prevent infinite loops
-            
+            const visited = new Set<string>(); 
+            const uniqueId = getAttr(tableEl, 'uniqueid');
+            if (uniqueId) visited.add(uniqueId);
+
             let zLinkInfoNode = findNode(finalZAxisNode, 'embedinfo');
             let zLinkedTableId = getAttr(zLinkInfoNode, 'linkobjid');
-            const uniqueId = getAttr(tableEl, 'uniqueid');
-
-            if (uniqueId) visited.add(uniqueId);
 
             while(zLinkedTableId && allTablesById.has(zLinkedTableId) && !visited.has(zLinkedTableId)) {
                 visited.add(zLinkedTableId);
@@ -146,10 +146,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 }
             }
             
-            // Only consider tables with their own Z-axis data as primary maps.
             const embeddedData = findNode(zAxis, 'embeddeddata', 'EMBEDDEDDATA');
             if (!embeddedData) {
-                 // It's likely a breakpoint table, so we don't add it to the list of selectable maps.
                 return;
             }
             
@@ -182,7 +180,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             
             const dataOrganization = 'ROW_MAJOR';
             
-            // Inherit Z-axis properties from the final resolved Z-axis node
             const isBigEndian = getIsBigEndian(findNode(finalZAxisNode, 'embeddeddata', 'EMBEDDEDDATA'));
             const mathNode = findNode(finalZAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
@@ -274,6 +271,36 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     return { raw, calculated, originalIndices: Array.from({ length: calculated.length }, (_, i) => i), label };
 }
 
+function sortAxis(axisData: AxisDataState): { sortedAxis: AxisDataState, sortedIndices: number[] } {
+    const isNumeric = axisData.calculated.every(v => typeof v === 'number');
+    if (!isNumeric) {
+        // Cannot sort non-numeric axes, return original
+        return { sortedAxis: axisData, sortedIndices: axisData.originalIndices };
+    }
+
+    const indexed = (axisData.calculated as number[]).map((value, index) => ({
+        value,
+        originalIndex: index,
+        originalRaw: axisData.raw[index]
+    }));
+    
+    indexed.sort((a, b) => a.value - b.value);
+
+    const sortedIndices = indexed.map(item => item.originalIndex);
+    const sortedCalculated = indexed.map(item => item.value);
+    const sortedRaw = indexed.map(item => item.originalRaw);
+
+    return {
+        sortedAxis: {
+            ...axisData,
+            raw: sortedRaw,
+            calculated: sortedCalculated,
+            originalIndices: sortedIndices, // this now maps sorted position to original position
+        },
+        sortedIndices
+    };
+}
+
 
 export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
@@ -284,8 +311,11 @@ export function readAndCalculateMapFromBin(
         dataOrganization, colStrideBytes, rowStrideBytes
     } = def;
     
-    const axisXData = readAxisFromBin(binBuffer, def.xAxisDef);
-    const axisYData = readAxisFromBin(binBuffer, def.yAxisDef);
+    const unsortedXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
+    const unsortedYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
+
+    const { sortedAxis: sortedXAxis, sortedIndices: xSortedIndices } = sortAxis(unsortedXAxis);
+    const { sortedAxis: sortedYAxis, sortedIndices: ySortedIndices } = sortAxis(unsortedYAxis);
 
     const actualRows = def.yAxisDef.count || rows;
     const actualCols = def.xAxisDef.count || cols;
@@ -304,6 +334,7 @@ export function readAndCalculateMapFromBin(
     const rawMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
     const calculatedMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
 
+    // First, read the map in its original (unsorted) order
     for (let r = 0; r < actualRows; r++) {
         for (let c = 0; c < actualCols; c++) {
             const offset = dataOrganization === 'COL_MAJOR'
@@ -322,10 +353,19 @@ export function readAndCalculateMapFromBin(
         }
     }
 
+    // Now, create the sorted maps based on the sorted axis indices
+    const sortedRawMap = ySortedIndices.map(originalRowIndex => 
+        xSortedIndices.map(originalColIndex => rawMap[originalRowIndex][originalColIndex])
+    );
+    const sortedCalculatedMap = ySortedIndices.map(originalRowIndex => 
+        xSortedIndices.map(originalColIndex => calculatedMap[originalRowIndex][originalColIndex])
+    );
+
+
     return { 
-        calculatedMap, 
-        rawMap, 
-        sortedAxes: { x: axisXData, y: axisYData } 
+        calculatedMap: sortedCalculatedMap, 
+        rawMap: sortedRawMap, 
+        sortedAxes: { x: sortedXAxis, y: sortedYAxis } 
     };
 }
 
@@ -424,7 +464,15 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
-    const mapForCalc = [...calculatedMap];
+    // We need to 'unsort' the map data before calculating the raw values,
+    // as the raw map must be in the original layout to be written to the BIN.
+    const unsortedCalculatedMap: MapData = Array(calculatedMap.length).fill(null).map(() => Array(calculatedMap[0].length).fill(null));
+    
+    sourceAxes.y.originalIndices.forEach((originalRow, sortedRow) => {
+        sourceAxes.x.originalIndices.forEach((originalCol, sortedCol) => {
+            unsortedCalculatedMap[originalRow][originalCol] = calculatedMap[sortedRow][sortedCol];
+        });
+    });
     
     const actualRows = def.yAxisDef.count || def.rows;
     const actualCols = def.xAxisDef.count || def.cols;
@@ -433,7 +481,7 @@ export function recalculateRawMapFromCalculated(
     for (let r = 0; r < actualRows; r++) {
         const newRawRow: (number | null)[] = [];
         for (let c = 0; c < actualCols; c++) {
-            const calculatedValue = mapForCalc[r]?.[c];
+            const calculatedValue = unsortedCalculatedMap[r]?.[c];
 
             if (calculatedValue === null || calculatedValue === undefined) {
                 newRawRow.push(null);

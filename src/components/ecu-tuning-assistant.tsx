@@ -122,8 +122,6 @@ function MapTable({
   xAxis,
   yAxis,
   definition,
-  onSortAxis,
-  onResetSort,
   onCellChange,
   isEditable = true,
   selectedCells,
@@ -137,8 +135,6 @@ function MapTable({
   xAxis: AxisDataState;
   yAxis: AxisDataState;
   definition: XDFDefinition | undefined;
-  onSortAxis: (axis: 'x' | 'y') => void;
-  onResetSort: () => void;
   onCellChange: (rowIndex: number, colIndex: number, value: string) => void;
   isEditable?: boolean;
   selectedCells: Set<string>;
@@ -209,28 +205,6 @@ function MapTable({
                                     onCheckedChange={onViewModeChange}
                                 />
                             </div>
-                        )}
-                        {isEditable && (
-                           <>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('y')}><ArrowUpNarrowWide className="h-4 w-4" /></Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Ordenar o eixo Y (ex: RPM) e alinhar os dados.</p></TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSortAxis('x')}><ArrowUpNarrowWide className="h-4 w-4 rotate-90" /></Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Ordenar o eixo X (ex: TPS) e alinhar os dados.</p></TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onResetSort}><Undo2 className="h-4 w-4" /></Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>Restaurar ordem original</p></TooltipContent>
-                                </Tooltip>
-                            </>
                         )}
                     </div>
                 </div>
@@ -308,13 +282,9 @@ export default function EcuTuningAssistant() {
     const [selectedCells, setSelectedCells] = useState(new Set<string>());
     const [selectedLineIndex, setSelectedLineIndex] = useState<number | null>(null);
 
-    // State for map data. "working" is the editable source of truth, "display" is for rendering (can be sorted)
     const [rawMap, setRawMap] = useState<MapData | null>(null);
     const [workingMap, setWorkingMap] = useState<MapData | null>(null);
     const [sourceAxes, setSourceAxes] = useState<{ x: AxisDataState, y: AxisDataState } | null>(null);
-    const [displayMap, setDisplayMap] = useState<MapData | null>(null);
-    const [displayRawMap, setDisplayRawMap] = useState<MapData | null>(null);
-    const [displayAxes, setDisplayAxes] = useState<{ x: AxisDataState, y: AxisDataState } | null>(null);
     const [mapRenderKey, setMapRenderKey] = useState(0);
     const [mapViewMode, setMapViewMode] = useState<'calculated' | 'raw'>('calculated');
 
@@ -389,9 +359,9 @@ export default function EcuTuningAssistant() {
 
         if (selectedMapName && !uniqueCombinedMaps.some(def => def.name === selectedMapName)) {
             setSelectedMapName('');
-            setDisplayMap(null);
-            setDisplayRawMap(null);
-            setDisplayAxes(null);
+            setWorkingMap(null);
+            setRawMap(null);
+            setSourceAxes(null);
         }
 
         if (invalidCount > 0) {
@@ -410,9 +380,6 @@ export default function EcuTuningAssistant() {
         setRawMap(null); 
         setWorkingMap(null); 
         setSourceAxes(null);
-        setDisplayMap(null); 
-        setDisplayRawMap(null);
-        setDisplayAxes(null);
         setMapValidationStatus('idle');
         setAiSuggestion(null);
         setAvailableMaps([]);
@@ -440,7 +407,6 @@ export default function EcuTuningAssistant() {
                 if (type === 'bin') {
                     if (!(buffer instanceof ArrayBuffer)) throw new Error("O ficheiro BIN não foi lido como ArrayBuffer.");
                     
-                    // Reset everything when a new BIN is loaded
                     resetState();
                     
                     const checksum = generateChecksum(buffer);
@@ -492,10 +458,6 @@ export default function EcuTuningAssistant() {
             setWorkingMap(calculatedMap);
             setRawMap(newRawMap); 
             setSourceAxes(sortedAxes);
-            
-            setDisplayMap(calculatedMap);
-            setDisplayRawMap(newRawMap);
-            setDisplayAxes(sortedAxes);
 
             addLog(`Mapa carregado: ${name}.`, 'info');
             setMapRenderKey(p => p + 1);
@@ -504,9 +466,9 @@ export default function EcuTuningAssistant() {
             const msg = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro de Leitura do Mapa", description: msg });
-            setDisplayMap(null);
-            setDisplayRawMap(null);
-            setDisplayAxes(null);
+            setWorkingMap(null);
+            setRawMap(null);
+            setSourceAxes(null);
         }
     }, [binFile, availableMaps, addLog, toast]);
     
@@ -549,53 +511,8 @@ export default function EcuTuningAssistant() {
 
     }, [selectedMapName, availableMaps, binFile, handleMapSelect, addLog, toast]);
 
-    const handleSortAxis = (axis: 'x' | 'y') => {
-        if (!displayMap || !displayAxes || !displayRawMap) return;
-    
-        const newAxes = JSON.parse(JSON.stringify(displayAxes));
-        const axisState = axis === 'x' ? newAxes.x : newAxes.y;
-    
-        const indexed = axisState.calculated.map((value: any, index: any) => ({ value, originalIndex: index }));
-        indexed.sort((a: any, b: any) => {
-            const valA = Number(a.value);
-            const valB = Number(b.value);
-            if (!isNaN(valA) && !isNaN(valB)) return valA - valB;
-            return String(a.value).localeCompare(String(b.value));
-        });
-    
-        const sortedIndices = indexed.map((item: any) => item.originalIndex);
-        axisState.calculated = indexed.map((item: any) => item.value);
-    
-        let newDisplayMap, newDisplayRawMap;
-    
-        if (axis === 'y') {
-            newDisplayMap = sortedIndices.map((originalIndex: any) => displayMap[originalIndex]);
-            newDisplayRawMap = sortedIndices.map((originalIndex: any) => displayRawMap[originalIndex]);
-        } else { // axis === 'x'
-            newDisplayMap = displayMap.map(row => sortedIndices.map((originalIndex: any) => row[originalIndex]));
-            newDisplayRawMap = displayRawMap.map(row => sortedIndices.map((originalIndex: any) => row[originalIndex]));
-        }
-        
-        setDisplayAxes(newAxes);
-        setDisplayMap(newDisplayMap);
-        setDisplayRawMap(newDisplayRawMap);
-        setMapRenderKey(p => p + 1);
-        addLog(`Eixo ${axis.toUpperCase()} ordenado.`, 'info');
-    };
-
-    const handleResetSort = () => {
-        if (workingMap && rawMap && sourceAxes) {
-            setDisplayMap(workingMap);
-            setDisplayRawMap(rawMap);
-            setDisplayAxes(sourceAxes);
-            setSelectedCells(new Set());
-            setMapRenderKey(p => p + 1);
-            addLog('Ordenação do mapa revertida para o original.', 'info');
-        }
-    };
-    
     const handleCellChange = (rowIndex: number, colIndex: number, value: string) => {
-      if (!workingMap || !displayMap || !displayAxes || !rawMap || !sourceAxes) return;
+      if (!workingMap || !rawMap || !sourceAxes) return;
 
       const newValue = parseFloat(value);
       if (isNaN(newValue)) {
@@ -608,32 +525,20 @@ export default function EcuTuningAssistant() {
       newWorkingMap[rowIndex][colIndex] = newValue;
       setWorkingMap(newWorkingMap);
 
-      const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
-      newDisplayMap[rowIndex][colIndex] = newValue;
-      setDisplayMap(newDisplayMap);
-
       setMapValidationStatus('idle');
     };
 
     const handlePointChange = useCallback((rowIndex: number, colIndex: number, newValue: number) => {
-        if (!workingMap || !displayMap) return;
+        if (!workingMap) return;
 
-        // Update the working map (source of truth for saving)
         const newWorkingMap = JSON.parse(JSON.stringify(workingMap));
         if (newWorkingMap[rowIndex] !== undefined && newWorkingMap[rowIndex][colIndex] !== undefined) {
              newWorkingMap[rowIndex][colIndex] = newValue;
              setWorkingMap(newWorkingMap);
         }
-
-        // Update the display map to reflect the change immediately
-        const newDisplayMap = JSON.parse(JSON.stringify(displayMap));
-        if (newDisplayMap[rowIndex] !== undefined && newDisplayMap[rowIndex][colIndex] !== undefined) {
-             newDisplayMap[rowIndex][colIndex] = newValue;
-             setDisplayMap(newDisplayMap);
-        }
         
-        setMapValidationStatus('idle'); // Any manual change invalidates AI suggestions
-    }, [workingMap, displayMap]);
+        setMapValidationStatus('idle');
+    }, [workingMap]);
 
     const handleCellSelect = useCallback((rowIndex: number, colIndex: number, isCtrlOrCmd: boolean) => {
         const newSelection = new Set(selectedCells);
@@ -719,7 +624,7 @@ export default function EcuTuningAssistant() {
     };
 
     const handleValidateMap = useCallback(async () => {
-        if (!selectedMapDefinition || !displayMap || !displayAxes) return;
+        if (!selectedMapDefinition || !workingMap || !sourceAxes) return;
 
         setMapValidationStatus('loading');
         addLog(`A iniciar validação do mapa "${selectedMapDefinition.name}" com a IA...`, 'info');
@@ -727,9 +632,9 @@ export default function EcuTuningAssistant() {
         try {
             const input = {
                 mapName: selectedMapDefinition.name,
-                mapData: displayMap,
-                xAxis: displayAxes.x.calculated,
-                yAxis: displayAxes.y.calculated,
+                mapData: workingMap,
+                xAxis: sourceAxes.x.calculated,
+                yAxis: sourceAxes.y.calculated,
                 equation: selectedMapDefinition.equation,
                 brand: xdfFile?.brand,
                 model: undefined
@@ -753,13 +658,13 @@ export default function EcuTuningAssistant() {
                     
                     const suggestionData: AISuggestion = {
                         reasoning: data.reasoning,
-                        originalMap: displayMap,
+                        originalMap: workingMap,
                         correctedMap: correctedMap,
                         originalAxes: {
-                            x: displayAxes.x.calculated,
-                            y: displayAxes.y.calculated,
-                            xLabel: displayAxes.x.label,
-                            yLabel: displayAxes.y.label
+                            x: sourceAxes.x.calculated,
+                            y: sourceAxes.y.calculated,
+                            xLabel: sourceAxes.x.label,
+                            yLabel: sourceAxes.y.label
                         },
                         correctedAxes: {
                             x: correctedAxesData.x.calculated,
@@ -786,7 +691,7 @@ export default function EcuTuningAssistant() {
             addLog(msg, 'error');
             toast({ variant: 'destructive', title: "Erro na IA", description: msg });
         }
-    }, [selectedMapDefinition, displayMap, displayAxes, binFile, xdfFile?.brand, addLog, toast]);
+    }, [selectedMapDefinition, workingMap, sourceAxes, binFile, xdfFile?.brand, addLog, toast]);
     
     const handleAcceptSuggestion = useCallback(() => {
         if (!aiSuggestion) return;
@@ -869,7 +774,7 @@ export default function EcuTuningAssistant() {
     };
 
     const handleAlignMap = async () => {
-        if (!selectedMapDefinition || !displayMap || !displayAxes) {
+        if (!selectedMapDefinition || !workingMap || !sourceAxes) {
             toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, carregue um mapa para o alinhar.' });
             return;
         }
@@ -881,11 +786,11 @@ export default function EcuTuningAssistant() {
         try {
             const input = {
                 mapName: selectedMapDefinition.name,
-                mapData: displayMap,
-                xAxis: displayAxes.x.calculated,
-                yAxis: displayAxes.y.calculated,
-                xAxisLabel: displayAxes.x.label,
-                yAxisLabel: displayAxes.y.label
+                mapData: workingMap,
+                xAxis: sourceAxes.x.calculated,
+                yAxis: sourceAxes.y.calculated,
+                xAxisLabel: sourceAxes.x.label,
+                yAxisLabel: sourceAxes.y.label
             };
 
             const result = await alignMap(input);
@@ -893,7 +798,6 @@ export default function EcuTuningAssistant() {
             if (result.success && result.data) {
                 const { alignedMapData } = result.data;
                 setWorkingMap(alignedMapData);
-                setDisplayMap(alignedMapData);
                 setMapRenderKey(p => p + 1);
                 addLog('Mapa alinhado com sucesso pela IA.', 'success');
                 toast({ title: 'Mapa Alinhado!', description: 'A IA suavizou os dados do mapa.' });
@@ -910,7 +814,7 @@ export default function EcuTuningAssistant() {
     };
 
     const handleExplainMap = async () => {
-        if (!selectedMapDefinition || !displayMap || !displayAxes) {
+        if (!selectedMapDefinition || !workingMap || !sourceAxes) {
              toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, carregue um mapa para obter uma explicação.' });
             return;
         }
@@ -923,11 +827,11 @@ export default function EcuTuningAssistant() {
         try {
             const input = {
                 mapName: selectedMapDefinition.name,
-                mapData: displayMap,
-                xAxis: displayAxes.x.calculated,
-                yAxis: displayAxes.y.calculated,
-                xAxisLabel: displayAxes.x.label,
-                yAxisLabel: displayAxes.y.label
+                mapData: workingMap,
+                xAxis: sourceAxes.x.calculated,
+                yAxis: sourceAxes.y.calculated,
+                xAxisLabel: sourceAxes.x.label,
+                yAxisLabel: sourceAxes.y.label
             };
             
             const explanationResponse = await explainMap(input);
@@ -1030,7 +934,6 @@ export default function EcuTuningAssistant() {
     
         // 4. Update state
         setWorkingMap(newMap);
-        setDisplayMap(newMap); // Also update display to show the change
         setMapRenderKey(p => p + 1);
         addLog("Mapa de dados (eixo Z) alinhado usando interpolação bilinear.", "success");
         toast({ title: "Mapa Alinhado", description: "Os dados do mapa foram suavizados." });
@@ -1126,7 +1029,7 @@ export default function EcuTuningAssistant() {
                                     </Tooltip>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                             <Button variant="secondary" className="w-full" onClick={handleValidateMap} disabled={!displayMap}>
+                                             <Button variant="secondary" className="w-full" onClick={handleValidateMap} disabled={!workingMap}>
                                                 <GitCompareArrows className="mr-2 h-4 w-4" />
                                                 Validar
                                             </Button>
@@ -1135,7 +1038,7 @@ export default function EcuTuningAssistant() {
                                     </Tooltip>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                             <Button variant="secondary" className="w-full" onClick={handleAlignMap} disabled={!displayMap || isAligningMap}>
+                                             <Button variant="secondary" className="w-full" onClick={handleAlignMap} disabled={!workingMap || isAligningMap}>
                                                 {isAligningMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
                                                 Alinhar
                                             </Button>
@@ -1144,7 +1047,7 @@ export default function EcuTuningAssistant() {
                                     </Tooltip>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                             <Button variant="secondary" className="w-full" onClick={handleExplainMap} disabled={!displayMap}>
+                                             <Button variant="secondary" className="w-full" onClick={handleExplainMap} disabled={!workingMap}>
                                                 <Volume2 className="mr-2 h-4 w-4" />
                                                 Explicar
                                             </Button>
@@ -1183,7 +1086,7 @@ export default function EcuTuningAssistant() {
                         </div>
                     </CardHeader>
                     <CardContent className="flex flex-1 flex-col p-6 pt-0 min-h-0">
-                        {displayMap && displayAxes && selectedMapDefinition ? (
+                        {workingMap && sourceAxes && selectedMapDefinition ? (
                             <Tabs defaultValue="2d" className="flex flex-1 flex-col min-h-0">
                                 <TabsList className="mb-2 shrink-0">
                                     <TabsTrigger value="2d"><TableIcon className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
@@ -1194,13 +1097,11 @@ export default function EcuTuningAssistant() {
                                     <div className="flex-1 overflow-auto min-h-0">
                                         <MapTable
                                             key={mapRenderKey}
-                                            mapData={displayMap || []} 
-                                            rawMapData={displayRawMap || []}
-                                            xAxis={displayAxes.x} 
-                                            yAxis={displayAxes.y} 
+                                            mapData={workingMap || []} 
+                                            rawMapData={rawMap || []}
+                                            xAxis={sourceAxes.x} 
+                                            yAxis={sourceAxes.y} 
                                             definition={selectedMapDefinition}
-                                            onSortAxis={handleSortAxis}
-                                            onResetSort={handleResetSort}
                                             onCellChange={handleCellChange}
                                             selectedCells={selectedCells}
                                             onCellSelect={handleCellSelect}
@@ -1211,7 +1112,7 @@ export default function EcuTuningAssistant() {
                                     <div className="border-t pt-4 flex justify-between items-center mt-4 flex-shrink-0">
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <Button variant="outline" onClick={handleInterpolateMap} disabled={!displayMap}>
+                                                <Button variant="outline" onClick={handleInterpolateMap} disabled={!workingMap}>
                                                     <Blend className="mr-2 h-4 w-4" />
                                                     Alinhar Dados (Interpolar)
                                                 </Button>
@@ -1224,9 +1125,9 @@ export default function EcuTuningAssistant() {
                                 <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0">
                                     <div className="relative flex-1 overflow-hidden min-h-0">
                                         <LinePlot2D
-                                            mapData={displayMap}
-                                            xAxis={displayAxes.x}
-                                            yAxis={displayAxes.y}
+                                            mapData={workingMap}
+                                            xAxis={sourceAxes.x}
+                                            yAxis={sourceAxes.y}
                                             selectedLineIndex={selectedLineIndex}
                                             onLineSelect={setSelectedLineIndex}
                                             onPointChange={handlePointChange}
@@ -1237,7 +1138,7 @@ export default function EcuTuningAssistant() {
                                 </TabsContent>
                                 <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
                                     <div className="relative flex-1">
-                                      <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={displayMap} xAxis={displayAxes.x.calculated} yAxis={displayAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} />
+                                      <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={workingMap} xAxis={sourceAxes.x.calculated} yAxis={sourceAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} />
                                     </div>
                                     <div className="border-t pt-4 flex justify-end mt-4 flex-shrink-0">
                                         {/* No save button in 3D view as it's for observation */}
@@ -1460,8 +1361,6 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                 yAxis={{raw: [], calculated: suggestion.originalAxes.y, originalIndices: [], label: suggestion.originalAxes.yLabel }}
                                 definition={suggestion.originalDefinition}
                                 isEditable={false}
-                                onSortAxis={() => {}}
-                                onResetSort={() => {}}
                                 onCellChange={() => {}}
                                 selectedCells={new Set()}
                                 onCellSelect={() => {}}
@@ -1480,8 +1379,6 @@ function MapCorrectionSuggestionModal({ open, onOpenChange, suggestion, onAccept
                                   yAxis={{raw: [], calculated: suggestion.correctedAxes.y, originalIndices: [], label: suggestion.correctedAxes.yLabel }}
                                   definition={suggestion.newDefinition}
                                   isEditable={false}
-                                  onSortAxis={() => {}}
-                                  onResetSort={() => {}}
                                   onCellChange={() => {}}
                                   selectedCells={new Set()}
                                   onCellSelect={() => {}}
@@ -1690,7 +1587,3 @@ function EditNameModal({ open, onOpenChange, onConfirm, currentName }: {
         </Dialog>
     );
 }
-
-    
-
-
