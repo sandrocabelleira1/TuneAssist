@@ -49,14 +49,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     }
 
     const allTableElements = xmlDoc.querySelectorAll('XDFTABLE, table');
-    const allTablesByName = new Map<string, Element>();
     const allTablesById = new Map<string, Element>();
-
     allTableElements.forEach(table => {
-        const name = findNode(table, 'title')?.textContent?.trim() || getAttr(table, 'name');
-        if (name) {
-            allTablesByName.set(name, table);
-        }
         const uniqueId = getAttr(table, 'uniqueid');
         if (uniqueId) {
             allTablesById.set(uniqueId, table);
@@ -99,10 +93,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const dataSize = dataSizeBits / 8;
             
             const minorStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || '0', 10);
-            const majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
+            let majorStrideBits = parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10);
             
             const colStrideBytes = (minorStrideBits > 0) ? minorStrideBits / 8 : dataSize;
-            const rowStrideBytes = (majorStrideBits > 0) ? majorStrideBits / 8 : cols * colStrideBytes;
+            if (majorStrideBits === 0) {
+                 majorStrideBits = cols * colStrideBytes * 8; // Calculate major stride if not provided
+            }
+            const rowStrideBytes = majorStrideBits / 8;
             
             const dataOrganizationAttr = getAttr(embeddedData, 'mmeddataorganization');
             const dataOrganization = (dataOrganizationAttr === 'COL_MAJOR' || dataOrganizationAttr === 'COLMAJOR') ? 'COL_MAJOR' : 'ROW_MAJOR';
@@ -121,21 +118,19 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 const count = axisId === 'x' ? cols : rows;
                 const axisDef: Partial<AxisDimension> = { count, label: defaultLabel };
 
-                const linkNode = findNode(axisNode, 'link');
-                const linkedTableId = getAttr(linkNode, 'uniqueid');
-                const linkedTableName = getAttr(linkNode, 'name')?.trim();
-                const linkedTableNode = (linkedTableId ? allTablesById.get(linkedTableId) : null) || (linkedTableName ? allTablesByName.get(linkedTableName) : null);
+                const linkInfoNode = findNode(axisNode, 'embedinfo');
+                const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
                 
                 let sourceNodeForData = axisNode; 
                 let label = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
 
-                if (linkedTableNode) {
+                if (linkedTableId && allTablesById.has(linkedTableId)) {
+                    const linkedTableNode = allTablesById.get(linkedTableId)!;
                     const linkedTitle = findNode(linkedTableNode, 'title')?.textContent?.trim();
-                    const linkedUnits = findNode(linkedTableNode, 'units')?.textContent?.trim();
-                    if (linkedTitle || linkedUnits) label = linkedTitle || linkedUnits || label;
-                    
+                    if(linkedTitle) label = linkedTitle;
+
                     const linkedZAxis = findNode(linkedTableNode, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-                    if (linkedZAxis) {
+                    if(linkedZAxis) {
                       sourceNodeForData = linkedZAxis;
                     }
                 }
@@ -153,8 +148,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 }
                 axisDef.dataSize = axisDataSizeBits / 8;
                 
-                // AXIS STRIDE CORRECTION: Axes are sequential. Stride is always dataSize.
-                axisDef.stride = axisDef.dataSize;
+                const axisMinorStrideBits = parseInt(getAttr(axisEmbeddedData, 'mmedminorstridebits') || '0', 10);
+                axisDef.stride = (axisMinorStrideBits > 0) ? axisMinorStrideBits / 8 : axisDef.dataSize;
                 
                 axisDef.isBigEndian = getIsBigEndian(axisEmbeddedData);
 
