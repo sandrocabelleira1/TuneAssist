@@ -131,29 +131,23 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         const tableName = findNode(tableEl, 'title')?.textContent?.trim();
         if (!tableName || !uniqueId) return;
 
-        // Ignorar tabelas que são apenas para eixos
-        const isAxisTable = !findNode(tableEl, 'XDFAXIS[id="x"]') && !findNode(tableEl, 'XDFAXIS[id="y"]');
-        if (isAxisTable && allTableElements.some(el => getAttr(findNode(el, 'XDFAXIS[id="x"] > embedinfo, XDFAXIS[id="x"] > EMBEDDEDDATA'), 'linkobjid') === uniqueId || getAttr(findNode(el, 'XDFAXIS[id="y"] > embedinfo, XDFAXIS[id="y"] > EMBEDDEDDATA'), 'linkobjid') === uniqueId)) {
-            return;
-        }
-
         try {
             const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
-            if (!zAxisNode) throw new Error("Eixo Z (dados do mapa) não encontrado.");
+            if (!zAxisNode) {
+                return; // Ignorar tabelas sem eixo Z (não são mapas de dados)
+            }
 
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             if (isNaN(address)) {
-                // Se a tabela Z não tem endereço, é provável que seja uma tabela de "breakpoints", vamos ignorá-la por agora
-                return;
+                return; // Ignorar tabelas sem endereço de memória
             }
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
             
             if (!xAxisNode || !yAxisNode) {
-                 // É um mapa 1D ou tabela de valores, ignorar por agora
-                 return;
+                 return; // É um mapa 1D ou tabela de valores, ignorar por agora para garantir estabilidade
             }
             
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
@@ -161,7 +155,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             const cols = xAxisDef.count;
             const rows = yAxisDef.count;
-            if (cols === 0 || rows === 0) throw new Error("Dimensões da tabela (linhas/colunas) não podem ser zero.");
+            if (cols === 0 || rows === 0) {
+                // Em vez de lançar um erro, simplesmente ignoramos esta tabela.
+                // Isto evita que a aplicação falhe em tabelas 1D ou com formato inesperado.
+                throw new Error("Dimensões da tabela (linhas/colunas) não podem ser zero.");
+            }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             const rowStrideBits = parseInt(getAttr(embeddedData, 'mmedrowstridebits') || `${cols * dataSizeBits}`, 10);
@@ -183,7 +181,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 yAxisDef,
             });
         } catch (e) {
-            console.error(`Erro ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${(e as Error).message}. Esta tabela será ignorada.`);
+            console.warn(`Aviso ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${(e as Error).message}. Esta tabela será ignorada.`);
         }
     });
 
@@ -460,7 +458,7 @@ export function invertEquation(
     }
 
 
-    console.error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);
+    console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);
     return finalValue; // Fallback se a inversão falhar
 }
 
