@@ -51,7 +51,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         if (!embeddedData) throw new Error(`Dados embutidos não encontrados no eixo Z da tabela vinculada ${linkId}`);
         
         const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
-        const count = parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || `${indexcount}` || '0', 10);
+        const count = parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || '0', 10);
         
         return {
             isLinked: true,
@@ -69,7 +69,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA');
     if (sourceEmbeddedData && getAttr(sourceEmbeddedData, 'mmedaddress')) {
         const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
-        const count = parseInt(getAttr(sourceEmbeddedData, 'mmedrowcount') || getAttr(sourceEmbeddedData, 'mmedcolcount') || `${indexcount}` || '0', 10);
+        const count = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || `${indexcount}` || '0', 10);
         return {
             isLinked: false,
             count: count,
