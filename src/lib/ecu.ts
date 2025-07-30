@@ -160,7 +160,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const cols = xAxisDef.count;
             const rows = yAxisDef.count;
             if (cols === 0 || rows === 0) {
-                // This will be caught and the table will be skipped.
                 throw new Error("Dimensões da tabela (linhas/colunas) não podem ser zero.");
             }
 
@@ -365,16 +364,13 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     if (!def) return null;
     const { address, rowStrideBytes, colStrideBytes, dataOrganization, rows, cols } = def;
 
-    // A validação de limites deve ser feita na função que chama, mas uma verificação rápida aqui é útil
     if (rowIndex < 0 || rowIndex >= rows || colIndex < 0 || colIndex >= cols) {
         return null;
     }
 
     if (dataOrganization === 'COL_MAJOR') {
-        // Na organização por colunas, o stride da coluna é maior
         return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
     } 
-    // Por padrão (ROW_MAJOR), o stride da linha é maior
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
@@ -407,13 +403,9 @@ export function invertEquation(
         return finalValue;
     }
 
-    // Tenta resolver equações simples como Y = X * C, Y = X / C, Y = X + C, Y = X - C
-    // ou Y = C * X, Y = C / X, Y = C + X, Y = C - X
     const simpleMatch = sanitizedEq.match(/^(X\s*([*\/+-])\s*([\d.]+))|(([\d.]+)\s*([*\/+-])\s*X)$/);
 
     if (simpleMatch) {
-        // Ex: X / 2.56 -> simpleMatch = ['X / 2.56', 'X / 2.56', '/', '2.56', undefined, undefined, undefined]
-        // Ex: 128 - X -> simpleMatch = [ '128 - X', undefined, undefined, undefined, '128 - X', '128', '-' ]
         const isXFirst = !!simpleMatch[1];
         const op = isXFirst ? simpleMatch[2] : simpleMatch[6];
         const valStr = isXFirst ? simpleMatch[3] : simpleMatch[5];
@@ -430,7 +422,6 @@ export function invertEquation(
     }
 
 
-    // Tenta resolver equações como Y = (X - 128) * 0.5
     const complexMatch = sanitizedEq.match(/^\(\s*X\s*([+\-])\s*([\d.]+)\s*\)\s*([*\/])\s*([\d.]+)$/);
     if(complexMatch) {
         const [, innerOp, innerValStr, outerOp, outerValStr] = complexMatch;
@@ -439,17 +430,14 @@ export function invertEquation(
         
         if (!isNaN(innerVal) && !isNaN(outerVal)) {
             let result = finalValue;
-            // Inverte a operação externa primeiro
             if (outerOp === '*') result /= outerVal;
             if (outerOp === '/') result *= outerVal;
-            // Inverte a operação interna
             if (innerOp === '+') result -= innerVal;
             if (innerOp === '-') result += innerVal;
             return result;
         }
     }
     
-    // Tenta resolver equações como Y = (128 - X) * 0.5
     const complexMatch2 = sanitizedEq.match(/^\(\s*([\d.]+)\s*([+\-])\s*X\s*\)\s*([*\/])\s*([\d.]+)$/);
      if(complexMatch2) {
         const [, innerValStr, innerOp, outerOp, outerValStr] = complexMatch2;
@@ -458,12 +446,9 @@ export function invertEquation(
         
         if (!isNaN(innerVal) && !isNaN(outerVal)) {
             let result = finalValue;
-            // Inverte a operação externa primeiro
             if (outerOp === '*') result /= outerVal;
             if (outerOp === '/') result *= outerVal;
-            // Inverte a operação interna, C - X = Y -> X = C - Y
             if (innerOp === '-') result = innerVal - result;
-            // C + X = Y -> X = Y - C
             if (innerOp === '+') result = result - innerVal;
 
             return result;
@@ -484,16 +469,11 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
-    // Cria um mapa "desordenado" (na ordem original do BIN) a partir do mapa ordenado
     const unsortedCalculatedMap: MapData = Array(def.rows).fill(null).map(() => Array(def.cols).fill(null));
     
-    // Itera sobre o mapa CALCULADO e ordenado, e coloca cada valor na sua posição ORIGINAL
-    // no 'unsortedCalculatedMap'.
     sourceAxes.y.originalIndices.forEach((originalRow, sortedRow) => {
         sourceAxes.x.originalIndices.forEach((originalCol, sortedCol) => {
             if(originalRow < def.rows && originalCol < def.cols) {
-                // A célula [sortedRow, sortedCol] do mapa calculado corresponde à
-                // célula [originalRow, originalCol] no ficheiro BIN.
                 unsortedCalculatedMap[originalRow][originalCol] = calculatedMap[sortedRow][sortedCol];
             }
         });
@@ -563,3 +543,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    
