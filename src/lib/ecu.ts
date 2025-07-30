@@ -80,6 +80,9 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     // Fallback para eixos com dados embutidos mas não vinculados (raro, mas possível)
     const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10)
+    if (count === 0) {
+        throw new Error('A contagem do eixo (indexcount) não pode ser zero para um eixo não estático.');
+    }
     const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
     return {
         isLinked: false,
@@ -286,11 +289,6 @@ export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
 ): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
-    const {
-        address, rows, cols, dataSize, equation: eq,
-        dataOrganization, colStrideBytes, rowStrideBytes
-    } = def;
-    
     const unsortedXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
     const unsortedYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
 
@@ -302,7 +300,7 @@ export function readAndCalculateMapFromBin(
     
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !(def.isBigEndian ?? false);
-    const equation = normalizeEquation(eq);
+    const equation = normalizeEquation(def.equation);
 
     let zEquationFunc: (val: number) => number | string;
     try {
@@ -311,18 +309,19 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
 
+    // 1. Ler o mapa RAW na ordem original do ficheiro BIN
     const originalRawMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
     for (let r = 0; r < actualRows; r++) {
         for (let c = 0; c < actualCols; c++) {
             const offset = getCellAddress(def, r, c);
             
-            if (offset === null || offset + dataSize > view.byteLength) continue;
+            if (offset === null || offset + def.dataSize > view.byteLength) continue;
             
             try {
                 let rawValue;
-                if (dataSize === 1) {
+                if (def.dataSize === 1) {
                     rawValue = view.getUint8(offset);
-                } else if (dataSize === 2) {
+                } else if (def.dataSize === 2) {
                     rawValue = view.getUint16(offset, useLittleEndianForZ);
                 } else {
                     rawValue = 0;
@@ -334,16 +333,20 @@ export function readAndCalculateMapFromBin(
         }
     }
     
+    // 2. Criar um novo mapa RAW ordenado de acordo com os eixos ordenados
+    // Usamos os 'originalIndices' dos eixos ordenados para saber de onde puxar os dados do mapa original.
     const sortedRawMap = sortedYAxis.originalIndices.map(originalRowIndex => 
         sortedXAxis.originalIndices.map(originalColIndex => originalRawMap[originalRowIndex]?.[originalColIndex] ?? null)
     );
     
+    // 3. Calcular o mapa final (visual) a partir do mapa RAW já ordenado.
     const sortedCalculatedMap = sortedRawMap.map(row => 
         row.map(cellValue => {
             if (cellValue === null) return null;
             try {
                 const result = zEquationFunc(cellValue);
-                return typeof result === 'number' ? result : parseFloat(result);
+                // Garante que o resultado final é um número para cálculos e visualizações
+                return typeof result === 'number' ? result : parseFloat(result as string);
             } catch {
                 return cellValue;
             }
@@ -481,9 +484,13 @@ export function recalculateRawMapFromCalculated(
     // Cria um mapa "desordenado" (na ordem original do BIN) a partir do mapa ordenado
     const unsortedCalculatedMap: MapData = Array(def.rows).fill(null).map(() => Array(def.cols).fill(null));
     
+    // Itera sobre o mapa CALCULADO e ordenado, e coloca cada valor na sua posição ORIGINAL
+    // no 'unsortedCalculatedMap'.
     sourceAxes.y.originalIndices.forEach((originalRow, sortedRow) => {
         sourceAxes.x.originalIndices.forEach((originalCol, sortedCol) => {
             if(originalRow < def.rows && originalCol < def.cols) {
+                // A célula [sortedRow, sortedCol] do mapa calculado corresponde à
+                // célula [originalRow, originalCol] no ficheiro BIN.
                 unsortedCalculatedMap[originalRow][originalCol] = calculatedMap[sortedRow][sortedCol];
             }
         });
@@ -534,7 +541,7 @@ export function writeMapToBin(
             const offset = getCellAddress(def, r, c);
 
             if (offset === null || offset + def.dataSize > view.byteLength) {
-                console.error(`Escrita do mapa fora dos limites. Offset: ${offset} para o mapa "${def.name}". A saltar.`);
+                console.warn(`Escrita do mapa fora dos limites. Offset: ${offset} para o mapa "${def.name}". A saltar.`);
                 continue;
             }
             
