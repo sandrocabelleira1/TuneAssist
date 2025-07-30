@@ -159,9 +159,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const cols = xAxisDef.count;
             const rows = yAxisDef.count;
             if (cols === 0 || rows === 0) {
-                // Em vez de lançar um erro, simplesmente ignoramos esta tabela.
-                // Isto evita que a aplicação falhe em tabelas 1D ou com formato inesperado.
-                return;
+                throw new Error("Dimensões da tabela (linhas/colunas) não podem ser zero.");
             }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
