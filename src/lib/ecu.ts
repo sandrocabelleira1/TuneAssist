@@ -64,6 +64,22 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
             decimalpl: parseInt(findNode(zAxisNodeOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
         };
     }
+    
+    const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA');
+    if (sourceEmbeddedData && getAttr(sourceEmbeddedData, 'mmedaddress')) {
+        const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
+        return {
+            isLinked: false,
+            count: indexcount,
+            label: primaryTitle || 'Eixo Embutido',
+            address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
+            dataSize: dataSizeBits / 8,
+            stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
+            isBigEndian: getIsBigEndian(sourceEmbeddedData),
+            equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
+            decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
+        };
+    }
 
     const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
     if (labels.length > 0 && labels.some(l => (getAttr(l, 'value') || l.textContent || '').trim() !== '')) {
@@ -76,7 +92,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     if (!sourceEmbeddedData || !indexcount) {
       return { count: indexcount || 0, label: primaryTitle || 'Eixo Inválido', decimalpl: 1 };
     }
@@ -180,7 +195,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 yAxisDef,
             });
         } catch (e) {
-            if (e instanceof Error) {
+             if (e instanceof Error) {
                  console.warn(`Aviso ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${e.message}. Esta tabela será ignorada.`);
             }
         }
@@ -478,5 +493,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-    
