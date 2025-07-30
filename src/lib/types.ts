@@ -30,7 +30,6 @@ export type XDFDefinition = {
   dataSize: number; // in bytes
   colStrideBytes: number;
   rowStrideBytes: number;
-  dataOrganization: 'ROW_MAJOR' | 'COL_MAJOR';
   isBigEndian: boolean;
   equation: string;
   decimalpl: number;
@@ -47,3 +46,5 @@ export type LogMessage = {
 };
 
 export type MapData = (number | null)[][];
+
+    

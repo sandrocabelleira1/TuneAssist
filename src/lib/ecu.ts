@@ -31,16 +31,18 @@ function evaluateEquation(equation: string, value: number): number {
         const sanitizedEq = normalizeEquation(equation);
         
         // Substitui a variável 'X' (maiúscula) pelo valor numérico.
-        const expr = sanitizedEq.replace(/X/g, value.toString());
+        // Adiciona parênteses em torno do valor para garantir a ordem correta das operações.
+        const expr = sanitizedEq.replace(/X/g, `(${value.toString()})`);
 
         // Usa new Function() para criar uma função que avalia a expressão matemática.
+        // É uma forma segura de avaliar expressões desde que a entrada (equação do XDF) seja confiável.
         const func = new Function(`return ${expr}`);
         const result = func();
 
         if (typeof result === 'number' && isFinite(result)) {
             return result;
         }
-        return value;
+        return value; // Retorna o valor original se o resultado não for um número finito
     } catch (e) {
         console.error(`Erro ao avaliar a equação "${equation}" com o valor ${value}:`, e);
         return value; // Retorna o valor original em caso de erro na avaliação.
@@ -183,8 +185,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
-            const dataOrganizationStr = getAttr(zAxisNode, 'data_organization')?.toUpperCase();
-            const dataOrganization: 'ROW_MAJOR' | 'COL_MAJOR' = dataOrganizationStr === 'COL_MAJOR' ? 'COL_MAJOR' : 'ROW_MAJOR';
             
             const colStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || `${dataSizeBits}`, 10);
             const rowStrideBits = parseInt(getAttr(embeddedData, 'mmedrowstridebits') || `${cols * colStrideBits}`, 10);
@@ -198,7 +198,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 dataSize: dataSizeBits / 8,
                 colStrideBytes: colStrideBits / 8, 
                 rowStrideBytes: rowStrideBits / 8,
-                dataOrganization,
                 isBigEndian: getIsBigEndian(embeddedData),
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'X',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
@@ -319,15 +318,12 @@ export function readAndCalculateMapFromBin(
 
 export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: number): number | null {
     if (!def) return null;
-    const { address, rowStrideBytes, colStrideBytes, dataOrganization, rows, cols } = def;
+    const { address, rowStrideBytes, colStrideBytes, rows, cols } = def;
 
     if (rowIndex < 0 || rowIndex >= rows || colIndex < 0 || colIndex >= cols) {
         return null;
     }
     
-    // A maioria dos XDFs usa Row Major. A lógica de stride é a chave.
-    // rowStrideBytes: bytes para saltar para a próxima linha.
-    // colStrideBytes: bytes para saltar para a próxima coluna.
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
@@ -461,3 +457,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    

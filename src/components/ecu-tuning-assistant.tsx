@@ -48,7 +48,7 @@ function EditableMapCell({ value, onCellChange, address, originalValue, showCorr
     };
     
     const correction = (value !== null && originalValue !== null) ? value - originalValue : 0;
-    const backgroundColor = showCorrection ? getCorrectionColor(correction) : getHeatmapColor(value, 0, 0);
+    const backgroundColor = showCorrection ? getCorrectionColor(correction) : 'transparent';
 
     if (isEditing) {
         return (
@@ -414,3 +414,5 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+
+    
