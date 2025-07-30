@@ -85,3 +85,23 @@ export const AlignMapOutputSchema = z.object({
     alignedMapData: z.array(z.array(z.number().nullable())).describe('A nova grelha de dados do mapa 2D, suavizada e alinhada.'),
 });
 export type AlignMapOutput = z.infer<typeof AlignMapOutputSchema>;
+
+export const CorrectMapInputSchema = z.object({
+    mapName: z.string().describe('O nome do mapa de combustível a ser corrigido.'),
+    mapData: z.array(z.array(z.number().nullable())).describe('Os dados 2D atuais do mapa de combustível (VE).'),
+    xAxis: z.array(z.union([z.string(), z.number()])).describe('Valores do eixo X (Carga/Load).'),
+    yAxis: z.array(z.union([z.string(), z.number()])).describe('Valores do eixo Y (RPM).'),
+    xAxisLabel: z.string().describe('Rótulo do eixo X.'),
+    yAxisLabel: z.string().describe('Rótulo do eixo Y.'),
+    logRpm: z.number().describe('O valor de RPM do ponto de dados do log.'),
+    logLoad: z.number().describe('O valor de Carga/Load do ponto de dados do log.'),
+    measuredAfr: z.number().describe('O valor de AFR (Air-Fuel Ratio) medido pelo sensor de banda larga.'),
+    targetAfr: z.number().describe('O valor de AFR alvo desejado para este ponto de operação.'),
+    aggressiveness: z.number().min(0).max(100).describe('A percentagem de agressividade da correção (0-100). Influencia a força e a propagação da alteração.'),
+});
+export type CorrectMapInput = z.infer<typeof CorrectMapInputSchema>;
+
+export const CorrectMapOutputSchema = z.object({
+    correctedMap: z.array(z.array(z.number().nullable())).describe('A nova grelha de dados do mapa 2D, corrigida com base nos dados de log.'),
+});
+export type CorrectMapOutput = z.infer<typeof CorrectMapOutputSchema>;

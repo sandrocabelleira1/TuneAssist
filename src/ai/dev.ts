@@ -7,3 +7,4 @@ import '@/ai/flows/find-maps-flow.ts';
 import '@/ai/flows/explain-map-flow.ts';
 import '@/ai/flows/text-to-speech-flow.ts';
 import '@/ai/flows/align-map-flow.ts';
+import '@/ai/flows/correct-map-flow.ts';

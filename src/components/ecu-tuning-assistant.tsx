@@ -5,7 +5,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { LogMessage, XDFDefinition, MapData, AxisDataState, AxisDimension } from '@/lib/types';
 import { parseXDF, readAndCalculateMapFromBin, generateChecksum, bufferToHex, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress } from '@/lib/ecu';
-import { validateMapType, findPotentialMaps, explainMap, generateSpeech, alignMap } from '@/app/actions';
+import { validateMapType, findPotentialMaps, explainMap, generateSpeech, alignMap, correctMap } from '@/app/actions';
 import { getHeatmapColor } from '@/lib/colors';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, TableIcon, Undo2, Box, LineChart, Volume2, Blend, Wand2, Settings } from 'lucide-react';
+import { AlertCircle, ArrowUpNarrowWide, CheckCircle, FileUp, GitCompareArrows, Loader2, Pencil, RefreshCw, Save, Sparkles, TableIcon, Undo2, Box, LineChart, Volume2, Blend, Wand2, Settings, TestTube } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from '@/components/ui/slider';
@@ -294,8 +294,16 @@ export default function EcuTuningAssistant() {
     const [potentialMapsResult, setPotentialMapsResult] = useState<{ maps: XDFDefinition[], analysis: string } | null>(null);
     const [isFindingMaps, setIsFindingMaps] = useState(false);
     const [isAligningMap, setIsAligningMap] = useState(false);
+    const [isCorrectingMap, setIsCorrectingMap] = useState(false);
     const [explanationResult, setExplanationResult] = useState<{ text: string, audio: string | null } | null>(null);
     const [isExplaining, setIsExplaining] = useState(false);
+
+    // Datalog Correction State
+    const [logRpm, setLogRpm] = useState('8500');
+    const [logLoad, setLogLoad] = useState('100');
+    const [measuredAfr, setMeasuredAfr] = useState('12.1');
+    const [targetAfr, setTargetAfr] = useState('12.8');
+    const [aggressiveness, setAggressiveness] = useState(50);
 
     // Modal state
     const [isAxesModalOpen, setIsAxesModalOpen] = useState(false);
@@ -813,6 +821,51 @@ export default function EcuTuningAssistant() {
         }
     };
 
+    const handleCorrectMap = async () => {
+        if (!selectedMapDefinition || !workingMap || !sourceAxes) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, carregue um mapa para o corrigir.' });
+            return;
+        }
+
+        setIsCorrectingMap(true);
+        addLog(`A iniciar correção do mapa "${selectedMapDefinition.name}" com base no datalog...`, 'info');
+        toast({ title: 'A IA está a pensar...', description: 'A calcular as correções para o mapa. Isto pode demorar alguns segundos.' });
+
+        try {
+            const input = {
+                mapName: selectedMapDefinition.name,
+                mapData: workingMap,
+                xAxis: sourceAxes.x.calculated,
+                yAxis: sourceAxes.y.calculated,
+                xAxisLabel: sourceAxes.x.label,
+                yAxisLabel: sourceAxes.y.label,
+                logRpm: parseFloat(logRpm),
+                logLoad: parseFloat(logLoad),
+                measuredAfr: parseFloat(measuredAfr),
+                targetAfr: parseFloat(targetAfr),
+                aggressiveness: aggressiveness,
+            };
+
+            const result = await correctMap(input);
+
+            if (result.success && result.data) {
+                const { correctedMap } = result.data;
+                setWorkingMap(correctedMap);
+                setMapRenderKey(p => p + 1);
+                addLog('Mapa corrigido com sucesso pela IA com base nos dados de log.', 'success');
+                toast({ title: 'Mapa Corrigido!', description: 'A IA aplicou as correções de combustível.' });
+            } else {
+                throw new Error(result.error || "A IA não devolveu um mapa corrigido válido.");
+            }
+        } catch (error) {
+            const msg = `Falha na correção do mapa: ${(error as Error).message}`;
+            addLog(msg, 'error');
+            toast({ variant: 'destructive', title: "Erro na Correção da IA", description: msg });
+        } finally {
+            setIsCorrectingMap(false);
+        }
+    };
+
     const handleExplainMap = async () => {
         if (!selectedMapDefinition || !workingMap || !sourceAxes) {
              toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, carregue um mapa para obter uma explicação.' });
@@ -949,237 +1002,284 @@ export default function EcuTuningAssistant() {
 
     return (
         <TooltipProvider>
-            <div className="flex flex-1 flex-col p-4 gap-4">
-                <Card className="flex-shrink-0">
-                    <CardHeader>
-                        <CardTitle>Painel de Controlo</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                            <div className="space-y-2">
-                                <h3 className="font-semibold text-primary">1. Carregar Ficheiros</h3>
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}>
-                                        <FileUp className="mr-2 h-4 w-4" />
-                                        Carregar .BIN
-                                    </Button>
-                                    <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
-
-                                    <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}>
-                                        <FileUp className="mr-2 h-4 w-4" />
-                                        Carregar .XDF
-                                    </Button>
-                                    <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
-                                </div>
-                                <div className="space-y-1 pt-2 text-xs">
-                                    {binFile && <p className="truncate text-green-400">BIN Ativo: {binFile.name}</p>}
-                                    {xdfFile && <p className="truncate text-green-400">XDF Ativo: {xdfFile.name}</p>}
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
-                                <div className="flex items-center gap-2">
-                                    <Select onValueChange={handleMapSelect} disabled={!binFile || availableMaps.length === 0} value={selectedMapName} >
-                                        <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : (xdfFile ? "Selecione um mapa" : "Carregue um XDF ou use a IA")} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {availableMaps.map(def => (
-                                              <SelectItem key={def.name} value={def.name}>
-                                                  <div className="flex w-full items-center justify-between">
-                                                      <span className="truncate">{def.name}</span>
-                                                      <span className="ml-4 flex-shrink-0 font-mono text-xs text-muted-foreground">0x{def.address.toString(16).toUpperCase()}</span>
-                                                  </div>
-                                              </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleOpenEditNameModal} disabled={!selectedMapName}>
-                                                <Pencil className="h-4 w-4" />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent><p>Editar Nome do Mapa</p></TooltipContent>
-                                    </Tooltip>
-                                </div>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!selectedMapDefinition}>
-                                            <Settings className="mr-2 h-4 w-4" />
-                                            Configurações do Mapa
+            <div className="flex flex-1 flex-col xl:flex-row p-4 gap-4">
+                <div className="flex-1 flex flex-col gap-4 min-w-0">
+                    <Card className="flex-shrink-0">
+                        <CardHeader>
+                            <CardTitle>Painel de Controlo</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                                <div className="space-y-2">
+                                    <h3 className="font-semibold text-primary">1. Carregar Ficheiros</h3>
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                        <Button variant="outline" className="w-full" onClick={() => binInputRef.current?.click()}>
+                                            <FileUp className="mr-2 h-4 w-4" />
+                                            Carregar .BIN
                                         </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Editar equações e ordem de bytes para cada eixo.</TooltipContent>
-                                </Tooltip>
-                            </div>
+                                        <Input ref={binInputRef} type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'bin')} className="hidden" />
 
-                            <div className="space-y-2">
-                                <h3 className="font-semibold text-primary">3. Assistência da IA</h3>
-                                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                             <Button variant="secondary" className="w-full" onClick={handleFindPotentialMaps} disabled={!binFile}>
-                                                <Sparkles className="mr-2 h-4 w-4" />
-                                                Procurar
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Procurar por mapas não definidos no ficheiro BIN.</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                             <Button variant="secondary" className="w-full" onClick={handleValidateMap} disabled={!workingMap}>
-                                                <GitCompareArrows className="mr-2 h-4 w-4" />
-                                                Validar
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Verificar se o tipo e as equações do mapa estão corretos.</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                             <Button variant="secondary" className="w-full" onClick={handleAlignMap} disabled={!workingMap || isAligningMap}>
-                                                {isAligningMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                                                Alinhar
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Alinhar inteligentemente os dados do mapa (eixo Z) para transições suaves.</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                             <Button variant="secondary" className="w-full" onClick={handleExplainMap} disabled={!workingMap}>
-                                                <Volume2 className="mr-2 h-4 w-4" />
-                                                Explicar
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Gerar uma explicação textual e em áudio do mapa selecionado.</TooltipContent>
-                                    </Tooltip>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <h3 className="font-semibold text-primary">4. Sessão</h3>
-                                <p className="text-xs text-muted-foreground">
-                                    Reinicie o estado para começar do zero com novos ficheiros.
-                                </p>
-                                <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="flex flex-1 flex-col min-h-0">
-                    <CardHeader className="flex-shrink-0">
-                        <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                                <CardTitle className="flex items-center gap-2">
-                                    Visualizador de Mapas
-                                    {mapValidationStatus === 'loading' && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-                                    {mapValidationStatus === 'valid' && <Tooltip><TooltipTrigger><CheckCircle className="h-5 w-5 text-green-500" /></TooltipTrigger><TooltipContent>A IA confirmou que as equações parecem corretas.</TooltipContent></Tooltip>}
-                                    {mapValidationStatus === 'suggestion' && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:text-primary" onClick={() => setIsSuggestionModalOpen(true)}><Sparkles className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>A IA tem uma sugestão de correção. Clique para ver.</TooltipContent></Tooltip>}
-                                    {mapValidationStatus === 'error' && <Tooltip><TooltipTrigger><AlertCircle className="h-5 w-5 text-destructive" /></TooltipTrigger><TooltipContent>A análise da IA falhou. Verifique o log.</TooltipContent></Tooltip>}
-                                </CardTitle>
-                                <CardDescription>
-                                    {selectedMapDefinition ? <span dangerouslySetInnerHTML={{ __html: `${selectedMapDefinition.name} <span class="font-mono text-xs text-muted-foreground ml-2">(0x${selectedMapDefinition.address.toString(16).toUpperCase()})</span>` }} /> : "Carregue os ficheiros e selecione um mapa para começar"}
-                                </CardDescription>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="flex flex-1 flex-col p-6 pt-0 min-h-0">
-                        {workingMap && sourceAxes && selectedMapDefinition ? (
-                            <Tabs defaultValue="2d" className="flex flex-1 flex-col min-h-0">
-                                <TabsList className="mb-2 shrink-0">
-                                    <TabsTrigger value="2d"><TableIcon className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
-                                    <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
-                                    <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
-                                </TabsList>
-                                <TabsContent value="2d" className="flex flex-1 flex-col min-h-0">
-                                    <div className="flex-1 overflow-auto min-h-0">
-                                        <MapTable
-                                            key={mapRenderKey}
-                                            mapData={workingMap || []} 
-                                            rawMapData={rawMap || []}
-                                            xAxis={sourceAxes.x} 
-                                            yAxis={sourceAxes.y} 
-                                            definition={selectedMapDefinition}
-                                            onCellChange={handleCellChange}
-                                            selectedCells={selectedCells}
-                                            onCellSelect={handleCellSelect}
-                                            viewMode={mapViewMode}
-                                            onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
-                                        />
+                                        <Button variant="outline" className="w-full" onClick={() => xdfInputRef.current?.click()}>
+                                            <FileUp className="mr-2 h-4 w-4" />
+                                            Carregar .XDF
+                                        </Button>
+                                        <Input ref={xdfInputRef} type="file" accept=".xdf" onChange={(e) => handleFileChange(e, 'xdf')} className="hidden" />
                                     </div>
-                                    <div className="border-t pt-4 flex justify-between items-center mt-4 flex-shrink-0">
+                                    <div className="space-y-1 pt-2 text-xs">
+                                        {binFile && <p className="truncate text-green-400">BIN Ativo: {binFile.name}</p>}
+                                        {xdfFile && <p className="truncate text-green-400">XDF Ativo: {xdfFile.name}</p>}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h3 className="font-semibold text-primary">2. Selecionar Mapa</h3>
+                                    <div className="flex items-center gap-2">
+                                        <Select onValueChange={handleMapSelect} disabled={!binFile || availableMaps.length === 0} value={selectedMapName} >
+                                            <SelectTrigger className="flex-1">
+                                                <SelectValue placeholder={!binFile ? "Carregue um ficheiro BIN" : (xdfFile ? "Selecione um mapa" : "Carregue um XDF ou use a IA")} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableMaps.map(def => (
+                                                  <SelectItem key={def.name} value={def.name}>
+                                                      <div className="flex w-full items-center justify-between">
+                                                          <span className="truncate">{def.name}</span>
+                                                          <span className="ml-4 flex-shrink-0 font-mono text-xs text-muted-foreground">0x{def.address.toString(16).toUpperCase()}</span>
+                                                      </div>
+                                                  </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <Button variant="outline" onClick={handleInterpolateMap} disabled={!workingMap}>
-                                                    <Blend className="mr-2 h-4 w-4" />
-                                                    Alinhar Dados (Interpolar)
+                                                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleOpenEditNameModal} disabled={!selectedMapName}>
+                                                    <Pencil className="h-4 w-4" />
                                                 </Button>
                                             </TooltipTrigger>
-                                            <TooltipContent>Suaviza os dados do mapa usando interpolação linear entre os quatro cantos.</TooltipContent>
+                                            <TooltipContent><p>Editar Nome do Mapa</p></TooltipContent>
                                         </Tooltip>
-                                        {saveButton}
                                     </div>
-                                </TabsContent>
-                                <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0">
-                                    <div className="relative flex-1 overflow-hidden min-h-0">
-                                        <LinePlot2D
-                                            mapData={workingMap}
-                                            xAxis={sourceAxes.x}
-                                            yAxis={sourceAxes.y}
-                                            selectedLineIndex={selectedLineIndex}
-                                            onLineSelect={setSelectedLineIndex}
-                                            onPointChange={handlePointChange}
-                                            yAxisLabel={selectedMapDefinition?.yAxisDef?.label}
-                                            xAxisLabel={selectedMapDefinition?.xAxisDef?.label}
-                                        />
-                                    </div>
-                                </TabsContent>
-                                <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
-                                    <div className="relative flex-1">
-                                      <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={workingMap} xAxis={sourceAxes.x.calculated} yAxis={sourceAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} />
-                                    </div>
-                                    <div className="border-t pt-4 flex justify-end mt-4 flex-shrink-0">
-                                        {/* No save button in 3D view as it's for observation */}
-                                    </div>
-                                </TabsContent>
-                            </Tabs>
-                        ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-12">
-                                <FileUp className="w-16 h-16 mb-4"/>
-                                <p className="font-semibold">Nenhum mapa carregado</p>
-                                <p className="text-sm">Por favor carregue um ficheiro .BIN e um .XDF para começar.</p>
-                                <p className="text-sm mt-2">Ou carregue um .BIN e use o botão <span className="font-bold text-primary">Procurar</span> da IA.</p>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-                <Card className="flex-shrink-0">
-                    <CardHeader>
-                        <div className="flex justify-between items-center">
-                            <CardTitle>Log de Operações</CardTitle>
-                            <div className="flex items-center space-x-2">
-                                <Label htmlFor="debugMode" className="text-xs">Debug</Label>
-                                <Switch id="debugMode" checked={debugMode} onCheckedChange={setDebugMode} />
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <ScrollArea id="log-container" className="h-40 w-full rounded-md border p-2 font-mono text-xs">
-                            {visibleLogs.map(log => (
-                                <div key={log.id} className="flex items-start gap-2">
-                                    <span className="text-muted-foreground shrink-0">{log.timestamp}</span>
-                                    <span className={cn('min-w-0 break-words', {
-                                        'text-green-400': log.type === 'success',
-                                        'text-red-400': log.type === 'error',
-                                        'text-yellow-400': log.type === 'debug',
-                                    })}>{log.message}</span>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="secondary" className="w-full" onClick={() => setIsAxesModalOpen(true)} disabled={!selectedMapDefinition}>
+                                                <Settings className="mr-2 h-4 w-4" />
+                                                Configurações do Mapa
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Editar equações e ordem de bytes para cada eixo.</TooltipContent>
+                                    </Tooltip>
                                 </div>
-                            ))}
-                        </ScrollArea>
-                    </CardContent>
-                </Card>
+
+                                <div className="space-y-2">
+                                    <h3 className="font-semibold text-primary">3. Assistência da IA</h3>
+                                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                 <Button variant="secondary" className="w-full" onClick={handleFindPotentialMaps} disabled={!binFile}>
+                                                    <Sparkles className="mr-2 h-4 w-4" />
+                                                    Procurar
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Procurar por mapas não definidos no ficheiro BIN.</TooltipContent>
+                                        </Tooltip>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                 <Button variant="secondary" className="w-full" onClick={handleValidateMap} disabled={!workingMap}>
+                                                    <GitCompareArrows className="mr-2 h-4 w-4" />
+                                                    Validar
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Verificar se o tipo e as equações do mapa estão corretos.</TooltipContent>
+                                        </Tooltip>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                 <Button variant="secondary" className="w-full" onClick={handleAlignMap} disabled={!workingMap || isAligningMap}>
+                                                    {isAligningMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+                                                    Alinhar
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Alinhar inteligentemente os dados do mapa (eixo Z) para transições suaves.</TooltipContent>
+                                        </Tooltip>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                 <Button variant="secondary" className="w-full" onClick={handleExplainMap} disabled={!workingMap}>
+                                                    <Volume2 className="mr-2 h-4 w-4" />
+                                                    Explicar
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Gerar uma explicação textual e em áudio do mapa selecionado.</TooltipContent>
+                                        </Tooltip>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h3 className="font-semibold text-primary">4. Sessão</h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Reinicie o estado para começar do zero com novos ficheiros.
+                                    </p>
+                                    <Button onClick={resetState} variant="destructive" className="w-full">Reset</Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="flex flex-1 flex-col min-h-0">
+                        <CardHeader className="flex-shrink-0">
+                            <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                    <CardTitle className="flex items-center gap-2">
+                                        Visualizador de Mapas
+                                        {mapValidationStatus === 'loading' && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+                                        {mapValidationStatus === 'valid' && <Tooltip><TooltipTrigger><CheckCircle className="h-5 w-5 text-green-500" /></TooltipTrigger><TooltipContent>A IA confirmou que as equações parecem corretas.</TooltipContent></Tooltip>}
+                                        {mapValidationStatus === 'suggestion' && <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:text-primary" onClick={() => setIsSuggestionModalOpen(true)}><Sparkles className="h-5 w-5" /></Button></TooltipTrigger><TooltipContent>A IA tem uma sugestão de correção. Clique para ver.</TooltipContent></Tooltip>}
+                                        {mapValidationStatus === 'error' && <Tooltip><TooltipTrigger><AlertCircle className="h-5 w-5 text-destructive" /></TooltipTrigger><TooltipContent>A análise da IA falhou. Verifique o log.</TooltipContent></Tooltip>}
+                                    </CardTitle>
+                                    <CardDescription>
+                                        {selectedMapDefinition ? <span dangerouslySetInnerHTML={{ __html: `${selectedMapDefinition.name} <span class="font-mono text-xs text-muted-foreground ml-2">(0x${selectedMapDefinition.address.toString(16).toUpperCase()})</span>` }} /> : "Carregue os ficheiros e selecione um mapa para começar"}
+                                    </CardDescription>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="flex flex-1 flex-col p-6 pt-0 min-h-0">
+                            {workingMap && sourceAxes && selectedMapDefinition ? (
+                                <Tabs defaultValue="2d" className="flex flex-1 flex-col min-h-0">
+                                    <TabsList className="mb-2 shrink-0">
+                                        <TabsTrigger value="2d"><TableIcon className="mr-2 h-4 w-4" />Tabela 2D</TabsTrigger>
+                                        <TabsTrigger value="plot-2d"><LineChart className="mr-2 h-4 w-4" />Gráfico 2D</TabsTrigger>
+                                        <TabsTrigger value="3d"><Box className="mr-2 h-4 w-4" />Gráfico 3D</TabsTrigger>
+                                    </TabsList>
+                                    <TabsContent value="2d" className="flex flex-1 flex-col min-h-0">
+                                        <div className="flex-1 overflow-auto min-h-0">
+                                            <MapTable
+                                                key={mapRenderKey}
+                                                mapData={workingMap || []} 
+                                                rawMapData={rawMap || []}
+                                                xAxis={sourceAxes.x} 
+                                                yAxis={sourceAxes.y} 
+                                                definition={selectedMapDefinition}
+                                                onCellChange={handleCellChange}
+                                                selectedCells={selectedCells}
+                                                onCellSelect={handleCellSelect}
+                                                viewMode={mapViewMode}
+                                                onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
+                                            />
+                                        </div>
+                                        <div className="border-t pt-4 flex justify-between items-center mt-4 flex-shrink-0">
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button variant="outline" onClick={handleInterpolateMap} disabled={!workingMap}>
+                                                        <Blend className="mr-2 h-4 w-4" />
+                                                        Alinhar Dados (Interpolar)
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>Suaviza os dados do mapa usando interpolação linear entre os quatro cantos.</TooltipContent>
+                                            </Tooltip>
+                                            {saveButton}
+                                        </div>
+                                    </TabsContent>
+                                    <TabsContent value="plot-2d" className="flex flex-1 flex-col min-h-0">
+                                        <div className="relative flex-1 overflow-hidden min-h-0">
+                                            <LinePlot2D
+                                                mapData={workingMap}
+                                                xAxis={sourceAxes.x}
+                                                yAxis={sourceAxes.y}
+                                                selectedLineIndex={selectedLineIndex}
+                                                onLineSelect={setSelectedLineIndex}
+                                                onPointChange={handlePointChange}
+                                                yAxisLabel={selectedMapDefinition?.yAxisDef?.label}
+                                                xAxisLabel={selectedMapDefinition?.xAxisDef?.label}
+                                            />
+                                        </div>
+                                    </TabsContent>
+                                    <TabsContent value="3d" className="flex-1 flex flex-col min-h-0">
+                                        <div className="relative flex-1">
+                                          <SurfacePlot3D key={mapRenderKey + '-3d'} mapData={workingMap} xAxis={sourceAxes.x.calculated} yAxis={sourceAxes.y.calculated} xAxisLabel={selectedMapDefinition?.xAxisDef?.label || 'Eixo X'} yAxisLabel={selectedMapDefinition?.yAxisDef?.label || 'Eixo Y'} />
+                                        </div>
+                                        <div className="border-t pt-4 flex justify-end mt-4 flex-shrink-0">
+                                            {/* No save button in 3D view as it's for observation */}
+                                        </div>
+                                    </TabsContent>
+                                </Tabs>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-12">
+                                    <FileUp className="w-16 h-16 mb-4"/>
+                                    <p className="font-semibold">Nenhum mapa carregado</p>
+                                    <p className="text-sm">Por favor carregue um ficheiro .BIN e um .XDF para começar.</p>
+                                    <p className="text-sm mt-2">Ou carregue um .BIN e use o botão <span className="font-bold text-primary">Procurar</span> da IA.</p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+                
+                <div className="w-full xl:w-96 flex flex-col gap-4 flex-shrink-0">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <TestTube className="text-primary" />
+                                Correção por Datalog (IA)
+                            </CardTitle>
+                            <CardDescription>Insira os dados de um log para a IA sugerir correções no mapa de combustível.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="log-rpm">RPM</Label>
+                                    <Input id="log-rpm" type="number" value={logRpm} onChange={(e) => setLogRpm(e.target.value)} placeholder="8500" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="log-load">Carga</Label>
+                                    <Input id="log-load" type="number" value={logLoad} onChange={(e) => setLogLoad(e.target.value)} placeholder="100" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="measured-afr">AFR Medido</Label>
+                                    <Input id="measured-afr" type="number" step="0.1" value={measuredAfr} onChange={(e) => setMeasuredAfr(e.target.value)} placeholder="12.1" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="target-afr">AFR Alvo</Label>
+                                    <Input id="target-afr" type="number" step="0.1" value={targetAfr} onChange={(e) => setTargetAfr(e.target.value)} placeholder="12.8" />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="aggressiveness">Agressividade da Correção: {aggressiveness}%</Label>
+                                <Slider id="aggressiveness" min={0} max={100} step={1} value={[aggressiveness]} onValueChange={(value) => setAggressiveness(value[0])} />
+                            </div>
+                        </CardContent>
+                        <CardFooter>
+                            <Button className="w-full" onClick={handleCorrectMap} disabled={!workingMap || isCorrectingMap}>
+                                {isCorrectingMap ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                                Calcular Correção
+                            </Button>
+                        </CardFooter>
+                    </Card>
+
+                    <Card className="flex-1 flex flex-col min-h-0">
+                        <CardHeader>
+                            <div className="flex justify-between items-center">
+                                <CardTitle>Log de Operações</CardTitle>
+                                <div className="flex items-center space-x-2">
+                                    <Label htmlFor="debugMode" className="text-xs">Debug</Label>
+                                    <Switch id="debugMode" checked={debugMode} onCheckedChange={setDebugMode} />
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col min-h-0">
+                            <ScrollArea id="log-container" className="h-full w-full rounded-md border p-2 font-mono text-xs">
+                                {visibleLogs.map(log => (
+                                    <div key={log.id} className="flex items-start gap-2">
+                                        <span className="text-muted-foreground shrink-0">{log.timestamp}</span>
+                                        <span className={cn('min-w-0 break-words', {
+                                            'text-green-400': log.type === 'success',
+                                            'text-red-400': log.type === 'error',
+                                            'text-yellow-400': log.type === 'debug',
+                                        })}>{log.message}</span>
+                                    </div>
+                                ))}
+                            </ScrollArea>
+                        </CardContent>
+                    </Card>
+                </div>
                 
                 {/* Modals */}
                 <EditAxesModal
