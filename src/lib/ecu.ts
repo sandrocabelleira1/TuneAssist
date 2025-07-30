@@ -6,16 +6,37 @@ function evaluateEquation(equation: string, value: number): number {
         return NaN;
     }
     try {
-        const sanitizedEq = equation.trim().replace(/x/gi, 'X');
-        const expr = sanitizedEq.replace(/X/g, `(${value.toString()})`);
-        // Using a direct evaluation for simple arithmetic, which is safer than new Function().
-        // This handles the vast majority of ECU equations.
-        if (/^[\d\s()+\-*/.Eef-]+$/.test(expr)) {
-             const result = parseFloat(new Function(`return ${expr}`)());
+        const sanitizedEq = equation.trim().toLowerCase().replace(/\s/g, '');
+        if (sanitizedEq === 'x') return value;
+
+        // Simple expressions first for performance
+        // y = x * C
+        let match = sanitizedEq.match(/^x\*([0-9.-]+)$/);
+        if (match) return value * parseFloat(match[1]);
+        // y = x / C
+        match = sanitizedEq.match(/^x\/([0-9.-]+)$/);
+        if (match) return value / parseFloat(match[1]);
+        // y = x + C
+        match = sanitizedEq.match(/^x\+([0-9.-]+)$/);
+        if (match) return value + parseFloat(match[1]);
+        // y = x - C
+        match = sanitizedEq.match(/^x-([0-9.-]+)$/);
+        if (match) return value - parseFloat(match[1]);
+
+        // More complex but common expressions
+        // y = (x-C1)/C2
+        match = sanitizedEq.match(/^\(x-([0-9.-]+)\)\/([0-9.-]+)$/);
+        if (match) return (value - parseFloat(match[1])) / parseFloat(match[2]);
+        
+        // Fallback for other simple cases
+        const expr = equation.toLowerCase().replace(/x/g, `(${value.toString()})`);
+        if (/^[\d\s()+\-*/.]+$/.test(expr)) {
+             const result = new Function(`return ${expr}`)();
              if (typeof result === 'number' && isFinite(result)) {
                 return result;
             }
         }
+        console.warn(`Equação não suportada "${equation}", a devolver o valor original.`);
         return value;
     } catch (e) {
         console.error(`Erro ao avaliar a equação "${equation}" com o valor ${value}:`, e);
@@ -23,29 +44,33 @@ function evaluateEquation(equation: string, value: number): number {
     }
 }
 
+
 function invertEquation(eq: string, finalValue: number): number {
     if (finalValue === null || isNaN(finalValue)) {
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
+    const sanitizedEq = eq.trim().toLowerCase().replace(/\s/g, '');
+    if (sanitizedEq === 'x') return finalValue;
 
-    const sanitizedEq = eq.trim().replace(/x/gi, 'X');
-    if (sanitizedEq === 'X') return finalValue;
-
-    // Y = X * C  => X = Y / C
-    let match = sanitizedEq.match(/^X\s*\*\s*(-?[\d.]+(?:E-?\d+)?)$/i);
+    // y = x * C  => x = y / C
+    let match = sanitizedEq.match(/^x\*([0-9.-]+)$/);
     if (match) return finalValue / parseFloat(match[1]);
 
-    // Y = X / C => X = Y * C
-    match = sanitizedEq.match(/^X\s*\/\s*(-?[\d.]+(?:E-?\d+)?)$/i);
+    // y = x / C => x = y * C
+    match = sanitizedEq.match(/^x\/([0-9.-]+)$/);
     if (match) return finalValue * parseFloat(match[1]);
 
-    // Y = X + C => X = Y - C
-    match = sanitizedEq.match(/^X\s*\+\s*(-?[\d.]+(?:E-?\d+)?)$/i);
+    // y = x + C => x = y - C
+    match = sanitizedEq.match(/^x\+([0-9.-]+)$/);
     if (match) return finalValue - parseFloat(match[1]);
 
-    // Y = X - C => X = Y + C
-    match = sanitizedEq.match(/^X\s*-\s*(-?[\d.]+(?:E-?\d+)?)$/i);
+    // y = x - C => x = y + C
+    match = sanitizedEq.match(/^x-([0-9.-]+)$/);
     if (match) return finalValue + parseFloat(match[1]);
+    
+    // y = (x-C1)/C2 => x = y*C2 + C1
+    match = sanitizedEq.match(/^\(x-([0-9.-]+)\)\/([0-9.-]+)$/);
+    if (match) return finalValue * parseFloat(match[2]) + parseFloat(match[1]);
 
     console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);
     return finalValue;
@@ -74,6 +99,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
+    const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
 
     let defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
 
@@ -93,7 +119,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: true,
             label: label,
-            count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || '0', 10),
+            count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || `${indexcount}` || '0', 10),
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             isBigEndian: getIsBigEndian(embeddedData),
@@ -102,9 +128,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
     const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
-
     if (sourceEmbeddedData && getAttr(sourceEmbeddedData, 'mmedaddress')) {
         const dataSizeBits = parseInt(getAttr(sourceEmbeddedData, 'mmedelementsizebits') || getAttr(axisNode, 'elementsizebits') || '16', 10);
         return {
@@ -180,7 +204,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             if (xAxisDef.count === 0 || yAxisDef.count === 0) return;
             
-            const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '8', 10);
+            const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || getAttr(zAxisNode, 'elementsizebits') || '8', 10);
             
             definitions.push({
                 uniqueId: uniqueId,

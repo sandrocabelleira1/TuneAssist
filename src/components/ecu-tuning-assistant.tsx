@@ -103,6 +103,17 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
     const yAxisLabel = formatAxisLabel(axes.y, selectedMapDefinition.yAxisDef);
     const xAxisLabel = formatAxisLabel(axes.x, selectedMapDefinition.xAxisDef);
 
+    const getAxisDecimalPlaces = (axisDef: AxisDimension | undefined) => {
+        if (!axisDef) return 2;
+        // Se for um eixo com labels de texto, não formatar.
+        if (axisDef.values) return -1; // Sinalizador para não formatar
+        return axisDef.decimalpl ?? 2;
+    }
+    
+    const xAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.xAxisDef);
+    const yAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.yAxisDef);
+
+
     return (
         <div className="overflow-auto h-full w-full">
             <table className="w-full border-collapse text-xs">
@@ -113,7 +124,7 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
                         </th>
                         {axes.x.calculated.map((x, i) => (
                             <th key={i} className="sticky top-0 bg-muted p-2 border border-border font-semibold">
-                                {typeof x === 'number' ? x.toFixed(selectedMapDefinition.xAxisDef.decimalpl ?? 2) : x}
+                                {typeof x === 'number' && xAxisDecimalPlaces !== -1 ? x.toFixed(xAxisDecimalPlaces) : x}
                             </th>
                         ))}
                     </tr>
@@ -122,7 +133,7 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
                     {axes.y.calculated.map((y, yi) => (
                         <tr key={yi}>
                             <td className="sticky left-0 bg-muted p-2 border border-border font-bold text-right">
-                                {typeof y === 'number' ? y.toFixed(selectedMapDefinition.yAxisDef.decimalpl ?? 0) : y}
+                                {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
                             </td>
                             {mapData[yi]?.map((cell, xi) => {
                                 const address = getCellAddress(selectedMapDefinition, yi, xi);
@@ -411,5 +422,3 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
-
-    

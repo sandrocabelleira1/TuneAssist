@@ -13,7 +13,6 @@ export type AxisDimension = {
   label: string;
   address?: number | null;
   dataSize?: number;
-  stride?: number;
   isBigEndian?: boolean;
   equation?: string;
   decimalpl?: number;
@@ -28,8 +27,6 @@ export type XDFDefinition = {
   rows: number;
   cols: number;
   dataSize: number; // in bytes
-  colStrideBytes: number;
-  rowStrideBytes: number;
   isBigEndian: boolean;
   equation: string;
   decimalpl: number;
@@ -46,5 +43,3 @@ export type LogMessage = {
 };
 
 export type MapData = (number | null)[][];
-
-    
