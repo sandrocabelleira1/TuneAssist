@@ -64,7 +64,6 @@ function EditableMapCell({ value, onCellChange, address, originalValue, showCorr
         );
     }
     
-    // Simplificação radical: Apenas mostrar o valor formatado.
     return (
         <div 
             onClick={() => setIsEditing(true)} 
@@ -333,9 +332,6 @@ export default function EcuTuningAssistant() {
                             <CardContent className="p-4 pt-0 flex flex-col gap-3">
                                <Button variant="default" size="sm" disabled={!mapData} onClick={handleSave}>
                                    <Save className="mr-2" /> Salvar .BIN Modificado
-                               </Button>
-                               <Button variant="secondary" size="sm" disabled={!mapData}>
-                                   <Pencil className="mr-2" /> Editar Eixos
                                </Button>
                             </CardContent>
                         </Card>
