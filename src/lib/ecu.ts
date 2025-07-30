@@ -18,7 +18,12 @@ function getAttr(element: Element | null, attrName: string): string | null {
 
 function normalizeEquation(eq: string | null | undefined): string {
     if (!eq) return 'X';
+    // Substitui 'x' minúsculo por 'X' maiúsculo, mas evita substituir em números hexadecimais (ex: 0x...)
+    // A expressão regular (?<![0-9a-fA-F])x(?![0-9a-fA-F]) faz um lookbehind e lookahead negativo
+    // para garantir que 'x' não está rodeado por caracteres hexadecimais.
     let sanitizedEq = eq.trim().replace(/(?<![0-9a-fA-F])x(?![0-9a-fA-F])/gi, 'X');
+
+    // Adiciona operadores de multiplicação implícitos, ex: "1.8*X" em vez de "1.8X"
     sanitizedEq = sanitizedEq.replace(/(\d*\.?\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d*\.?\d+)/g, '$1*$2');
     return sanitizedEq;
 }
@@ -50,7 +55,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         
         return {
             isLinked: true,
-            count: indexcount,
+            count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || '0', 10),
             label: findNode(linkedTable, 'title')?.textContent?.trim() || 'Eixo Vinculado',
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
@@ -83,13 +88,17 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: labels.length || indexcount,
-            label: findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo de Label',
+            label: findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo de Label',
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
         };
     }
     
-    return { count: indexcount, label: 'Eixo Desconhecido', decimalpl: 1 };
+    return { 
+        count: indexcount, 
+        label: findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido', 
+        decimalpl: 1 
+    };
 }
 
 export function parseXDF(xmlString: string): { definitions: XDFDefinition[], brand: string | null } {
