@@ -18,15 +18,25 @@ function getAttr(element: Element | null, attrName: string): string | null {
 
 function normalizeEquation(eq: string | null | undefined): string {
     if (!eq) return 'X';
-    // Substitui 'x' minúsculo por 'X' maiúsculo, mas evita substituir em números hexadecimais (ex: 0x...)
-    // A expressão regular (?<![0-9a-fA-F])x(?![0-9a-fA-F]) faz um lookbehind e lookahead negativo
-    // para garantir que 'x' não está rodeado por caracteres hexadecimais.
-    let sanitizedEq = eq.trim().replace(/(?<![0-9a-fA-F])x(?![0-9a-fA-F])/gi, 'X');
-
-    // Adiciona operadores de multiplicação implícitos, ex: "1.8*X" em vez de "1.8X"
-    sanitizedEq = sanitizedEq.replace(/(\d*\.?\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d*\.?\d+)/g, '$1*$2');
-    return sanitizedEq;
+    return eq.trim().replace(/(?<![0-9a-fA-F])x(?![0-9a-fA-F])/gi, 'X');
 }
+
+
+function evaluateEquation(equation: string, value: number): number {
+    try {
+        const sanitizedEq = normalizeEquation(equation);
+        const func = new Function('X', `return ${sanitizedEq}`);
+        const result = func(value);
+        if (typeof result === 'number' && isFinite(result)) {
+            return result;
+        }
+        return value;
+    } catch (e) {
+        console.error(`Erro ao avaliar a equação "${equation}" com o valor ${value}:`, e);
+        return value; // Retorna o valor original em caso de erro
+    }
+}
+
 
 function getIsBigEndian(element: Element | null): boolean {
     const attr = getAttr(element, 'bigendian');
@@ -38,6 +48,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
+    const units = findNode(axisNode, 'units')?.textContent?.trim();
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
@@ -56,7 +67,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: true,
             count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || '0', 10),
-            label: findNode(linkedTable, 'title')?.textContent?.trim() || 'Eixo Vinculado',
+            label: findNode(linkedTable, 'title')?.textContent?.trim() || units || 'Eixo Vinculado',
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -69,11 +80,11 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
     if (sourceEmbeddedData && getAttr(sourceEmbeddedData, 'mmedaddress')) {
         const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
-        const count = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || `${indexcount}` || '0', 10);
+        const count = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || getAttr(sourceEmbeddedData, 'mmedrowcount') || `${indexcount}` || '0', 10);
         return {
             isLinked: false,
             count: count,
-            label: findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Embutido',
+            label: units || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Embutido',
             address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -88,7 +99,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: labels.length || indexcount,
-            label: findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo de Label',
+            label: units || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo de Label',
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
         };
@@ -96,7 +107,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     
     return { 
         count: indexcount, 
-        label: findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido', 
+        label: units || 'Eixo Desconhecido', 
         decimalpl: 1 
     };
 }
@@ -219,20 +230,11 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     }
 
     const view = new DataView(binBuffer);
-    const { dataSize = 2, equation: eq, isBigEndian } = axisDef;
+    const { dataSize = 2, equation = 'X', isBigEndian } = axisDef;
     const useLittleEndian = !(isBigEndian ?? false);
-    const equation = normalizeEquation(eq);
     const stride = axisDef.stride || dataSize;
 
     if (isNaN(addr) || isNaN(count) || isNaN(dataSize)) return defaultState;
-
-    let equationFunc: (val: number) => number | string;
-    try {
-        equationFunc = new Function('X', `return ${equation}`) as (val: number) => number;
-    } catch (e) {
-        console.error(`Equação de eixo inválida para "${label}": ${equation}`);
-        equationFunc = (X: number) => X;
-    }
 
     const raw: number[] = [];
     const calculated: (number | string)[] = [];
@@ -253,12 +255,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
         }
         
         raw.push(rawValue);
-        try {
-            const result = equationFunc(rawValue);
-            calculated.push(result);
-        } catch (e) {
-            calculated.push(rawValue);
-        }
+        calculated.push(evaluateEquation(equation, rawValue));
     }
     return { raw, calculated, label, address: addr };
 }
@@ -273,14 +270,6 @@ export function readAndCalculateMapFromBin(
 
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !(def.isBigEndian ?? false);
-    const equation = normalizeEquation(def.equation);
-
-    let zEquationFunc: (val: number) => number | string;
-    try {
-        zEquationFunc = new Function('X', `return ${equation}`) as (val: number) => number;
-    } catch(e) {
-        throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
-    }
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
@@ -301,9 +290,7 @@ export function readAndCalculateMapFromBin(
                     rawValue = 0;
                 }
                 rawMap[r][c] = rawValue;
-
-                const calcResult = zEquationFunc(rawValue);
-                calculatedMap[r][c] = typeof calcResult === 'number' ? calcResult : parseFloat(calcResult as string);
+                calculatedMap[r][c] = evaluateEquation(def.equation, rawValue);
 
             } catch (e) {
                 // Silenciosamente ignorar células que falham
@@ -328,8 +315,12 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     }
 
     if (dataOrganization === 'COL_MAJOR') {
+        // Col-major pode ter um layout diferente, mas para muitos casos simples, a lógica de stride ainda se aplica.
+        // A lógica pode precisar de ajuste se rowStrideBytes e colStrideBytes tiverem significados diferentes.
+        // Assumindo que rowStrideBytes é o passo para a próxima coluna e colStrideBytes é o passo para a próxima linha na mesma coluna.
         return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
     } 
+    // ROW_MAJOR (padrão)
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
@@ -356,65 +347,43 @@ export function invertEquation(
         throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
     }
 
-    const sanitizedEq = normalizeEquation(eq);
+    try {
+        // Esta é uma abordagem muito simplista e só funcionará para equações lineares simples.
+        // Y = a * X + b  => X = (Y - b) / a
+        const sanitizedEq = normalizeEquation(eq).toUpperCase();
+        
+        if (sanitizedEq === 'X') return finalValue;
 
-    if (sanitizedEq.toUpperCase() === 'X') {
+        // Y = X * C => X = Y / C
+        let match = sanitizedEq.match(/^X\s*\*\s*([\d.-]+)$/);
+        if (match) return finalValue / parseFloat(match[1]);
+
+        // Y = X / C => X = Y * C
+        match = sanitizedEq.match(/^X\s*\/\s*([\d.-]+)$/);
+        if (match) return finalValue * parseFloat(match[1]);
+
+        // Y = X + C => X = Y - C
+        match = sanitizedEq.match(/^X\s*\+\s*([\d.-]+)$/);
+        if (match) return finalValue - parseFloat(match[1]);
+
+        // Y = X - C => X = Y + C
+        match = sanitizedEq.match(/^X\s*-\s*([\d.-]+)$/);
+        if (match) return finalValue + parseFloat(match[1]);
+
+        // Y = C - X => X = C - Y
+        match = sanitizedEq.match(/^([\d.-]+)\s*-\s*X$/);
+        if (match) return parseFloat(match[1]) - finalValue;
+        
+        // Y = (X - C1) / C2 => X = (Y * C2) + C1
+        match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.-]+)\s*\)\s*\/\s*([\d.-]+)$/);
+        if (match) return (finalValue * parseFloat(match[2])) + parseFloat(match[1]);
+
+        console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);
+        return finalValue;
+    } catch(e) {
+        console.error(`Erro ao inverter a equação "${eq}"`, e);
         return finalValue;
     }
-    
-    // Y = (X - C1) / C2  => X = (Y * C2) + C1
-    let match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\/\s*([\d.]+)$/i);
-    if (match) return (finalValue * parseFloat(match[2])) + parseFloat(match[1]);
-    
-    // Y = (X - C1) * C2  => X = (Y / C2) + C1
-    match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\*\s*([\d.]+)$/i);
-    if (match) return (finalValue / parseFloat(match[2])) + parseFloat(match[1]);
-    
-    // Y = (C1 - X) * C2 => X = C1 - (Y / C2)
-    match = sanitizedEq.match(/^\(\s*([\d.]+)\s*-\s*X\s*\)\s*\*\s*([\d.]+)$/i);
-    if (match) return parseFloat(match[1]) - (finalValue / parseFloat(match[2]));
-    
-    // Y = (X + C1) * C2 => X = (Y / C2) - C1
-    match = sanitizedEq.match(/^\(\s*X\s*\+\s*([\d.]+)\s*\)\s*\*\s*([\d.]+)$/i);
-    if (match) return (finalValue / parseFloat(match[2])) - parseFloat(match[1]);
-
-    // Y = X / C  => X = Y * C
-    match = sanitizedEq.match(/^X\s*\/\s*([\d.]+)$/i);
-    if (match) return finalValue * parseFloat(match[1]);
-    
-    // Y = C / X  => X = C / Y
-    match = sanitizedEq.match(/^([\d.]+)\s*\/\s*X$/i);
-    if (match) {
-      if (finalValue === 0) return Infinity; // Evita divisão por zero
-      return parseFloat(match[1]) / finalValue;
-    }
-
-    // Y = X * C  => X = Y / C
-    match = sanitizedEq.match(/^X\s*\*\s*([\d.]+)$/i);
-    if (match) {
-        const C = parseFloat(match[1]);
-        if (C === 0) return Infinity;
-        return finalValue / C;
-    }
-
-    // Y = X + C  => X = Y - C
-    match = sanitizedEq.match(/^X\s*\+\s*([\d.]+)$/i);
-    if (match) return finalValue - parseFloat(match[1]);
-    
-    // Y = C + X  => X = Y - C
-    match = sanitizedEq.match(/^([\d.]+)\s*\+\s*X$/i);
-    if (match) return finalValue - parseFloat(match[1]);
-
-    // Y = X - C  => X = Y + C
-    match = sanitizedEq.match(/^X\s*-\s*([\d.]+)$/i);
-    if (match) return finalValue + parseFloat(match[1]);
-
-    // Y = C - X  => X = C - Y
-    match = sanitizedEq.match(/^([\d.]+)\s*-\s*X$/i);
-    if (match) return parseFloat(match[1]) - finalValue;
-
-    console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);
-    return finalValue;
 }
 
 export function recalculateRawMapFromCalculated(
