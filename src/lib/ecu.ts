@@ -29,7 +29,6 @@ function normalizeEquation(eq: string | null | undefined): string {
 // Verifica o atributo 'bigendian' e retorna um booleano
 function getIsBigEndian(element: Element | null): boolean {
     const attr = getAttr(element, 'bigendian');
-    // Considera "0" ou "false" como little-endian, qualquer outra coisa (incluindo a ausência) como big-endian por defeito do TunerPro.
     return attr !== '0' && attr?.toLowerCase() !== 'false';
 }
 
@@ -63,40 +62,62 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         }
     });
 
+    const axisCache = new Map<string, AxisDimension>();
+
     function parseAxis(tableEl: Element, axisId: 'x' | 'y'): AxisDimension {
+        const tableId = getAttr(tableEl, 'uniqueid');
+        const cacheKey = `${tableId}-${axisId}`;
+        if (axisCache.has(cacheKey)) {
+            return axisCache.get(cacheKey)!;
+        }
+
         const axisNode = findNode(tableEl, `XDFAXIS[id="${axisId}"]`);
-        if (!axisNode) throw new Error(`Nó do eixo ${axisId} não encontrado.`);
+        if (!axisNode) throw new Error(`Nó do eixo ${axisId} não encontrado na tabela ${tableId}.`);
 
         const linkNode = findNode(axisNode, 'linkobjid');
-        if (linkNode) {
-            const linkedTableId = getAttr(linkNode, 'objectid');
-            const linkedAxisId = getAttr(linkNode, 'subobjectid'); // e.g., "x", "y", "z"
-            if (linkedTableId && linkedAxisId) {
-                const linkedTableEl = tableCache.get(linkedTableId);
-                if (linkedTableEl) {
-                    // Chamada recursiva para analisar o eixo da tabela ligada
-                    return parseAxis(linkedTableEl, linkedAxisId as 'x' | 'y');
-                } else {
-                    throw new Error(`Tabela ligada com uniqueid "${linkedTableId}" não encontrada.`);
+        const linkedTableId = getAttr(linkNode, 'objectid');
+        const linkedAxisId = getAttr(linkNode, 'subobjectid') as 'x' | 'y' | 'z' | null;
+        
+        if (linkNode && linkedTableId && linkedAxisId) {
+             const linkedTableEl = tableCache.get(linkedTableId);
+             if (linkedTableEl) {
+                if (linkedAxisId === 'z') { // O link aponta para os valores Z de outra tabela
+                    const zAxisNodeOfLinkedTable = findNode(linkedTableEl, 'XDFAXIS[id="z"]');
+                    if (!zAxisNodeOfLinkedTable) throw new Error(`Eixo Z ligado não encontrado em ${linkedTableId}`);
+                    const embeddedData = findNode(linkedTableEl, 'embeddeddata', 'EMBEDDEDDATA');
+                     return {
+                        count: parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10),
+                        label: findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Ligado',
+                        address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16) || undefined,
+                        dataSize: (parseInt(getAttr(zAxisNodeOfLinkedTable, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10)) / 8,
+                        isBigEndian: getIsBigEndian(embeddedData),
+                        equation: getAttr(findNode(zAxisNodeOfLinkedTable, 'math', 'MATH'), 'equation') || 'X',
+                        decimalpl: parseInt(findNode(zAxisNodeOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
+                    };
+
+                } else { // O link aponta para um eixo X ou Y de outra tabela
+                    return parseAxis(linkedTableEl, linkedAxisId);
                 }
-            }
+             } else {
+                 throw new Error(`Tabela ligada com uniqueid "${linkedTableId}" não encontrada.`);
+             }
         }
         
         // Se não houver link, analisa a definição do próprio eixo
         const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-        let count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
+        const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
         const labelNodes = axisNode.querySelectorAll(':scope > label');
         const explicitValues: (string | number)[] = [];
+
         if (labelNodes.length > 0) {
             labelNodes.forEach(labelNode => {
-                const val = parseFloat(getAttr(labelNode, 'index') || '');
-                explicitValues.push(isNaN(val) ? (labelNode.textContent || '') : val);
+                 const val = parseFloat(getAttr(labelNode, 'index') || '');
+                 explicitValues.push(isNaN(val) ? (labelNode.textContent || '') : val);
             });
-            count = explicitValues.length;
         }
-
-        return {
-            count: count,
+        
+        const result: AxisDimension = {
+            count: explicitValues.length > 0 ? explicitValues.length : count,
             label: findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || (axisId === 'x' ? 'Eixo X' : 'Eixo Y'),
             address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16) || undefined,
             dataSize: (parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10)) / 8,
@@ -105,6 +126,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
             values: explicitValues.length > 0 ? explicitValues : undefined,
         };
+
+        axisCache.set(cacheKey, result);
+        return result;
     }
 
     allTableElements.forEach(tableEl => {
@@ -150,7 +174,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 isPotential: false,
             });
         } catch (e) {
-            const tableName = getAttr(tableEl, 'name') || 'desconhecida';
+            const tableName = findNode(tableEl, 'title')?.textContent?.trim() || getAttr(tableEl, 'name') || 'desconhecida';
             console.error(`Erro ao analisar a tabela "${tableName}": ${(e as Error).message}`);
         }
     });
@@ -207,7 +231,15 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
         const offset = addr + (i * stride);
         if (offset + dataSize > view.byteLength) continue;
 
-        let rawValue = dataSize === 1 ? view.getUint8(offset) : view.getUint16(offset, useLittleEndian);
+        let rawValue;
+        if (dataSize === 1) {
+            rawValue = view.getUint8(offset);
+        } else if (dataSize === 2) {
+            rawValue = view.getUint16(offset, useLittleEndian);
+        } else {
+            rawValue = 0; // Fallback for unsupported data sizes
+        }
+        
         raw.push(rawValue);
         try {
             calculated.push(equationFunc(rawValue));
@@ -280,7 +312,14 @@ export function readAndCalculateMapFromBin(
             if (offset + dataSize > view.byteLength) continue;
             
             try {
-                const rawValue = dataSize === 1 ? view.getUint8(offset) : view.getUint16(offset, useLittleEndianForZ);
+                let rawValue;
+                if (dataSize === 1) {
+                    rawValue = view.getUint8(offset);
+                } else if (dataSize === 2) {
+                    rawValue = view.getUint16(offset, useLittleEndianForZ);
+                } else {
+                    rawValue = 0;
+                }
                 originalRawMap[r][c] = rawValue;
             } catch (e) {
                 console.error(`Erro ao ler o BIN no offset ${offset}: ${(e as Error).message}`);
