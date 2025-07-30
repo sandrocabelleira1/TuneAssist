@@ -18,22 +18,34 @@ function getAttr(element: Element | null, attrName: string): string | null {
 
 function normalizeEquation(eq: string | null | undefined): string {
     if (!eq) return 'X';
-    return eq.trim().replace(/(?<![0-9a-fA-F])x(?![0-9a-fA-F])/gi, 'X');
+    // Garante que 'x' (minúsculo) seja tratado como a variável, a menos que seja parte de um número hexadecimal (ex: 0x...)
+    return eq.trim().replace(/(?<![0-9a-fA-F])x(?![0-9a-fA-F])/g, 'X');
 }
 
 
 function evaluateEquation(equation: string, value: number): number {
+    if (value === null || value === undefined || isNaN(value)) {
+        return NaN;
+    }
     try {
         const sanitizedEq = normalizeEquation(equation);
-        const func = new Function('X', `return ${sanitizedEq}`);
-        const result = func(value);
+        
+        // Substitui a variável 'X' pelo valor numérico.
+        // É mais seguro do que usar new Function() ou eval() diretamente com a string completa.
+        const expr = sanitizedEq.replace(/X/g, value.toString());
+
+        // Usa new Function() para criar uma função que avalia a expressão matemática.
+        // Esta é uma maneira de avaliar a string como código de forma segura no contexto do navegador.
+        const func = new Function(`return ${expr}`);
+        const result = func();
+
         if (typeof result === 'number' && isFinite(result)) {
             return result;
         }
         return value;
     } catch (e) {
         console.error(`Erro ao avaliar a equação "${equation}" com o valor ${value}:`, e);
-        return value; // Retorna o valor original em caso de erro
+        return value; // Retorna o valor original em caso de erro na avaliação.
     }
 }
 
@@ -48,7 +60,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
-    const units = findNode(axisNode, 'units')?.textContent?.trim();
+    const units = findNode(axisNode, 'units')?.textContent?.trim() || '';
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
@@ -313,14 +325,10 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     if (rowIndex < 0 || rowIndex >= rows || colIndex < 0 || colIndex >= cols) {
         return null;
     }
-
-    if (dataOrganization === 'COL_MAJOR') {
-        // Col-major pode ter um layout diferente, mas para muitos casos simples, a lógica de stride ainda se aplica.
-        // A lógica pode precisar de ajuste se rowStrideBytes e colStrideBytes tiverem significados diferentes.
-        // Assumindo que rowStrideBytes é o passo para a próxima coluna e colStrideBytes é o passo para a próxima linha na mesma coluna.
-        return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
-    } 
-    // ROW_MAJOR (padrão)
+    
+    // A maioria dos XDFs usa Row Major. A lógica de stride é a chave.
+    // rowStrideBytes: bytes para saltar para a próxima linha.
+    // colStrideBytes: bytes para saltar para a próxima coluna.
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
@@ -348,34 +356,35 @@ export function invertEquation(
     }
 
     try {
-        // Esta é uma abordagem muito simplista e só funcionará para equações lineares simples.
-        // Y = a * X + b  => X = (Y - b) / a
         const sanitizedEq = normalizeEquation(eq).toUpperCase();
         
         if (sanitizedEq === 'X') return finalValue;
 
-        // Y = X * C => X = Y / C
-        let match = sanitizedEq.match(/^X\s*\*\s*([\d.-]+)$/);
+        // Esta é uma abordagem muito simplista e só funcionará para equações lineares simples.
+        // Vou adicionar mais casos comuns.
+
+        // Caso: Y = X * C => X = Y / C
+        let match = sanitizedEq.match(/^X\s*\*\s*(-?[\d.]+(?:E-?\d+)?)$/);
         if (match) return finalValue / parseFloat(match[1]);
 
-        // Y = X / C => X = Y * C
-        match = sanitizedEq.match(/^X\s*\/\s*([\d.-]+)$/);
+        // Caso: Y = X / C => X = Y * C
+        match = sanitizedEq.match(/^X\s*\/\s*(-?[\d.]+(?:E-?\d+)?)$/);
         if (match) return finalValue * parseFloat(match[1]);
 
-        // Y = X + C => X = Y - C
-        match = sanitizedEq.match(/^X\s*\+\s*([\d.-]+)$/);
+        // Caso: Y = X + C => X = Y - C
+        match = sanitizedEq.match(/^X\s*\+\s*(-?[\d.]+(?:E-?\d+)?)$/);
         if (match) return finalValue - parseFloat(match[1]);
 
-        // Y = X - C => X = Y + C
-        match = sanitizedEq.match(/^X\s*-\s*([\d.-]+)$/);
+        // Caso: Y = X - C => X = Y + C
+        match = sanitizedEq.match(/^X\s*-\s*(-?[\d.]+(?:E-?\d+)?)$/);
         if (match) return finalValue + parseFloat(match[1]);
-
-        // Y = C - X => X = C - Y
-        match = sanitizedEq.match(/^([\d.-]+)\s*-\s*X$/);
-        if (match) return parseFloat(match[1]) - finalValue;
         
-        // Y = (X - C1) / C2 => X = (Y * C2) + C1
-        match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.-]+)\s*\)\s*\/\s*([\d.-]+)$/);
+        // Caso: Y = C - X => X = C - Y
+        match = sanitizedEq.match(/^(-?[\d.]+(?:E-?\d+)?)\s*-\s*X$/);
+        if (match) return parseFloat(match[1]) - finalValue;
+
+        // Caso: Y = (X - C1) / C2 => X = (Y * C2) + C1
+        match = sanitizedEq.match(/^\(\s*X\s*-\s*(-?[\d.]+(?:E-?\d+)?)\s*\)\s*\/\s*(-?[\d.]+(?:E-?\d+)?)$/);
         if (match) return (finalValue * parseFloat(match[2])) + parseFloat(match[1]);
 
         console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);
