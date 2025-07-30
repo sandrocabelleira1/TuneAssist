@@ -18,33 +18,19 @@ interface SurfacePlot3DProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel, className, ...props }: SurfacePlot3DProps) {
   const plotData = useMemo(() => {
+    // Data is now pre-sorted and remapped by the readAndCalculateMapFromBin function.
+    // We can use it directly.
     const isXNumeric = xAxis.every(v => typeof v === 'number' && isFinite(v));
     const isYNumeric = yAxis.every(v => typeof v === 'number' && isFinite(v));
 
     if (!isXNumeric || !isYNumeric) {
       return null;
     }
-    
-    const indexedX = (xAxis as number[]).map((val, index) => ({ val, index }));
-    const indexedY = (yAxis as number[]).map((val, index) => ({ val, index }));
-    
-    indexedX.sort((a, b) => a.val - b.val);
-    indexedY.sort((a, b) => a.val - b.val);
-
-    const sortedX = indexedX.map(item => item.val);
-    const sortedY = indexedY.map(item => item.val);
-
-    const sortedZ = indexedY.map(yItem => 
-        indexedX.map(xItem => {
-            const cellValue = mapData[yItem.index]?.[xItem.index];
-            return (cellValue === null || !isFinite(cellValue)) ? undefined : cellValue;
-        })
-    );
 
     return {
-      x: sortedX,
-      y: sortedY,
-      z: sortedZ,
+      x: xAxis,
+      y: yAxis,
+      z: mapData,
     };
   }, [mapData, xAxis, yAxis]);
 

@@ -1,5 +1,6 @@
+import type { XDFDefinition, AxisDimension, MapData, LogMessage, AxisData, ProcessedMap } from './types';
 
-import type { XDFDefinition, AxisDataState, AxisDimension, MapData } from './types';
+// #region Utility Functions
 
 function evaluateEquation(equation: string, value: number): number {
     if (value === null || value === undefined || isNaN(value)) {
@@ -7,53 +8,42 @@ function evaluateEquation(equation: string, value: number): number {
     }
     try {
         const sanitizedEq = equation.trim().toLowerCase().replace(/\s/g, '');
-        if (sanitizedEq === 'x') return value;
+        if (sanitizedEq === 'x' || sanitizedEq === '') return value;
 
-        // Simple expressions first for performance
-        // y = x * C
-        let match = sanitizedEq.match(/^x\*([0-9.-]+)$/);
-        if (match) return value * parseFloat(match[1]);
-        // y = x / C
-        match = sanitizedEq.match(/^x\/([0-9.-]+)$/);
-        if (match) return value / parseFloat(match[1]);
-        // y = x + C
-        match = sanitizedEq.match(/^x\+([0-9.-]+)$/);
-        if (match) return value + parseFloat(match[1]);
-        // y = x - C
-        match = sanitizedEq.match(/^x-([0-9.-]+)$/);
-        if (match) return value - parseFloat(match[1]);
+        // Use a safe evaluation method
+        const expr = sanitizedEq.replace(/x/g, `(${value.toString()})`);
 
-        // More complex but common expressions
-        // y = (x-C1)/C2
-        match = sanitizedEq.match(/^\(x-([0-9.-]+)\)\/([0-9.-]+)$/);
-        if (match) return (value - parseFloat(match[1])) / parseFloat(match[2]);
-        
-        // Fallback for other simple cases
-        const expr = equation.toLowerCase().replace(/x/g, `(${value.toString()})`);
-        if (/^[\d\s()+\-*/.]+$/.test(expr)) {
-             const result = new Function(`return ${expr}`)();
-             if (typeof result === 'number' && isFinite(result)) {
-                return result;
-            }
+        // Basic safety check
+        if (!/^[0-9().+\-*/\s]+$/.test(expr)) {
+            console.warn(`Equação potencialmente insegura ou não suportada: "${equation}". A usar o valor original.`);
+            return value;
         }
-        console.warn(`Equação não suportada "${equation}", a devolver o valor original.`);
+        
+        const result = new Function(`return ${expr}`)();
+
+        if (typeof result === 'number' && isFinite(result)) {
+            return result;
+        }
+        console.warn(`Resultado inválido da equação "${equation}" para o valor ${value}. A usar o valor original.`);
         return value;
     } catch (e) {
         console.error(`Erro ao avaliar a equação "${equation}" com o valor ${value}:`, e);
-        return value;
+        return value; // Return original value on error
     }
 }
 
 
 function invertEquation(eq: string, finalValue: number): number {
-    if (finalValue === null || isNaN(finalValue)) {
-        throw new Error('O valor final não pode ser nulo ou NaN para a inversão.');
-    }
+    // This is a simplified version and won't handle complex equations.
+    // For robust saving, a proper math parser would be needed.
     const sanitizedEq = eq.trim().toLowerCase().replace(/\s/g, '');
-    if (sanitizedEq === 'x') return finalValue;
+     if (sanitizedEq === 'x' || sanitizedEq === '') return finalValue;
+
+    // Attempt to reverse common patterns
+    let match: RegExpMatchArray | null;
 
     // y = x * C  => x = y / C
-    let match = sanitizedEq.match(/^x\*([0-9.-]+)$/);
+    match = sanitizedEq.match(/^x\*([0-9.-]+)$/);
     if (match) return finalValue / parseFloat(match[1]);
 
     // y = x / C => x = y * C
@@ -72,7 +62,7 @@ function invertEquation(eq: string, finalValue: number): number {
     match = sanitizedEq.match(/^\(x-([0-9.-]+)\)\/([0-9.-]+)$/);
     if (match) return finalValue * parseFloat(match[2]) + parseFloat(match[1]);
 
-    console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);
+    console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A escrita pode ser imprecisa.`);
     return finalValue;
 }
 
@@ -95,58 +85,62 @@ function getIsBigEndian(element: Element | null): boolean {
     return attr === '1' || attr?.toLowerCase() === 'true';
 }
 
+function getDataSize(element: Element | null, axisNode: Element | null): number {
+    const sizeBits = parseInt(getAttr(element, 'mmedelementsizebits') || getAttr(axisNode, 'elementsizebits') || '8', 10);
+    return sizeBits / 8;
+}
+
+// #endregion
+
+// #region XDF Parsing
+
 function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>): AxisDimension {
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
     const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
-
-    let defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
-
+    const defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
+    
+    // --- Case 1: Axis data is linked from another table ---
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
         if (!linkedTable) throw new Error(`Tabela de eixos vinculada com ID ${linkId} não encontrada.`);
         
-        let label = findNode(linkedTable, 'title')?.textContent?.trim() || defaultLabel;
         const zAxisOfLinkedTable = findNode(linkedTable, 'XDFAXIS[id="z"]');
         if (!zAxisOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
         
         const embeddedData = findNode(zAxisOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA');
         if (!embeddedData) throw new Error(`Dados embutidos não encontrados no eixo Z da tabela vinculada ${linkId}`);
         
-        const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || getAttr(zAxisOfLinkedTable, 'elementsizebits') || '16', 10);
-        
         return {
-            isLinked: true,
-            label: label,
+            label: findNode(linkedTable, 'title')?.textContent?.trim() || defaultLabel,
             count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || `${indexcount}` || '0', 10),
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
-            dataSize: dataSizeBits / 8,
+            dataSize: getDataSize(embeddedData, zAxisOfLinkedTable),
             isBigEndian: getIsBigEndian(embeddedData),
             equation: getAttr(findNode(zAxisOfLinkedTable, 'math', 'MATH'), 'equation') || 'X',
             decimalpl: parseInt(findNode(zAxisOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
         };
     }
     
+    // --- Case 2: Axis data is embedded directly in the axis definition ---
     const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
     if (sourceEmbeddedData && getAttr(sourceEmbeddedData, 'mmedaddress')) {
-        const dataSizeBits = parseInt(getAttr(sourceEmbeddedData, 'mmedelementsizebits') || getAttr(axisNode, 'elementsizebits') || '16', 10);
         return {
-            isLinked: false,
             label: defaultLabel,
             count: parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || getAttr(sourceEmbeddedData, 'mmedrowcount') || `${indexcount}` || '0', 10),
             address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
-            dataSize: dataSizeBits / 8,
+            dataSize: getDataSize(sourceEmbeddedData, axisNode),
             isBigEndian: getIsBigEndian(sourceEmbeddedData),
             equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
         };
     }
     
+    // --- Case 3: Axis uses hardcoded text labels ---
     const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
     if (labels.length > 0) {
         return {
-            isLinked: false,
             label: defaultLabel,
             count: labels.length || indexcount,
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
@@ -154,11 +148,12 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    return { 
-        count: indexcount, 
-        label: defaultLabel, 
-        decimalpl: 1,
+    // --- Fallback ---
+    return {
+        count: indexcount,
+        label: defaultLabel,
         equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
+        decimalpl: 1,
     };
 }
 
@@ -204,15 +199,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             if (xAxisDef.count === 0 || yAxisDef.count === 0) return;
             
-            const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || getAttr(zAxisNode, 'elementsizebits') || '8', 10);
-            
             definitions.push({
                 uniqueId: uniqueId,
                 name: tableName,
                 address,
                 rows: yAxisDef.count,
                 cols: xAxisDef.count,
-                dataSize: dataSizeBits / 8,
+                dataSize: getDataSize(embeddedData, zAxisNode),
                 isBigEndian: getIsBigEndian(embeddedData),
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'X',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
@@ -229,13 +222,16 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
     return { definitions, brand };
 }
+// #endregion
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisDataState {
-    const defaultState: AxisDataState = { label: 'Indefinido', raw: [], calculated: [], address: null };
+// #region BIN Reading and Processing
+
+function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisData {
+    const defaultState: AxisData = { label: 'Indefinido', raw: [], calculated: [], address: null, originalIndices: [] };
     if (!axisDef || !binBuffer) return defaultState;
     
     if (axisDef.values) {
-        return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null };
+        return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null, originalIndices: axisDef.values.map((_, i) => i) };
     }
 
     const { address, count, dataSize = 2, equation = 'X', isBigEndian = false } = axisDef;
@@ -262,28 +258,25 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
         calculated.push(evaluateEquation(equation, rawValue));
     }
     
-    return { raw, calculated, label: axisDef.label, address };
+    return { raw, calculated, label: axisDef.label, address, originalIndices: raw.map((_, i) => i) };
 }
 
-export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition) {
-    const xAxis = readAxisFromBin(binBuffer, def.xAxisDef);
-    const yAxis = readAxisFromBin(binBuffer, def.yAxisDef);
+export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
+    let xAxis = readAxisFromBin(binBuffer, def.xAxisDef);
+    let yAxis = readAxisFromBin(binBuffer, def.yAxisDef);
 
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !def.isBigEndian;
 
     const rawMap: MapData = [];
-    const calculatedMap: MapData = [];
 
     for (let r = 0; r < def.rows; r++) {
         const rawRow: (number | null)[] = [];
-        const calcRow: (number | null)[] = [];
         for (let c = 0; c < def.cols; c++) {
             const offset = getCellAddress(def, r, c);
             
             if (offset === null || offset + def.dataSize > view.byteLength) {
                 rawRow.push(null);
-                calcRow.push(null);
                 continue;
             }
             
@@ -294,13 +287,47 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
             else rawValue = 0;
             
             rawRow.push(rawValue);
-            calcRow.push(evaluateEquation(def.equation, rawValue));
         }
         rawMap.push(rawRow);
-        calculatedMap.push(calcRow);
     }
     
-    return { calculatedMap, rawMap, axes: { x: xAxis, y: yAxis } };
+    // --- SORTING AND REMAPPING ---
+    const sortAxis = (axis: AxisData) => {
+        const indexed = axis.calculated.map((val, index) => ({ val, index }));
+        if (typeof indexed[0]?.val === 'number') {
+            indexed.sort((a, b) => (a.val as number) - (b.val as number));
+        }
+        return {
+            calculated: indexed.map(item => item.val),
+            originalIndices: indexed.map(item => item.index)
+        };
+    };
+
+    const xSortResult = sortAxis(xAxis);
+    const ySortResult = sortAxis(yAxis);
+    
+    const sortedCalculatedMap: MapData = [];
+    for (const yOrigIndex of ySortResult.originalIndices) {
+        const sortedRow: (number | null)[] = [];
+        for (const xOrigIndex of xSortResult.originalIndices) {
+            const rawValue = rawMap[yOrigIndex]?.[xOrigIndex];
+            if (rawValue !== null && rawValue !== undefined) {
+                 sortedRow.push(evaluateEquation(def.equation, rawValue));
+            } else {
+                sortedRow.push(null);
+            }
+        }
+        sortedCalculatedMap.push(sortedRow);
+    }
+
+    const sortedXAxis: AxisData = { ...xAxis, calculated: xSortResult.calculated, originalIndices: xSortResult.originalIndices };
+    const sortedYAxis: AxisData = { ...yAxis, calculated: ySortResult.calculated, originalIndices: ySortResult.originalIndices };
+
+    return { 
+        calculatedMap: sortedCalculatedMap,
+        rawMap, 
+        axes: { x: sortedXAxis, y: sortedYAxis } 
+    };
 }
 
 export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: number): number | null {
@@ -311,18 +338,10 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     return def.address + (rowIndex * rowStride) + (colIndex * def.dataSize);
 }
 
-export function recalculateRawMapFromCalculated(calculatedMap: MapData, def: XDFDefinition): MapData {
-    return calculatedMap.map(row => 
-        row.map(cellValue => {
-            if (cellValue === null || cellValue === undefined) return null;
-            try {
-                return invertEquation(def.equation, cellValue);
-            } catch (e) {
-                console.error(`Não foi possível recalcular o valor raw: ${(e as Error).message}.`);
-                return NaN;
-            }
-        })
-    );
+// Note: Saving functionality needs to be reworked to handle the sorted/remapped data.
+// It is temporarily disabled in the UI.
+export function recalculateRawMapFromCalculated(calculatedMap: MapData, def: XDFDefinition, originalAxes: {x: AxisData, y: AxisData}): MapData {
+   throw new Error("A funcionalidade de salvar precisa ser atualizada para lidar com eixos ordenados.");
 }
 
 export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMapData: MapData): ArrayBuffer {
@@ -350,3 +369,4 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMap
     }
     return newBuffer;
 }
+// #endregion

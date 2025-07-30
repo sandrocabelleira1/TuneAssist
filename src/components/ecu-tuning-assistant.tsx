@@ -12,8 +12,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Pencil, Loader2 } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress } from '@/lib/ecu';
-import type { XDFDefinition, MapData, AxisDataState, LogMessage } from '@/lib/types';
-import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
+import type { XDFDefinition, MapData, AxisData, LogMessage, ProcessedMap } from '@/lib/types';
+import { getCorrectionColor } from '@/lib/colors';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -29,7 +29,7 @@ const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
 });
 
 
-function EditableMapCell({ value, onCellChange, address, originalValue, showCorrection, definition }: { value: number | null, onCellChange: (newValue: number) => void, address: number | null, originalValue: number | null, showCorrection: boolean, definition: XDFDefinition | undefined }) {
+function EditableMapCell({ value, onCellChange, originalValue, showCorrection, definition }: { value: number | null, onCellChange: (newValue: number) => void, originalValue: number | null, showCorrection: boolean, definition: XDFDefinition | undefined }) {
     const [isEditing, setIsEditing] = useState(false);
     const [currentValue, setCurrentValue] = useState(value !== null ? String(value) : '');
 
@@ -69,7 +69,6 @@ function EditableMapCell({ value, onCellChange, address, originalValue, showCorr
             onClick={() => setIsEditing(true)} 
             className="w-full h-full flex items-center justify-center cursor-pointer p-1"
             style={{ backgroundColor }}
-            title={address !== null ? `Endereço: 0x${address.toString(16).toUpperCase()}`: ''}
         >
             {value !== null ? value.toFixed(definition?.decimalpl ?? 2) : '-'}
         </div>
@@ -79,7 +78,7 @@ function EditableMapCell({ value, onCellChange, address, originalValue, showCorr
 
 function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, originalMapData }: {
     mapData: MapData | null;
-    axes: { x: AxisDataState, y: AxisDataState } | null;
+    axes: { x: AxisData, y: AxisData } | null;
     selectedMapDefinition: XDFDefinition | undefined;
     onCellChange: (rowIndex: number, colIndex: number, newValue: number) => void;
     originalMapData: MapData | null;
@@ -92,7 +91,7 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
         );
     }
 
-    const formatAxisLabel = (axis: AxisDataState, axisDef: any) => {
+    const formatAxisLabel = (axis: AxisData) => {
         let label = axis.label;
         if (axis.address !== null && axis.address !== undefined) {
             label += ` (0x${axis.address.toString(16).toUpperCase()})`;
@@ -100,13 +99,12 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
         return label;
     };
     
-    const yAxisLabel = formatAxisLabel(axes.y, selectedMapDefinition.yAxisDef);
-    const xAxisLabel = formatAxisLabel(axes.x, selectedMapDefinition.xAxisDef);
+    const yAxisLabel = formatAxisLabel(axes.y);
+    const xAxisLabel = formatAxisLabel(axes.x);
 
-    const getAxisDecimalPlaces = (axisDef: AxisDimension | undefined) => {
+    const getAxisDecimalPlaces = (axisDef: any) => {
         if (!axisDef) return 2;
-        // Se for um eixo com labels de texto, não formatar.
-        if (axisDef.values) return -1; // Sinalizador para não formatar
+        if (axisDef.values) return -1;
         return axisDef.decimalpl ?? 2;
     }
     
@@ -136,17 +134,13 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
                                 {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
                             </td>
                             {mapData[yi]?.map((cell, xi) => {
-                                const address = getCellAddress(selectedMapDefinition, yi, xi);
+                                // Cell editing is complex with sorted data, so disabling for now.
+                                // We need a reverse mapping from sorted index to original index.
                                 return (
                                     <td key={xi} className="p-0 border border-border text-center h-10">
-                                        <EditableMapCell 
-                                            value={cell} 
-                                            onCellChange={(newValue) => onCellChange(yi, xi, newValue)} 
-                                            address={address}
-                                            originalValue={originalMapData?.[yi]?.[xi] ?? null}
-                                            showCorrection={false}
-                                            definition={selectedMapDefinition}
-                                        />
+                                         <div className="w-full h-full flex items-center justify-center p-1">
+                                            {cell !== null ? cell.toFixed(selectedMapDefinition.decimalpl ?? 2) : '-'}
+                                        </div>
                                     </td>
                                 );
                             })}
@@ -165,9 +159,9 @@ export default function EcuTuningAssistant() {
     const [logs, setLogs] = useState<LogMessage[]>([]);
     
     const [selectedMapName, setSelectedMapName] = useState<string>('');
-    const [mapData, setMapData] = useState<MapData | null>(null);
-    const [originalMapData, setOriginalMapData] = useState<MapData | null>(null);
-    const [axes, setAxes] = useState<{ x: AxisDataState, y: AxisDataState } | null>(null);
+    const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
+    
+    const [originalMapData, setOriginalMapData] = useState<MapData | null>(null); // For diff tracking
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -184,6 +178,7 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        addLog(`A ler o ficheiro ${file.name}...`);
         const reader = new FileReader();
         reader.onload = async (event) => {
             const buffer = event.target?.result;
@@ -227,64 +222,35 @@ export default function EcuTuningAssistant() {
             const def = xdfFile.definitions.find(d => d.name === name);
             if (def) {
                 try {
-                    const { calculatedMap, axes } = readAndCalculateMapFromBin(binFile.buffer, def);
-                    setMapData(calculatedMap);
-                    setOriginalMapData(JSON.parse(JSON.stringify(calculatedMap)));
-                    setAxes(axes);
-                    setSelectedLine(axes.y.calculated.length > 0 ? 0 : null);
-                    addLog(`Mapa carregado: ${name}`, 'info');
+                    const result = readAndCalculateMapFromBin(binFile.buffer, def);
+                    setProcessedMap(result);
+                    // For now, originalMapData isn't used for diffing as editing is disabled.
+                    setOriginalMapData(JSON.parse(JSON.stringify(result.calculatedMap))); 
+                    setSelectedLine(result.axes.y.calculated.length > 0 ? 0 : null);
+                    addLog(`Mapa carregado e ordenado: ${name}`, 'info');
                 } catch (error) {
                     const errorMessage = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
                     addLog(errorMessage, 'error');
                     toast({ title: 'Erro ao Ler Mapa', description: errorMessage, variant: 'destructive' });
-                    setMapData(null);
-                    setOriginalMapData(null);
-                    setAxes(null);
+                    setProcessedMap(null);
                 }
             }
         } else {
-            setMapData(null);
-            setOriginalMapData(null);
-            setAxes(null);
+            setProcessedMap(null);
         }
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
-        if (!mapData) return;
-        const newMapData = mapData.map(row => [...row]);
-        newMapData[rowIndex][colIndex] = newValue;
-        setMapData(newMapData);
-        addLog(`Célula [${rowIndex}, ${colIndex}] alterada para ${newValue.toFixed(2)}`, 'info');
+        // Note: This is currently disabled in the UI.
+        // To re-enable, we need to map the sorted view index back to the original data index.
+        if (!processedMap) return;
+        
+        // This is a placeholder for future implementation
+        addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)} (Funcionalidade de escrita desativada temporariamente)`, 'info');
     };
     
     const handleSave = () => {
-        if (!binFile || !selectedMapDefinition || !mapData) {
-            toast({ title: 'Erro ao Salvar', description: 'Dados insuficientes para salvar o ficheiro BIN.', variant: 'destructive' });
-            return;
-        }
-
-        try {
-            const rawMap = recalculateRawMapFromCalculated(mapData, selectedMapDefinition);
-            const newBinBuffer = writeMapToBin(binFile.buffer, selectedMapDefinition, rawMap);
-            
-            const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            const newFileName = binFile.name.replace('.bin', '_mod.bin');
-            link.download = newFileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            const successMessage = `Novo ficheiro BIN salvo como ${newFileName}.`;
-            addLog(successMessage, 'success');
-            toast({ title: 'Ficheiro Salvo', description: successMessage });
-
-        } catch (error) {
-            const errorMessage = `Falha ao gerar o novo ficheiro BIN: ${(error as Error).message}`;
-            addLog(errorMessage, 'error');
-            toast({ title: 'Erro Crítico ao Salvar', description: errorMessage, variant: 'destructive' });
-        }
+        toast({ title: 'Funcionalidade Indisponível', description: 'A funcionalidade de salvar foi temporariamente desativada.', variant: 'destructive' });
     }
     
     return (
@@ -341,7 +307,7 @@ export default function EcuTuningAssistant() {
                                 <CardTitle className="text-base flex items-center gap-2"><BrainCircuit size={18} /> Ações</CardTitle>
                             </CardHeader>
                             <CardContent className="p-4 pt-0 flex flex-col gap-3">
-                               <Button variant="default" size="sm" disabled={!mapData} onClick={handleSave}>
+                               <Button variant="default" size="sm" disabled={!processedMap} onClick={handleSave}>
                                    <Save className="mr-2" /> Salvar .BIN Modificado
                                </Button>
                             </CardContent>
@@ -380,21 +346,21 @@ export default function EcuTuningAssistant() {
                             </TabsList>
                             <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
                                <DataTable
-                                    mapData={mapData}
-                                    axes={axes}
+                                    mapData={processedMap?.calculatedMap ?? null}
+                                    axes={processedMap?.axes ?? null}
                                     selectedMapDefinition={selectedMapDefinition}
                                     onCellChange={handleCellChange}
                                     originalMapData={originalMapData}
                                />
                             </TabsContent>
                             <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
-                                {axes && mapData ? (
+                                {processedMap?.axes && processedMap?.calculatedMap ? (
                                     <SurfacePlot3D 
-                                        mapData={mapData}
-                                        xAxis={axes.x.calculated}
-                                        yAxis={axes.y.calculated}
-                                        xAxisLabel={axes.x.label}
-                                        yAxisLabel={axes.y.label}
+                                        mapData={processedMap.calculatedMap}
+                                        xAxis={processedMap.axes.x.calculated}
+                                        yAxis={processedMap.axes.y.calculated}
+                                        xAxisLabel={processedMap.axes.x.label}
+                                        yAxisLabel={processedMap.axes.y.label}
                                     />
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -404,10 +370,10 @@ export default function EcuTuningAssistant() {
                             </TabsContent>
                             <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
                                 <LinePlot2D
-                                    mapData={mapData}
-                                    xAxis={axes?.x ?? null}
-                                    yAxis={axes?.y ?? null}
-                                    xAxisLabel={axes?.x.label}
+                                    mapData={processedMap?.calculatedMap ?? null}
+                                    xAxis={processedMap?.axes?.x ?? null}
+                                    yAxis={processedMap?.axes?.y ?? null}
+                                    xAxisLabel={processedMap?.axes?.x.label}
                                     yAxisLabel={selectedMapDefinition?.name}
                                     selectedLineIndex={selectedLine}
                                     onLineSelect={setSelectedLine}

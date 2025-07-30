@@ -1,24 +1,23 @@
 
 
-export type AxisDataState = {
+export type AxisData = {
   label: string;
   raw: number[];
   calculated: (string | number)[];
-  address?: number | null;
+  address: number | null;
+  originalIndices: number[]; // To map sorted back to original
 };
 
 export type AxisDimension = {
-  isLinked?: boolean;
-  count: number;
   label: string;
-  address?: number | null;
+  count: number;
+  address?: number;
   dataSize?: number;
   isBigEndian?: boolean;
   equation?: string;
   decimalpl?: number;
-  values?: (string | number)[];
+  values?: (string | number)[]; // For hardcoded labels
 };
-
 
 export type XDFDefinition = {
   uniqueId: string;
@@ -32,7 +31,6 @@ export type XDFDefinition = {
   decimalpl: number;
   xAxisDef: AxisDimension;
   yAxisDef: AxisDimension;
-  isPotential?: boolean;
 };
 
 export type LogMessage = {
@@ -43,3 +41,12 @@ export type LogMessage = {
 };
 
 export type MapData = (number | null)[][];
+
+export type ProcessedMap = {
+  calculatedMap: MapData; // The sorted and calculated map
+  rawMap: MapData; // The original map as read from the BIN
+  axes: {
+    x: AxisData; // The sorted axis
+    y: AxisData; // The sorted axis
+  }
+}

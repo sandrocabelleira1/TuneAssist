@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/chart';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { MapData, AxisDataState } from '@/lib/types';
+import type { MapData, AxisData } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -28,8 +28,8 @@ import { Label } from '@/components/ui/label';
 
 interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   mapData: MapData | null;
-  xAxis: AxisDataState | null;
-  yAxis: AxisDataState | null;
+  xAxis: AxisData | null;
+  yAxis: AxisData | null;
   xAxisLabel?: string;
   yAxisLabel?: string;
   selectedLineIndex: number | null;
@@ -56,7 +56,7 @@ const xAxisTickFormatter = (value: any) => {
 
 
 const RPMSelector = ({ yAxis, selectedLineIndex, onLineSelect }: { 
-    yAxis: AxisDataState,
+    yAxis: AxisData,
     selectedLineIndex: number | null,
     onLineSelect: (index: number) => void 
 }) => {
@@ -126,7 +126,8 @@ export default function LinePlot2D({
         return { chartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
     }
 
-    preparedData.sort((a, b) => a.x - b.x);
+    // Data is already sorted by the backend
+    // preparedData.sort((a, b) => a.x - b.x);
 
     const lineDataKey = `${yAxis.label} ${yAxisTickFormatter(yAxis.calculated[selectedLineIndex])}`;
 
