@@ -51,15 +51,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         throw new Error("Nenhuma tag <XDFTABLE> ou <table> foi encontrada no ficheiro. Este não parece ser um ficheiro XDF válido.");
     }
     
-    // Create a map of all tables by their unique ID for easy lookup
-    const allTablesById = new Map<string, Element>();
-    allTableElements.forEach(tableEl => {
-        const uniqueId = getAttr(tableEl, 'uniqueid');
-        if (uniqueId) {
-            allTablesById.set(uniqueId, tableEl);
-        }
-    });
-
     const header = findNode(xmlDoc, 'XDF', 'xdfile');
     const brand = findNode(header, 'DEFAULTS', 'defaults')?.querySelector('CATEGORY')?.textContent?.split(' ')[0] || null;
 
@@ -78,34 +69,30 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             if (isNaN(address)) return;
             
             const parseAxis = (axisNode: Element, defaultCount: number, defaultLabel: string): AxisDimension => {
-                const linkInfoNode = findNode(axisNode, 'embedinfo');
-                const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
-                
-                let sourceNode = axisNode;
-                if (linkedTableId && allTablesById.has(linkedTableId)) {
-                    const linkedTableEl = allTablesById.get(linkedTableId)!;
-                    const linkedAxisSource = findNode(linkedTableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-                    if (linkedAxisSource) {
-                        sourceNode = linkedAxisSource;
-                    }
-                }
+                 const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+                 const sourceAddr = parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16);
+                 const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
+                 const dataSize = dataSizeBits / 8;
+                 
+                 const labelNodes = axisNode.querySelectorAll('label');
+                 const explicitValues: (string | number)[] = [];
+                 if (labelNodes.length > 0) {
+                    labelNodes.forEach(labelNode => {
+                        explicitValues.push(labelNode.textContent || '');
+                    });
+                 }
 
-                const sourceEmbeddedData = findNode(sourceNode, 'embeddeddata', 'EMBEDDEDDATA');
-                const sourceAddr = parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16);
-
-                const dataSizeBits = parseInt(getAttr(sourceNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
-                const dataSize = dataSizeBits / 8;
-
-                return {
-                    count: parseInt(findNode(sourceNode, 'indexcount')?.textContent || `${defaultCount}`, 10),
+                 return {
+                    count: explicitValues.length > 0 ? explicitValues.length : parseInt(findNode(axisNode, 'indexcount')?.textContent || `${defaultCount}`, 10),
                     label: findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || defaultLabel,
                     address: !isNaN(sourceAddr) ? sourceAddr : undefined,
                     dataSize,
                     stride: dataSize,
                     isBigEndian: getIsBigEndian(sourceEmbeddedData),
-                    equation: getAttr(findNode(sourceNode, 'math', 'MATH'), 'equation') || 'X',
-                    decimalpl: parseInt(findNode(sourceNode, 'decimalpl')?.textContent || '1', 10),
-                };
+                    equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
+                    decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
+                    values: explicitValues.length > 0 ? explicitValues : undefined,
+                 };
             };
 
             const xAxisNode = findNode(tableEl, 'xaxis', 'XDFAXIS[id="x"]');
@@ -506,7 +493,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-    
 
     
