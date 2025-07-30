@@ -88,7 +88,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     return {
         isLinked: false,
         count: indexcount,
-        label: primaryUnits || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Desconhecido',
+        label: getAttr(axisNode, 'units') || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Desconhecido',
         address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
         dataSize: dataSizeBits / 8,
         stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -163,7 +163,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const dataOrganization: 'ROW_MAJOR' | 'COL_MAJOR' = dataOrganizationStr === 'COL_MAJOR' ? 'COL_MAJOR' : 'ROW_MAJOR';
             
             const colStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || `${dataSizeBits}`, 10);
-            const rowStrideBits = parseInt(getAttr(embeddedData, 'mmedrowstridebits') || `${cols * dataSizeBits}`, 10);
+            const rowStrideBits = parseInt(getAttr(embeddedData, 'mmedrowstridebits') || `${cols * colStrideBits}`, 10);
             
             definitions.push({
                 uniqueId: uniqueId,
@@ -184,6 +184,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         } catch (e) {
             if (e instanceof Error) {
                  // Silenciosamente ignorar tabelas que falham na análise
+                 console.warn(`Aviso ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${e.message}. Esta tabela será ignorada.`);
             }
         }
     });
