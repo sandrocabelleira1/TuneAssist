@@ -39,6 +39,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
+    const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
@@ -50,13 +51,12 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         if (!zAxisNodeOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
 
         const embeddedData = findNode(zAxisNodeOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA');
-        const count = parseInt(findNode(zAxisNodeOfLinkedTable, 'indexcount')?.textContent || '0', 10);
         const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
         
         return {
             isLinked: true,
-            count: count,
-            label: findNode(linkedTable, 'title')?.textContent?.trim() || 'Eixo Vinculado',
+            count: indexcount,
+            label: findNode(linkedTable, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Vinculado',
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -66,29 +66,27 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
 
-    // Lógica de parsing para eixos definidos estaticamente (não vinculados)
+    // Lógica para eixos definidos estaticamente (não vinculados, com <LABEL>)
     const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
     if (labels.length > 0) {
-        const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
         return {
             isLinked: false,
-            count: labels.length || count,
+            count: labels.length || indexcount,
             label: findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo',
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
         };
     }
     
-    // Fallback para eixos com dados embutidos mas não vinculados (raro, mas possível)
+    // Lógica para eixos com dados embutidos mas não vinculados
     const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-    const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10)
-    if (count === 0) {
-        // Retorna um objeto válido mas vazio se a contagem for 0, para ser ignorado depois
-        return { count: 0, label: 'Eixo Inválido' };
+    if (!sourceEmbeddedData || !indexcount) {
+      return { count: 0, label: 'Eixo Inválido' };
     }
+
     const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
     return {
         isLinked: false,
-        count: count,
+        count: indexcount,
         label: findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Desconhecido',
         address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
         dataSize: dataSizeBits / 8,
@@ -152,7 +150,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
             
             if (!xAxisNode || !yAxisNode) {
-                 return; // É um mapa 1D ou tabela de valores, ignorar
+                 return; // É um mapa 1D ou tabela de valores, ignorar por agora
             }
             
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
@@ -162,7 +160,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = yAxisDef.count;
             
             if (cols === 0 || rows === 0) {
-                throw new Error("Dimensões da tabela (linhas/colunas) não podem ser zero.");
+                return; // Ignorar tabelas com dimensões inválidas
             }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
@@ -177,7 +175,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 rows,
                 cols,
                 dataSize: dataSizeBits / 8,
-                colStrideBytes: dataSizeBits / 8, // Stride da coluna é o tamanho do dado
+                colStrideBytes: dataSizeBits / 8, 
                 rowStrideBytes: rowStrideBits / 8,
                 dataOrganization,
                 isBigEndian: getIsBigEndian(embeddedData),
@@ -187,8 +185,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 yAxisDef,
             });
         } catch (e) {
-            // Se as dimensões forem zero ou ocorrer outro erro de parsing, ignoramos a tabela.
-            // console.error(`Erro ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${(e as Error).message}. Esta tabela será ignorada.`);
+            // Se as dimensões forem zero ou ocorrer outro erro de parsing, ignoramos a tabela silenciosamente.
         }
     });
 
@@ -254,7 +251,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
         
         raw.push(rawValue);
         try {
-            calculated.push(equationFunc(rawValue));
+            const result = equationFunc(rawValue);
+            calculated.push(result);
         } catch (e) {
             calculated.push(rawValue);
         }
@@ -329,8 +327,10 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     }
 
     if (dataOrganization === 'COL_MAJOR') {
+        // Col-major: Avança primeiro pelas colunas
         return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
     } 
+    // Row-major (padrão): Avança primeiro pelas linhas
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
@@ -363,35 +363,47 @@ export function invertEquation(
         return finalValue;
     }
 
-    // Caso: Y = X / C  => X = Y * C
+    // Tenta resolver equações simples
+    // Y = X / C  => X = Y * C
     let match = sanitizedEq.match(/^X\s*\/\s*([\d.]+)$/);
     if (match) return finalValue * parseFloat(match[1]);
     
-    // Caso: Y = C / X  => X = C / Y
+    // Y = C / X  => X = C / Y
     match = sanitizedEq.match(/^([\d.]+)\s*\/\s*X$/);
-    if (match) return parseFloat(match[1]) / finalValue;
+    if (match) {
+      if (finalValue === 0) return Infinity; // Evita divisão por zero
+      return parseFloat(match[1]) / finalValue;
+    }
 
-    // Caso: Y = X * C  => X = Y / C
+    // Y = X * C  => X = Y / C
     match = sanitizedEq.match(/^X\s*\*\s*([\d.]+)$/);
-    if (match) return finalValue / parseFloat(match[1]);
+    if (match) {
+        const C = parseFloat(match[1]);
+        if (C === 0) return Infinity;
+        return finalValue / C;
+    }
 
-    // Caso: Y = X + C  => X = Y - C
+    // Y = X + C  => X = Y - C
     match = sanitizedEq.match(/^X\s*\+\s*([\d.]+)$/);
     if (match) return finalValue - parseFloat(match[1]);
     
-    // Caso: Y = C + X  => X = Y - C
+    // Y = C + X  => X = Y - C
     match = sanitizedEq.match(/^([\d.]+)\s*\+\s*X$/);
     if (match) return finalValue - parseFloat(match[1]);
 
-    // Caso: Y = X - C  => X = Y + C
+    // Y = X - C  => X = Y + C
     match = sanitizedEq.match(/^X\s*-\s*([\d.]+)$/);
     if (match) return finalValue + parseFloat(match[1]);
 
-    // Caso: Y = C - X  => X = C - Y
+    // Y = C - X  => X = C - Y
     match = sanitizedEq.match(/^([\d.]+)\s*-\s*X$/);
     if (match) return parseFloat(match[1]) - finalValue;
 
     // Equações com parênteses
+    // Y = (X - C1) / C2  => X = (Y * C2) + C1
+    match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\/\s*([\d.]+)$/);
+    if (match) return (finalValue * parseFloat(match[2])) + parseFloat(match[1]);
+    
     // Y = (X - C1) * C2  => X = (Y / C2) + C1
     match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\*\s*([\d.]+)$/);
     if (match) return (finalValue / parseFloat(match[2])) + parseFloat(match[1]);
