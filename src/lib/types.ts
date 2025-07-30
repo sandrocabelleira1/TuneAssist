@@ -3,7 +3,6 @@ export type AxisDataState = {
   label: string;
   raw: number[];
   calculated: (string | number)[];
-  originalIndices: number[];
 };
 
 export type AxisDimension = {

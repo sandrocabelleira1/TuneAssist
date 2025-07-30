@@ -116,9 +116,9 @@ export default function EcuTuningPage() {
             const def = xdfFile.definitions.find(d => d.name === name);
             if (def) {
                 try {
-                    const { calculatedMap, sortedAxes } = readAndCalculateMapFromBin(binFile.buffer, def);
+                    const { calculatedMap, axes } = readAndCalculateMapFromBin(binFile.buffer, def);
                     setMapData(calculatedMap);
-                    setAxes(sortedAxes);
+                    setAxes(axes);
                     addLog(`Mapa carregado: ${name}`, 'info');
                 } catch (error) {
                     addLog(`Erro ao ler o mapa do BIN: ${(error as Error).message}`, 'error');

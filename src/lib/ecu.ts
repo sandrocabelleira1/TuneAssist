@@ -39,6 +39,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
+    const titleNode = findNode(axisNode, 'title');
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
@@ -73,7 +74,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: labels.length || count,
-            label: findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo',
+            label: titleNode?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo',
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
         };
     }
@@ -88,7 +89,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     return {
         isLinked: false,
         count: count,
-        label: findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Desconhecido',
+        label: titleNode?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Desconhecido',
         address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
         dataSize: dataSizeBits / 8,
         stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -185,7 +186,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 yAxisDef,
             });
         } catch (e) {
-            console.warn(`Aviso ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${(e as Error).message}. Esta tabela será ignorada.`);
+            console.error(`Erro ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${(e as Error).message}. Esta tabela será ignorada.`);
         }
     });
 
@@ -202,7 +203,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
             label,
             raw: Array.from({ length: numValues.length }, (_, i) => i),
             calculated: numValues,
-            originalIndices: Array.from({ length: numValues.length }, (_, i) => i),
         };
     }
     
@@ -210,7 +210,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
         label,
         raw: Array.from({ length: count }, (_, i) => i + 1),
         calculated: Array.from({ length: count }, (_, i) => i + 1),
-        originalIndices: Array.from({ length: count }, (_, i) => i),
     };
 
     if (!axisDef || !binBuffer || axisDef.address === undefined || axisDef.address === null || isNaN(axisDef.address)) {
@@ -258,45 +257,17 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
             calculated.push(rawValue);
         }
     }
-    return { raw, calculated, originalIndices: Array.from({ length: calculated.length }, (_, i) => i), label };
+    return { raw, calculated, label };
 }
-
-function sortAxis(axisData: AxisDataState): AxisDataState {
-    const isNumeric = axisData.calculated.every(v => typeof v === 'number' && isFinite(v));
-    if (!isNumeric) {
-        return axisData;
-    }
-
-    const indexed = (axisData.calculated as number[]).map((value, index) => ({
-        value,
-        originalIndex: axisData.originalIndices[index],
-        originalRaw: axisData.raw[index]
-    }));
-    
-    indexed.sort((a, b) => a.value - b.value);
-
-    return {
-        ...axisData,
-        raw: indexed.map(item => item.originalRaw),
-        calculated: indexed.map(item => item.value),
-        originalIndices: indexed.map(item => item.originalIndex),
-    };
-}
-
 
 export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
-): { calculatedMap: MapData, rawMap: MapData, sortedAxes: { x: AxisDataState, y: AxisDataState } } {
-    const unsortedXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
-    const unsortedYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
-
-    const sortedXAxis = sortAxis(unsortedXAxis);
-    const sortedYAxis = sortAxis(unsortedYAxis);
-
-    const actualRows = def.yAxisDef.count;
-    const actualCols = def.xAxisDef.count;
+): { calculatedMap: MapData, rawMap: MapData, axes: { x: AxisDataState, y: AxisDataState } } {
     
+    const xAxis = readAxisFromBin(binBuffer, def.xAxisDef);
+    const yAxis = readAxisFromBin(binBuffer, def.yAxisDef);
+
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !(def.isBigEndian ?? false);
     const equation = normalizeEquation(def.equation);
@@ -308,10 +279,11 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
 
-    // 1. Ler o mapa RAW na ordem original do ficheiro BIN
-    const originalRawMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
-    for (let r = 0; r < actualRows; r++) {
-        for (let c = 0; c < actualCols; c++) {
+    const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
+    const calculatedMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
+
+    for (let r = 0; r < def.rows; r++) {
+        for (let c = 0; c < def.cols; c++) {
             const offset = getCellAddress(def, r, c);
             
             if (offset === null || offset + def.dataSize > view.byteLength) continue;
@@ -325,37 +297,23 @@ export function readAndCalculateMapFromBin(
                 } else {
                     rawValue = 0;
                 }
-                originalRawMap[r][c] = rawValue;
+                rawMap[r][c] = rawValue;
+
+                const calcResult = zEquationFunc(rawValue);
+                calculatedMap[r][c] = typeof calcResult === 'number' ? calcResult : parseFloat(calcResult as string);
+
             } catch (e) {
                 console.error(`Erro ao ler o BIN no offset ${offset}: ${(e as Error).message}`);
+                rawMap[r][c] = null;
+                calculatedMap[r][c] = null;
             }
         }
     }
     
-    // 2. Criar um novo mapa RAW ordenado de acordo com os eixos ordenados
-    // Usamos os 'originalIndices' dos eixos ordenados para saber de onde puxar os dados do mapa original.
-    const sortedRawMap = sortedYAxis.originalIndices.map(originalRowIndex => 
-        sortedXAxis.originalIndices.map(originalColIndex => originalRawMap[originalRowIndex]?.[originalColIndex] ?? null)
-    );
-    
-    // 3. Calcular o mapa final (visual) a partir do mapa RAW já ordenado.
-    const sortedCalculatedMap = sortedRawMap.map(row => 
-        row.map(cellValue => {
-            if (cellValue === null) return null;
-            try {
-                const result = zEquationFunc(cellValue);
-                // Garante que o resultado final é um número para cálculos e visualizações
-                return typeof result === 'number' ? result : parseFloat(result as string);
-            } catch {
-                return cellValue;
-            }
-        })
-    );
-
     return { 
-        calculatedMap: sortedCalculatedMap, 
-        rawMap: sortedRawMap, 
-        sortedAxes: { x: sortedXAxis, y: sortedYAxis } 
+        calculatedMap, 
+        rawMap, 
+        axes: { x: xAxis, y: yAxis } 
     };
 }
 
@@ -403,58 +361,46 @@ export function invertEquation(
         return finalValue;
     }
 
-    const simpleMatch = sanitizedEq.match(/^(X\s*([*\/+-])\s*([\d.]+))|(([\d.]+)\s*([*\/+-])\s*X)$/);
-
-    if (simpleMatch) {
-        const isXFirst = !!simpleMatch[1];
-        const op = isXFirst ? simpleMatch[2] : simpleMatch[6];
-        const valStr = isXFirst ? simpleMatch[3] : simpleMatch[5];
-        const val = parseFloat(valStr);
-
-        if(!isNaN(val)) {
-            switch (op) {
-                case '*': return finalValue / val;
-                case '/': return isXFirst ? (finalValue * val) : (val / finalValue);
-                case '+': return finalValue - val;
-                case '-': return isXFirst ? (finalValue + val) : (val - finalValue);
-            }
-        }
-    }
-
-
-    const complexMatch = sanitizedEq.match(/^\(\s*X\s*([+\-])\s*([\d.]+)\s*\)\s*([*\/])\s*([\d.]+)$/);
-    if(complexMatch) {
-        const [, innerOp, innerValStr, outerOp, outerValStr] = complexMatch;
-        const innerVal = parseFloat(innerValStr);
-        const outerVal = parseFloat(outerValStr);
-        
-        if (!isNaN(innerVal) && !isNaN(outerVal)) {
-            let result = finalValue;
-            if (outerOp === '*') result /= outerVal;
-            if (outerOp === '/') result *= outerVal;
-            if (innerOp === '+') result -= innerVal;
-            if (innerOp === '-') result += innerVal;
-            return result;
-        }
-    }
+    // Caso: Y = X / C  => X = Y * C
+    // Caso: Y = C / X  => X = C / Y
+    let match = sanitizedEq.match(/^X\s*\/\s*([\d.]+)$/);
+    if (match) return finalValue * parseFloat(match[1]);
     
-    const complexMatch2 = sanitizedEq.match(/^\(\s*([\d.]+)\s*([+\-])\s*X\s*\)\s*([*\/])\s*([\d.]+)$/);
-     if(complexMatch2) {
-        const [, innerValStr, innerOp, outerOp, outerValStr] = complexMatch2;
-        const innerVal = parseFloat(innerValStr);
-        const outerVal = parseFloat(outerValStr);
-        
-        if (!isNaN(innerVal) && !isNaN(outerVal)) {
-            let result = finalValue;
-            if (outerOp === '*') result /= outerVal;
-            if (outerOp === '/') result *= outerVal;
-            if (innerOp === '-') result = innerVal - result;
-            if (innerOp === '+') result = result - innerVal;
+    match = sanitizedEq.match(/^([\d.]+)\s*\/\s*X$/);
+    if (match) return parseFloat(match[1]) / finalValue;
 
-            return result;
-        }
-    }
+    // Caso: Y = X * C  => X = Y / C
+    match = sanitizedEq.match(/^X\s*\*\s*([\d.]+)$/);
+    if (match) return finalValue / parseFloat(match[1]);
 
+    // Caso: Y = X + C  => X = Y - C
+    match = sanitizedEq.match(/^X\s*\+\s*([\d.]+)$/);
+    if (match) return finalValue - parseFloat(match[1]);
+    
+    // Caso: Y = C + X  => X = Y - C
+    match = sanitizedEq.match(/^([\d.]+)\s*\+\s*X$/);
+    if (match) return finalValue - parseFloat(match[1]);
+
+    // Caso: Y = X - C  => X = Y + C
+    match = sanitizedEq.match(/^X\s*-\s*([\d.]+)$/);
+    if (match) return finalValue + parseFloat(match[1]);
+
+    // Caso: Y = C - X  => X = C - Y
+    match = sanitizedEq.match(/^([\d.]+)\s*-\s*X$/);
+    if (match) return parseFloat(match[1]) - finalValue;
+
+    // Equações com parênteses
+    // Y = (X - C1) * C2  => X = (Y / C2) + C1
+    match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\*\s*([\d.]+)$/);
+    if (match) return (finalValue / parseFloat(match[2])) + parseFloat(match[1]);
+    
+    // Y = (C1 - X) * C2 => X = C1 - (Y / C2)
+    match = sanitizedEq.match(/^\(\s*([\d.]+)\s*-\s*X\s*\)\s*\*\s*([\d.]+)$/);
+    if (match) return parseFloat(match[1]) - (finalValue / parseFloat(match[2]));
+    
+    // Y = (X + C1) * C2 => X = (Y / C2) - C1
+    match = sanitizedEq.match(/^\(\s*X\s*\+\s*([\d.]+)\s*\)\s*\*\s*([\d.]+)$/);
+    if (match) return (finalValue / parseFloat(match[2])) - parseFloat(match[1]);
 
     console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);
     return finalValue; // Fallback se a inversão falhar
@@ -463,27 +409,12 @@ export function invertEquation(
 export function recalculateRawMapFromCalculated(
     calculatedMap: MapData,
     def: XDFDefinition,
-    sourceAxes: { x: AxisDataState, y: AxisDataState },
 ): MapData {
-    if (!sourceAxes.x.originalIndices || !sourceAxes.y.originalIndices) {
-        throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
-    }
-    
-    const unsortedCalculatedMap: MapData = Array(def.rows).fill(null).map(() => Array(def.cols).fill(null));
-    
-    sourceAxes.y.originalIndices.forEach((originalRow, sortedRow) => {
-        sourceAxes.x.originalIndices.forEach((originalCol, sortedCol) => {
-            if(originalRow < def.rows && originalCol < def.cols) {
-                unsortedCalculatedMap[originalRow][originalCol] = calculatedMap[sortedRow][sortedCol];
-            }
-        });
-    });
-    
     const newRawMap: MapData = [];
     for (let r = 0; r < def.rows; r++) {
         const newRawRow: (number | null)[] = [];
         for (let c = 0; c < def.cols; c++) {
-            const calculatedValue = unsortedCalculatedMap[r]?.[c];
+            const calculatedValue = calculatedMap[r]?.[c];
             if (calculatedValue === null || calculatedValue === undefined) {
                 newRawRow.push(null);
                 continue;
@@ -543,5 +474,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-    
