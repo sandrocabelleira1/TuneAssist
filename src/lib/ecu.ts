@@ -175,7 +175,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             });
         } catch (e) {
             const tableName = findNode(tableEl, 'title')?.textContent?.trim() || getAttr(tableEl, 'name') || 'desconhecida';
-            console.error(`Erro ao analisar a tabela "${tableName}": ${(e as Error).message}`);
+            console.error(`Erro ao analisar a tabela "${tableName}": ${(e as Error).message}. Esta tabela será ignorada.`);
         }
     });
 
