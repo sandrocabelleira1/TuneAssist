@@ -7,6 +7,7 @@ export type AxisDataState = {
 };
 
 export type AxisDimension = {
+  isLinked?: boolean;
   count: number;
   label: string;
   address?: number | null;
@@ -18,18 +19,6 @@ export type AxisDimension = {
   values?: (string | number)[];
 };
 
-export type AxisDefinition = {
-  node: Element | null;
-  count: number;
-  label: string;
-  address?: number | null;
-  dataSize?: number;
-  stride?: number;
-  isBigEndian?: boolean;
-  equation?: string;
-  decimalpl?: number;
-  values?: (string | number)[]; // To hold explicit values from <LABEL> tags
-} | null;
 
 export type XDFDefinition = {
   uniqueId: string;

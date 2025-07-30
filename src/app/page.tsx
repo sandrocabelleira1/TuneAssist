@@ -91,14 +91,12 @@ export default function EcuTuningPage() {
 
             if (type === 'bin' && buffer instanceof ArrayBuffer) {
                 setBinFile({ name: file.name, buffer });
-                (document.getElementById('binFileName') as HTMLElement).textContent = file.name;
                 addLog(`Ficheiro BIN carregado: ${file.name}`, 'success');
             } else if (type === 'xdf' && typeof buffer === 'string') {
                  try {
                     const { definitions } = parseXDF(buffer);
                     if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     setXdfFile({ name: file.name, definitions });
-                    (document.getElementById('xdfFileName') as HTMLElement).textContent = file.name;
                     addLog(`Ficheiro XDF carregado: ${file.name} com ${definitions.length} mapas.`, 'success');
                  } catch (error) {
                     addLog(`Erro ao processar o XDF: ${(error as Error).message}`, 'error');
@@ -109,24 +107,6 @@ export default function EcuTuningPage() {
         if (type === 'xdf') reader.readAsText(file);
         else reader.readAsArrayBuffer(file);
     };
-
-    // Efeito para atualizar o seletor de mapas
-    useEffect(() => {
-        const selector = document.getElementById('mapSelector') as HTMLSelectElement;
-        if (binFile && xdfFile) {
-            selector.disabled = false;
-            selector.innerHTML = '<option value="">Selecione um mapa</option>';
-            xdfFile.definitions.forEach(def => {
-                const option = document.createElement('option');
-                option.value = def.name;
-                option.textContent = def.name;
-                selector.appendChild(option);
-            });
-        } else {
-            selector.disabled = true;
-            selector.innerHTML = '<option>Carregue BIN e XDF</option>';
-        }
-    }, [binFile, xdfFile]);
 
     // Manipulador para seleção de mapa
     const handleMapSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -152,15 +132,6 @@ export default function EcuTuningPage() {
         }
     };
     
-    // Habilitar/desabilitar botões com base no estado
-    useEffect(() => {
-        const mapSelected = !!(selectedMapName && mapData);
-        (document.getElementById('editAxesButton') as HTMLButtonElement).disabled = !mapSelected;
-        (document.getElementById('manualLogButton') as HTMLButtonElement).disabled = !mapSelected;
-        (document.getElementById('analyzeButton') as HTMLButtonElement).disabled = !mapSelected;
-        (document.getElementById('saveButton') as HTMLButtonElement).disabled = !mapSelected;
-    }, [selectedMapName, mapData]);
-
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
         if (!mapData) return;
         const newMapData = mapData.map(row => [...row]);
@@ -192,16 +163,16 @@ export default function EcuTuningPage() {
                         <h3 className="font-semibold text-lg text-blue-400 mb-3">1. Carregar Ficheiros</h3>
                         <div className="space-y-4">
                             <div>
-                               <label htmlFor="binFile" className="file-input-label" onClick={() => binInputRef.current?.click()}>
+                               <label className="file-input-label" onClick={() => binInputRef.current?.click()}>
                                     <span className="font-bold">Carregar .BIN</span>
-                                    <span className="block text-xs text-gray-400 mt-1" id="binFileName">Nenhum ficheiro selecionado</span>
+                                    <span className="block text-xs text-gray-400 mt-1">{binFile?.name ?? 'Nenhum ficheiro selecionado'}</span>
                                </label>
                                <input ref={binInputRef} type="file" id="binFile" accept=".bin" className="hidden" onChange={(e) => handleFileChange(e, 'bin')} />
                             </div>
                              <div>
-                               <label htmlFor="xdfFile" className="file-input-label" onClick={() => xdfInputRef.current?.click()}>
+                               <label className="file-input-label" onClick={() => xdfInputRef.current?.click()}>
                                     <span className="font-bold">Carregar .XDF</span>
-                                    <span className="block text-xs text-gray-400 mt-1" id="xdfFileName">Nenhum ficheiro selecionado</span>
+                                    <span className="block text-xs text-gray-400 mt-1">{xdfFile?.name ?? 'Nenhum ficheiro selecionado'}</span>
                                </label>
                                <input ref={xdfInputRef} type="file" id="xdfFile" accept=".xdf" className="hidden" onChange={(e) => handleFileChange(e, 'xdf')} />
                             </div>
@@ -210,18 +181,21 @@ export default function EcuTuningPage() {
                     
                      <div className="mb-6">
                         <h3 className="font-semibold text-lg text-blue-400 mb-3">2. Selecionar Mapa</h3>
-                         <select id="mapSelector" className="w-full bg-gray-700 text-white p-2 rounded-md disabled:opacity-50" disabled onChange={handleMapSelect} value={selectedMapName}>
-                            <option value="">Carregue BIN e XDF</option>
+                         <select id="mapSelector" className="w-full bg-gray-700 text-white p-2 rounded-md disabled:opacity-50" disabled={!binFile || !xdfFile} onChange={handleMapSelect} value={selectedMapName}>
+                            <option value="">{binFile && xdfFile ? 'Selecione um mapa' : 'Carregue BIN e XDF'}</option>
+                            {xdfFile?.definitions.map(def => (
+                                <option key={def.uniqueId} value={def.name}>{def.name}</option>
+                            ))}
                         </select>
                     </div>
 
                     <div className="mb-6">
                          <h3 className="font-semibold text-lg text-blue-400 mb-3">3. Ações e Dados de Ensaio</h3>
                          <div className="space-y-4">
-                            <button id="editAxesButton" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition-all disabled:bg-gray-500 disabled:cursor-not-allowed" disabled onClick={() => setIsEditAxesModalOpen(true)}>
+                            <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition-all disabled:bg-gray-500 disabled:cursor-not-allowed" disabled={!selectedMapName || !mapData} onClick={() => setIsEditAxesModalOpen(true)}>
                                 Editar Eixos da Tabela
                             </button>
-                            <button id="manualLogButton" className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-md transition-all disabled:bg-gray-500 disabled:cursor-not-allowed" disabled onClick={() => setIsManualLogModalOpen(true)}>
+                            <button className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-md transition-all disabled:bg-gray-500 disabled:cursor-not-allowed" disabled={!selectedMapName || !mapData} onClick={() => setIsManualLogModalOpen(true)}>
                                 Adicionar Dados do Ensaio
                             </button>
                         </div>
@@ -236,8 +210,8 @@ export default function EcuTuningPage() {
                                     (document.getElementById('aggressivenessValue') as HTMLElement).textContent = `${e.target.value}%`;
                                 }}/>
                             </div>
-                            <button id="analyzeButton" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition-all disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>Analisar e Gerar Mapa</button>
-                            <button id="saveButton" className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition-all disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>Salvar Novo .BIN</button>
+                            <button id="analyzeButton" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition-all disabled:bg-gray-500 disabled:cursor-not-allowed" disabled={!selectedMapName || !mapData}>Analisar e Gerar Mapa</button>
+                            <button id="saveButton" className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition-all disabled:bg-gray-500 disabled:cursor-not-allowed" disabled={!selectedMapName || !mapData}>Salvar Novo .BIN</button>
                         </div>
                     </div>
 
@@ -250,12 +224,12 @@ export default function EcuTuningPage() {
                              </label>
                         </div>
                         <div id="logPanel" className="log-panel">
-                             {visibleLogs.length > 0 ? visibleLogs.map(log => (
+                             {visibleLogs.length > 0 ? visibleLogs.slice().reverse().map(log => (
                                 <div key={log.id} className={`log-entry ${log.type}`}>
                                     <span className="timestamp">{log.timestamp}</span>
                                     <span className="message">{log.message}</span>
                                 </div>
-                             )).reverse() : 'Aguardando ações do utilizador...'}
+                             )) : 'Aguardando ações do utilizador...'}
                         </div>
                     </div>
                 </div>
@@ -270,7 +244,7 @@ export default function EcuTuningPage() {
                                             <th className="sticky top-0 left-0 z-20 bg-gray-700 p-2 border border-gray-600 text-left">
                                                 {selectedMapDefinition.yAxisDef.label} \ {selectedMapDefinition.xAxisDef.label}
                                             </th>
-                                            {axes.x.calculated.map((x, i) => <th key={i} className="sticky top-0 bg-gray-700 p-2 border border-gray-600">{typeof x === 'number' ? x.toFixed(0) : x}</th>)}
+                                            {axes.x.calculated.map((x, i) => <th key={i} className="sticky top-0 bg-gray-700 p-2 border border-gray-600">{typeof x === 'number' ? x.toFixed(2) : x}</th>)}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -326,19 +300,19 @@ export default function EcuTuningPage() {
             )}
             
             {/* Modal de Edição de Eixos */}
-             {isEditAxesModalOpen && (
+             {isEditAxesModalOpen && axes && (
                  <div id="editAxesModal" className="modal-backdrop">
                     <div className="modal-content">
                         <h3 className="text-xl font-bold text-white mb-4">Editar Eixos da Tabela</h3>
                         <p className="text-gray-400 mb-6">Insira os valores corretos para os eixos, separados por vírgulas.</p>
                         <div className="space-y-4">
                             <div>
-                                <label htmlFor="yAxisText" className="block mb-2 text-sm font-medium text-gray-300">Eixo Y (RPM)</label>
-                                <textarea id="yAxisText" rows="4" className="textarea-dark" defaultValue={axes?.y.calculated.join(', ')}></textarea>
+                                <label htmlFor="yAxisText" className="block mb-2 text-sm font-medium text-gray-300">Eixo Y ({axes.y.label})</label>
+                                <textarea id="yAxisText" rows="4" className="textarea-dark" defaultValue={axes.y.calculated.join(', ')}></textarea>
                             </div>
                             <div>
-                                <label htmlFor="xAxisText" className="block mb-2 text-sm font-medium text-gray-300">Eixo X (Carga/TPS)</label>
-                                 <textarea id="xAxisText" rows="4" className="textarea-dark" defaultValue={axes?.x.calculated.join(', ')}></textarea>
+                                <label htmlFor="xAxisText" className="block mb-2 text-sm font-medium text-gray-300">Eixo X ({axes.x.label})</label>
+                                 <textarea id="xAxisText" rows="4" className="textarea-dark" defaultValue={axes.x.calculated.join(', ')}></textarea>
                             </div>
                         </div>
                         <div className="mt-8 flex justify-end space-x-4">
