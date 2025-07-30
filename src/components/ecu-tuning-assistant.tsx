@@ -122,7 +122,7 @@ export default function EcuTuningAssistant() {
     const xdfInputRef = useRef<HTMLInputElement>(null);
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
-        const id = `${Date.now()}`;
+        const id = `${Date.now()}-${Math.random()}`;
         setLogs(prev => [...prev, { id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), message, type }]);
     }, []);
 
