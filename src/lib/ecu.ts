@@ -19,6 +19,7 @@ function normalizeEquation(eq: string | null | undefined): string {
     if (!eq) return 'X';
     let sanitizedEq = eq.trim().toUpperCase();
     sanitizedEq = sanitizedEq.replace(/x/g, 'X');
+    // Basic conversion of implied multiplication for safety
     sanitizedEq = sanitizedEq.replace(/(\d*\.?\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d*\.?\d+)/g, '$1*$2');
     return sanitizedEq;
 }
@@ -28,8 +29,10 @@ function getIsBigEndian(element: Element | null): boolean {
     if (attr === '0' || attr?.toLowerCase() === 'false') {
         return false;
     }
+    // Default to true if attribute is present but not "0" or "false", or if it's absent.
     return true; 
 }
+
 
 export function parseXDF(xmlString: string): { definitions: XDFDefinition[], brand: string | null } {
     if (typeof DOMParser === 'undefined') {
@@ -48,6 +51,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         throw new Error("Nenhuma tag <XDFTABLE> ou <table> foi encontrada no ficheiro. Este não parece ser um ficheiro XDF válido.");
     }
     
+    // Create a map of all tables by their unique ID for easy lookup
     const allTablesById = new Map<string, Element>();
     allTableElements.forEach(tableEl => {
         const uniqueId = getAttr(tableEl, 'uniqueid');
@@ -66,107 +70,57 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const tableName = findNode(tableEl, 'title')?.textContent?.trim() || getAttr(tableEl, 'name');
             if (!tableName) return;
             
-            let zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+            const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             if (!zAxisNode) return;
             
             const embeddedData = findNode(tableEl, 'embeddeddata', 'EMBEDDEDDATA');
-            if (!embeddedData) return;
-
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             if (isNaN(address)) return;
             
-            const parseAxis = (axisNode: Element, defaultCount: number, defaultLabel: string): AxisDimension | null => {
-                let currentNode = axisNode;
-                let finalCount = parseInt(findNode(currentNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
-                let finalLabel = findNode(currentNode, 'title')?.textContent?.trim() || findNode(currentNode, 'units')?.textContent?.trim() || getAttr(currentNode, 'title') || getAttr(currentNode, 'label') || defaultLabel;
-
-                // Loop to resolve links until we find the source data definition
-                for (let i = 0; i < 10; i++) { // safety break
-                    const linkInfoNode = findNode(currentNode, 'embedinfo');
-                    const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
-                    
-                    if (linkedTableId && allTablesById.has(linkedTableId)) {
-                        const linkedTableElement = allTablesById.get(linkedTableId)!;
-                        const linkedAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]'); // Breakpoints are usually defined on Z axis of another table
-                        if (linkedAxisNode) {
-                            currentNode = linkedAxisNode;
-                            finalCount = parseInt(findNode(currentNode, 'indexcount')?.textContent || `${finalCount}`, 10);
-                            finalLabel = findNode(currentNode, 'title')?.textContent?.trim() || findNode(currentNode, 'units')?.textContent?.trim() || getAttr(currentNode, 'title') || getAttr(currentNode, 'label') || finalLabel;
-                            continue; // Follow the link
-                        }
+            const parseAxis = (axisNode: Element, defaultCount: number, defaultLabel: string): AxisDimension => {
+                const linkInfoNode = findNode(axisNode, 'embedinfo');
+                const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
+                
+                let sourceNode = axisNode;
+                if (linkedTableId && allTablesById.has(linkedTableId)) {
+                    const linkedTableEl = allTablesById.get(linkedTableId)!;
+                    const linkedAxisSource = findNode(linkedTableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+                    if (linkedAxisSource) {
+                        sourceNode = linkedAxisSource;
                     }
-                    break; // No more links to follow
                 }
 
-                // Now `currentNode` is the source of the data definition
-                const sourceEmbeddedData = findNode(currentNode, 'embeddeddata', 'EMBEDDEDDATA');
-                if (sourceEmbeddedData) {
-                    const sourceAddr = parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16);
-                    if (isNaN(sourceAddr)) return null;
-                    
-                    const dataSizeBits = parseInt(getAttr(currentNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
-                    const dataSize = dataSizeBits / 8;
-                    const isBigEndian = getIsBigEndian(sourceEmbeddedData);
-                    const equation = getAttr(findNode(currentNode, 'math', 'MATH'), 'equation') || 'X';
-                    const decimalpl = parseInt(findNode(currentNode, 'decimalpl')?.textContent || '1', 10);
-                    
-                    return { count: finalCount, label: finalLabel, address: sourceAddr, dataSize, stride: dataSize, isBigEndian, equation, decimalpl };
-                }
+                const sourceEmbeddedData = findNode(sourceNode, 'embeddeddata', 'EMBEDDEDDATA');
+                const sourceAddr = parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16);
 
-                const valuesNodeList = currentNode.querySelectorAll(':scope > label, :scope > LABEL');
-                if (valuesNodeList.length > 0) {
-                    const values: (string | number)[] = [];
-                    valuesNodeList.forEach(ln => {
-                        const val = ln.getAttribute('value') || ln.textContent || '';
-                        const numVal = parseFloat(val);
-                        values.push(isNaN(numVal) ? val : numVal);
-                    });
-                    return { count: values.length, label: finalLabel, values };
-                }
+                const dataSizeBits = parseInt(getAttr(sourceNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
+                const dataSize = dataSizeBits / 8;
 
-                return { count: finalCount, label: finalLabel, values: Array.from({ length: finalCount }, (_, i) => i + 1) };
+                return {
+                    count: parseInt(findNode(sourceNode, 'indexcount')?.textContent || `${defaultCount}`, 10),
+                    label: findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || defaultLabel,
+                    address: !isNaN(sourceAddr) ? sourceAddr : undefined,
+                    dataSize,
+                    stride: dataSize,
+                    isBigEndian: getIsBigEndian(sourceEmbeddedData),
+                    equation: getAttr(findNode(sourceNode, 'math', 'MATH'), 'equation') || 'X',
+                    decimalpl: parseInt(findNode(sourceNode, 'decimalpl')?.textContent || '1', 10),
+                };
             };
-
 
             const xAxisNode = findNode(tableEl, 'xaxis', 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'yaxis', 'XDFAXIS[id="y"]');
             if (!xAxisNode || !yAxisNode) return;
             
-            const colsFromXDF = parseInt(getAttr(tableEl, 'cols') || '0', 10);
-            const rowsFromXDF = parseInt(getAttr(tableEl, 'rows') || '0', 10);
+            const cols = parseInt(getAttr(xAxisNode, 'indexcount') || getAttr(tableEl, 'cols') || '0', 10);
+            const rows = parseInt(getAttr(yAxisNode, 'indexcount') || getAttr(tableEl, 'rows') || '0', 10);
+            if (cols === 0 || rows === 0) return;
 
-            const xAxisDef = parseAxis(xAxisNode, colsFromXDF, 'Eixo X');
-            const yAxisDef = parseAxis(yAxisNode, rowsFromXDF, 'Eixo Y');
-
-            if (!xAxisDef || !yAxisDef) return;
+            const xAxisDef = parseAxis(xAxisNode, cols, 'Eixo X');
+            const yAxisDef = parseAxis(yAxisNode, rows, 'Eixo Y');
             
-            const rows = yAxisDef.count;
-            const cols = xAxisDef.count;
-
-            // --- Resolve Z-Axis Properties ---
-            let sourceZAxisNode = zAxisNode;
-            let finalZEquation = getAttr(findNode(sourceZAxisNode, 'math', 'MATH'), 'equation') || 'X';
-            let finalZIsBigEndian = getIsBigEndian(findNode(sourceZAxisNode, 'embeddeddata', 'EMBEDDEDDATA') || sourceZAxisNode);
-            let finalZDecimalpl = parseInt(findNode(sourceZAxisNode, 'decimalpl')?.textContent || '2', 10);
-
-            const zLinkInfo = findNode(sourceZAxisNode, 'embedinfo');
-            const zLinkedTableId = getAttr(zLinkInfo, 'linkobjid');
-            if (zLinkedTableId && allTablesById.has(zLinkedTableId)) {
-                const linkedTableElement = allTablesById.get(zLinkedTableId)!;
-                const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-                    if (linkedZAxisNode) {
-                    finalZEquation = getAttr(findNode(linkedZAxisNode, 'math', 'MATH'), 'equation') || finalZEquation;
-                    finalZIsBigEndian = getIsBigEndian(findNode(linkedZAxisNode, 'embeddeddata', 'EMBEDDEDDATA') || linkedZAxisNode);
-                    finalZDecimalpl = parseInt(findNode(linkedZAxisNode, 'decimalpl')?.textContent || `${finalZDecimalpl}`, 10);
-                }
-            }
-
-            const dataSizeBits = parseInt(getAttr(sourceZAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
+            const dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             const dataSize = dataSizeBits / 8;
-            
-            const colStrideBytes = dataSize;
-            const rowStrideBytes = cols * colStrideBytes;
-            const dataOrganization = 'ROW_MAJOR';
             
             definitions.push({
                 uniqueId: getAttr(tableEl, 'uniqueid') || tableName,
@@ -175,12 +129,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 rows,
                 cols,
                 dataSize,
-                colStrideBytes,
-                rowStrideBytes,
-                dataOrganization,
-                isBigEndian: finalZIsBigEndian,
-                equation: finalZEquation,
-                decimalpl: finalZDecimalpl,
+                colStrideBytes: dataSize,
+                rowStrideBytes: cols * dataSize,
+                dataOrganization: 'ROW_MAJOR',
+                isBigEndian: getIsBigEndian(embeddedData),
+                equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'X',
+                decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
                 xAxisDef,
                 yAxisDef,
                 isPotential: false,
@@ -328,6 +282,7 @@ export function readAndCalculateMapFromBin(
         }
     }
     
+    // Reorder the map data based on the sorted axes
     const sortedRawMap = sortedYAxis.originalIndices.map(originalRowIndex => 
         sortedXAxis.originalIndices.map(originalColIndex => originalRawMap[originalRowIndex]?.[originalColIndex] ?? null)
     );
@@ -356,9 +311,13 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     if (!def) return null;
     const { address, rowStrideBytes, colStrideBytes, dataOrganization } = def;
 
+    // NOTE: This assumes the provided rowIndex and colIndex are for the *sorted* map.
+    // A full implementation would need to map these back to original indices if needed.
+    // For now, this should be sufficient for tooltip display on the sorted map.
     if (dataOrganization === 'COL_MAJOR') {
         return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
     } 
+    // Default to ROW_MAJOR
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
@@ -388,10 +347,12 @@ export function invertEquation(
 
     const sanitizedEq = normalizeEquation(eq);
 
+    // Simple case: no transformation
     if (sanitizedEq.toUpperCase() === 'X') {
         return finalValue;
     }
 
+    // Try to solve for simple arithmetic: X * C, X / C, X + C, X - C, C - X
     const parts = sanitizedEq.split(/([*\/+-])/).map(p => p.trim());
     
     if (parts.length === 3) {
@@ -411,12 +372,13 @@ export function invertEquation(
         case '-':
             if (isXFirst) {
                 return finalValue + operand;
-            } else {
+            } else { // Case C - X
                 return operand - finalValue;
             }
       }
     }
     
+    // Try to solve for (X+C)*V
     const match = sanitizedEq.match(/\(\s*X\s*([+\-])\s*(\d+\.?\d*)\s*\)\s*([*\/])\s*(\d+\.?\d*)/);
     if(match) {
         const [, innerOp, innerValStr, outerOp, outerValStr] = match;
@@ -425,14 +387,17 @@ export function invertEquation(
         
         if (!isNaN(innerVal) && !isNaN(outerVal)) {
             let result = finalValue;
+            // Reverse outer operation first
             if (outerOp === '*') result /= outerVal;
             if (outerOp === '/') result *= outerVal;
+            // Reverse inner operation
             if (innerOp === '+') result -= innerVal;
             if (innerOp === '-') result += innerVal;
             return result;
         }
     }
 
+    // Fallback for complex equations
     throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente.`);
 }
 
@@ -446,8 +411,10 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
+    // Create a map that is "unsorted" back to its original BIN order
     const unsortedCalculatedMap: MapData = Array(calculatedMap.length).fill(null).map(() => Array(calculatedMap[0].length).fill(null));
     
+    // Place the data from the sorted view back into an "unsorted" grid
     sourceAxes.y.originalIndices.forEach((originalRow, sortedRow) => {
         sourceAxes.x.originalIndices.forEach((originalCol, sortedCol) => {
             unsortedCalculatedMap[originalRow][originalCol] = calculatedMap[sortedRow][sortedCol];
@@ -474,7 +441,7 @@ export function recalculateRawMapFromCalculated(
             } catch (e) {
                 const errorMsg = e instanceof Error ? e.message : "Erro desconhecido";
                 console.error(`Não foi possível recalcular o valor raw para a célula [${r}, ${c}]: ${errorMsg}. A utilizar NaN.`);
-                newRawRow.push(NaN);
+                newRawRow.push(NaN); // Push NaN to indicate failure for this cell
             }
         }
         newRawMap.push(newRawRow);
@@ -500,11 +467,12 @@ export function writeMapToBin(
     const actualRows = def.yAxisDef.count || rows;
     const actualCols = def.xAxisDef.count || def.cols;
 
-    const newBuffer = binBuffer.slice(0);
+    const newBuffer = binBuffer.slice(0); // Create a mutable copy
     const view = new DataView(newBuffer);
     
     const useLittleEndianForZ = !(def.isBigEndian ?? false);
     
+    // The rawMapData is now in its original, "unsorted" order, matching the BIN file layout
     const mapToWrite = [...rawMapData];
 
     for (let r = 0; r < actualRows; r++) {
@@ -538,5 +506,7 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    
 
     
