@@ -92,13 +92,24 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
         );
     }
 
+    const formatAxisLabel = (axis: AxisDataState) => {
+        let label = axis.label;
+        if (axis.address !== null && axis.address !== undefined) {
+            label += ` (0x${axis.address.toString(16).toUpperCase()})`;
+        }
+        return label;
+    };
+    
+    const yAxisLabel = formatAxisLabel(axes.y);
+    const xAxisLabel = formatAxisLabel(axes.x);
+
     return (
         <div className="overflow-auto h-full w-full">
             <table className="w-full border-collapse text-xs">
                 <thead>
                     <tr>
                         <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-left font-semibold">
-                            {axes.y.label} \ {axes.x.label}
+                            {yAxisLabel} \ {xAxisLabel}
                         </th>
                         {axes.x.calculated.map((x, i) => (
                             <th key={i} className="sticky top-0 bg-muted p-2 border border-border font-semibold">
@@ -403,3 +414,5 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+
+    

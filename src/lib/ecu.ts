@@ -209,12 +209,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisDataState {
-    const { count = 0, label = 'Eixo Desconhecido' } = axisDef || {};
+    const { count = 0, label = 'Eixo Desconhecido', address: addr } = axisDef || {};
     
     if (axisDef?.values && axisDef.values.length > 0) {
         const numValues = axisDef.values.map(v => typeof v === 'number' ? v : (parseFloat(v as string) || v) );
         return {
             label,
+            address: addr,
             raw: Array.from({ length: numValues.length }, (_, i) => i),
             calculated: numValues,
         };
@@ -222,16 +223,17 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     
     const defaultState: AxisDataState = {
         label,
+        address: addr,
         raw: [],
         calculated: [],
     };
 
-    if (!axisDef || !binBuffer || axisDef.address === undefined || axisDef.address === null || isNaN(axisDef.address)) {
+    if (!axisDef || !binBuffer || addr === undefined || addr === null || isNaN(addr)) {
         return defaultState;
     }
 
     const view = new DataView(binBuffer);
-    const { address: addr, dataSize = 2, equation: eq, isBigEndian } = axisDef;
+    const { dataSize = 2, equation: eq, isBigEndian } = axisDef;
     const useLittleEndian = !(isBigEndian ?? false);
     const equation = normalizeEquation(eq);
     const stride = axisDef.stride || dataSize;
@@ -272,7 +274,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
             calculated.push(rawValue);
         }
     }
-    return { raw, calculated, label };
+    return { raw, calculated, label, address: addr };
 }
 
 export function readAndCalculateMapFromBin(
@@ -496,5 +498,7 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    
 
     

@@ -3,6 +3,7 @@ export type AxisDataState = {
   label: string;
   raw: number[];
   calculated: (string | number)[];
+  address?: number | null;
 };
 
 export type AxisDimension = {
@@ -45,3 +46,5 @@ export type LogMessage = {
 };
 
 export type MapData = (number | null)[][];
+
+    
