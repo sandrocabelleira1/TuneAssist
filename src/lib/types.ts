@@ -1,4 +1,5 @@
 
+
 export type AxisDataState = {
   label: string;
   raw: number[];
@@ -46,5 +47,3 @@ export type LogMessage = {
 };
 
 export type MapData = (number | null)[][];
-
-    

@@ -18,7 +18,6 @@ function getAttr(element: Element | null, attrName: string): string | null {
 
 function normalizeEquation(eq: string | null | undefined): string {
     if (!eq) return 'X';
-    // Use uma expressão regular para substituir 'x' por 'X' apenas quando não estiver dentro de '0x'
     let sanitizedEq = eq.trim().replace(/(?<![0-9a-fA-F])x(?![0-9a-fA-F])/gi, 'X');
     sanitizedEq = sanitizedEq.replace(/(\d*\.?\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d*\.?\d+)/g, '$1*$2');
     return sanitizedEq;
@@ -35,7 +34,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
     const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
     
-    let primaryTitle = findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units');
+    let primaryTitle = findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Desconhecido';
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
@@ -51,13 +50,12 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         if (!embeddedData) throw new Error(`Dados embutidos não encontrados no eixo Z da tabela vinculada ${linkId}`);
         
         const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
-        // For linked axes, the count comes from the source axis, not the linked one.
         const count = indexcount;
         
         return {
             isLinked: true,
             count: count,
-            label: linkedTableTitle || primaryTitle || 'Eixo Vinculado',
+            label: linkedTableTitle || primaryTitle,
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -67,14 +65,14 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA');
+    const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
     if (sourceEmbeddedData && getAttr(sourceEmbeddedData, 'mmedaddress')) {
         const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
         const count = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || `${indexcount}` || '0', 10);
         return {
             isLinked: false,
             count: count,
-            label: primaryTitle || 'Eixo Embutido',
+            label: primaryTitle,
             address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -89,21 +87,21 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: labels.length || indexcount,
-            label: primaryTitle || 'Eixo (Label)',
+            label: primaryTitle,
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
         };
     }
     
     if (!sourceEmbeddedData || !indexcount) {
-      return { count: indexcount || 0, label: primaryTitle || 'Eixo Inválido', decimalpl: 1 };
+      return { count: indexcount || 0, label: primaryTitle, decimalpl: 1 };
     }
 
     const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
     return {
         isLinked: false,
         count: indexcount,
-        label: primaryTitle || 'Eixo Desconhecido',
+        label: primaryTitle,
         address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
         dataSize: dataSizeBits / 8,
         stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -170,7 +168,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = yAxisDef.count;
             
             if (cols === 0 || rows === 0) {
-                // Silently ignore tables with zero dimensions
                 return;
             }
 
@@ -498,7 +495,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-    
-
-    
