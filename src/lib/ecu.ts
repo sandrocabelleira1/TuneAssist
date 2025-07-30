@@ -1,3 +1,4 @@
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
 
 // #region Utility Functions
@@ -10,50 +11,16 @@ function evaluateEquation(equation: string, value: number): number {
         const sanitizedEq = equation.trim().toLowerCase().replace(/\s/g, '');
         if (sanitizedEq === 'x' || sanitizedEq === '') return value;
 
-        // More robust replacement for 'x'
         const expr = sanitizedEq.replace(/x/g, `(${value.toString()})`);
         
-        // Very basic safety check, allows numbers, x, and basic operators.
-        // Avoids using Function constructor for security.
-        if (!/^[0-9().+\-*/x\s]+$/.test(sanitizedEq)) {
-             console.warn(`Potentially unsafe or complex equation: "${equation}". Evaluating with limited capabilities.`);
-        }
-        
-        // This is a safer, but more limited evaluator.
-        // It won't handle things like Math.pow, etc. but is fine for basic arithmetic.
-        let match;
-        
-        // Order of operations is NOT handled here, it's a simple left-to-right eval.
-        // For XDFs, it's usually one or two operations, so this is often sufficient.
-        
-        // (x-a)/b
-        match = expr.match(/^\(x-([0-9.-]+)\)\/([0-9.-]+)$/);
-        if (match) return (value - parseFloat(match[1])) / parseFloat(match[2]);
-        
-        // x/a
-        match = expr.match(/^x\/([0-9.-]+)$/);
-        if (match) return value / parseFloat(match[1]);
-
-        // x*a
-        match = expr.match(/^x\*([0-9.-]+)$/);
-        if (match) return value * parseFloat(match[1]);
-
-        // x+a
-        match = expr.match(/^x\+([0-9.-]+)$/);
-        if (match) return value + parseFloat(match[1]);
-        
-        // x-a
-        match = expr.match(/^x-([0-9.-]+)$/);
-        if (match) return value - parseFloat(match[1]);
-        
-        // For more complex but still safe equations, a proper parser would be needed.
-        // For now, we return the value if the equation is not a simple pattern.
-        // console.warn(`Equation "${equation}" is too complex for the simple evaluator. Using original value.`);
-        return value;
-
+        // This is a security risk in a real application.
+        // For this specific use case, we are assuming XDF equations are safe.
+        // A proper math parser would be a safer long-term solution.
+        // eslint-disable-next-line no-new-func
+        return new Function('return ' + expr)();
     } catch (e) {
         console.error(`Error evaluating equation "${equation}" with value ${value}:`, e);
-        return value; // Return original value on error
+        return value; 
     }
 }
 
@@ -75,7 +42,19 @@ function getIsBigEndian(element: Element | null): boolean {
     return attr === '1' || attr?.toLowerCase() === 'true';
 }
 
-function getDataSize(element: Element | null, axisNode: Element | null): number {
+// Ensure address parsing handles potential BigInts from hex strings
+function parseAddress(addressStr: string | null): number {
+    if (!addressStr) return NaN;
+    // Use BigInt for parsing to handle addresses larger than Number.MAX_SAFE_INTEGER
+    // then convert to Number. This is generally safe as buffer offsets won't exceed this.
+    try {
+        return Number(BigInt(addressStr.startsWith('0x') ? addressStr : '0x' + addressStr));
+    } catch {
+        return NaN;
+    }
+}
+
+function getDataSizeInBytes(element: Element | null, axisNode: Element | null): number {
     const sizeBits = parseInt(getAttr(element, 'mmedelementsizebits') || getAttr(axisNode, 'elementsizebits') || '8', 10);
     return sizeBits / 8;
 }
@@ -91,36 +70,45 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
     const defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
     
-    // Case 1: Axis data is linked from another table
+    // Case 1: Axis data is linked from another table (correct way for breakpoints)
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
         if (!linkedTable) throw new Error(`Tabela de eixos vinculada com ID ${linkId} não encontrada.`);
         
+        // A tabela vinculada (de breakpoint) geralmente define seus dados no eixo Z
         const zAxisOfLinkedTable = findNode(linkedTable, 'XDFAXIS[id="z"]');
-        if (!zAxisOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
+        if (!zAxisOf-linked-table) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
         
         const embeddedData = findNode(zAxisOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA');
         if (!embeddedData) throw new Error(`Dados embutidos não encontrados no eixo Z da tabela vinculada ${linkId}`);
         
+        const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
+        if (isNaN(address)) throw new Error(`Endereço inválido na tabela vinculada ${linkId}`);
+
+        // O número de elementos é a contagem de colunas ou linhas da tabela de breakpoint
+        const count = parseInt(getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedrowcount') || '0', 10);
+
         return {
             label: findNode(linkedTable, 'title')?.textContent?.trim() || defaultLabel,
-            count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || `${indexcount}` || '0', 10),
-            address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
-            dataSize: getDataSize(embeddedData, zAxisOfLinkedTable),
+            count: count,
+            address: address,
+            dataSize: getDataSizeInBytes(embeddedData, zAxisOfLinkedTable),
             isBigEndian: getIsBigEndian(embeddedData),
             equation: getAttr(findNode(zAxisOfLinkedTable, 'math', 'MATH'), 'equation') || 'X',
             decimalpl: parseInt(findNode(zAxisOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
         };
     }
     
-    // Case 2: Axis data is embedded directly in the axis definition
+    // Case 2: Axis data is embedded directly in the axis definition (less common for main maps)
     const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
-    if (sourceEmbeddedData && getAttr(sourceEmbeddedData, 'mmedaddress')) {
+    const sourceAddress = parseAddress(getAttr(sourceEmbeddedData, 'mmedaddress'));
+    if (sourceEmbeddedData && !isNaN(sourceAddress)) {
+         const count = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || getAttr(sourceEmbeddedData, 'mmedrowcount') || `${indexcount}` || '0', 10);
         return {
             label: defaultLabel,
-            count: parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || getAttr(sourceEmbeddedData, 'mmedrowcount') || `${indexcount}` || '0', 10),
-            address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
-            dataSize: getDataSize(sourceEmbeddedData, axisNode),
+            count: count,
+            address: sourceAddress,
+            dataSize: getDataSizeInBytes(sourceEmbeddedData, axisNode),
             isBigEndian: getIsBigEndian(sourceEmbeddedData),
             equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
@@ -171,7 +159,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             if (!zAxisNode) return;
 
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
-            const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
+            const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
+            // Se a tabela não tem um endereço para seus dados Z, provavelmente é uma tabela de eixos, não um mapa principal.
             if (isNaN(address)) return;
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
@@ -181,6 +170,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
             const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap);
 
+            // Se os eixos não puderam ser definidos (sem contagem), ignore este mapa.
             if (xAxisDef.count === 0 || yAxisDef.count === 0) return;
             
             definitions.push({
@@ -189,7 +179,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 address,
                 rows: yAxisDef.count,
                 cols: xAxisDef.count,
-                dataSize: getDataSize(embeddedData, zAxisNode),
+                dataSize: getDataSizeInBytes(embeddedData, zAxisNode),
                 isBigEndian: getIsBigEndian(embeddedData),
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'X',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
@@ -230,7 +220,10 @@ function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisDa
 
     for (let i = 0; i < count; i++) {
         const offset = address + (i * dataSize);
-        if (offset + dataSize > view.byteLength) continue;
+        if (offset + dataSize > view.byteLength) {
+            console.warn(`Offset de leitura do eixo ${axisDef.label} fora dos limites do ficheiro.`);
+            continue;
+        };
 
         let rawValue;
         if (dataSize === 1) rawValue = view.getUint8(offset);
@@ -280,7 +273,6 @@ function processAndSortMap(
         if (typeof indexed[0]?.val === 'number') {
             indexed.sort((a, b) => (a.val as number) - (b.val as number));
         } else {
-             // Optional: sort alphabetically if strings, otherwise keep original order
              indexed.sort((a,b) => String(a.val).localeCompare(String(b.val)));
         }
         return {
@@ -297,7 +289,7 @@ function processAndSortMap(
         const sortedRow: (number | null)[] = [];
         for (const xOrigIndex of xSort.originalIndices) {
             const rawValue = rawMap[yOrigIndex]?.[xOrigIndex];
-            sortedRow.push(rawValue !== null ? evaluateEquation(def.equation, rawValue) : null);
+            sortedRow.push(rawValue !== null && !isNaN(rawValue) ? evaluateEquation(def.equation, rawValue) : null);
         }
         calculatedMap.push(sortedRow);
     }
@@ -322,9 +314,9 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
 export function readAndCalculateMapFromBinManual(binBuffer: ArrayBuffer, def: XDFDefinition, manualConfig: ManualAxisConfig): ProcessedMap {
     const manualToAxisDim = (manual: ManualAxisConfig['x']): AxisDimension => ({
         label: manual.label,
-        count: parseInt(manual.count),
-        address: parseInt(manual.address, 16),
-        dataSize: parseInt(manual.dataSize) / 8,
+        count: parseInt(manual.count, 10),
+        address: parseAddress(manual.address),
+        dataSize: parseInt(manual.dataSize, 10) / 8,
         isBigEndian: manual.isBigEndian === 'true',
         equation: manual.equation
     });
@@ -335,7 +327,6 @@ export function readAndCalculateMapFromBinManual(binBuffer: ArrayBuffer, def: XD
     const xAxisData = readAxisFromBin(binBuffer, xAxisDef);
     const yAxisData = readAxisFromBin(binBuffer, yAxisDef);
 
-    // Ensure the map dimensions in the definition match the manual counts
     const newDef = {...def, cols: xAxisDef.count, rows: yAxisDef.count };
 
     return processAndSortMap(binBuffer, newDef, xAxisData, yAxisData);
