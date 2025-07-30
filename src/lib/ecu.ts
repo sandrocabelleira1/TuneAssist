@@ -118,36 +118,35 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
     allTableElements.forEach(tableEl => {
         try {
-            const zAxis = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-            if (!zAxis) return;
+            let finalZAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+            if (!finalZAxisNode) return;
             
-            let finalZAxisNode = zAxis;
-            let finalZTableElement = tableEl;
-            const visited = new Set<string>(); 
-            const uniqueId = getAttr(tableEl, 'uniqueid');
-            if (uniqueId) visited.add(uniqueId);
+            let finalTableElement = tableEl;
+            const visited = new Set<string>();
+            let currentId = getAttr(tableEl, 'uniqueid');
+            if(currentId) visited.add(currentId);
 
-            let zLinkInfoNode = findNode(finalZAxisNode, 'embedinfo');
-            let zLinkedTableId = getAttr(zLinkInfoNode, 'linkobjid');
-
-            while(zLinkedTableId && allTablesById.has(zLinkedTableId) && !visited.has(zLinkedTableId)) {
-                visited.add(zLinkedTableId);
-                const parentTable = allTablesById.get(zLinkedTableId)!;
-                const parentZAxis = findNode(parentTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-                if (parentZAxis) {
-                    finalZAxisNode = parentZAxis;
-                    finalZTableElement = parentTable;
-                    zLinkInfoNode = findNode(finalZAxisNode, 'embedinfo');
-                    zLinkedTableId = getAttr(zLinkInfoNode, 'linkobjid');
+            // Chase the Z-axis links to find the definitive source of Z-axis properties
+            while (true) {
+                const linkInfoNode = findNode(finalZAxisNode, 'embedinfo');
+                const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
+                if (linkedTableId && allTablesById.has(linkedTableId) && !visited.has(linkedTableId)) {
+                    visited.add(linkedTableId);
+                    const parentTable = allTablesById.get(linkedTableId)!;
+                    const parentZAxis = findNode(parentTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+                    if (parentZAxis) {
+                        finalZAxisNode = parentZAxis;
+                        finalTableElement = parentTable;
+                    } else {
+                        break;
+                    }
                 } else {
                     break;
                 }
             }
             
-            const embeddedData = findNode(zAxis, 'embeddeddata', 'EMBEDDEDDATA');
-            if (!embeddedData) {
-                return;
-            }
+            const embeddedData = findNode(tableEl, 'embeddeddata', 'EMBEDDEDDATA');
+            if (!embeddedData) return;
             
             const tableName = findNode(tableEl, 'title')?.textContent?.trim() || getAttr(tableEl, 'name');
             if (!tableName) return;
@@ -170,7 +169,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             if (isNaN(address)) return;
 
-            const dataSizeBits = parseInt(getAttr(zAxis, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
+            const dataSizeBits = parseInt(getAttr(finalZAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             const dataSize = dataSizeBits / 8;
             
             const colStrideBytes = dataSize;
