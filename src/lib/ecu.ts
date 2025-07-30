@@ -33,7 +33,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
     const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
     
-    const primaryTitle = findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units');
+    let primaryTitle = findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units');
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
@@ -45,6 +45,8 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         if (!zAxisNodeOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
 
         const embeddedData = findNode(zAxisNodeOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA');
+        if (!embeddedData) throw new Error(`Dados embutidos não encontrados no eixo Z da tabela vinculada ${linkId}`);
+        
         const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
         const linkedTableTitle = findNode(linkedTable, 'title')?.textContent?.trim();
         const count = parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || `${indexcount}` || '0', 10);
@@ -75,7 +77,10 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     
     const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     if (!sourceEmbeddedData || !indexcount) {
-      return { count: 0, label: primaryTitle || 'Eixo Inválido', decimalpl: 1 };
+      if (!primaryTitle) {
+          primaryTitle = 'Eixo Inválido';
+      }
+      return { count: indexcount || 0, label: primaryTitle, decimalpl: 1 };
     }
 
     const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
@@ -149,7 +154,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = yAxisDef.count;
             
             if (cols === 0 || rows === 0) {
-                console.warn(`Aviso: A tabela "${tableName}" (ID: ${uniqueId}) tem dimensões zero e será ignorada.`);
+                // Silently ignore tables with zero dimensions
                 return;
             }
 
@@ -354,34 +359,34 @@ export function invertEquation(
     }
     
     // Y = (X - C1) / C2  => X = (Y * C2) + C1
-    let match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\/\s*([\d.]+)$/);
+    let match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\/\s*([\d.]+)$/i);
     if (match) return (finalValue * parseFloat(match[2])) + parseFloat(match[1]);
     
     // Y = (X - C1) * C2  => X = (Y / C2) + C1
-    match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\*\s*([\d.]+)$/);
+    match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\*\s*([\d.]+)$/i);
     if (match) return (finalValue / parseFloat(match[2])) + parseFloat(match[1]);
     
     // Y = (C1 - X) * C2 => X = C1 - (Y / C2)
-    match = sanitizedEq.match(/^\(\s*([\d.]+)\s*-\s*X\s*\)\s*\*\s*([\d.]+)$/);
+    match = sanitizedEq.match(/^\(\s*([\d.]+)\s*-\s*X\s*\)\s*\*\s*([\d.]+)$/i);
     if (match) return parseFloat(match[1]) - (finalValue / parseFloat(match[2]));
     
     // Y = (X + C1) * C2 => X = (Y / C2) - C1
-    match = sanitizedEq.match(/^\(\s*X\s*\+\s*([\d.]+)\s*\)\s*\*\s*([\d.]+)$/);
+    match = sanitizedEq.match(/^\(\s*X\s*\+\s*([\d.]+)\s*\)\s*\*\s*([\d.]+)$/i);
     if (match) return (finalValue / parseFloat(match[2])) - parseFloat(match[1]);
 
     // Y = X / C  => X = Y * C
-    match = sanitizedEq.match(/^X\s*\/\s*([\d.]+)$/);
+    match = sanitizedEq.match(/^X\s*\/\s*([\d.]+)$/i);
     if (match) return finalValue * parseFloat(match[1]);
     
     // Y = C / X  => X = C / Y
-    match = sanitizedEq.match(/^([\d.]+)\s*\/\s*X$/);
+    match = sanitizedEq.match(/^([\d.]+)\s*\/\s*X$/i);
     if (match) {
       if (finalValue === 0) return Infinity; // Evita divisão por zero
       return parseFloat(match[1]) / finalValue;
     }
 
     // Y = X * C  => X = Y / C
-    match = sanitizedEq.match(/^X\s*\*\s*([\d.]+)$/);
+    match = sanitizedEq.match(/^X\s*\*\s*([\d.]+)$/i);
     if (match) {
         const C = parseFloat(match[1]);
         if (C === 0) return Infinity;
@@ -389,19 +394,19 @@ export function invertEquation(
     }
 
     // Y = X + C  => X = Y - C
-    match = sanitizedEq.match(/^X\s*\+\s*([\d.]+)$/);
+    match = sanitizedEq.match(/^X\s*\+\s*([\d.]+)$/i);
     if (match) return finalValue - parseFloat(match[1]);
     
     // Y = C + X  => X = Y - C
-    match = sanitizedEq.match(/^([\d.]+)\s*\+\s*X$/);
+    match = sanitizedEq.match(/^([\d.]+)\s*\+\s*X$/i);
     if (match) return finalValue - parseFloat(match[1]);
 
     // Y = X - C  => X = Y + C
-    match = sanitizedEq.match(/^X\s*-\s*([\d.]+)$/);
+    match = sanitizedEq.match(/^X\s*-\s*([\d.]+)$/i);
     if (match) return finalValue + parseFloat(match[1]);
 
     // Y = C - X  => X = C - Y
-    match = sanitizedEq.match(/^([\d.]+)\s*-\s*X$/);
+    match = sanitizedEq.match(/^([\d.]+)\s*-\s*X$/i);
     if (match) return parseFloat(match[1]) - finalValue;
 
     console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);

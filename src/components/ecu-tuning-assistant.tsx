@@ -28,7 +28,7 @@ const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
 });
 
 
-function EditableMapCell({ value, onCellChange, address, originalValue, showCorrection }: { value: number | null, onCellChange: (newValue: number) => void, address: number | null, originalValue: number | null, showCorrection: boolean }) {
+function EditableMapCell({ value, onCellChange, address, originalValue, showCorrection, definition }: { value: number | null, onCellChange: (newValue: number) => void, address: number | null, originalValue: number | null, showCorrection: boolean, definition: XDFDefinition | undefined }) {
     const [isEditing, setIsEditing] = useState(false);
     const [currentValue, setCurrentValue] = useState(value !== null ? String(value) : '');
 
@@ -70,7 +70,7 @@ function EditableMapCell({ value, onCellChange, address, originalValue, showCorr
             style={{ backgroundColor }}
             title={address !== null ? `Endereço: 0x${address.toString(16).toUpperCase()}`: ''}
         >
-            {value !== null ? value.toFixed(2) : '-'}
+            {value !== null ? value.toFixed(definition?.decimalpl ?? 2) : '-'}
         </div>
     );
 }
@@ -122,6 +122,7 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
                                             address={address}
                                             originalValue={originalMapData?.[yi]?.[xi] ?? null}
                                             showCorrection={false}
+                                            definition={selectedMapDefinition}
                                         />
                                     </td>
                                 );
