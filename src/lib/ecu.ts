@@ -18,8 +18,8 @@ function getAttr(element: Element | null, attrName: string): string | null {
 
 function normalizeEquation(eq: string | null | undefined): string {
     if (!eq) return 'X';
-    // Garante que 'x' (minúsculo) seja tratado como a variável, a menos que seja parte de um número hexadecimal (ex: 0x...)
-    return eq.trim().replace(/(?<![0-9a-fA-F])x(?![0-9a-fA-F])/g, 'X');
+    // Garante que 'x' e 'X' sejam tratados como a mesma variável.
+    return eq.trim().replace(/x/gi, 'X');
 }
 
 
@@ -30,12 +30,10 @@ function evaluateEquation(equation: string, value: number): number {
     try {
         const sanitizedEq = normalizeEquation(equation);
         
-        // Substitui a variável 'X' pelo valor numérico.
-        // É mais seguro do que usar new Function() ou eval() diretamente com a string completa.
+        // Substitui a variável 'X' (maiúscula) pelo valor numérico.
         const expr = sanitizedEq.replace(/X/g, value.toString());
 
         // Usa new Function() para criar uma função que avalia a expressão matemática.
-        // Esta é uma maneira de avaliar a string como código de forma segura no contexto do navegador.
         const func = new Function(`return ${expr}`);
         const result = func();
 
@@ -120,7 +118,8 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     return { 
         count: indexcount, 
         label: units || 'Eixo Desconhecido', 
-        decimalpl: 1 
+        decimalpl: 1,
+        equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
     };
 }
 
