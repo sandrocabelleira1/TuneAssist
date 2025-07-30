@@ -50,3 +50,22 @@ export type ProcessedMap = {
     y: AxisData; // The sorted axis
   }
 }
+
+export type ManualAxisConfig = {
+  x: {
+    address: string;
+    count: string;
+    equation: string;
+    dataSize: '8' | '16';
+    isBigEndian: 'true' | 'false';
+    label: string;
+  };
+  y: {
+    address: string;
+    count: string;
+    equation: string;
+    dataSize: '8' | '16';
+    isBigEndian: 'true' | 'false';
+    label: string;
+  };
+};

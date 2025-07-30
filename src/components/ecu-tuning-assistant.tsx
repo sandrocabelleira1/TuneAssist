@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -10,13 +9,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Pencil, Loader2 } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress } from '@/lib/ecu';
-import type { XDFDefinition, MapData, AxisData, LogMessage, ProcessedMap } from '@/lib/types';
-import { getCorrectionColor } from '@/lib/colors';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Pencil, Loader2, Settings2 } from 'lucide-react';
+import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress, readAndCalculateMapFromBinManual } from '@/lib/ecu';
+import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -28,11 +29,10 @@ const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     )
 });
 
-function DataTable({ mapData, axes, selectedMapDefinition, originalMapData }: {
+function DataTable({ mapData, axes, selectedMapDefinition }: {
     mapData: MapData | null;
-    axes: { x: AxisData, y: AxisData } | null;
+    axes: { x: any, y: any } | null;
     selectedMapDefinition: XDFDefinition | undefined;
-    originalMapData: MapData | null;
 }) {
     if (!mapData || !axes || !selectedMapDefinition) {
         return (
@@ -42,26 +42,26 @@ function DataTable({ mapData, axes, selectedMapDefinition, originalMapData }: {
         );
     }
 
-    const formatAxisLabel = (axis: AxisData) => {
-        let label = axis.label;
-        if (axis.address !== null && axis.address !== undefined) {
+    const formatAxisLabel = (axis: any, axisDef: any) => {
+        let label = axis.label || 'Eixo';
+        if (axis.address) {
             label += ` (0x${axis.address.toString(16).toUpperCase()})`;
         }
         return label;
     };
     
-    const yAxisLabel = formatAxisLabel(axes.y);
-    const xAxisLabel = formatAxisLabel(axes.x);
+    const yAxisLabel = formatAxisLabel(axes.y, selectedMapDefinition.yAxisDef);
+    const xAxisLabel = formatAxisLabel(axes.x, selectedMapDefinition.xAxisDef);
 
     const getAxisDecimalPlaces = (axisDef: any) => {
         if (!axisDef) return 2;
-        if (axisDef.values) return -1; // No decimals for string labels
+        if (axisDef.values) return -1;
         return axisDef.decimalpl ?? 2;
     }
     
     const xAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.xAxisDef);
     const yAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.yAxisDef);
-
+    
     return (
         <div className="overflow-auto h-full w-full">
             <table className="w-full border-collapse text-xs">
@@ -70,7 +70,7 @@ function DataTable({ mapData, axes, selectedMapDefinition, originalMapData }: {
                         <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-left font-semibold">
                             {yAxisLabel} \ {xAxisLabel}
                         </th>
-                        {axes.x.calculated.map((x, i) => (
+                        {axes.x.calculated.map((x: any, i: number) => (
                             <th key={i} className="sticky top-0 bg-muted p-2 border border-border font-semibold">
                                 {typeof x === 'number' && xAxisDecimalPlaces !== -1 ? x.toFixed(xAxisDecimalPlaces) : x}
                             </th>
@@ -78,7 +78,7 @@ function DataTable({ mapData, axes, selectedMapDefinition, originalMapData }: {
                     </tr>
                 </thead>
                 <tbody>
-                    {axes.y.calculated.map((y, yi) => (
+                    {axes.y.calculated.map((y: any, yi: number) => (
                         <tr key={yi}>
                             <td className="sticky left-0 bg-muted p-2 border border-border font-bold text-right">
                                 {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
@@ -100,6 +100,11 @@ function DataTable({ mapData, axes, selectedMapDefinition, originalMapData }: {
     );
 }
 
+const initialManualConfig = {
+    x: { address: '', count: '', equation: '', dataSize: '16', isBigEndian: 'false', label: 'Carga' },
+    y: { address: '', count: '', equation: '', dataSize: '16', isBigEndian: 'false', label: 'RPM' },
+};
+
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
@@ -109,8 +114,9 @@ export default function EcuTuningAssistant() {
     const [selectedMapName, setSelectedMapName] = useState<string>('');
     const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
     
-    const [originalMapData, setOriginalMapData] = useState<MapData | null>(null);
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
+
+    const [manualConfig, setManualConfig] = useState<ManualAxisConfig>(initialManualConfig);
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
@@ -164,32 +170,60 @@ export default function EcuTuningAssistant() {
         e.target.value = '';
     };
 
-    const handleMapSelect = (name: string) => {
-        setSelectedMapName(name);
-        if (name && binFile && xdfFile) {
-            const def = xdfFile.definitions.find(d => d.name === name);
-            if (def) {
-                try {
-                    const result = readAndCalculateMapFromBin(binFile.buffer, def);
-                    setProcessedMap(result);
-                    setOriginalMapData(JSON.parse(JSON.stringify(result.calculatedMap))); 
-                    setSelectedLine(result.axes.y.calculated.length > 0 ? 0 : null);
-                    addLog(`Mapa carregado e ordenado: ${name}`, 'info');
-                } catch (error) {
-                    const errorMessage = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
-                    addLog(errorMessage, 'error');
-                    toast({ title: 'Erro ao Ler Mapa', description: errorMessage, variant: 'destructive' });
-                    setProcessedMap(null);
-                }
+    const processMap = (useManualConfig = false) => {
+        if (!selectedMapName || !binFile || !xdfFile) return;
+        const def = xdfFile.definitions.find(d => d.name === selectedMapName);
+        if (!def) return;
+    
+        try {
+            let result: ProcessedMap;
+            if (useManualConfig) {
+                addLog('A processar mapa com configuração manual dos eixos...', 'info');
+                result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
+            } else {
+                addLog(`A processar mapa com eixos do XDF: ${def.name}`, 'info');
+                result = readAndCalculateMapFromBin(binFile.buffer, def);
             }
-        } else {
+    
+            setProcessedMap(result);
+            setSelectedLine(result.axes.y.calculated.length > 0 ? 0 : null);
+            addLog(`Mapa carregado e ordenado: ${def.name}`, 'success');
+        } catch (error) {
+            const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
+            addLog(errorMessage, 'error');
+            toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
             setProcessedMap(null);
         }
     };
 
+    const handleMapSelect = (name: string) => {
+        setSelectedMapName(name);
+        setProcessedMap(null); // Clear previous map data
+    };
+
+    useEffect(() => {
+        if (selectedMapName && binFile && xdfFile) {
+            processMap();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedMapName, binFile, xdfFile]);
+    
+    const handleManualConfigChange = (axis: 'x' | 'y', field: keyof ManualAxisConfig['x'], value: string) => {
+        setManualConfig(prev => ({
+            ...prev,
+            [axis]: {
+                ...prev[axis],
+                [field]: value
+            }
+        }));
+    };
+
+    const handleManualRecalculate = () => {
+        processMap(true);
+    };
+
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
-        // Note: This is currently disabled in the UI.
-        addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)} (Funcionalidade de escrita desativada temporariamente)`, 'info');
+        addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)} (Funcionalidade de escrita desativada)`, 'info');
     };
     
     const handleSave = () => {
@@ -246,6 +280,42 @@ export default function EcuTuningAssistant() {
                         </Card>
 
                         <Card>
+                            <CardHeader className="p-4">
+                                <CardTitle className="text-base flex items-center gap-2"><Settings2 size={18} /> Configuração Manual dos Eixos</CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 pt-0 space-y-4">
+                                <div className="space-y-3">
+                                    <h4 className="font-semibold text-sm">Eixo Y (Linhas, ex: RPM)</h4>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Input placeholder="Endereço (ex: 8AF4)" value={manualConfig.y.address} onChange={e => handleManualConfigChange('y', 'address', e.target.value)} />
+                                        <Input placeholder="Contagem (ex: 16)" value={manualConfig.y.count} onChange={e => handleManualConfigChange('y', 'count', e.target.value)} />
+                                    </div>
+                                    <Input placeholder="Equação (ex: x)" value={manualConfig.y.equation} onChange={e => handleManualConfigChange('y', 'equation', e.target.value)} />
+                                    <RadioGroup value={manualConfig.y.dataSize} onValueChange={val => handleManualConfigChange('y', 'dataSize', val)} className="flex items-center space-x-4">
+                                        <Label>Tamanho:</Label>
+                                        <div className="flex items-center space-x-2"><RadioGroupItem value="8" id="y-8bit" /><Label htmlFor="y-8bit">8-bit</Label></div>
+                                        <div className="flex items-center space-x-2"><RadioGroupItem value="16" id="y-16bit" /><Label htmlFor="y-16bit">16-bit</Label></div>
+                                    </RadioGroup>
+                                </div>
+                                <div className="space-y-3">
+                                    <h4 className="font-semibold text-sm">Eixo X (Colunas, ex: Carga)</h4>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Input placeholder="Endereço (ex: 8B14)" value={manualConfig.x.address} onChange={e => handleManualConfigChange('x', 'address', e.target.value)} />
+                                        <Input placeholder="Contagem (ex: 16)" value={manualConfig.x.count} onChange={e => handleManualConfigChange('x', 'count', e.target.value)} />
+                                    </div>
+                                    <Input placeholder="Equação (ex: x/69.6)" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', 'equation', e.target.value)} />
+                                     <RadioGroup value={manualConfig.x.dataSize} onValueChange={val => handleManualConfigChange('x', 'dataSize', val)} className="flex items-center space-x-4">
+                                        <Label>Tamanho:</Label>
+                                        <div className="flex items-center space-x-2"><RadioGroupItem value="8" id="x-8bit" /><Label htmlFor="x-8bit">8-bit</Label></div>
+                                        <div className="flex items-center space-x-2"><RadioGroupItem value="16" id="x-16bit" /><Label htmlFor="x-16bit">16-bit</Label></div>
+                                    </RadioGroup>
+                                </div>
+                                <Button size="sm" onClick={handleManualRecalculate} disabled={!selectedMapName}>Aplicar e Recalcular Mapa</Button>
+                            </CardContent>
+                        </Card>
+
+
+                        <Card>
                              <CardHeader className="p-4">
                                 <CardTitle className="text-base flex items-center gap-2"><BrainCircuit size={18} /> Ações</CardTitle>
                             </CardHeader>
@@ -292,7 +362,6 @@ export default function EcuTuningAssistant() {
                                     mapData={processedMap?.calculatedMap ?? null}
                                     axes={processedMap?.axes ?? null}
                                     selectedMapDefinition={selectedMapDefinition}
-                                    originalMapData={originalMapData}
                                />
                             </TabsContent>
                             <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">

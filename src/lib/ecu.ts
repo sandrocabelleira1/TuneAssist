@@ -1,4 +1,4 @@
-import type { XDFDefinition, AxisDimension, MapData, LogMessage, AxisData, ProcessedMap } from './types';
+import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
 
 // #region Utility Functions
 
@@ -7,58 +7,56 @@ function evaluateEquation(equation: string, value: number): number {
         return NaN;
     }
     try {
-        // Normalize to handle both 'x' and 'X'
         const sanitizedEq = equation.trim().toLowerCase().replace(/\s/g, '');
         if (sanitizedEq === 'x' || sanitizedEq === '') return value;
 
+        // More robust replacement for 'x'
         const expr = sanitizedEq.replace(/x/g, `(${value.toString()})`);
-
-        // Basic safety check for allowed characters.
-        if (!/^[0-9().+\-*/\s]+$/.test(expr)) {
-            console.warn(`Potentially unsafe or unsupported equation: "${equation}". Using original value.`);
-            return value;
+        
+        // Very basic safety check, allows numbers, x, and basic operators.
+        // Avoids using Function constructor for security.
+        if (!/^[0-9().+\-*/x\s]+$/.test(sanitizedEq)) {
+             console.warn(`Potentially unsafe or complex equation: "${equation}". Evaluating with limited capabilities.`);
         }
         
-        // Using Function constructor for evaluation.
-        const result = new Function(`return ${expr}`)();
+        // This is a safer, but more limited evaluator.
+        // It won't handle things like Math.pow, etc. but is fine for basic arithmetic.
+        let match;
+        
+        // Order of operations is NOT handled here, it's a simple left-to-right eval.
+        // For XDFs, it's usually one or two operations, so this is often sufficient.
+        
+        // (x-a)/b
+        match = expr.match(/^\(x-([0-9.-]+)\)\/([0-9.-]+)$/);
+        if (match) return (value - parseFloat(match[1])) / parseFloat(match[2]);
+        
+        // x/a
+        match = expr.match(/^x\/([0-9.-]+)$/);
+        if (match) return value / parseFloat(match[1]);
 
-        if (typeof result === 'number' && isFinite(result)) {
-            return result;
-        }
-        console.warn(`Invalid result from equation "${equation}" for value ${value}. Using original value.`);
+        // x*a
+        match = expr.match(/^x\*([0-9.-]+)$/);
+        if (match) return value * parseFloat(match[1]);
+
+        // x+a
+        match = expr.match(/^x\+([0-9.-]+)$/);
+        if (match) return value + parseFloat(match[1]);
+        
+        // x-a
+        match = expr.match(/^x-([0-9.-]+)$/);
+        if (match) return value - parseFloat(match[1]);
+        
+        // For more complex but still safe equations, a proper parser would be needed.
+        // For now, we return the value if the equation is not a simple pattern.
+        // console.warn(`Equation "${equation}" is too complex for the simple evaluator. Using original value.`);
         return value;
+
     } catch (e) {
         console.error(`Error evaluating equation "${equation}" with value ${value}:`, e);
         return value; // Return original value on error
     }
 }
 
-
-function invertEquation(eq: string, finalValue: number): number {
-    // This is a simplified version and won't handle complex equations.
-    const sanitizedEq = eq.trim().toLowerCase().replace(/\s/g, '');
-     if (sanitizedEq === 'x' || sanitizedEq === '') return finalValue;
-
-    let match: RegExpMatchArray | null;
-
-    match = sanitizedEq.match(/^x\*([0-9.-]+)$/);
-    if (match) return finalValue / parseFloat(match[1]);
-
-    match = sanitizedEq.match(/^x\/([0-9.-]+)$/);
-    if (match) return finalValue * parseFloat(match[1]);
-
-    match = sanitizedEq.match(/^x\+([0-9.-]+)$/);
-    if (match) return finalValue - parseFloat(match[1]);
-
-    match = sanitizedEq.match(/^x-([0-9.-]+)$/);
-    if (match) return finalValue + parseFloat(match[1]);
-    
-    match = sanitizedEq.match(/^\(x-([0-9.-]+)\)\/([0-9.-]+)$/);
-    if (match) return finalValue * parseFloat(match[2]) + parseFloat(match[1]);
-
-    console.warn(`Equation "${eq}" is too complex to invert automatically. Writing may be inaccurate.`);
-    return finalValue;
-}
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
     for (const selector of selectors) {
@@ -140,8 +138,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    // Fallback
-    throw new Error('Definição de eixo não suportada ou incompleta.');
+    throw new Error(`Definição de eixo não suportada ou incompleta para: ${defaultLabel}`);
 }
 
 
@@ -250,13 +247,16 @@ function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisDa
     return { raw, calculated, label: axisDef.label, address, originalIndices };
 }
 
-export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
-    const xAxisData = readAxisFromBin(binBuffer, def.xAxisDef);
-    const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef);
 
+function processAndSortMap(
+    binBuffer: ArrayBuffer, 
+    def: XDFDefinition, 
+    xAxisData: AxisData, 
+    yAxisData: AxisData
+): ProcessedMap {
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !def.isBigEndian;
-
+    
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
 
     for (let r = 0; r < def.rows; r++) {
@@ -279,6 +279,9 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
         const indexed = axis.calculated.map((val, index) => ({ val, index }));
         if (typeof indexed[0]?.val === 'number') {
             indexed.sort((a, b) => (a.val as number) - (b.val as number));
+        } else {
+             // Optional: sort alphabetically if strings, otherwise keep original order
+             indexed.sort((a,b) => String(a.val).localeCompare(String(b.val)));
         }
         return {
             sortedValues: indexed.map(item => item.val),
@@ -309,6 +312,36 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
     };
 }
 
+
+export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
+    const xAxisData = readAxisFromBin(binBuffer, def.xAxisDef);
+    const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef);
+    return processAndSortMap(binBuffer, def, xAxisData, yAxisData);
+}
+
+export function readAndCalculateMapFromBinManual(binBuffer: ArrayBuffer, def: XDFDefinition, manualConfig: ManualAxisConfig): ProcessedMap {
+    const manualToAxisDim = (manual: ManualAxisConfig['x']): AxisDimension => ({
+        label: manual.label,
+        count: parseInt(manual.count),
+        address: parseInt(manual.address, 16),
+        dataSize: parseInt(manual.dataSize) / 8,
+        isBigEndian: manual.isBigEndian === 'true',
+        equation: manual.equation
+    });
+
+    const xAxisDef = manualToAxisDim(manualConfig.x);
+    const yAxisDef = manualToAxisDim(manualConfig.y);
+
+    const xAxisData = readAxisFromBin(binBuffer, xAxisDef);
+    const yAxisData = readAxisFromBin(binBuffer, yAxisDef);
+
+    // Ensure the map dimensions in the definition match the manual counts
+    const newDef = {...def, cols: xAxisDef.count, rows: yAxisDef.count };
+
+    return processAndSortMap(binBuffer, newDef, xAxisData, yAxisData);
+}
+
+
 export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: number): number | null {
     if (!def || rowIndex < 0 || rowIndex >= def.rows || colIndex < 0 || colIndex >= def.cols) {
         return null;
@@ -316,6 +349,7 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     const rowStride = def.cols * def.dataSize;
     return def.address + (rowIndex * rowStride) + (colIndex * def.dataSize);
 }
+
 
 export function recalculateRawMapFromCalculated(calculatedMap: MapData, def: XDFDefinition, originalAxes: {x: AxisData, y: AxisData}): MapData {
    throw new Error("A funcionalidade de salvar precisa ser atualizada para lidar com eixos ordenados.");
