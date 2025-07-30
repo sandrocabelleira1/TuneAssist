@@ -19,18 +19,26 @@ interface SurfacePlot3DProps extends React.HTMLAttributes<HTMLDivElement> {
 export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel, className, ...props }: SurfacePlot3DProps) {
   const plotData = useMemo(() => {
     // Data is now pre-sorted and remapped by the readAndCalculateMapFromBin function.
-    // We can use it directly.
     const isXNumeric = xAxis.every(v => typeof v === 'number' && isFinite(v));
     const isYNumeric = yAxis.every(v => typeof v === 'number' && isFinite(v));
 
     if (!isXNumeric || !isYNumeric) {
       return null;
     }
+    
+    // Ensure z-data (mapData) is a 2D array of numbers for plotly
+    const numericMapData = mapData.map(row => 
+        row.map(cell => {
+            const num = Number(cell);
+            return isNaN(num) ? null : num;
+        })
+    );
+
 
     return {
       x: xAxis,
       y: yAxis,
-      z: mapData,
+      z: numericMapData,
     };
   }, [mapData, xAxis, yAxis]);
 

@@ -11,6 +11,7 @@ function evaluateEquation(equation: string, value: number): number {
         const sanitizedEq = equation.trim().toLowerCase().replace(/\s/g, '');
         if (sanitizedEq === 'x' || sanitizedEq === '') return value;
 
+        // Replace case-insensitive 'x' with the value
         const expr = sanitizedEq.replace(/x/g, `(${value.toString()})`);
         
         // This is a security risk in a real application.
@@ -67,12 +68,15 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
     const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
+    
+    // Default label from the axis itself, used as a fallback
     let defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
     
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
         if (!linkedTable) throw new Error(`Tabela de eixos vinculada com ID ${linkId} não encontrada.`);
         
+        // For linked tables, the Z-axis holds the data definition
         const zAxisOfLinkedTable = findNode(linkedTable, 'XDFAXIS[id="z"]');
         if (!zAxisOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
         
@@ -82,7 +86,9 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
         if (isNaN(address)) throw new Error(`Endereço inválido na tabela vinculada ${linkId}`);
 
-        const count = parseInt(getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedrowcount') || '0', 10);
+        // Count for linked table can be on its z-axis or the original axis reference
+        const count = parseInt(getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedrowcount') || '0', 10) || indexcount;
+        if (count === 0) throw new Error(`Contagem de eixo inválida para a tabela vinculada ${linkId}`);
         
         const labelNode = findNode(linkedTable, 'title');
         const label = labelNode?.textContent?.trim() || defaultLabel;
@@ -98,6 +104,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
+    // Logic for non-linked (embedded) axes
     const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
     const sourceAddress = parseAddress(getAttr(sourceEmbeddedData, 'mmedaddress'));
     if (sourceEmbeddedData && !isNaN(sourceAddress)) {
@@ -113,6 +120,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
+    // Fallback for axes defined by <LABEL> tags (not common for dynamic data)
     const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
     if (labels.length > 0) {
         return {
@@ -149,15 +157,14 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     allTablesMap.forEach(tableEl => {
         const uniqueId = getAttr(tableEl, 'uniqueid');
         const tableName = findNode(tableEl, 'title')?.textContent?.trim();
-        if (!tableName || !uniqueId) return;
+        // We only care about tables with a Z-axis, which are the main maps.
+        const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
+        if (!tableName || !uniqueId || !zAxisNode) return;
 
         try {
-            const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
-            if (!zAxisNode) return;
-
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
-            if (isNaN(address)) return;
+            if (isNaN(address)) return; // Skip tables without a valid main map address
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
@@ -264,6 +271,7 @@ function processAndSortMap(
     
     // SORTING AND REMAPPING
     const createSortMap = (axis: AxisData) => {
+        if (!axis || !Array.isArray(axis.calculated)) return { sortedValues: [], originalIndices: [] };
         const indexed = axis.calculated.map((val, index) => ({ val, index }));
         if (typeof indexed[0]?.val === 'number') {
             indexed.sort((a, b) => (a.val as number) - (b.val as number));
@@ -321,7 +329,12 @@ export function readAndCalculateMapFromBinManual(binBuffer: ArrayBuffer, def: XD
     const xAxisDef = manualToAxisDim(manualConfig.x);
     const yAxisDef = manualToAxisDim(manualConfig.y);
     
-    if(isNaN(xAxisDef.count) || isNaN(yAxisDef.count)) throw new Error("Contagem inválida para eixos manuais.");
+    if(isNaN(xAxisDef.count) || isNaN(yAxisDef.count) || xAxisDef.count === 0 || yAxisDef.count === 0) {
+        throw new Error("Contagem inválida para eixos manuais. Deve ser um número maior que zero.");
+    }
+    if(isNaN(xAxisDef.address) || isNaN(yAxisDef.address)) {
+        throw new Error("Endereço inválido para eixos manuais. Use o formato hexadecimal (ex: 8AF4).");
+    }
 
     const xAxisData = readAxisFromBin(binBuffer, xAxisDef);
     const yAxisData = readAxisFromBin(binBuffer, yAxisDef);

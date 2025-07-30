@@ -124,7 +124,7 @@ export default function EcuTuningAssistant() {
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         const id = `${Date.now()}-${Math.random()}`;
-        setLogs(prev => [...prev, { id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), message, type }]);
+        setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), message, type }, ...prev]);
     }, []);
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.name === selectedMapName);
@@ -172,9 +172,12 @@ export default function EcuTuningAssistant() {
     };
 
     const processMap = useCallback((useManualConfig: boolean = false) => {
-        if (!selectedMapName || !binFile || !xdfFile) return;
-        const def = xdfFile.definitions.find(d => d.name === selectedMapName);
-        if (!def) return;
+        if (!selectedMapName || !binFile) return;
+        const def = xdfFile?.definitions.find(d => d.name === selectedMapName);
+        if (!def) {
+             addLog(`Definição de mapa "${selectedMapName}" não encontrada.`, 'error');
+             return;
+        }
     
         try {
             let result: ProcessedMap;
@@ -182,6 +185,10 @@ export default function EcuTuningAssistant() {
                 addLog('A processar mapa com configuração manual dos eixos...', 'info');
                 result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
             } else {
+                if (!xdfFile) {
+                    addLog('Ficheiro XDF não carregado para processamento automático.', 'error');
+                    return;
+                }
                 addLog(`A processar mapa com eixos do XDF: ${def.name}`, 'info');
                 result = readAndCalculateMapFromBin(binFile.buffer, def);
             }
@@ -193,8 +200,8 @@ export default function EcuTuningAssistant() {
             const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
             addLog(errorMessage, 'error');
             toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
-            // Não defina o mapa como nulo aqui para evitar que a tabela desapareça
-            // setProcessedMap(null); 
+            // Não defina o mapa como nulo para não esconder a UI abruptamente
+            // Apenas o erro no log e no toast será suficiente
         }
     }, [selectedMapName, binFile, xdfFile, manualConfig, addLog, toast]);
 
@@ -204,11 +211,11 @@ export default function EcuTuningAssistant() {
     };
 
     useEffect(() => {
-        if (selectedMapName && binFile && xdfFile && !isManualMode) {
+        if (selectedMapName && binFile && !isManualMode) {
             processMap(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName, binFile, xdfFile, isManualMode]);
+    }, [selectedMapName, binFile, isManualMode]);
     
     const handleManualConfigChange = (axis: 'x' | 'y', field: keyof ManualAxisConfig['x'], value: string) => {
         setManualConfig(prev => ({
@@ -340,7 +347,7 @@ export default function EcuTuningAssistant() {
                         <div className="p-2">
                              <h3 className="font-semibold text-sm mb-2 px-2">Log de Operações</h3>
                              <ScrollArea className="h-48 w-full rounded-md border p-2 font-mono text-xs">
-                                {logs.length > 0 ? logs.slice().reverse().map(log => (
+                                {logs.length > 0 ? logs.map(log => (
                                     <div key={log.id} className="flex items-start">
                                       <span className="text-muted-foreground/60 mr-2 shrink-0">{log.timestamp}</span>
                                       <span className={`break-words ${
@@ -379,8 +386,8 @@ export default function EcuTuningAssistant() {
                                         mapData={processedMap.calculatedMap}
                                         xAxis={processedMap.axes.x.calculated}
                                         yAxis={processedMap.axes.y.calculated}
-                                        xAxisLabel={processedMap.axes.x.label}
-                                        yAxisLabel={processedMap.axes.y.label}
+                                        xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
+                                        yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
                                     />
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-muted-foreground">
