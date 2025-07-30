@@ -73,7 +73,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             if (!tableName) return; // Skip tables without a name
 
             // Function to resolve a link and get the definitive table element
-            const resolveLink = (startEl: Element, idSelector: 'XDFAXIS' | 'z' | 'x' | 'y'): Element => {
+            const resolveLink = (startEl: Element, idSelector: 'z' | 'x' | 'y'): Element => {
                 const axisNode = findNode(startEl, `XDFAXIS[id="${idSelector}"]`);
                 const linkId = axisNode ? getAttr(findNode(axisNode, 'link'), 'objid') : null;
                 if (linkId && tableCatalog.has(linkId)) {
@@ -100,7 +100,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             if (isNaN(address)) return;
 
             const parseAxis = (axisNode: Element, sourceTable: Element, defaultCount: number, defaultLabel: string): AxisDimension => {
-                 const sourceEmbeddedData = findNode(sourceTable, 'embeddeddata', 'EMBEDDEDDATA');
+                 // Resolve the link for the axis's data source if it exists
+                 const dataDefinitionTable = resolveLink(sourceTable, getAttr(axisNode, 'id') as 'x' | 'y');
+                 const sourceEmbeddedData = findNode(dataDefinitionTable, 'embeddeddata', 'EMBEDDEDDATA');
                  const sourceAddr = parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16);
                  const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
                  const dataSize = dataSizeBits / 8;
@@ -491,3 +493,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    
