@@ -51,7 +51,8 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         if (!embeddedData) throw new Error(`Dados embutidos não encontrados no eixo Z da tabela vinculada ${linkId}`);
         
         const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
-        const count = parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || '0', 10);
+        // For linked axes, the count comes from the source axis, not the linked one.
+        const count = indexcount;
         
         return {
             isLinked: true,
@@ -495,3 +496,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    
