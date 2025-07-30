@@ -40,13 +40,14 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
     const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
+    const primaryUnits = getAttr(axisNode, 'units');
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
         if (!linkedTable) {
             throw new Error(`Tabela de eixos vinculada com ID ${linkId} não encontrada.`);
         }
-        // Os dados do eixo estão no eixo Z da tabela vinculada.
+        
         const zAxisNodeOfLinkedTable = findNode(linkedTable, 'XDFAXIS[id="z"]');
         if (!zAxisNodeOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
 
@@ -56,7 +57,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: true,
             count: indexcount,
-            label: findNode(linkedTable, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Vinculado',
+            label: findNode(linkedTable, 'title')?.textContent?.trim() || primaryUnits || 'Eixo Vinculado',
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -66,28 +67,26 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
 
-    // Lógica para eixos definidos estaticamente (não vinculados, com <LABEL>)
     const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
     if (labels.length > 0) {
         return {
             isLinked: false,
             count: labels.length || indexcount,
-            label: findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo',
+            label: primaryUnits || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo (Label)',
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
         };
     }
     
-    // Lógica para eixos com dados embutidos mas não vinculados
     const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     if (!sourceEmbeddedData || !indexcount) {
-      return { count: 0, label: 'Eixo Inválido' };
+      return { count: 0, label: primaryUnits || 'Eixo Inválido' };
     }
 
     const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
     return {
         isLinked: false,
         count: indexcount,
-        label: findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Desconhecido',
+        label: primaryUnits || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Desconhecido',
         address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
         dataSize: dataSizeBits / 8,
         stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -137,20 +136,20 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         try {
             const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
             if (!zAxisNode) {
-                return; // Ignorar tabelas sem eixo Z (não são mapas de dados)
+                return; 
             }
 
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             if (isNaN(address)) {
-                return; // Ignorar tabelas sem endereço de memória
+                return;
             }
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
             
             if (!xAxisNode || !yAxisNode) {
-                 return; // É um mapa 1D ou tabela de valores, ignorar por agora
+                 return; 
             }
             
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
@@ -160,7 +159,10 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = yAxisDef.count;
             
             if (cols === 0 || rows === 0) {
-                return; // Ignorar tabelas com dimensões inválidas
+                 if (tableName === "Ignition # Netral") { // Special case for this known problematic table
+                    return;
+                }
+                throw new Error(`Dimensões da tabela (linhas/colunas) não podem ser zero.`);
             }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
