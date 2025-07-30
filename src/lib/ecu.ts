@@ -150,7 +150,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
-            if (!xAxisNode || !yAxisNode) throw new Error("Eixos X ou Y não encontrados");
+            
+            // Se uma tabela não tiver eixos X ou Y (mapa 1D), ignora em vez de causar erro
+            if (!xAxisNode || !yAxisNode) {
+                 console.warn(`Tabela "${tableName}" (ID: ${uniqueId}) ignorada porque não é um mapa 2D (faltam eixos X ou Y).`);
+                 return;
+            }
             
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
             const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap);
