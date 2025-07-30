@@ -18,7 +18,6 @@ interface SurfacePlot3DProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel, className, ...props }: SurfacePlot3DProps) {
   const plotData = useMemo(() => {
-    // A 3D surface plot requires numeric axes.
     const isXNumeric = xAxis.every(v => typeof v === 'number' && isFinite(v));
     const isYNumeric = yAxis.every(v => typeof v === 'number' && isFinite(v));
 
@@ -26,22 +25,19 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
       return null;
     }
     
-    // Create indexed data for sorting
     const indexedX = (xAxis as number[]).map((val, index) => ({ val, index }));
     const indexedY = (yAxis as number[]).map((val, index) => ({ val, index }));
     
-    // Sort axes and keep original indices
     indexedX.sort((a, b) => a.val - b.val);
     indexedY.sort((a, b) => a.val - b.val);
 
     const sortedX = indexedX.map(item => item.val);
     const sortedY = indexedY.map(item => item.val);
 
-    // Reorder the Z data matrix according to the sorted axes
     const sortedZ = indexedY.map(yItem => 
         indexedX.map(xItem => {
             const cellValue = mapData[yItem.index]?.[xItem.index];
-            return (cellValue === null || !isFinite(cellValue)) ? NaN : cellValue;
+            return (cellValue === null || !isFinite(cellValue)) ? undefined : cellValue;
         })
     );
 
@@ -54,7 +50,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
 
   if (!plotData) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+      <div className="flex h-full w-full items-center justify-center text-muted-foreground bg-card rounded-lg border p-4">
         <div className="text-center p-4">
             <AlertCircle className="mx-auto h-12 w-12" />
             <p className="mt-4 font-semibold">Não é possível apresentar o gráfico 3D</p>
@@ -69,12 +65,8 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     y: plotData.y as any[],
     z: plotData.z as any[][],
     type: 'surface',
-    connectgaps: false, // Important for handling NaN
-    colorscale: [
-      [0, 'rgb(0,0,255)'],      // Blue for low values
-      [0.5, 'rgb(0,255,0)'],    // Green for mid values
-      [1, 'rgb(255,0,0)']       // Red for high values
-    ],
+    connectgaps: false,
+    colorscale: 'Viridis',
     colorbar: {
       title: 'Valor',
       tickfont: { color: 'hsl(var(--foreground))' },
@@ -98,7 +90,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
   };
 
   return (
-    <div className={cn("h-full w-full", className)} {...props}>
+    <div className={cn("h-full w-full bg-card rounded-lg border p-4", className)} {...props}>
       <Plot
         data={data}
         layout={layout}

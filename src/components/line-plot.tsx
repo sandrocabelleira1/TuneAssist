@@ -128,7 +128,7 @@ export default function LinePlot2D({
 
     preparedData.sort((a, b) => a.x - b.x);
 
-    const lineDataKey = `RPM ${yAxisTickFormatter(yAxis.calculated[selectedLineIndex])}`;
+    const lineDataKey = `${yAxis.label} ${yAxisTickFormatter(yAxis.calculated[selectedLineIndex])}`;
 
     return { chartData: preparedData, lineDataKey, error: null };
   }, [mapData, xAxis, yAxis, selectedLineIndex]);
@@ -193,7 +193,7 @@ export default function LinePlot2D({
   }
 
   return (
-    <div className={cn('h-full w-full flex', className)} {...props}>
+    <div className={cn('h-full w-full flex bg-card rounded-lg border p-4', className)} {...props}>
         <RPMSelector yAxis={yAxis} selectedLineIndex={selectedLineIndex} onLineSelect={onLineSelect} />
         <div className="flex-1 min-w-0">
             {selectedLineIndex === null ? (
@@ -201,7 +201,7 @@ export default function LinePlot2D({
                     <div>
                         <AlertCircle className="mx-auto h-12 w-12" />
                         <p className="mt-4 font-semibold">Nenhuma Linha Selecionada</p>
-                        <p className="text-sm">Clique num valor de RPM à esquerda para visualizar os seus dados.</p>
+                        <p className="text-sm">Clique num valor de {yAxis.label} à esquerda para visualizar os seus dados.</p>
                     </div>
                 </div>
             ) : error || !currentChartData || !lineDataKey ? (
@@ -255,8 +255,8 @@ export default function LinePlot2D({
                 point={editingPoint}
                 onSave={handleSavePointChange}
                 onClose={() => setEditingPoint(null)}
-                yAxisLabel={yAxisLabel}
-                xAxisLabel={xAxisLabel}
+                yAxisLabel={yAxisLabel ?? "Valor"}
+                xAxisLabel={xAxisLabel ?? "Ponto"}
             />
         )}
     </div>
@@ -277,7 +277,6 @@ function EditPointModal({ point, onSave, onClose, yAxisLabel, xAxisLabel }: {
         if (!isNaN(numValue)) {
             onSave(numValue);
         } else {
-            // Optional: show an error if the input is not a valid number
             console.error("Valor inválido");
         }
     };

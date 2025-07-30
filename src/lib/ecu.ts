@@ -31,7 +31,6 @@ function normalizeEquation(eq: string | null | undefined): string {
 // Verifica o atributo 'bigendian' e retorna um booleano
 function getIsBigEndian(element: Element | null): boolean {
     const attr = getAttr(element, 'bigendian');
-    // O padrão é little-endian, então só é big-endian se explicitamente for "1" ou "true"
     return attr === '1' || attr?.toLowerCase() === 'true';
 }
 
@@ -40,6 +39,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
     const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
+    const primaryTitle = findNode(axisNode, 'title')?.textContent?.trim();
     const primaryUnits = getAttr(axisNode, 'units');
 
     if (isLinked && linkId) {
@@ -54,11 +54,11 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         const embeddedData = findNode(zAxisNodeOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA');
         const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
         const linkedTableTitle = findNode(linkedTable, 'title')?.textContent?.trim();
+        const count = parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || '0', 10);
 
         return {
             isLinked: true,
-            // A contagem real de elementos vem do eixo Z da tabela vinculada
-            count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || `${indexcount}`, 10),
+            count: count,
             label: linkedTableTitle || primaryUnits || 'Eixo Vinculado',
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
@@ -74,21 +74,21 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: labels.length || indexcount,
-            label: primaryUnits || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo (Label)',
+            label: primaryTitle || primaryUnits || 'Eixo (Label)',
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
         };
     }
     
     const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     if (!sourceEmbeddedData || !indexcount) {
-      return { count: 0, label: primaryUnits || 'Eixo Inválido' };
+      return { count: 0, label: primaryTitle || primaryUnits || 'Eixo Inválido' };
     }
 
     const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
     return {
         isLinked: false,
         count: indexcount,
-        label: getAttr(axisNode, 'units') || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Desconhecido',
+        label: primaryTitle || getAttr(axisNode, 'units') || 'Eixo Desconhecido',
         address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
         dataSize: dataSizeBits / 8,
         stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -155,7 +155,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = yAxisDef.count;
             
             if (cols === 0 || rows === 0) {
-                 return;
+                 return; // Ignora tabelas sem dimensões válidas
             }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
@@ -207,8 +207,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     
     const defaultState: AxisDataState = {
         label,
-        raw: Array.from({ length: count }, (_, i) => i + 1),
-        calculated: Array.from({ length: count }, (_, i) => i + 1),
+        raw: [],
+        calculated: [],
     };
 
     if (!axisDef || !binBuffer || axisDef.address === undefined || axisDef.address === null || isNaN(axisDef.address)) {
@@ -246,7 +246,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
         } else if (dataSize === 2) {
             rawValue = view.getUint16(offset, useLittleEndian);
         } else {
-            rawValue = 0; // Fallback for unsupported data sizes
+            rawValue = 0;
         }
         
         raw.push(rawValue);
@@ -325,10 +325,8 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     }
 
     if (dataOrganization === 'COL_MAJOR') {
-        // Col-major: Avança primeiro pelas colunas
         return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
     } 
-    // Row-major (padrão): Avança primeiro pelas linhas
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
@@ -361,7 +359,6 @@ export function invertEquation(
         return finalValue;
     }
 
-    // Tenta resolver equações simples
     // Y = X / C  => X = Y * C
     let match = sanitizedEq.match(/^X\s*\/\s*([\d.]+)$/);
     if (match) return finalValue * parseFloat(match[1]);
@@ -397,7 +394,6 @@ export function invertEquation(
     match = sanitizedEq.match(/^([\d.]+)\s*-\s*X$/);
     if (match) return parseFloat(match[1]) - finalValue;
 
-    // Equações com parênteses
     // Y = (X - C1) / C2  => X = (Y * C2) + C1
     match = sanitizedEq.match(/^\(\s*X\s*-\s*([\d.]+)\s*\)\s*\/\s*([\d.]+)$/);
     if (match) return (finalValue * parseFloat(match[2])) + parseFloat(match[1]);
@@ -415,7 +411,7 @@ export function invertEquation(
     if (match) return (finalValue / parseFloat(match[2])) - parseFloat(match[1]);
 
     console.warn(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente. A devolver o valor original.`);
-    return finalValue; // Fallback se a inversão falhar
+    return finalValue;
 }
 
 export function recalculateRawMapFromCalculated(
