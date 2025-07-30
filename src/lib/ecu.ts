@@ -17,7 +17,8 @@ function getAttr(element: Element | null, attrName: string): string | null {
 
 function normalizeEquation(eq: string | null | undefined): string {
     if (!eq) return 'X';
-    let sanitizedEq = eq.trim().replace(/x/gi, 'X');
+    // Use uma expressão regular para substituir 'x' por 'X' apenas quando não estiver dentro de '0x'
+    let sanitizedEq = eq.trim().replace(/(?<![0-9a-fA-F])x(?![0-9a-fA-F])/gi, 'X');
     sanitizedEq = sanitizedEq.replace(/(\d*\.?\d+)([A-Z])/g, '$1*$2').replace(/([A-Z])(\d*\.?\d+)/g, '$1*$2');
     return sanitizedEq;
 }
@@ -77,10 +78,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     
     const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     if (!sourceEmbeddedData || !indexcount) {
-      if (!primaryTitle) {
-          primaryTitle = 'Eixo Inválido';
-      }
-      return { count: indexcount || 0, label: primaryTitle, decimalpl: 1 };
+      return { count: indexcount || 0, label: primaryTitle || 'Eixo Inválido', decimalpl: 1 };
     }
 
     const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
