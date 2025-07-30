@@ -200,14 +200,12 @@ export default function EcuTuningAssistant() {
             const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
             addLog(errorMessage, 'error');
             toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
-            // Não defina o mapa como nulo para não esconder a UI abruptamente
-            // Apenas o erro no log e no toast será suficiente
         }
     }, [selectedMapName, binFile, xdfFile, manualConfig, addLog, toast]);
 
     const handleMapSelect = (name: string) => {
         setSelectedMapName(name);
-        setProcessedMap(null); // Limpa dados antigos ao selecionar novo mapa
+        setProcessedMap(null); 
     };
 
     useEffect(() => {
@@ -228,11 +226,10 @@ export default function EcuTuningAssistant() {
     };
 
     const handleManualRecalculate = () => {
-        setIsManualMode(true); // Ativa o modo manual
-        processMap(true); // Processa com a configuração manual
+        setIsManualMode(true); 
+        processMap(true);
     };
     
-    // Desativa o modo manual se o mapa for trocado
     useEffect(() => {
         setIsManualMode(false);
     }, [selectedMapName]);
@@ -301,10 +298,10 @@ export default function EcuTuningAssistant() {
                             </CardHeader>
                             <CardContent className="p-4 pt-0 space-y-4">
                                 <div className="space-y-3">
-                                    <h4 className="font-semibold text-sm">Eixo Y (Linhas, ex: RPM)</h4>
+                                    <h4 className="font-semibold text-sm">Eixo Y (Linhas)</h4>
                                     <div className="grid grid-cols-2 gap-2">
                                         <Input placeholder="Endereço (ex: 8AF4)" value={manualConfig.y.address} onChange={e => handleManualConfigChange('y', 'address', e.target.value)} />
-                                        <Input placeholder="Contagem (ex: 16)" value={manualConfig.y.count} onChange={e => handleManualConfigChange('y', 'count', e.target.value)} />
+                                        <Input placeholder="Nº de Linhas" value={manualConfig.y.count} onChange={e => handleManualConfigChange('y', 'count', e.target.value)} />
                                     </div>
                                     <Input placeholder="Equação (ex: x)" value={manualConfig.y.equation} onChange={e => handleManualConfigChange('y', 'equation', e.target.value)} />
                                     <RadioGroup value={manualConfig.y.dataSize} onValueChange={val => handleManualConfigChange('y', 'dataSize', val as '8' | '16')} className="flex items-center space-x-4">
@@ -314,10 +311,10 @@ export default function EcuTuningAssistant() {
                                     </RadioGroup>
                                 </div>
                                 <div className="space-y-3">
-                                    <h4 className="font-semibold text-sm">Eixo X (Colunas, ex: Carga)</h4>
+                                    <h4 className="font-semibold text-sm">Eixo X (Colunas)</h4>
                                     <div className="grid grid-cols-2 gap-2">
                                         <Input placeholder="Endereço (ex: 8B14)" value={manualConfig.x.address} onChange={e => handleManualConfigChange('x', 'address', e.target.value)} />
-                                        <Input placeholder="Contagem (ex: 16)" value={manualConfig.x.count} onChange={e => handleManualConfigChange('x', 'count', e.target.value)} />
+                                        <Input placeholder="Nº de Colunas" value={manualConfig.x.count} onChange={e => handleManualConfigChange('x', 'count', e.target.value)} />
                                     </div>
                                     <Input placeholder="Equação (ex: x/69.6)" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', 'equation', e.target.value)} />
                                      <RadioGroup value={manualConfig.x.dataSize} onValueChange={val => handleManualConfigChange('x', 'dataSize', val as '8' | '16')} className="flex items-center space-x-4">
@@ -388,6 +385,7 @@ export default function EcuTuningAssistant() {
                                         yAxis={processedMap.axes.y.calculated}
                                         xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
                                         yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
+                                        zAxisLabel={selectedMapDefinition?.name}
                                     />
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-muted-foreground">

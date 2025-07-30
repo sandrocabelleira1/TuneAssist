@@ -14,11 +14,11 @@ interface SurfacePlot3DProps extends React.HTMLAttributes<HTMLDivElement> {
   yAxis: (string | number)[]; 
   xAxisLabel: string; 
   yAxisLabel: string;
+  zAxisLabel?: string;
 }
 
-export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel, className, ...props }: SurfacePlot3DProps) {
+export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxisLabel, zAxisLabel = 'Valor', className, ...props }: SurfacePlot3DProps) {
   const plotData = useMemo(() => {
-    // Data is now pre-sorted and remapped by the readAndCalculateMapFromBin function.
     const isXNumeric = xAxis.every(v => typeof v === 'number' && isFinite(v));
     const isYNumeric = yAxis.every(v => typeof v === 'number' && isFinite(v));
 
@@ -26,7 +26,6 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
       return null;
     }
     
-    // Ensure z-data (mapData) is a 2D array of numbers for plotly
     const numericMapData = mapData.map(row => 
         row.map(cell => {
             const num = Number(cell);
@@ -62,7 +61,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     connectgaps: false,
     colorscale: 'Viridis',
     colorbar: {
-      title: 'Valor',
+      title: zAxisLabel,
       tickfont: { color: 'hsl(var(--foreground))' },
       titlefont: { color: 'hsl(var(--foreground))' }
     }
@@ -77,7 +76,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     scene: {
       xaxis: { title: xAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
       yaxis: { title: yAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
-      zaxis: { title: 'Valor', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+      zaxis: { title: zAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
       camera: { eye: {x: 1.8, y: -1.8, z: 1.2} }
     },
     margin: { l: 0, r: 0, b: 0, t: 0 },
