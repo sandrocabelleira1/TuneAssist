@@ -55,6 +55,57 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     const brand = findNode(header, 'DEFAULTS', 'defaults')?.querySelector('CATEGORY')?.textContent?.split(' ')[0] || null;
 
     const definitions: XDFDefinition[] = [];
+    const tableCache = new Map<string, Element>();
+    allTableElements.forEach(tableEl => {
+        const uniqueId = getAttr(tableEl, 'uniqueid');
+        if (uniqueId) {
+            tableCache.set(uniqueId, tableEl);
+        }
+    });
+
+    function parseAxis(tableEl: Element, axisId: 'x' | 'y'): AxisDimension {
+        const axisNode = findNode(tableEl, `XDFAXIS[id="${axisId}"]`);
+        if (!axisNode) throw new Error(`Nó do eixo ${axisId} não encontrado.`);
+
+        const linkNode = findNode(axisNode, 'linkobjid');
+        if (linkNode) {
+            const linkedTableId = getAttr(linkNode, 'objectid');
+            const linkedAxisId = getAttr(linkNode, 'subobjectid'); // e.g., "x", "y", "z"
+            if (linkedTableId && linkedAxisId) {
+                const linkedTableEl = tableCache.get(linkedTableId);
+                if (linkedTableEl) {
+                    // Chamada recursiva para analisar o eixo da tabela ligada
+                    return parseAxis(linkedTableEl, linkedAxisId as 'x' | 'y');
+                } else {
+                    throw new Error(`Tabela ligada com uniqueid "${linkedTableId}" não encontrada.`);
+                }
+            }
+        }
+        
+        // Se não houver link, analisa a definição do próprio eixo
+        const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+        let count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
+        const labelNodes = axisNode.querySelectorAll(':scope > label');
+        const explicitValues: (string | number)[] = [];
+        if (labelNodes.length > 0) {
+            labelNodes.forEach(labelNode => {
+                const val = parseFloat(getAttr(labelNode, 'index') || '');
+                explicitValues.push(isNaN(val) ? (labelNode.textContent || '') : val);
+            });
+            count = explicitValues.length;
+        }
+
+        return {
+            count: count,
+            label: findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || (axisId === 'x' ? 'Eixo X' : 'Eixo Y'),
+            address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16) || undefined,
+            dataSize: (parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10)) / 8,
+            isBigEndian: getIsBigEndian(sourceEmbeddedData),
+            equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
+            decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
+            values: explicitValues.length > 0 ? explicitValues : undefined,
+        };
+    }
 
     allTableElements.forEach(tableEl => {
         try {
@@ -62,44 +113,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             if (!tableName) return;
 
             const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
-            if (!zAxisNode) return; // Se não houver eixo Z, não é um mapa de dados válido
+            if (!zAxisNode) return;
 
             const embeddedData = findNode(tableEl, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            if (isNaN(address)) return; // Se não houver endereço, não podemos ler
-            
-            const parseAxis = (axisId: 'x' | 'y'): AxisDimension => {
-                 const axisNode = findNode(tableEl, `XDFAXIS[id="${axisId}"]`);
-                 const altAxisNode = findNode(tableEl, axisId === 'x' ? 'xaxis' : 'yaxis');
-                 const sourceNode = axisNode || altAxisNode;
-                 if (!sourceNode) throw new Error(`Nó do eixo ${axisId} não encontrado.`);
-
-                 const sourceEmbeddedData = findNode(sourceNode, 'embeddeddata', 'EMBEDDEDDATA');
-                 
-                 let count = parseInt(findNode(sourceNode, 'indexcount')?.textContent || '0', 10);
-                 const labelNodes = sourceNode.querySelectorAll(':scope > label');
-                 const explicitValues: (string | number)[] = [];
-                 if (labelNodes.length > 0) {
-                    labelNodes.forEach(labelNode => {
-                        // Tenta obter o valor do atributo 'index' e converte para número
-                        const val = parseFloat(getAttr(labelNode, 'index') || '');
-                        // Se for um número válido, usa-o, caso contrário usa o texto do nó
-                        explicitValues.push(isNaN(val) ? (labelNode.textContent || '') : val);
-                    });
-                    count = explicitValues.length;
-                 }
-
-                 return {
-                    count: count,
-                    label: findNode(sourceNode, 'title')?.textContent?.trim() || findNode(sourceNode, 'units')?.textContent?.trim() || (axisId === 'x' ? 'Eixo X' : 'Eixo Y'),
-                    address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16) || undefined,
-                    dataSize: (parseInt(getAttr(sourceNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10)) / 8,
-                    isBigEndian: getIsBigEndian(sourceEmbeddedData),
-                    equation: getAttr(findNode(sourceNode, 'math', 'MATH'), 'equation') || 'X',
-                    decimalpl: parseInt(findNode(sourceNode, 'decimalpl')?.textContent || '1', 10),
-                    values: explicitValues.length > 0 ? explicitValues : undefined,
-                 };
-            };
+            if (isNaN(address)) return;
             
             const colsEl = findNode(tableEl, 'xaxis');
             const rowsEl = findNode(tableEl, 'yaxis');
@@ -109,8 +127,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             
             if (cols === 0 || rows === 0) return;
             
-            const xAxisDef = parseAxis('x');
-            const yAxisDef = parseAxis('y');
+            const xAxisDef = parseAxis(tableEl, 'x');
+            const yAxisDef = parseAxis(tableEl, 'y');
 
             const dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             
@@ -121,9 +139,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 rows: rows,
                 cols: cols,
                 dataSize: dataSizeBits / 8,
-                colStrideBytes: dataSizeBits / 8, // Stride simples, ajustaremos mais tarde se necessário
+                colStrideBytes: dataSizeBits / 8,
                 rowStrideBytes: (cols) * (dataSizeBits / 8),
-                dataOrganization: 'ROW_MAJOR', // Assumir ROW_MAJOR por defeito
+                dataOrganization: 'ROW_MAJOR',
                 isBigEndian: getIsBigEndian(embeddedData),
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'X',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
@@ -143,12 +161,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisDataState {
     const { count = 0, label = 'Eixo Desconhecido' } = axisDef || {};
     
-    // Se houver valores explícitos no XDF (tags <label>), usa-os diretamente
     if (axisDef?.values && axisDef.values.length > 0) {
         const numValues = axisDef.values.map(v => typeof v === 'number' ? v : (parseFloat(v as string) || 0) );
         return {
             label,
-            raw: numValues, // O "raw" aqui é o próprio valor, já que não vem do BIN
+            raw: numValues,
             calculated: axisDef.values,
             originalIndices: Array.from({ length: axisDef.values.length }, (_, i) => i),
         };
@@ -175,11 +192,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
 
     let equationFunc: (val: number) => number | string;
     try {
-        // Cria a função de forma segura
         equationFunc = new Function('X', `return ${equation}`) as (val: number) => number;
     } catch (e) {
         console.error(`Equação de eixo inválida para "${label}": ${equation}`);
-        equationFunc = (X: number) => X; // Retorna o valor original em caso de erro
+        equationFunc = (X: number) => X;
     }
 
     const raw: number[] = [];
@@ -196,17 +212,16 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
         try {
             calculated.push(equationFunc(rawValue));
         } catch (e) {
-            calculated.push(rawValue); // Em caso de erro no cálculo, usa o valor raw
+            calculated.push(rawValue);
         }
     }
     return { raw, calculated, originalIndices: Array.from({ length: calculated.length }, (_, i) => i), label };
 }
 
-// Ordena um eixo e mantém o registo dos seus índices originais
 function sortAxis(axisData: AxisDataState): AxisDataState {
     const isNumeric = axisData.calculated.every(v => typeof v === 'number' && isFinite(v));
     if (!isNumeric) {
-        return axisData; // Não ordena eixos não numéricos
+        return axisData;
     }
 
     const indexed = (axisData.calculated as number[]).map((value, index) => ({
@@ -235,16 +250,14 @@ export function readAndCalculateMapFromBin(
         dataOrganization, colStrideBytes, rowStrideBytes
     } = def;
     
-    // 1. Ler os eixos como estão no BIN
     const unsortedXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
     const unsortedYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
 
-    // 2. Ordenar os eixos e guardar os mapeamentos de índice
     const sortedXAxis = sortAxis(unsortedXAxis);
     const sortedYAxis = sortAxis(unsortedYAxis);
 
-    const actualRows = def.rows;
-    const actualCols = def.cols;
+    const actualRows = def.yAxisDef.count;
+    const actualCols = def.xAxisDef.count;
     
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !(def.isBigEndian ?? false);
@@ -257,7 +270,6 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
 
-    // 3. Ler a tabela de dados Z inteira na ordem original (sem ordenação)
     const originalRawMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
     for (let r = 0; r < actualRows; r++) {
         for (let c = 0; c < actualCols; c++) {
@@ -276,7 +288,6 @@ export function readAndCalculateMapFromBin(
         }
     }
     
-    // 4. Criar um novo mapa de dados Z (raw e calculado) ordenado com base nos eixos ordenados
     const sortedRawMap = sortedYAxis.originalIndices.map(originalRowIndex => 
         sortedXAxis.originalIndices.map(originalColIndex => originalRawMap[originalRowIndex]?.[originalColIndex] ?? null)
     );
@@ -286,10 +297,9 @@ export function readAndCalculateMapFromBin(
             if (cellValue === null) return null;
             try {
                 const result = zEquationFunc(cellValue);
-                // Garante que o resultado é um número
                 return typeof result === 'number' ? result : parseFloat(result);
             } catch {
-                return cellValue; // Retorna o valor raw em caso de erro de cálculo
+                return cellValue;
             }
         })
     );
@@ -306,12 +316,9 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     if (!def) return null;
     const { address, rowStrideBytes, colStrideBytes, dataOrganization } = def;
 
-    // A lógica aqui deve usar os índices ORDENADOS para encontrar o endereço
-    // Esta função é chamada a partir da UI que mostra dados ordenados
     if (dataOrganization === 'COL_MAJOR') {
         return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
     } 
-    // Assumir ROW_MAJOR
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
@@ -319,7 +326,7 @@ export function generateChecksum(buffer: ArrayBuffer): string {
     const dataView = new DataView(buffer);
     let checksum = 0;
     for (let i = 0; i < buffer.byteLength; i++) {
-        checksum = (checksum + dataView.getUint8(i)) % 65536; // Checksum de 16 bits
+        checksum = (checksum + dataView.getUint8(i)) % 65536;
     }
     return checksum.toString(16).toUpperCase().padStart(4, '0');
 }
@@ -340,12 +347,10 @@ export function invertEquation(
 
     const sanitizedEq = normalizeEquation(eq);
 
-    // Caso mais simples: Y = X
     if (sanitizedEq.toUpperCase() === 'X') {
         return finalValue;
     }
 
-    // Tenta resolver equações lineares simples como Y = X * a, Y = X / a, Y = X + a, Y = X - a
     const parts = sanitizedEq.split(/([*\/+-])/).map(p => p.trim());
     
     if (parts.length === 3) {
@@ -363,13 +368,10 @@ export function invertEquation(
         case '/': return finalValue * operand;
         case '+': return finalValue - operand;
         case '-':
-            // Se for X - A, então X = Y + A
-            // Se for A - X, então X = A - Y
             return isXFirst ? finalValue + operand : operand - finalValue;
       }
     }
     
-    // Tenta resolver equações com parênteses, ex: Y = (X + a) * b
     const match = sanitizedEq.match(/\(\s*X\s*([+\-])\s*(\d+\.?\d*)\s*\)\s*([*\/])\s*(\d+\.?\d*)/);
     if(match) {
         const [, innerOp, innerValStr, outerOp, outerValStr] = match;
@@ -378,10 +380,8 @@ export function invertEquation(
         
         if (!isNaN(innerVal) && !isNaN(outerVal)) {
             let result = finalValue;
-            // Inverte a operação exterior primeiro
             if (outerOp === '*') result /= outerVal;
             if (outerOp === '/') result *= outerVal;
-            // Inverte a operação interior
             if (innerOp === '+') result -= innerVal;
             if (innerOp === '-') result += innerVal;
             return result;
@@ -400,7 +400,6 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
-    // 1. Criar um mapa calculado não ordenado para corresponder à ordem original do BIN
     const unsortedCalculatedMap: MapData = Array(calculatedMap.length).fill(null).map(() => Array(calculatedMap[0].length).fill(null));
     
     sourceAxes.y.originalIndices.forEach((originalRow, sortedRow) => {
@@ -412,7 +411,6 @@ export function recalculateRawMapFromCalculated(
     const actualRows = def.rows;
     const actualCols = def.cols;
 
-    // 2. Iterar sobre o mapa não ordenado e inverter a equação para cada célula
     const newRawMap: MapData = [];
     for (let r = 0; r < actualRows; r++) {
         const newRawRow: (number | null)[] = [];
@@ -427,7 +425,7 @@ export function recalculateRawMapFromCalculated(
                 newRawRow.push(newRawValue);
             } catch (e) {
                 console.error(`Não foi possível recalcular o valor raw para a célula [${r}, ${c}]: ${(e as Error).message}. A usar NaN.`);
-                newRawRow.push(NaN); // Usa NaN para indicar que a inversão falhou
+                newRawRow.push(NaN);
             }
         }
         newRawMap.push(newRawRow);
@@ -453,18 +451,16 @@ export function writeMapToBin(
     const actualRows = def.rows;
     const actualCols = def.cols;
 
-    // Cria uma cópia do buffer para não modificar o original
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
     const useLittleEndianForZ = !(def.isBigEndian ?? false);
     
-    // O rawMapData já está na ordem original do BIN, vindo de recalculateRawMapFromCalculated
     const mapToWrite = [...rawMapData];
 
     for (let r = 0; r < actualRows; r++) {
         for (let c = 0; c < actualCols; c++) {
-            const rawValue = mapToWrite[r]?.[c]; // Adiciona verificação de segurança
+            const rawValue = mapToWrite[r]?.[c];
             if (rawValue === null || rawValue === undefined || isNaN(rawValue)) continue;
 
             const offset = dataOrganization === 'COL_MAJOR'
