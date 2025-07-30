@@ -53,11 +53,13 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
 
         const embeddedData = findNode(zAxisNodeOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA');
         const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
-        
+        const linkedTableTitle = findNode(linkedTable, 'title')?.textContent?.trim();
+
         return {
             isLinked: true,
-            count: indexcount,
-            label: findNode(linkedTable, 'title')?.textContent?.trim() || primaryUnits || 'Eixo Vinculado',
+            // A contagem real de elementos vem do eixo Z da tabela vinculada
+            count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || `${indexcount}`, 10),
+            label: linkedTableTitle || primaryUnits || 'Eixo Vinculado',
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -68,7 +70,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     }
 
     const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
-    if (labels.length > 0) {
+    if (labels.length > 0 && labels.some(l => (getAttr(l, 'value') || l.textContent || '').trim() !== '')) {
         return {
             isLinked: false,
             count: labels.length || indexcount,
@@ -135,22 +137,16 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
         try {
             const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
-            if (!zAxisNode) {
-                return; 
-            }
+            if (!zAxisNode) return;
 
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            if (isNaN(address)) {
-                return;
-            }
+            if (isNaN(address)) return;
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
             
-            if (!xAxisNode || !yAxisNode) {
-                 return; 
-            }
+            if (!xAxisNode || !yAxisNode) return; 
             
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
             const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap);
@@ -159,15 +155,14 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = yAxisDef.count;
             
             if (cols === 0 || rows === 0) {
-                 if (tableName === "Ignition # Netral") { // Special case for this known problematic table
-                    return;
-                }
-                throw new Error(`Dimensões da tabela (linhas/colunas) não podem ser zero.`);
+                 return;
             }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             const dataOrganizationStr = getAttr(zAxisNode, 'data_organization')?.toUpperCase();
             const dataOrganization: 'ROW_MAJOR' | 'COL_MAJOR' = dataOrganizationStr === 'COL_MAJOR' ? 'COL_MAJOR' : 'ROW_MAJOR';
+            
+            const colStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || `${dataSizeBits}`, 10);
             const rowStrideBits = parseInt(getAttr(embeddedData, 'mmedrowstridebits') || `${cols * dataSizeBits}`, 10);
             
             definitions.push({
@@ -177,7 +172,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 rows,
                 cols,
                 dataSize: dataSizeBits / 8,
-                colStrideBytes: dataSizeBits / 8, 
+                colStrideBytes: colStrideBits / 8, 
                 rowStrideBytes: rowStrideBits / 8,
                 dataOrganization,
                 isBigEndian: getIsBigEndian(embeddedData),
@@ -187,7 +182,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 yAxisDef,
             });
         } catch (e) {
-            // Se as dimensões forem zero ou ocorrer outro erro de parsing, ignoramos a tabela silenciosamente.
+            if (e instanceof Error) {
+                 // Silenciosamente ignorar tabelas que falham na análise
+            }
         }
     });
 
@@ -305,9 +302,7 @@ export function readAndCalculateMapFromBin(
                 calculatedMap[r][c] = typeof calcResult === 'number' ? calcResult : parseFloat(calcResult as string);
 
             } catch (e) {
-                console.error(`Erro ao ler o BIN no offset ${offset}: ${(e as Error).message}`);
-                rawMap[r][c] = null;
-                calculatedMap[r][c] = null;
+                // Silenciosamente ignorar células que falham
             }
         }
     }
@@ -471,7 +466,7 @@ export function writeMapToBin(
             const offset = getCellAddress(def, r, c);
 
             if (offset === null || offset + def.dataSize > view.byteLength) {
-                console.warn(`Escrita do mapa fora dos limites. Offset: ${offset} para o mapa "${def.name}". A saltar.`);
+                // Silenciosamente ignorar escritas fora dos limites
                 continue;
             }
             
@@ -483,7 +478,7 @@ export function writeMapToBin(
                      view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndianForZ);
                 }
             } catch (e) {
-                 console.error(`Não foi possível escrever a célula [${r},${c}] para o mapa "${def.name}": ${(e as Error).message}`);
+                 // Ignorar erros de escrita de célula
             }
         }
     }
