@@ -34,8 +34,8 @@ function EditableMapCell({ value, onCellChange, address, originalValue, showCorr
     const [currentValue, setCurrentValue] = useState(value !== null ? String(value) : '');
 
     useEffect(() => {
-        setCurrentValue(value !== null ? String(value) : '');
-    }, [value]);
+        setCurrentValue(value !== null ? String(value.toFixed(definition?.decimalpl ?? 2)) : '');
+    }, [value, definition]);
 
     const handleBlur = () => {
         setIsEditing(false);
@@ -43,7 +43,7 @@ function EditableMapCell({ value, onCellChange, address, originalValue, showCorr
         if (!isNaN(newValue)) {
             onCellChange(newValue);
         } else {
-            setCurrentValue(value !== null ? String(value) : '');
+            setCurrentValue(value !== null ? String(value.toFixed(definition?.decimalpl ?? 2)) : '');
         }
     };
     
@@ -63,7 +63,8 @@ function EditableMapCell({ value, onCellChange, address, originalValue, showCorr
             />
         );
     }
-
+    
+    // Simplificação radical: Apenas mostrar o valor formatado.
     return (
         <div 
             onClick={() => setIsEditing(true)} 
@@ -92,7 +93,7 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
         );
     }
 
-    const formatAxisLabel = (axis: AxisDataState) => {
+    const formatAxisLabel = (axis: AxisDataState, axisDef: any) => {
         let label = axis.label;
         if (axis.address !== null && axis.address !== undefined) {
             label += ` (0x${axis.address.toString(16).toUpperCase()})`;
@@ -100,8 +101,8 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
         return label;
     };
     
-    const yAxisLabel = formatAxisLabel(axes.y);
-    const xAxisLabel = formatAxisLabel(axes.x);
+    const yAxisLabel = formatAxisLabel(axes.y, selectedMapDefinition.yAxisDef);
+    const xAxisLabel = formatAxisLabel(axes.x, selectedMapDefinition.xAxisDef);
 
     return (
         <div className="overflow-auto h-full w-full">

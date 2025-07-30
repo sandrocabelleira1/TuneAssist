@@ -1,5 +1,4 @@
 
-
 import type { XDFDefinition, AxisDataState, AxisDimension, MapData } from './types';
 
 // Função auxiliar para normalizar e avaliar equações matemáticas de forma segura.
@@ -8,27 +7,16 @@ function evaluateEquation(equation: string, value: number): number {
         return NaN;
     }
     try {
-        // Normaliza a equação: remove espaços, substitui 'x' por 'X'.
         const sanitizedEq = equation.trim().replace(/x/gi, 'X');
-        
-        // Substitui 'X' pelo valor numérico.
-        // A expressão regular global /X/g garante que todas as ocorrências de X sejam substituídas.
         const expr = sanitizedEq.replace(/X/g, `(${value.toString()})`);
-
-        // Usa o construtor Function para criar uma função que avalia a expressão.
-        // É mais seguro do que eval() direto, pois não herda o escopo.
         const func = new Function(`return ${expr}`);
         const result = func();
-
-        // Garante que o resultado seja um número finito.
         if (typeof result === 'number' && isFinite(result)) {
             return result;
         }
-        // Se a equação não resultar num número válido, retorna o valor original.
         return value;
     } catch (e) {
         console.error(`Erro ao avaliar a equação "${equation}" com o valor ${value}:`, e);
-        // Em caso de erro, retorna o valor original para não quebrar a aplicação.
         return value;
     }
 }
@@ -98,10 +86,8 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         const linkedTable = allTables.get(linkId);
         if (!linkedTable) throw new Error(`Tabela de eixos vinculada com ID ${linkId} não encontrada.`);
         
-        // O nome do eixo principal vem do título da tabela ligada.
         label = findNode(linkedTable, 'title')?.textContent?.trim() || label;
 
-        // Os parâmetros vêm do eixo Z da tabela ligada.
         const zAxisOfLinkedTable = findNode(linkedTable, 'XDFAXIS[id="z"]');
         if (!zAxisOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
         
@@ -116,7 +102,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
             count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || '0', 10),
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
-            stride: (parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
             isBigEndian: getIsBigEndian(embeddedData),
             equation: getAttr(findNode(zAxisOfLinkedTable, 'math', 'MATH'), 'equation') || 'X',
             decimalpl: parseInt(findNode(zAxisOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
@@ -134,7 +119,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
             count: parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || getAttr(sourceEmbeddedData, 'mmedrowcount') || `${indexcount}` || '0', 10),
             address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
-            stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
             isBigEndian: getIsBigEndian(sourceEmbeddedData),
             equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
@@ -173,7 +157,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     const parseError = xmlDoc.querySelector("parsererror");
     if (parseError) throw new Error(`Erro de análise do XDF: ${parseError.textContent}`);
 
-    // Mapeia todas as tabelas por ID para referência futura (links).
     const allTablesMap = new Map<string, Element>();
     xmlDoc.querySelectorAll('XDFTABLE').forEach(tableEl => {
         const id = getAttr(tableEl, 'uniqueid');
@@ -191,11 +174,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
         try {
             const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
-            if (!zAxisNode) return; // Não é um mapa de dados, pode ser uma tabela de breakpoint.
+            if (!zAxisNode) return;
 
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            if (isNaN(address)) return; // Se não tem endereço, não é um mapa principal.
+            if (isNaN(address)) return;
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
@@ -207,8 +190,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             if (xAxisDef.count === 0 || yAxisDef.count === 0) return;
             
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '8', 10);
-            const colStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || `${dataSizeBits}`, 10);
-            const rowStrideBits = parseInt(getAttr(embeddedData, 'mmedrowstridebits') || `${xAxisDef.count * colStrideBits}`, 10);
             
             definitions.push({
                 uniqueId: uniqueId,
@@ -217,8 +198,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 rows: yAxisDef.count,
                 cols: xAxisDef.count,
                 dataSize: dataSizeBits / 8,
-                colStrideBytes: colStrideBits / 8, 
-                rowStrideBytes: rowStrideBits / 8,
                 isBigEndian: getIsBigEndian(embeddedData),
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'X',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
@@ -241,12 +220,11 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     const defaultState: AxisDataState = { label: 'Indefinido', raw: [], calculated: [], address: null };
     if (!axisDef || !binBuffer) return defaultState;
     
-    // Se o eixo for definido por valores de texto estáticos
     if (axisDef.values) {
         return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null };
     }
 
-    const { address, count, dataSize = 2, equation = 'X', isBigEndian = false, stride = dataSize } = axisDef;
+    const { address, count, dataSize = 2, equation = 'X', isBigEndian = false } = axisDef;
     if (address === undefined || address === null || isNaN(address) || count === 0) {
         return { ...defaultState, label: axisDef.label };
     }
@@ -257,7 +235,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     const calculated: (number | string)[] = [];
 
     for (let i = 0; i < count; i++) {
-        const offset = address + (i * stride);
+        const offset = address + (i * dataSize);
         if (offset + dataSize > view.byteLength) continue;
 
         let rawValue;
@@ -317,7 +295,10 @@ export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: n
     if (!def || rowIndex < 0 || rowIndex >= def.rows || colIndex < 0 || colIndex >= def.cols) {
         return null;
     }
-    return def.address + (rowIndex * def.rowStrideBytes) + (colIndex * def.colStrideBytes);
+    // Simplificado: assume que as colunas são contíguas e as linhas têm um passo fixo.
+    // Para XDFs mais complexos, os 'strides' precisam ser extraídos e usados.
+    const rowStride = def.cols * def.dataSize;
+    return def.address + (rowIndex * rowStride) + (colIndex * def.dataSize);
 }
 
 
