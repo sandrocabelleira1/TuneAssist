@@ -20,7 +20,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="h-full font-sans antialiased">
-        <div className="relative flex min-h-screen flex-col">
+        <div className="relative flex min-h-screen flex-col h-full">
             {children}
         </div>
         <Toaster />

@@ -2,23 +2,32 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Sidebar, SidebarProvider, SidebarHeader, SidebarContent, SidebarFooter, SidebarTrigger, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
+import dynamic from 'next/dynamic';
+import { Sidebar, SidebarProvider, SidebarHeader, SidebarContent, SidebarFooter, SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { UploadCloud, FileCog, Cog, Save, AlertTriangle, Cpu, BarChart3, Binary, Table2, Pencil, BrainCircuit, X } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress, bufferToHex } from '@/lib/ecu';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Pencil, Loader2 } from 'lucide-react';
+import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress } from '@/lib/ecu';
 import type { XDFDefinition, MapData, AxisDataState, LogMessage } from '@/lib/types';
 import { getHeatmapColor, getCorrectionColor } from '@/lib/colors';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
-import SurfacePlot3D from '@/components/surface-plot';
 import LinePlot2D from '@/components/line-plot';
 
-// Componente para uma célula editável da tabela
+const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
+    ssr: false,
+    loading: () => (
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+            <Loader2 className="mr-2 h-8 w-8 animate-spin" />
+            <p>A carregar o gráfico 3D...</p>
+        </div>
+    )
+});
+
+
 function EditableMapCell({ value, onCellChange, address, originalValue, showCorrection }: { value: number | null, onCellChange: (newValue: number) => void, address: number | null, originalValue: number | null, showCorrection: boolean }) {
     const [isEditing, setIsEditing] = useState(false);
     const [currentValue, setCurrentValue] = useState(value !== null ? String(value) : '');
@@ -33,12 +42,12 @@ function EditableMapCell({ value, onCellChange, address, originalValue, showCorr
         if (!isNaN(newValue)) {
             onCellChange(newValue);
         } else {
-            setCurrentValue(value !== null ? String(value) : ''); // Reverte se inválido
+            setCurrentValue(value !== null ? String(value) : '');
         }
     };
     
     const correction = (value !== null && originalValue !== null) ? value - originalValue : 0;
-    const backgroundColor = showCorrection ? getCorrectionColor(correction) : getHeatmapColor(value, 0, 0); // Simplified heatmap for now
+    const backgroundColor = showCorrection ? getCorrectionColor(correction) : getHeatmapColor(value, 0, 0);
 
     if (isEditing) {
         return (
@@ -92,7 +101,7 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
                         </th>
                         {axes.x.calculated.map((x, i) => (
                             <th key={i} className="sticky top-0 bg-muted p-2 border border-border font-semibold">
-                                {typeof x === 'number' ? x.toFixed(2) : x}
+                                {typeof x === 'number' ? x.toFixed(selectedMapDefinition.xAxisDef.decimalpl ?? 2) : x}
                             </th>
                         ))}
                     </tr>
@@ -101,7 +110,7 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
                     {axes.y.calculated.map((y, yi) => (
                         <tr key={yi}>
                             <td className="sticky left-0 bg-muted p-2 border border-border font-bold text-right">
-                                {typeof y === 'number' ? y.toFixed(0) : y}
+                                {typeof y === 'number' ? y.toFixed(selectedMapDefinition.yAxisDef.decimalpl ?? 0) : y}
                             </td>
                             {mapData[yi]?.map((cell, xi) => {
                                 const address = getCellAddress(selectedMapDefinition, yi, xi);
@@ -133,7 +142,7 @@ export default function EcuTuningAssistant() {
     
     const [selectedMapName, setSelectedMapName] = useState<string>('');
     const [mapData, setMapData] = useState<MapData | null>(null);
-    const [originalMapData, setOriginalMapData] = useState<MapData | null>(null); // Store original state for comparison
+    const [originalMapData, setOriginalMapData] = useState<MapData | null>(null);
     const [axes, setAxes] = useState<{ x: AxisDataState, y: AxisDataState } | null>(null);
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
 
@@ -185,7 +194,6 @@ export default function EcuTuningAssistant() {
         if (type === 'xdf') reader.readAsText(file);
         else reader.readAsArrayBuffer(file);
         
-        // Reset input value to allow reloading the same file
         e.target.value = '';
     };
 
@@ -197,9 +205,9 @@ export default function EcuTuningAssistant() {
                 try {
                     const { calculatedMap, axes } = readAndCalculateMapFromBin(binFile.buffer, def);
                     setMapData(calculatedMap);
-                    setOriginalMapData(JSON.parse(JSON.stringify(calculatedMap))); // Deep copy
+                    setOriginalMapData(JSON.parse(JSON.stringify(calculatedMap)));
                     setAxes(axes);
-                    setSelectedLine(axes.y.calculated.length > 0 ? 0 : null); // Select first line by default
+                    setSelectedLine(axes.y.calculated.length > 0 ? 0 : null);
                     addLog(`Mapa carregado: ${name}`, 'info');
                 } catch (error) {
                     const errorMessage = `Erro ao ler o mapa do BIN: ${(error as Error).message}`;
@@ -343,12 +351,21 @@ export default function EcuTuningAssistant() {
                          <h1 className="text-lg font-semibold ml-2">{selectedMapName || "Nenhum Mapa Selecionado"}</h1>
                     </div>
                     <div className="flex-1 p-4 min-h-0">
-                        <Tabs defaultValue="view-3d" className="w-full h-full flex flex-col">
+                        <Tabs defaultValue="view-table" className="w-full h-full flex flex-col">
                             <TabsList>
-                                <TabsTrigger value="view-3d"><BarChart3 className="mr-2"/>Tabela 3D</TabsTrigger>
-                                <TabsTrigger value="view-2d"><BarChart3 className="mr-2"/>Gráfico 2D</TabsTrigger>
                                 <TabsTrigger value="view-table"><Table2 className="mr-2"/>Tabela de Dados</TabsTrigger>
+                                <TabsTrigger value="view-3d"><BarChart3 className="mr-2"/>Gráfico 3D</TabsTrigger>
+                                <TabsTrigger value="view-2d"><BarChart3 className="mr-2"/>Gráfico 2D</TabsTrigger>
                             </TabsList>
+                            <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
+                               <DataTable
+                                    mapData={mapData}
+                                    axes={axes}
+                                    selectedMapDefinition={selectedMapDefinition}
+                                    onCellChange={handleCellChange}
+                                    originalMapData={originalMapData}
+                               />
+                            </TabsContent>
                             <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
                                 {axes && mapData ? (
                                     <SurfacePlot3D 
@@ -376,15 +393,6 @@ export default function EcuTuningAssistant() {
                                     onPointChange={handleCellChange}
                                 />
                             </TabsContent>
-                            <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
-                               <DataTable
-                                    mapData={mapData}
-                                    axes={axes}
-                                    selectedMapDefinition={selectedMapDefinition}
-                                    onCellChange={handleCellChange}
-                                    originalMapData={originalMapData}
-                               />
-                            </TabsContent>
                         </Tabs>
                     </div>
                 </main>
@@ -393,3 +401,5 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+
+    
