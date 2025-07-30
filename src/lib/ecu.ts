@@ -177,7 +177,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             
             const dataOrganization = 'ROW_MAJOR';
             
-            const isBigEndian = getIsBigEndian(findNode(finalZAxisNode, 'embeddeddata', 'EMBEDDEDDATA'));
+            const isBigEndian = getIsBigEndian(findNode(finalZAxisNode, 'embeddeddata', 'EMBEDDEDDATA') || finalZAxisNode);
             const mathNode = findNode(finalZAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
             const decimalplZ = parseInt(findNode(finalZAxisNode, 'decimalpl')?.textContent || '2', 10);
