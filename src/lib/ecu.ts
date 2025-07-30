@@ -133,13 +133,13 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
         // Ignorar tabelas que são apenas para eixos
         const isAxisTable = !findNode(tableEl, 'XDFAXIS[id="x"]') && !findNode(tableEl, 'XDFAXIS[id="y"]');
-        if (isAxisTable && allTableElements.some(el => getAttr(findNode(el, 'XDFAXIS[id="x"] > EMBEDDEDDATA'), 'linkobjid') === uniqueId || getAttr(findNode(el, 'XDFAXIS[id="y"] > EMBEDDEDDATA'), 'linkobjid') === uniqueId)) {
+        if (isAxisTable && allTableElements.some(el => getAttr(findNode(el, 'XDFAXIS[id="x"] > embedinfo, XDFAXIS[id="x"] > EMBEDDEDDATA'), 'linkobjid') === uniqueId || getAttr(findNode(el, 'XDFAXIS[id="y"] > embedinfo, XDFAXIS[id="y"] > EMBEDDEDDATA'), 'linkobjid') === uniqueId)) {
             return;
         }
 
         try {
             const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
-            if (!zAxisNode) throw new Error("Eixo Z não encontrado");
+            if (!zAxisNode) throw new Error("Eixo Z (dados do mapa) não encontrado.");
 
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
@@ -152,7 +152,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
             
             if (!xAxisNode || !yAxisNode) {
-                 console.warn(`Tabela "${tableName}" (ID: ${uniqueId}) ignorada porque não é um mapa 2D (faltam eixos X ou Y).`);
+                 // É um mapa 1D ou tabela de valores, ignorar por agora
                  return;
             }
             
