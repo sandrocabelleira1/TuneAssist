@@ -1,5 +1,6 @@
 
 
+
 'use client';
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -914,85 +915,6 @@ export default function EcuTuningAssistant() {
         }
     };
 
-    const handleInterpolateMap = () => {
-        if (!workingMap || !sourceAxes) {
-            toast({ variant: "destructive", title: "Erro", description: "Nenhum mapa ou eixos de origem para interpolar." });
-            return;
-        }
-    
-        const rows = workingMap.length;
-        const cols = workingMap[0].length;
-        if (rows < 2 || cols < 2) {
-            toast({ variant: "destructive", title: "Erro", description: "O mapa precisa de pelo menos 2x2 para ser interpolado." });
-            return;
-        }
-    
-        // 1. Create a sortable representation of the original map
-        const indexedMap = sourceAxes.y.calculated.map((yVal, r) => {
-            return sourceAxes.x.calculated.map((xVal, c) => ({
-                y: Number(yVal),
-                x: Number(xVal),
-                z: workingMap[r][c],
-                originalR: r,
-                originalC: c,
-            }));
-        }).flat();
-    
-        if (indexedMap.some(p => isNaN(p.x) || isNaN(p.y))) {
-            toast({ variant: "destructive", title: "Erro de Interpolação", description: "Os eixos devem ter valores numéricos para a interpolação." });
-            return;
-        }
-    
-        // 2. Find the logical corners based on min/max axis values
-        const xMin = Math.min(...indexedMap.map(p => p.x));
-        const xMax = Math.max(...indexedMap.map(p => p.x));
-        const yMin = Math.min(...indexedMap.map(p => p.y));
-        const yMax = Math.max(...indexedMap.map(p => p.y));
-    
-        const findCornerValue = (x: number, y: number) => {
-            const point = indexedMap.find(p => p.x === x && p.y === y);
-            return point?.z;
-        };
-    
-        const v00 = findCornerValue(xMin, yMin); // Top-left (min x, min y)
-        const v10 = findCornerValue(xMin, yMax); // Bottom-left (min x, max y)
-        const v01 = findCornerValue(xMax, yMin); // Top-right (max x, min y)
-        const v11 = findCornerValue(xMax, yMax); // Bottom-right (max x, max y)
-    
-        if (v00 === null || v10 === null || v01 === null || v11 === null || v00 === undefined || v10 === undefined || v01 === undefined || v11 === undefined) {
-            toast({ variant: "destructive", title: "Erro", description: "Os quatro cantos lógicos do mapa devem ter valores para a interpolação." });
-            return;
-        }
-    
-        // 3. Create the new interpolated map in the original structure
-        const newMap = sourceAxes.y.calculated.map((yVal, r) => {
-            return sourceAxes.x.calculated.map((xVal, c) => {
-                const numY = Number(yVal);
-                const numX = Number(xVal);
-    
-                if (numY === yMin && numX === xMin) return v00;
-                if (numY === yMax && numX === xMin) return v10;
-                if (numY === yMin && numX === xMax) return v01;
-                if (numY === yMax && numX === xMax) return v11;
-    
-                const xRatio = (xMax - xMin === 0) ? 0 : (numX - xMin) / (xMax - xMin);
-                const yRatio = (yMax - yMin === 0) ? 0 : (numY - yMin) / (yMax - yMin);
-    
-                const vTop = v00 * (1 - xRatio) + v01 * xRatio;
-                const vBottom = v10 * (1 - xRatio) + v11 * xRatio;
-    
-                return vTop * (1 - yRatio) + vBottom * yRatio;
-            });
-        });
-    
-        // 4. Update state
-        setWorkingMap(newMap);
-        setMapRenderKey(p => p + 1);
-        addLog("Mapa de dados (eixo Z) alinhado usando interpolação bilinear.", "success");
-        toast({ title: "Mapa Alinhado", description: "Os dados do mapa foram suavizados." });
-    };
-
-
     const saveButton = (
         <Button onClick={handleSaveModifiedBin} disabled={!binFile || !workingMap}>
             <Save className="mr-2 h-4 w-4" />
@@ -1163,16 +1085,7 @@ export default function EcuTuningAssistant() {
                                                 onViewModeChange={(isRaw) => setMapViewMode(isRaw ? 'raw' : 'calculated')}
                                             />
                                         </div>
-                                        <div className="border-t pt-4 flex justify-between items-center mt-4 flex-shrink-0">
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button variant="outline" onClick={handleInterpolateMap} disabled={!workingMap}>
-                                                        <Blend className="mr-2 h-4 w-4" />
-                                                        Alinhar Dados (Interpolar)
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent>Suaviza os dados do mapa usando interpolação linear entre os quatro cantos.</TooltipContent>
-                                            </Tooltip>
+                                        <div className="border-t pt-4 flex justify-end items-center mt-4 flex-shrink-0">
                                             {saveButton}
                                         </div>
                                     </TabsContent>

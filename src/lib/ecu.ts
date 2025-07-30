@@ -1,5 +1,6 @@
 
 
+
 import type { XDFDefinition, AxisDataState, AxisDimension, MapData } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -331,10 +332,9 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
 
-    const rawMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
-    const calculatedMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
+    const originalRawMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
 
-    // First, read the map in its original (unsorted) order
+    // First, read the map in its original (unsorted) order from the BIN
     for (let r = 0; r < actualRows; r++) {
         for (let c = 0; c < actualCols; c++) {
             const offset = dataOrganization === 'COL_MAJOR'
@@ -345,8 +345,7 @@ export function readAndCalculateMapFromBin(
             
             try {
                 const rawValue = dataSize === 1 ? view.getUint8(offset) : view.getUint16(offset, useLittleEndianForZ);
-                rawMap[r][c] = rawValue;
-                calculatedMap[r][c] = zEquationFunc(rawValue) as number;
+                originalRawMap[r][c] = rawValue;
             } catch (e) {
                 console.error(`Erro ao ler o BIN no offset ${offset}: ${(e as Error).message}`);
             }
@@ -355,10 +354,18 @@ export function readAndCalculateMapFromBin(
 
     // Now, create the sorted maps based on the sorted axis indices
     const sortedRawMap = ySortedIndices.map(originalRowIndex => 
-        xSortedIndices.map(originalColIndex => rawMap[originalRowIndex][originalColIndex])
+        xSortedIndices.map(originalColIndex => originalRawMap[originalRowIndex][originalColIndex])
     );
-    const sortedCalculatedMap = ySortedIndices.map(originalRowIndex => 
-        xSortedIndices.map(originalColIndex => calculatedMap[originalRowIndex][originalColIndex])
+    
+    const sortedCalculatedMap = sortedRawMap.map(row => 
+        row.map(cellValue => {
+            if (cellValue === null) return null;
+            try {
+                return zEquationFunc(cellValue) as number;
+            } catch {
+                return cellValue;
+            }
+        })
     );
 
 
