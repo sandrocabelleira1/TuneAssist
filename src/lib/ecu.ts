@@ -28,23 +28,18 @@ function evaluateEquation(equation: string, value: number): number {
     }
     try {
         const sanitizedEq = normalizeEquation(equation);
-        
-        // Substitui a variável 'X' (maiúscula) pelo valor numérico.
-        // Adiciona parênteses em torno do valor para garantir a ordem correta das operações.
         const expr = sanitizedEq.replace(/X/g, `(${value.toString()})`);
 
-        // Usa new Function() para criar uma função que avalia a expressão matemática.
-        // É uma forma segura de avaliar expressões desde que a entrada (equação do XDF) seja confiável.
         const func = new Function(`return ${expr}`);
         const result = func();
 
         if (typeof result === 'number' && isFinite(result)) {
             return result;
         }
-        return value; // Retorna o valor original se o resultado não for um número finito
+        return value;
     } catch (e) {
         console.error(`Erro ao avaliar a equação "${equation}" com o valor ${value}:`, e);
-        return value; // Retorna o valor original em caso de erro na avaliação.
+        return value;
     }
 }
 
@@ -59,7 +54,9 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
-    const units = findNode(axisNode, 'units')?.textContent?.trim() || '';
+    
+    // Usar 'units' como label principal se existir, senão usar o título do eixo.
+    let label = findNode(axisNode, 'units')?.textContent?.trim() || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Desconhecido';
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
@@ -75,10 +72,13 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
 
         const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
         
+        // Para eixos ligados, o título da tabela ligada é o nome do eixo.
+        label = findNode(linkedTable, 'title')?.textContent?.trim() || label;
+
         return {
             isLinked: true,
             count: parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || '0', 10),
-            label: findNode(linkedTable, 'title')?.textContent?.trim() || units || 'Eixo Vinculado',
+            label: label,
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -95,7 +95,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: count,
-            label: units || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Embutido',
+            label: label,
             address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -110,7 +110,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: labels.length || indexcount,
-            label: units || findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo de Label',
+            label: label,
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
         };
@@ -118,7 +118,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     
     return { 
         count: indexcount, 
-        label: units || 'Eixo Desconhecido', 
+        label: label, 
         decimalpl: 1,
         equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
     };
@@ -183,7 +183,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 return;
             }
 
-            const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
+            const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '8', 10);
             
             const colStrideBits = parseInt(getAttr(embeddedData, 'mmedminorstridebits') || `${dataSizeBits}`, 10);
             const rowStrideBits = parseInt(getAttr(embeddedData, 'mmedrowstridebits') || `${cols * colStrideBits}`, 10);
@@ -259,6 +259,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
             rawValue = view.getUint8(offset);
         } else if (dataSize === 2) {
             rawValue = view.getUint16(offset, useLittleEndian);
+        } else if (dataSize === 4) {
+            rawValue = view.getUint32(offset, useLittleEndian);
         } else {
             rawValue = 0;
         }
@@ -295,7 +297,10 @@ export function readAndCalculateMapFromBin(
                     rawValue = view.getUint8(offset);
                 } else if (def.dataSize === 2) {
                     rawValue = view.getUint16(offset, useLittleEndianForZ);
-                } else {
+                } else if (def.dataSize === 4) {
+                    rawValue = view.getUint32(offset, useLittleEndianForZ);
+                }
+                else {
                     rawValue = 0;
                 }
                 rawMap[r][c] = rawValue;
@@ -456,5 +461,3 @@ export function writeMapToBin(
     
     return newBuffer;
 }
-
-    
