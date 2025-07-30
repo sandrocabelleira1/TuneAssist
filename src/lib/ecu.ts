@@ -66,16 +66,20 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
         const linkInfoNode = findNode(axisNode, 'embedinfo');
         const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
     
+        // If this axis is a link to another table's Z-axis (common for breakpoints)
         if (linkedTableId && allTablesById.has(linkedTableId)) {
             const linkedTableElement = allTablesById.get(linkedTableId)!;
+            // The linked data is usually the Z-axis of the target table.
             const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+            
             if (linkedZAxisNode) {
+                // Recursively call parseAxis on the linked Z-axis to get its properties.
+                // The count from the *original* referring axis node takes precedence.
                 const axisCountFromOriginal = parseInt(findNode(axisNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
-                // Recursively call parseAxis on the linked Z-axis
                 const recursiveAxisDef = parseAxis(linkedZAxisNode, axisCountFromOriginal, defaultLabel);
                 
                 if (recursiveAxisDef) {
-                    // The label from the original referring axis node takes precedence
+                    // The label from the *original* referring axis node also takes precedence.
                     const originalLabel = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label');
                     recursiveAxisDef.label = originalLabel || recursiveAxisDef.label;
                     recursiveAxisDef.count = axisCountFromOriginal;
@@ -84,13 +88,15 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             }
         }
         
-        let label = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
+        // This is a base case: the axis is not a link, or the link couldn't be resolved.
+        // We read its properties directly.
+        const label = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
         const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
         
         const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
         if(embeddedData) {
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            if(isNaN(address)) return null;
+            if(isNaN(address)) return null; // Can't proceed without an address for embedded data.
             
             const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             const dataSize = dataSizeBits / 8;
@@ -112,44 +118,32 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             return { count: values.length, label, values };
         }
 
+        // Fallback for axes without embedded data or explicit labels (like simple index axes)
         return { count, label, values: Array.from({ length: count }, (_, i) => i + 1) };
     };
 
 
     allTableElements.forEach(tableEl => {
         try {
-            let finalZAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-            if (!finalZAxisNode) return;
-            
-            let finalTableElement = tableEl;
-            const visited = new Set<string>();
-            let currentId = getAttr(tableEl, 'uniqueid');
-            if(currentId) visited.add(currentId);
-
-            // Chase the Z-axis links to find the definitive source of Z-axis properties
-            while (true) {
-                const linkInfoNode = findNode(finalZAxisNode, 'embedinfo');
-                const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
-                if (linkedTableId && allTablesById.has(linkedTableId) && !visited.has(linkedTableId)) {
-                    visited.add(linkedTableId);
-                    const parentTable = allTablesById.get(linkedTableId)!;
-                    const parentZAxis = findNode(parentTable, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-                    if (parentZAxis) {
-                        finalZAxisNode = parentZAxis;
-                        finalTableElement = parentTable;
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-            
-            const embeddedData = findNode(tableEl, 'embeddeddata', 'EMBEDDEDDATA');
-            if (!embeddedData) return;
-            
             const tableName = findNode(tableEl, 'title')?.textContent?.trim() || getAttr(tableEl, 'name');
             if (!tableName) return;
+            
+            let zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+            if (!zAxisNode) return;
+            
+            // --- Z-Axis Property Inheritance ---
+            // If the Z-axis itself is a link, find the true source of its properties.
+            const zLinkInfo = findNode(zAxisNode, 'embedinfo');
+            const zLinkedTableId = getAttr(zLinkInfo, 'linkobjid');
+            const sourceZAxisNode = (zLinkedTableId && allTablesById.has(zLinkedTableId))
+                ? findNode(allTablesById.get(zLinkedTableId)!, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]') || zAxisNode
+                : zAxisNode;
+
+            const embeddedData = findNode(tableEl, 'embeddeddata', 'EMBEDDEDDATA');
+            if (!embeddedData) return;
+
+            const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
+            if (isNaN(address)) return;
 
             const xAxisNode = findNode(tableEl, 'xaxis', 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'yaxis', 'XDFAXIS[id="y"]');
@@ -166,10 +160,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = yAxisDef.count;
             const cols = xAxisDef.count;
             
-            const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            if (isNaN(address)) return;
-
-            const dataSizeBits = parseInt(getAttr(finalZAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
+            const dataSizeBits = parseInt(getAttr(sourceZAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             const dataSize = dataSizeBits / 8;
             
             const colStrideBytes = dataSize;
@@ -177,10 +168,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             
             const dataOrganization = 'ROW_MAJOR';
             
-            const isBigEndian = getIsBigEndian(findNode(finalZAxisNode, 'embeddeddata', 'EMBEDDEDDATA') || finalZAxisNode);
-            const mathNode = findNode(finalZAxisNode, 'math', 'MATH');
+            // Inherit from the source Z-axis node
+            const isBigEndian = getIsBigEndian(findNode(sourceZAxisNode, 'embeddeddata', 'EMBEDDEDDATA') || sourceZAxisNode);
+            const mathNode = findNode(sourceZAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
-            const decimalplZ = parseInt(findNode(finalZAxisNode, 'decimalpl')?.textContent || '2', 10);
+            const decimalplZ = parseInt(findNode(sourceZAxisNode, 'decimalpl')?.textContent || '2', 10);
             
             definitions.push({
                 uniqueId: getAttr(tableEl, 'uniqueid') || tableName,
@@ -268,36 +260,32 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     return { raw, calculated, originalIndices: Array.from({ length: calculated.length }, (_, i) => i), label };
 }
 
-function sortAxis(axisData: AxisDataState): { sortedAxis: AxisDataState, sortedIndices: number[] } {
-    const isNumeric = axisData.calculated.every(v => typeof v === 'number');
+function sortAxis(axisData: AxisDataState): AxisDataState {
+    const isNumeric = axisData.calculated.every(v => typeof v === 'number' && isFinite(v));
     if (!isNumeric) {
         // Cannot sort non-numeric axes, return original
-        return { sortedAxis: axisData, sortedIndices: axisData.originalIndices };
+        return axisData;
     }
 
     const indexed = (axisData.calculated as number[]).map((value, index) => ({
         value,
-        originalIndex: index,
+        originalIndex: axisData.originalIndices[index],
         originalRaw: axisData.raw[index]
     }));
     
     indexed.sort((a, b) => a.value - b.value);
 
-    const sortedIndices = indexed.map(item => item.originalIndex);
     const sortedCalculated = indexed.map(item => item.value);
     const sortedRaw = indexed.map(item => item.originalRaw);
+    const sortedOriginalIndices = indexed.map(item => item.originalIndex);
 
     return {
-        sortedAxis: {
-            ...axisData,
-            raw: sortedRaw,
-            calculated: sortedCalculated,
-            originalIndices: sortedIndices, // this now maps sorted position to original position
-        },
-        sortedIndices
+        ...axisData,
+        raw: sortedRaw,
+        calculated: sortedCalculated,
+        originalIndices: sortedOriginalIndices, // this now maps sorted position to original position
     };
 }
-
 
 export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
@@ -311,8 +299,8 @@ export function readAndCalculateMapFromBin(
     const unsortedXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
     const unsortedYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
 
-    const { sortedAxis: sortedXAxis, sortedIndices: xSortedIndices } = sortAxis(unsortedXAxis);
-    const { sortedAxis: sortedYAxis, sortedIndices: ySortedIndices } = sortAxis(unsortedYAxis);
+    const sortedXAxis = sortAxis(unsortedXAxis);
+    const sortedYAxis = sortAxis(unsortedYAxis);
 
     const actualRows = def.yAxisDef.count || rows;
     const actualCols = def.xAxisDef.count || cols;
@@ -348,9 +336,9 @@ export function readAndCalculateMapFromBin(
         }
     }
 
-    // Now, create the sorted maps based on the sorted axis indices
-    const sortedRawMap = ySortedIndices.map(originalRowIndex => 
-        xSortedIndices.map(originalColIndex => originalRawMap[originalRowIndex][originalColIndex])
+    // Now, create the sorted maps by remapping the data according to the sorted axes' original indices.
+    const sortedRawMap = sortedYAxis.originalIndices.map(originalRowIndex => 
+        sortedXAxis.originalIndices.map(originalColIndex => originalRawMap[originalRowIndex]?.[originalColIndex] ?? null)
     );
     
     const sortedCalculatedMap = sortedRawMap.map(row => 
@@ -363,7 +351,6 @@ export function readAndCalculateMapFromBin(
             }
         })
     );
-
 
     return { 
         calculatedMap: sortedCalculatedMap, 
