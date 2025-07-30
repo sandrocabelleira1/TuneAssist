@@ -18,7 +18,6 @@ function getAttr(element: Element | null, attrName: string): string | null {
 
 function normalizeEquation(eq: string | null | undefined): string {
     if (!eq) return 'X';
-    // Garante que 'x' e 'X' sejam tratados como a mesma variável.
     return eq.trim().replace(/x/gi, 'X');
 }
 
