@@ -478,3 +478,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    
