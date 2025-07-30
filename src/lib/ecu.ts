@@ -69,9 +69,10 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     // Lógica de parsing para eixos definidos estaticamente (não vinculados)
     const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
     if (labels.length > 0) {
+        const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
         return {
             isLinked: false,
-            count: labels.length,
+            count: labels.length || count,
             label: findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo',
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
         };
