@@ -160,9 +160,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             const cols = xAxisDef.count;
             const rows = yAxisDef.count;
+            
             if (cols === 0 || rows === 0) {
-                // Em vez de lançar um erro, simplesmente ignoramos esta tabela.
-                return;
+                throw new Error("Dimensões da tabela (linhas/colunas) não podem ser zero.");
             }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
@@ -187,7 +187,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 yAxisDef,
             });
         } catch (e) {
-            console.error(`Erro ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${(e as Error).message}. Esta tabela será ignorada.`);
+            // Se as dimensões forem zero ou ocorrer outro erro de parsing, ignoramos a tabela.
+            // console.error(`Erro ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${(e as Error).message}. Esta tabela será ignorada.`);
         }
     });
 
