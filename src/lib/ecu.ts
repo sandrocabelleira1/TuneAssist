@@ -29,12 +29,10 @@ function getIsBigEndian(element: Element | null): boolean {
 }
 
 function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>): AxisDimension {
+    const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
-    const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
-    
-    let primaryTitle = findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Desconhecido';
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
@@ -42,20 +40,18 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
             throw new Error(`Tabela de eixos vinculada com ID ${linkId} não encontrada.`);
         }
         
-        const linkedTableTitle = findNode(linkedTable, 'title')?.textContent?.trim();
         const zAxisNodeOfLinkedTable = findNode(linkedTable, 'XDFAXIS[id="z"]');
         if (!zAxisNodeOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
-
+        
         const embeddedData = findNode(zAxisNodeOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA');
         if (!embeddedData) throw new Error(`Dados embutidos não encontrados no eixo Z da tabela vinculada ${linkId}`);
-        
+
         const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
-        const count = indexcount;
         
         return {
             isLinked: true,
-            count: count,
-            label: linkedTableTitle || primaryTitle,
+            count: indexcount,
+            label: findNode(linkedTable, 'title')?.textContent?.trim() || 'Eixo Vinculado',
             address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(embeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -72,7 +68,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: count,
-            label: primaryTitle,
+            label: findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Embutido',
             address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
             dataSize: dataSizeBits / 8,
             stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -87,30 +83,14 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: labels.length || indexcount,
-            label: primaryTitle,
+            label: findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo de Label',
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
         };
     }
     
-    if (!sourceEmbeddedData || !indexcount) {
-      return { count: indexcount || 0, label: primaryTitle, decimalpl: 1 };
-    }
-
-    const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
-    return {
-        isLinked: false,
-        count: indexcount,
-        label: primaryTitle,
-        address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
-        dataSize: dataSizeBits / 8,
-        stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
-        isBigEndian: getIsBigEndian(sourceEmbeddedData),
-        equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
-        decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
-    };
+    return { count: indexcount, label: 'Eixo Desconhecido', decimalpl: 1 };
 }
-
 
 export function parseXDF(xmlString: string): { definitions: XDFDefinition[], brand: string | null } {
     if (typeof DOMParser === 'undefined') {
