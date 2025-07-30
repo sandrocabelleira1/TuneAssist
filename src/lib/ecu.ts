@@ -158,10 +158,12 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             if (cols === 0 || rows === 0) {
                 // Em vez de lançar um erro, simplesmente ignoramos esta tabela.
                 // Isto evita que a aplicação falhe em tabelas 1D ou com formato inesperado.
-                throw new Error("Dimensões da tabela (linhas/colunas) não podem ser zero.");
+                return;
             }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
+            const dataOrganizationStr = getAttr(zAxisNode, 'data_organization')?.toUpperCase();
+            const dataOrganization: 'ROW_MAJOR' | 'COL_MAJOR' = dataOrganizationStr === 'COL_MAJOR' ? 'COL_MAJOR' : 'ROW_MAJOR';
             const rowStrideBits = parseInt(getAttr(embeddedData, 'mmedrowstridebits') || `${cols * dataSizeBits}`, 10);
             
             definitions.push({
@@ -173,7 +175,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 dataSize: dataSizeBits / 8,
                 colStrideBytes: dataSizeBits / 8, // Stride da coluna é o tamanho do dado
                 rowStrideBytes: rowStrideBits / 8,
-                dataOrganization: 'ROW_MAJOR', // Assumir ROW_MAJOR como padrão
+                dataOrganization,
                 isBigEndian: getIsBigEndian(embeddedData),
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'X',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
@@ -312,11 +314,9 @@ export function readAndCalculateMapFromBin(
     const originalRawMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
     for (let r = 0; r < actualRows; r++) {
         for (let c = 0; c < actualCols; c++) {
-            const offset = dataOrganization === 'COL_MAJOR'
-                ? address + (c * rowStrideBytes) + (r * colStrideBytes)
-                : address + (r * rowStrideBytes) + (c * colStrideBytes);
+            const offset = getCellAddress(def, r, c);
             
-            if (offset + dataSize > view.byteLength) continue;
+            if (offset === null || offset + dataSize > view.byteLength) continue;
             
             try {
                 let rawValue;
@@ -360,11 +360,18 @@ export function readAndCalculateMapFromBin(
 
 export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: number): number | null {
     if (!def) return null;
-    const { address, rowStrideBytes, colStrideBytes, dataOrganization } = def;
+    const { address, rowStrideBytes, colStrideBytes, dataOrganization, rows, cols } = def;
+
+    // A validação de limites deve ser feita na função que chama, mas uma verificação rápida aqui é útil
+    if (rowIndex < 0 || rowIndex >= rows || colIndex < 0 || colIndex >= cols) {
+        return null;
+    }
 
     if (dataOrganization === 'COL_MAJOR') {
+        // Na organização por colunas, o stride da coluna é maior
         return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
     } 
+    // Por padrão (ROW_MAJOR), o stride da linha é maior
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
@@ -514,35 +521,28 @@ export function writeMapToBin(
         throw new Error('Parâmetros inválidos fornecidos para writeMapToBin.');
     }
 
-    const {
-        address, rows, cols, dataSize,
-        colStrideBytes, rowStrideBytes, dataOrganization
-    } = def;
-
     const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
     const useLittleEndianForZ = !(def.isBigEndian ?? false);
     
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < def.rows; r++) {
+        for (let c = 0; c < def.cols; c++) {
             const rawValue = rawMapData[r]?.[c];
             if (rawValue === null || rawValue === undefined || isNaN(rawValue)) continue;
 
-            const offset = dataOrganization === 'COL_MAJOR'
-                ? address + (c * rowStrideBytes) + (r * colStrideBytes)
-                : address + (r * rowStrideBytes) + (c * colStrideBytes);
+            const offset = getCellAddress(def, r, c);
 
-            if (offset + dataSize > view.byteLength) {
+            if (offset === null || offset + def.dataSize > view.byteLength) {
                 console.error(`Escrita do mapa fora dos limites. Offset: ${offset} para o mapa "${def.name}". A saltar.`);
                 continue;
             }
             
             try {
                 const intValue = Math.round(rawValue);
-                if (dataSize === 1) {
+                if (def.dataSize === 1) {
                     view.setUint8(offset, Math.max(0, Math.min(255, intValue)));
-                } else if (dataSize === 2) {
+                } else if (def.dataSize === 2) {
                      view.setUint16(offset, Math.max(0, Math.min(65535, intValue)), useLittleEndianForZ);
                 }
             } catch (e) {
