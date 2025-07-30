@@ -54,82 +54,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     const brand = findNode(header, 'DEFAULTS', 'defaults')?.querySelector('CATEGORY')?.textContent?.split(' ')[0] || null;
 
     const definitions: XDFDefinition[] = [];
-    const tableCache = new Map<string, Element>();
-    allTableElements.forEach(tableEl => {
-        const uniqueId = getAttr(tableEl, 'uniqueid');
-        if (uniqueId) {
-            tableCache.set(uniqueId, tableEl);
-        }
-    });
-
-    const axisCache = new Map<string, AxisDimension>();
-
-    function parseAxis(tableEl: Element, axisId: 'x' | 'y'): AxisDimension {
-        const tableId = getAttr(tableEl, 'uniqueid');
-        const cacheKey = `${tableId}-${axisId}`;
-        if (axisCache.has(cacheKey)) {
-            return axisCache.get(cacheKey)!;
-        }
-
-        const axisNode = findNode(tableEl, `XDFAXIS[id="${axisId}"]`);
-        if (!axisNode) throw new Error(`Nó do eixo ${axisId} não encontrado na tabela ${tableId}.`);
-
-        const linkNode = findNode(axisNode, 'linkobjid');
-        const linkedTableId = getAttr(linkNode, 'objectid');
-        const linkedAxisId = getAttr(linkNode, 'subobjectid') as 'x' | 'y' | 'z' | null;
-        
-        if (linkNode && linkedTableId && linkedAxisId) {
-             const linkedTableEl = tableCache.get(linkedTableId);
-             if (linkedTableEl) {
-                if (linkedAxisId === 'z') { // O link aponta para os valores Z de outra tabela
-                    const zAxisNodeOfLinkedTable = findNode(linkedTableEl, 'XDFAXIS[id="z"]');
-                    if (!zAxisNodeOfLinkedTable) throw new Error(`Eixo Z ligado não encontrado em ${linkedTableId}`);
-                    const embeddedData = findNode(linkedTableEl, 'embeddeddata', 'EMBEDDEDDATA');
-                     return {
-                        count: parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10),
-                        label: findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Ligado',
-                        address: parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16) || undefined,
-                        dataSize: (parseInt(getAttr(zAxisNodeOfLinkedTable, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10)) / 8,
-                        isBigEndian: getIsBigEndian(embeddedData),
-                        equation: getAttr(findNode(zAxisNodeOfLinkedTable, 'math', 'MATH'), 'equation') || 'X',
-                        decimalpl: parseInt(findNode(zAxisNodeOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
-                    };
-
-                } else { // O link aponta para um eixo X ou Y de outra tabela
-                    return parseAxis(linkedTableEl, linkedAxisId);
-                }
-             } else {
-                 throw new Error(`Tabela ligada com uniqueid "${linkedTableId}" não encontrada.`);
-             }
-        }
-        
-        // Se não houver link, analisa a definição do próprio eixo
-        const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-        const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
-        const labelNodes = axisNode.querySelectorAll(':scope > label');
-        const explicitValues: (string | number)[] = [];
-
-        if (labelNodes.length > 0) {
-            labelNodes.forEach(labelNode => {
-                 const val = parseFloat(getAttr(labelNode, 'index') || '');
-                 explicitValues.push(isNaN(val) ? (labelNode.textContent || '') : val);
-            });
-        }
-        
-        const result: AxisDimension = {
-            count: explicitValues.length > 0 ? explicitValues.length : count,
-            label: findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || (axisId === 'x' ? 'Eixo X' : 'Eixo Y'),
-            address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16) || undefined,
-            dataSize: (parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10)) / 8,
-            isBigEndian: getIsBigEndian(sourceEmbeddedData),
-            equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
-            decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
-            values: explicitValues.length > 0 ? explicitValues : undefined,
-        };
-
-        axisCache.set(cacheKey, result);
-        return result;
-    }
 
     allTableElements.forEach(tableEl => {
         try {
@@ -142,7 +66,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const embeddedData = findNode(tableEl, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             if (isNaN(address)) return;
-            
+
             const colsEl = findNode(tableEl, 'xaxis');
             const rowsEl = findNode(tableEl, 'yaxis');
             
@@ -150,9 +74,23 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const rows = parseInt(getAttr(rowsEl, 'indexcount') || '0', 10);
             
             if (cols === 0 || rows === 0) return;
+
+            const parseAxisSimple = (axisNode: Element | null, axisId: 'x' | 'y'): AxisDimension => {
+                if (!axisNode) throw new Error(`Nó do eixo ${axisId} não encontrado`);
+                const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+                 return {
+                    count: parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10),
+                    label: findNode(axisNode, 'title')?.textContent?.trim() || 'Eixo Desconhecido',
+                    address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16) || undefined,
+                    dataSize: (parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10)) / 8,
+                    isBigEndian: getIsBigEndian(sourceEmbeddedData),
+                    equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
+                    decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
+                };
+            }
             
-            const xAxisDef = parseAxis(tableEl, 'x');
-            const yAxisDef = parseAxis(tableEl, 'y');
+            const xAxisDef = parseAxisSimple(findNode(tableEl, 'XDFAXIS[id="x"]'), 'x');
+            const yAxisDef = parseAxisSimple(findNode(tableEl, 'XDFAXIS[id="y"]'), 'y');
 
             const dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             
@@ -160,8 +98,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 uniqueId: getAttr(tableEl, 'uniqueid') || tableName,
                 name: tableName,
                 address,
-                rows: rows,
-                cols: cols,
+                rows,
+                cols,
                 dataSize: dataSizeBits / 8,
                 colStrideBytes: dataSizeBits / 8,
                 rowStrideBytes: (cols) * (dataSizeBits / 8),
@@ -171,7 +109,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
                 xAxisDef,
                 yAxisDef,
-                isPotential: false,
             });
         } catch (e) {
             const tableName = findNode(tableEl, 'title')?.textContent?.trim() || getAttr(tableEl, 'name') || 'desconhecida';
