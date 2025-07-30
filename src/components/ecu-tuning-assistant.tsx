@@ -42,7 +42,7 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
         );
     }
 
-    const formatAxisLabel = (axis: any, axisDef: any) => {
+    const formatAxisLabel = (axis: any) => {
         let label = axis.label || 'Eixo';
         if (axis.address) {
             label += ` (0x${axis.address.toString(16).toUpperCase()})`;
@@ -50,8 +50,8 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
         return label;
     };
     
-    const yAxisLabel = formatAxisLabel(axes.y, selectedMapDefinition.yAxisDef);
-    const xAxisLabel = formatAxisLabel(axes.x, selectedMapDefinition.xAxisDef);
+    const yAxisLabel = formatAxisLabel(axes.y);
+    const xAxisLabel = formatAxisLabel(axes.x);
 
     const getAxisDecimalPlaces = (axisDef: any) => {
         if (!axisDef) return 2;
@@ -100,9 +100,9 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
     );
 }
 
-const initialManualConfig = {
-    x: { address: '', count: '', equation: '', dataSize: '16', isBigEndian: 'false', label: 'Carga' },
-    y: { address: '', count: '', equation: '', dataSize: '16', isBigEndian: 'false', label: 'RPM' },
+const initialManualConfig: ManualAxisConfig = {
+    x: { address: '', count: '', equation: 'x', dataSize: '16', isBigEndian: 'false', label: 'Carga' },
+    y: { address: '', count: '', equation: 'x', dataSize: '16', isBigEndian: 'false', label: 'RPM' },
 };
 
 export default function EcuTuningAssistant() {
@@ -117,6 +117,7 @@ export default function EcuTuningAssistant() {
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
 
     const [manualConfig, setManualConfig] = useState<ManualAxisConfig>(initialManualConfig);
+    const [isManualMode, setIsManualMode] = useState(false);
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
@@ -170,7 +171,7 @@ export default function EcuTuningAssistant() {
         e.target.value = '';
     };
 
-    const processMap = (useManualConfig = false) => {
+    const processMap = useCallback((useManualConfig: boolean = false) => {
         if (!selectedMapName || !binFile || !xdfFile) return;
         const def = xdfFile.definitions.find(d => d.name === selectedMapName);
         if (!def) return;
@@ -192,21 +193,22 @@ export default function EcuTuningAssistant() {
             const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
             addLog(errorMessage, 'error');
             toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
-            setProcessedMap(null);
+            // Não defina o mapa como nulo aqui para evitar que a tabela desapareça
+            // setProcessedMap(null); 
         }
-    };
+    }, [selectedMapName, binFile, xdfFile, manualConfig, addLog, toast]);
 
     const handleMapSelect = (name: string) => {
         setSelectedMapName(name);
-        setProcessedMap(null); // Clear previous map data
+        setProcessedMap(null); // Limpa dados antigos ao selecionar novo mapa
     };
 
     useEffect(() => {
-        if (selectedMapName && binFile && xdfFile) {
-            processMap();
+        if (selectedMapName && binFile && xdfFile && !isManualMode) {
+            processMap(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName, binFile, xdfFile]);
+    }, [selectedMapName, binFile, xdfFile, isManualMode]);
     
     const handleManualConfigChange = (axis: 'x' | 'y', field: keyof ManualAxisConfig['x'], value: string) => {
         setManualConfig(prev => ({
@@ -219,8 +221,14 @@ export default function EcuTuningAssistant() {
     };
 
     const handleManualRecalculate = () => {
-        processMap(true);
+        setIsManualMode(true); // Ativa o modo manual
+        processMap(true); // Processa com a configuração manual
     };
+    
+    // Desativa o modo manual se o mapa for trocado
+    useEffect(() => {
+        setIsManualMode(false);
+    }, [selectedMapName]);
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
         addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)} (Funcionalidade de escrita desativada)`, 'info');
@@ -282,6 +290,7 @@ export default function EcuTuningAssistant() {
                         <Card>
                             <CardHeader className="p-4">
                                 <CardTitle className="text-base flex items-center gap-2"><Settings2 size={18} /> Configuração Manual dos Eixos</CardTitle>
+                                <CardDescription className="text-xs">Use para substituir a leitura do XDF. Desativa o modo manual ao trocar de mapa.</CardDescription>
                             </CardHeader>
                             <CardContent className="p-4 pt-0 space-y-4">
                                 <div className="space-y-3">
@@ -291,7 +300,7 @@ export default function EcuTuningAssistant() {
                                         <Input placeholder="Contagem (ex: 16)" value={manualConfig.y.count} onChange={e => handleManualConfigChange('y', 'count', e.target.value)} />
                                     </div>
                                     <Input placeholder="Equação (ex: x)" value={manualConfig.y.equation} onChange={e => handleManualConfigChange('y', 'equation', e.target.value)} />
-                                    <RadioGroup value={manualConfig.y.dataSize} onValueChange={val => handleManualConfigChange('y', 'dataSize', val)} className="flex items-center space-x-4">
+                                    <RadioGroup value={manualConfig.y.dataSize} onValueChange={val => handleManualConfigChange('y', 'dataSize', val as '8' | '16')} className="flex items-center space-x-4">
                                         <Label>Tamanho:</Label>
                                         <div className="flex items-center space-x-2"><RadioGroupItem value="8" id="y-8bit" /><Label htmlFor="y-8bit">8-bit</Label></div>
                                         <div className="flex items-center space-x-2"><RadioGroupItem value="16" id="y-16bit" /><Label htmlFor="y-16bit">16-bit</Label></div>
@@ -304,7 +313,7 @@ export default function EcuTuningAssistant() {
                                         <Input placeholder="Contagem (ex: 16)" value={manualConfig.x.count} onChange={e => handleManualConfigChange('x', 'count', e.target.value)} />
                                     </div>
                                     <Input placeholder="Equação (ex: x/69.6)" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', 'equation', e.target.value)} />
-                                     <RadioGroup value={manualConfig.x.dataSize} onValueChange={val => handleManualConfigChange('x', 'dataSize', val)} className="flex items-center space-x-4">
+                                     <RadioGroup value={manualConfig.x.dataSize} onValueChange={val => handleManualConfigChange('x', 'dataSize', val as '8' | '16')} className="flex items-center space-x-4">
                                         <Label>Tamanho:</Label>
                                         <div className="flex items-center space-x-2"><RadioGroupItem value="8" id="x-8bit" /><Label htmlFor="x-8bit">8-bit</Label></div>
                                         <div className="flex items-center space-x-2"><RadioGroupItem value="16" id="x-16bit" /><Label htmlFor="x-16bit">16-bit</Label></div>

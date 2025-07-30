@@ -42,11 +42,8 @@ function getIsBigEndian(element: Element | null): boolean {
     return attr === '1' || attr?.toLowerCase() === 'true';
 }
 
-// Ensure address parsing handles potential BigInts from hex strings
 function parseAddress(addressStr: string | null): number {
     if (!addressStr) return NaN;
-    // Use BigInt for parsing to handle addresses larger than Number.MAX_SAFE_INTEGER
-    // then convert to Number. This is generally safe as buffer offsets won't exceed this.
     try {
         return Number(BigInt(addressStr.startsWith('0x') ? addressStr : '0x' + addressStr));
     } catch {
@@ -55,7 +52,9 @@ function parseAddress(addressStr: string | null): number {
 }
 
 function getDataSizeInBytes(element: Element | null, axisNode: Element | null): number {
-    const sizeBits = parseInt(getAttr(element, 'mmedelementsizebits') || getAttr(axisNode, 'elementsizebits') || '8', 10);
+    const sizeBitsAttr = getAttr(element, 'mmedelementsizebits') || getAttr(axisNode, 'elementsizebits');
+    const sizeBits = parseInt(sizeBitsAttr || '8', 10);
+    if (isNaN(sizeBits) || sizeBits === 0) return 1; // Default to 8-bit if invalid
     return sizeBits / 8;
 }
 
@@ -68,16 +67,14 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
     const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
-    const defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
+    let defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
     
-    // Case 1: Axis data is linked from another table (correct way for breakpoints)
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
         if (!linkedTable) throw new Error(`Tabela de eixos vinculada com ID ${linkId} não encontrada.`);
         
-        // A tabela vinculada (de breakpoint) geralmente define seus dados no eixo Z
         const zAxisOfLinkedTable = findNode(linkedTable, 'XDFAXIS[id="z"]');
-        if (!zAxisOf-linked-table) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
+        if (!zAxisOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada ${linkId}`);
         
         const embeddedData = findNode(zAxisOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA');
         if (!embeddedData) throw new Error(`Dados embutidos não encontrados no eixo Z da tabela vinculada ${linkId}`);
@@ -85,11 +82,13 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
         if (isNaN(address)) throw new Error(`Endereço inválido na tabela vinculada ${linkId}`);
 
-        // O número de elementos é a contagem de colunas ou linhas da tabela de breakpoint
         const count = parseInt(getAttr(embeddedData, 'mmedcolcount') || getAttr(embeddedData, 'mmedrowcount') || '0', 10);
+        
+        const labelNode = findNode(linkedTable, 'title');
+        const label = labelNode?.textContent?.trim() || defaultLabel;
 
         return {
-            label: findNode(linkedTable, 'title')?.textContent?.trim() || defaultLabel,
+            label: label,
             count: count,
             address: address,
             dataSize: getDataSizeInBytes(embeddedData, zAxisOfLinkedTable),
@@ -99,7 +98,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    // Case 2: Axis data is embedded directly in the axis definition (less common for main maps)
     const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
     const sourceAddress = parseAddress(getAttr(sourceEmbeddedData, 'mmedaddress'));
     if (sourceEmbeddedData && !isNaN(sourceAddress)) {
@@ -115,7 +113,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    // Case 3: Axis uses hardcoded text labels
     const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
     if (labels.length > 0) {
         return {
@@ -160,7 +157,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
-            // Se a tabela não tem um endereço para seus dados Z, provavelmente é uma tabela de eixos, não um mapa principal.
             if (isNaN(address)) return;
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
@@ -170,7 +166,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
             const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap);
 
-            // Se os eixos não puderam ser definidos (sem contagem), ignore este mapa.
             if (xAxisDef.count === 0 || yAxisDef.count === 0) return;
             
             definitions.push({
@@ -306,6 +301,7 @@ function processAndSortMap(
 
 
 export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
+    if (!def.xAxisDef || !def.yAxisDef) throw new Error(`Definições de eixo para o mapa "${def.name}" estão em falta.`);
     const xAxisData = readAxisFromBin(binBuffer, def.xAxisDef);
     const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef);
     return processAndSortMap(binBuffer, def, xAxisData, yAxisData);
@@ -318,11 +314,14 @@ export function readAndCalculateMapFromBinManual(binBuffer: ArrayBuffer, def: XD
         address: parseAddress(manual.address),
         dataSize: parseInt(manual.dataSize, 10) / 8,
         isBigEndian: manual.isBigEndian === 'true',
-        equation: manual.equation
+        equation: manual.equation,
+        decimalpl: 2, // Default decimal places for manual config
     });
 
     const xAxisDef = manualToAxisDim(manualConfig.x);
     const yAxisDef = manualToAxisDim(manualConfig.y);
+    
+    if(isNaN(xAxisDef.count) || isNaN(yAxisDef.count)) throw new Error("Contagem inválida para eixos manuais.");
 
     const xAxisData = readAxisFromBin(binBuffer, xAxisDef);
     const yAxisData = readAxisFromBin(binBuffer, yAxisDef);
