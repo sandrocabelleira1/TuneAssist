@@ -39,7 +39,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
-    const titleNode = findNode(axisNode, 'title');
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
@@ -74,7 +73,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         return {
             isLinked: false,
             count: labels.length || count,
-            label: titleNode?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo',
+            label: findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo',
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
         };
     }
@@ -83,13 +82,14 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
     const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10)
     if (count === 0) {
-        throw new Error('A contagem do eixo (indexcount) não pode ser zero para um eixo não estático.');
+        // Retorna um objeto válido mas vazio se a contagem for 0, para ser ignorado depois
+        return { count: 0, label: 'Eixo Inválido' };
     }
     const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
     return {
         isLinked: false,
         count: count,
-        label: titleNode?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Desconhecido',
+        label: findNode(axisNode, 'title')?.textContent?.trim() || getAttr(axisNode, 'units') || 'Eixo Desconhecido',
         address: parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16),
         dataSize: dataSizeBits / 8,
         stride: (parseInt(getAttr(sourceEmbeddedData, 'mmedmajorstridebits') || '0', 10) || dataSizeBits) / 8,
@@ -152,7 +152,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
             
             if (!xAxisNode || !yAxisNode) {
-                 return; // É um mapa 1D ou tabela de valores, ignorar por agora para garantir estabilidade
+                 return; // É um mapa 1D ou tabela de valores, ignorar
             }
             
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
@@ -161,7 +161,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const cols = xAxisDef.count;
             const rows = yAxisDef.count;
             if (cols === 0 || rows === 0) {
-                throw new Error("Dimensões da tabela (linhas/colunas) não podem ser zero.");
+                // Em vez de lançar um erro, simplesmente ignoramos esta tabela.
+                return;
             }
 
             const dataSizeBits = parseInt(getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
@@ -362,10 +363,10 @@ export function invertEquation(
     }
 
     // Caso: Y = X / C  => X = Y * C
-    // Caso: Y = C / X  => X = C / Y
     let match = sanitizedEq.match(/^X\s*\/\s*([\d.]+)$/);
     if (match) return finalValue * parseFloat(match[1]);
     
+    // Caso: Y = C / X  => X = C / Y
     match = sanitizedEq.match(/^([\d.]+)\s*\/\s*X$/);
     if (match) return parseFloat(match[1]) / finalValue;
 
