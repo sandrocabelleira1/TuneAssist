@@ -32,12 +32,8 @@ function normalizeEquation(eq: string | null | undefined): string {
 function getIsBigEndian(element: Element | null): boolean {
     const attr = getAttr(element, 'bigendian');
     // Considera "0" ou "false" como little-endian. Qualquer outra coisa (ou ausência) é big-endian.
-    if (attr === '0' || attr?.toLowerCase() === 'false') {
-        return false;
-    }
-    return true; 
+    return attr !== '0' && attr?.toLowerCase() !== 'false';
 }
-
 
 export function parseXDF(xmlString: string): { definitions: XDFDefinition[], brand: string | null } {
     if (typeof DOMParser === 'undefined') {
@@ -46,51 +42,75 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, "application/xml");
     
-    // Verifica se houve um erro de análise no XML
     const parseError = xmlDoc.querySelector("parsererror");
     if (parseError) {
         throw new Error(`Erro de análise do XDF: ${parseError.textContent}`);
     }
 
-    // Encontra todas as tabelas no documento
     const allTableElements = xmlDoc.querySelectorAll('XDFTABLE, table');
     if (allTableElements.length === 0) {
         throw new Error("Nenhuma tag <XDFTABLE> ou <table> foi encontrada no ficheiro. Este não parece ser um ficheiro XDF válido.");
     }
     
-    // Tenta extrair a marca do cabeçalho do XDF
     const header = findNode(xmlDoc, 'XDF', 'xdfile');
     const brand = findNode(header, 'DEFAULTS', 'defaults')?.querySelector('CATEGORY')?.textContent?.split(' ')[0] || null;
 
     const definitions: XDFDefinition[] = [];
 
+    // First Pass: Catalog all tables by their uniqueid
+    const tableCatalog = new Map<string, Element>();
+    allTableElements.forEach(tableEl => {
+        const uniqueId = getAttr(tableEl, 'uniqueid');
+        if (uniqueId) {
+            tableCatalog.set(uniqueId, tableEl);
+        }
+    });
+
+    // Second Pass: Process each table
     allTableElements.forEach(tableEl => {
         try {
             const tableName = findNode(tableEl, 'title')?.textContent?.trim() || getAttr(tableEl, 'name');
-            if (!tableName) return; // Salta tabelas sem nome
+            if (!tableName) return; // Skip tables without a name
+
+            // Function to resolve a link and get the definitive table element
+            const resolveLink = (startEl: Element, idSelector: 'XDFAXIS' | 'z' | 'x' | 'y'): Element => {
+                const axisNode = findNode(startEl, `XDFAXIS[id="${idSelector}"]`);
+                const linkId = axisNode ? getAttr(findNode(axisNode, 'link'), 'objid') : null;
+                if (linkId && tableCatalog.has(linkId)) {
+                    return tableCatalog.get(linkId)!;
+                }
+                return startEl;
+            };
+
+            const zDefinitionTable = resolveLink(tableEl, 'z');
+            const zAxisNode = findNode(zDefinitionTable, 'XDFAXIS[id="z"]') || findNode(zDefinitionTable, 'XDFAXIS[id="Z"]');
+            if (!zAxisNode) return;
+
+            const xDefinitionTable = resolveLink(tableEl, 'x');
+            const xAxisNode = findNode(xDefinitionTable, 'xaxis') || findNode(xDefinitionTable, 'XDFAXIS[id="x"]');
+
+            const yDefinitionTable = resolveLink(tableEl, 'y');
+            const yAxisNode = findNode(yDefinitionTable, 'yaxis') || findNode(yDefinitionTable, 'XDFAXIS[id="y"]');
             
-            // Procura o nó de dados principal (eixo Z)
-            const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-            if (!zAxisNode) return; // Salta tabelas sem definição de eixo Z
-            
-            // Encontra a definição de dados embutidos para obter o endereço de memória
-            const embeddedData = findNode(tableEl, 'embeddeddata', 'EMBEDDEDDATA');
+            if (!xAxisNode || !yAxisNode) return;
+
+
+            const embeddedData = findNode(zDefinitionTable, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            if (isNaN(address)) return; // Salta tabelas sem um endereço válido
-            
-            // Função interna para analisar um eixo (X ou Y)
-            const parseAxis = (axisNode: Element, defaultCount: number, defaultLabel: string): AxisDimension => {
-                 const sourceEmbeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
+            if (isNaN(address)) return;
+
+            const parseAxis = (axisNode: Element, sourceTable: Element, defaultCount: number, defaultLabel: string): AxisDimension => {
+                 const sourceEmbeddedData = findNode(sourceTable, 'embeddeddata', 'EMBEDDEDDATA');
                  const sourceAddr = parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16);
                  const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
                  const dataSize = dataSizeBits / 8;
                  
-                 // Verifica se existem valores explícitos (labels) para o eixo
-                 const labelNodes = axisNode.querySelectorAll('label');
+                 const labelNodes = axisNode.querySelectorAll(':scope > label');
                  const explicitValues: (string | number)[] = [];
                  if (labelNodes.length > 0) {
                     labelNodes.forEach(labelNode => {
-                        explicitValues.push(labelNode.textContent || '');
+                        const val = parseFloat(getAttr(labelNode, 'index') || '');
+                        explicitValues.push(isNaN(val) ? (labelNode.textContent || '') : val);
                     });
                  }
 
@@ -99,31 +119,24 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     label: findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || defaultLabel,
                     address: !isNaN(sourceAddr) ? sourceAddr : undefined,
                     dataSize,
-                    stride: dataSize, // Assume que o stride é igual ao tamanho do dado
+                    stride: dataSize,
                     isBigEndian: getIsBigEndian(sourceEmbeddedData),
                     equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
                     decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
                     values: explicitValues.length > 0 ? explicitValues : undefined,
                  };
             };
-
-            const xAxisNode = findNode(tableEl, 'xaxis', 'XDFAXIS[id="x"]');
-            const yAxisNode = findNode(tableEl, 'yaxis', 'XDFAXIS[id="y"]');
-            if (!xAxisNode || !yAxisNode) return; // Requer ambos os eixos
             
-            // Obtém as dimensões da tabela
             const cols = parseInt(getAttr(xAxisNode, 'indexcount') || getAttr(tableEl, 'cols') || '0', 10);
             const rows = parseInt(getAttr(yAxisNode, 'indexcount') || getAttr(tableEl, 'rows') || '0', 10);
-            if (cols === 0 || rows === 0) return; // Requer dimensões válidas
+            if (cols === 0 || rows === 0) return;
 
-            const xAxisDef = parseAxis(xAxisNode, cols, 'Eixo X');
-            const yAxisDef = parseAxis(yAxisNode, rows, 'Eixo Y');
+            const xAxisDef = parseAxis(xAxisNode, xDefinitionTable, cols, 'Eixo X');
+            const yAxisDef = parseAxis(yAxisNode, yDefinitionTable, rows, 'Eixo Y');
             
-            // Obtém o tamanho dos dados do eixo Z
             const dataSizeBits = parseInt(getAttr(zAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             const dataSize = dataSizeBits / 8;
             
-            // Adiciona a definição completa à lista
             definitions.push({
                 uniqueId: getAttr(tableEl, 'uniqueid') || tableName,
                 name: tableName,
@@ -133,7 +146,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 dataSize,
                 colStrideBytes: dataSize,
                 rowStrideBytes: cols * dataSize,
-                dataOrganization: 'ROW_MAJOR', // Assume ROW_MAJOR por defeito
+                dataOrganization: 'ROW_MAJOR',
                 isBigEndian: getIsBigEndian(embeddedData),
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'X',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
@@ -154,9 +167,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisDataState {
     const { count = 0, label = 'Eixo Desconhecido' } = axisDef || {};
     
-    // Se o eixo tiver valores fixos no XDF, usa-os diretamente
     if (axisDef?.values && axisDef.values.length > 0) {
-        const numValues = axisDef.values.map(v => typeof v === 'number' ? v : 0);
+        const numValues = axisDef.values.map(v => typeof v === 'number' ? v : (parseFloat(v as string) || 0) );
         return {
             label,
             raw: numValues,
@@ -165,7 +177,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
         };
     }
     
-    // Estado padrão se não houver endereço ou definição
     const defaultState: AxisDataState = {
         label,
         raw: Array.from({ length: count }, (_, i) => i + 1),
@@ -185,13 +196,12 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
 
     if (isNaN(addr) || isNaN(count) || isNaN(dataSize)) return defaultState;
 
-    // Cria a função de cálculo a partir da string da equação
     let equationFunc: (val: number) => number | string;
     try {
         equationFunc = new Function('X', `return ${equation}`) as (val: number) => number;
     } catch (e) {
         console.error(`Equação de eixo inválida para "${label}": ${equation}`);
-        equationFunc = (X: number) => X; // Retorna o valor raw em caso de erro
+        equationFunc = (X: number) => X;
     }
 
     const raw: number[] = [];
@@ -208,13 +218,12 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
         try {
             calculated.push(equationFunc(rawValue));
         } catch (e) {
-            calculated.push(rawValue); // Em caso de erro, usa o valor raw
+            calculated.push(rawValue);
         }
     }
     return { raw, calculated, originalIndices: Array.from({ length: calculated.length }, (_, i) => i), label };
 }
 
-// Ordena um eixo se ele for numérico
 function sortAxis(axisData: AxisDataState): AxisDataState {
     const isNumeric = axisData.calculated.every(v => typeof v === 'number' && isFinite(v));
     if (!isNumeric) {
@@ -237,7 +246,6 @@ function sortAxis(axisData: AxisDataState): AxisDataState {
     };
 }
 
-// Lê e calcula um mapa completo, incluindo a ordenação e alinhamento
 export function readAndCalculateMapFromBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
@@ -247,11 +255,9 @@ export function readAndCalculateMapFromBin(
         dataOrganization, colStrideBytes, rowStrideBytes
     } = def;
     
-    // Lê os eixos na sua ordem original
     const unsortedXAxis = readAxisFromBin(binBuffer, def.xAxisDef);
     const unsortedYAxis = readAxisFromBin(binBuffer, def.yAxisDef);
 
-    // Ordena os eixos
     const sortedXAxis = sortAxis(unsortedXAxis);
     const sortedYAxis = sortAxis(unsortedYAxis);
 
@@ -269,7 +275,6 @@ export function readAndCalculateMapFromBin(
         throw new Error(`A equação do mapa "${equation}" para "${def.name}" é inválida.`);
     }
 
-    // Lê os dados brutos do mapa na sua ordem original (como no BIN)
     const originalRawMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
 
     for (let r = 0; r < actualRows; r++) {
@@ -289,12 +294,10 @@ export function readAndCalculateMapFromBin(
         }
     }
     
-    // Reordena o mapa para corresponder aos eixos ordenados
     const sortedRawMap = sortedYAxis.originalIndices.map(originalRowIndex => 
         sortedXAxis.originalIndices.map(originalColIndex => originalRawMap[originalRowIndex]?.[originalColIndex] ?? null)
     );
     
-    // Calcula os valores finais a partir do mapa reordenado
     const sortedCalculatedMap = sortedRawMap.map(row => 
         row.map(cellValue => {
             if (cellValue === null) return null;
@@ -314,21 +317,16 @@ export function readAndCalculateMapFromBin(
     };
 }
 
-// Obtém o endereço de memória de uma célula específica
 export function getCellAddress(def: XDFDefinition, rowIndex: number, colIndex: number): number | null {
     if (!def) return null;
     const { address, rowStrideBytes, colStrideBytes, dataOrganization } = def;
 
-    // Esta função assume que rowIndex e colIndex são para o mapa ordenado.
-    // Para obter o endereço correto, precisaríamos dos índices originais.
-    // Esta implementação é uma simplificação para exibição.
     if (dataOrganization === 'COL_MAJOR') {
         return address + (colIndex * rowStrideBytes) + (rowIndex * colStrideBytes);
     } 
     return address + (rowIndex * rowStrideBytes) + (colIndex * colStrideBytes);
 }
 
-// Gera um checksum simples do buffer
 export function generateChecksum(buffer: ArrayBuffer): string {
     const dataView = new DataView(buffer);
     let checksum = 0;
@@ -338,14 +336,12 @@ export function generateChecksum(buffer: ArrayBuffer): string {
     return checksum.toString(16).toUpperCase().padStart(4, '0');
 }
 
-// Converte um buffer para uma string hexadecimal
 export function bufferToHex(buffer: ArrayBuffer): string {
   return [...new Uint8Array(buffer)]
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }
 
-// Inverte uma equação matemática simples para encontrar o valor original
 export function invertEquation(
   eq: string,
   finalValue: number
@@ -360,7 +356,6 @@ export function invertEquation(
         return finalValue;
     }
 
-    // Tenta resolver para aritmética simples: X * C, X / C, X + C, X - C
     const parts = sanitizedEq.split(/([*\/+-])/).map(p => p.trim());
     
     if (parts.length === 3) {
@@ -382,7 +377,6 @@ export function invertEquation(
       }
     }
     
-    // Tenta resolver para (X+C)*V
     const match = sanitizedEq.match(/\(\s*X\s*([+\-])\s*(\d+\.?\d*)\s*\)\s*([*\/])\s*(\d+\.?\d*)/);
     if(match) {
         const [, innerOp, innerValStr, outerOp, outerValStr] = match;
@@ -402,7 +396,6 @@ export function invertEquation(
     throw new Error(`A equação "${eq}" é demasiado complexa para ser invertida automaticamente.`);
 }
 
-// Recalcula o mapa de dados brutos a partir dos dados calculados
 export function recalculateRawMapFromCalculated(
     calculatedMap: MapData,
     def: XDFDefinition,
@@ -412,7 +405,6 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
-    // Cria um mapa "desordenado" para corresponder à ordem do BIN
     const unsortedCalculatedMap: MapData = Array(calculatedMap.length).fill(null).map(() => Array(calculatedMap[0].length).fill(null));
     
     sourceAxes.y.originalIndices.forEach((originalRow, sortedRow) => {
@@ -446,7 +438,6 @@ export function recalculateRawMapFromCalculated(
     return newRawMap;
 }
 
-// Escreve o mapa de dados brutos de volta no buffer do BIN
 export function writeMapToBin(
     binBuffer: ArrayBuffer,
     def: XDFDefinition,
@@ -464,7 +455,7 @@ export function writeMapToBin(
     const actualRows = def.yAxisDef.count || rows;
     const actualCols = def.xAxisDef.count || def.cols;
 
-    const newBuffer = binBuffer.slice(0); // Cria uma cópia
+    const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     
     const useLittleEndianForZ = !(def.isBigEndian ?? false);
