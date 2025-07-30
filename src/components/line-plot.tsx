@@ -126,9 +126,6 @@ export default function LinePlot2D({
         return { chartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
     }
 
-    // Data is already sorted by the backend
-    // preparedData.sort((a, b) => a.x - b.x);
-
     const lineDataKey = `${yAxis.label} ${yAxisTickFormatter(yAxis.calculated[selectedLineIndex])}`;
 
     return { chartData: preparedData, lineDataKey, error: null };
@@ -140,11 +137,22 @@ export default function LinePlot2D({
 
 
   const handlePointClick = (dotProps: any) => {
-    if (selectedLineIndex === null) return;
+    if (selectedLineIndex === null || !xAxis || !yAxis) return;
     const { payload } = dotProps;
+
+    const originalXIndex = xAxis.originalIndices.findIndex(i => i === payload.originalIndex)
+    
+    // We need to find the original index in the UNSORTED map
+    // The chart data is sorted, but our mapData passed to onPointChange is not
+    // The `processedMap.axes.y.originalIndices` gives us the original row index
+    // The `processedMap.axes.x.originalIndices` gives us the original col index
+    
+    const originalRowIndex = yAxis.originalIndices[selectedLineIndex];
+    const originalColIndex = xAxis.originalIndices[payload.originalIndex];
+
     setEditingPoint({
-      rowIndex: selectedLineIndex,
-      colIndex: payload.originalIndex,
+      rowIndex: originalRowIndex,
+      colIndex: originalColIndex,
       currentValue: payload.y,
       xValue: payload.x
     });

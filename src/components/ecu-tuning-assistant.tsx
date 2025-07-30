@@ -28,59 +28,10 @@ const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     )
 });
 
-
-function EditableMapCell({ value, onCellChange, originalValue, showCorrection, definition }: { value: number | null, onCellChange: (newValue: number) => void, originalValue: number | null, showCorrection: boolean, definition: XDFDefinition | undefined }) {
-    const [isEditing, setIsEditing] = useState(false);
-    const [currentValue, setCurrentValue] = useState(value !== null ? String(value) : '');
-
-    useEffect(() => {
-        setCurrentValue(value !== null ? String(value.toFixed(definition?.decimalpl ?? 2)) : '');
-    }, [value, definition]);
-
-    const handleBlur = () => {
-        setIsEditing(false);
-        const newValue = parseFloat(currentValue);
-        if (!isNaN(newValue)) {
-            onCellChange(newValue);
-        } else {
-            setCurrentValue(value !== null ? String(value.toFixed(definition?.decimalpl ?? 2)) : '');
-        }
-    };
-    
-    const correction = (value !== null && originalValue !== null) ? value - originalValue : 0;
-    const backgroundColor = showCorrection ? getCorrectionColor(correction) : 'transparent';
-
-    if (isEditing) {
-        return (
-            <input
-                type="text"
-                value={currentValue}
-                onChange={(e) => setCurrentValue(e.target.value)}
-                onBlur={handleBlur}
-                onKeyDown={(e) => e.key === 'Enter' && handleBlur()}
-                autoFocus
-                className="w-full h-full text-center bg-background text-foreground border-primary border-2 outline-none"
-            />
-        );
-    }
-    
-    return (
-        <div 
-            onClick={() => setIsEditing(true)} 
-            className="w-full h-full flex items-center justify-center cursor-pointer p-1"
-            style={{ backgroundColor }}
-        >
-            {value !== null ? value.toFixed(definition?.decimalpl ?? 2) : '-'}
-        </div>
-    );
-}
-
-
-function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, originalMapData }: {
+function DataTable({ mapData, axes, selectedMapDefinition, originalMapData }: {
     mapData: MapData | null;
     axes: { x: AxisData, y: AxisData } | null;
     selectedMapDefinition: XDFDefinition | undefined;
-    onCellChange: (rowIndex: number, colIndex: number, newValue: number) => void;
     originalMapData: MapData | null;
 }) {
     if (!mapData || !axes || !selectedMapDefinition) {
@@ -104,13 +55,12 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
 
     const getAxisDecimalPlaces = (axisDef: any) => {
         if (!axisDef) return 2;
-        if (axisDef.values) return -1;
+        if (axisDef.values) return -1; // No decimals for string labels
         return axisDef.decimalpl ?? 2;
     }
     
     const xAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.xAxisDef);
     const yAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.yAxisDef);
-
 
     return (
         <div className="overflow-auto h-full w-full">
@@ -134,8 +84,6 @@ function DataTable({ mapData, axes, selectedMapDefinition, onCellChange, origina
                                 {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
                             </td>
                             {mapData[yi]?.map((cell, xi) => {
-                                // Cell editing is complex with sorted data, so disabling for now.
-                                // We need a reverse mapping from sorted index to original index.
                                 return (
                                     <td key={xi} className="p-0 border border-border text-center h-10">
                                          <div className="w-full h-full flex items-center justify-center p-1">
@@ -161,7 +109,7 @@ export default function EcuTuningAssistant() {
     const [selectedMapName, setSelectedMapName] = useState<string>('');
     const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
     
-    const [originalMapData, setOriginalMapData] = useState<MapData | null>(null); // For diff tracking
+    const [originalMapData, setOriginalMapData] = useState<MapData | null>(null);
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -224,7 +172,6 @@ export default function EcuTuningAssistant() {
                 try {
                     const result = readAndCalculateMapFromBin(binFile.buffer, def);
                     setProcessedMap(result);
-                    // For now, originalMapData isn't used for diffing as editing is disabled.
                     setOriginalMapData(JSON.parse(JSON.stringify(result.calculatedMap))); 
                     setSelectedLine(result.axes.y.calculated.length > 0 ? 0 : null);
                     addLog(`Mapa carregado e ordenado: ${name}`, 'info');
@@ -242,10 +189,6 @@ export default function EcuTuningAssistant() {
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
         // Note: This is currently disabled in the UI.
-        // To re-enable, we need to map the sorted view index back to the original data index.
-        if (!processedMap) return;
-        
-        // This is a placeholder for future implementation
         addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)} (Funcionalidade de escrita desativada temporariamente)`, 'info');
     };
     
@@ -349,7 +292,6 @@ export default function EcuTuningAssistant() {
                                     mapData={processedMap?.calculatedMap ?? null}
                                     axes={processedMap?.axes ?? null}
                                     selectedMapDefinition={selectedMapDefinition}
-                                    onCellChange={handleCellChange}
                                     originalMapData={originalMapData}
                                />
                             </TabsContent>
