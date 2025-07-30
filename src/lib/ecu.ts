@@ -1,6 +1,3 @@
-
-
-
 import type { XDFDefinition, AxisDataState, AxisDimension, MapData } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
