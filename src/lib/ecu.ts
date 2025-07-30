@@ -87,9 +87,11 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                     
                     if (linkedTableId && allTablesById.has(linkedTableId)) {
                         const linkedTableElement = allTablesById.get(linkedTableId)!;
-                        const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-                        if (linkedZAxisNode) {
-                            currentNode = linkedZAxisNode;
+                        const linkedAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]'); // Breakpoints are usually defined on Z axis of another table
+                        if (linkedAxisNode) {
+                            currentNode = linkedAxisNode;
+                            finalCount = parseInt(findNode(currentNode, 'indexcount')?.textContent || `${finalCount}`, 10);
+                            finalLabel = findNode(currentNode, 'title')?.textContent?.trim() || findNode(currentNode, 'units')?.textContent?.trim() || getAttr(currentNode, 'title') || getAttr(currentNode, 'label') || finalLabel;
                             continue; // Follow the link
                         }
                     }
@@ -143,18 +145,20 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
             // --- Resolve Z-Axis Properties ---
             let sourceZAxisNode = zAxisNode;
-            for (let i = 0; i < 10; i++) { // safety break
-                const zLinkInfo = findNode(sourceZAxisNode, 'embedinfo');
-                const zLinkedTableId = getAttr(zLinkInfo, 'linkobjid');
-                if (zLinkedTableId && allTablesById.has(zLinkedTableId)) {
-                    const linkedTableElement = allTablesById.get(zLinkedTableId)!;
-                    const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-                     if (linkedZAxisNode) {
-                        sourceZAxisNode = linkedZAxisNode;
-                        continue;
-                    }
+            let finalZEquation = getAttr(findNode(sourceZAxisNode, 'math', 'MATH'), 'equation') || 'X';
+            let finalZIsBigEndian = getIsBigEndian(findNode(sourceZAxisNode, 'embeddeddata', 'EMBEDDEDDATA') || sourceZAxisNode);
+            let finalZDecimalpl = parseInt(findNode(sourceZAxisNode, 'decimalpl')?.textContent || '2', 10);
+
+            const zLinkInfo = findNode(sourceZAxisNode, 'embedinfo');
+            const zLinkedTableId = getAttr(zLinkInfo, 'linkobjid');
+            if (zLinkedTableId && allTablesById.has(zLinkedTableId)) {
+                const linkedTableElement = allTablesById.get(zLinkedTableId)!;
+                const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+                    if (linkedZAxisNode) {
+                    finalZEquation = getAttr(findNode(linkedZAxisNode, 'math', 'MATH'), 'equation') || finalZEquation;
+                    finalZIsBigEndian = getIsBigEndian(findNode(linkedZAxisNode, 'embeddeddata', 'EMBEDDEDDATA') || linkedZAxisNode);
+                    finalZDecimalpl = parseInt(findNode(linkedZAxisNode, 'decimalpl')?.textContent || `${finalZDecimalpl}`, 10);
                 }
-                break;
             }
 
             const dataSizeBits = parseInt(getAttr(sourceZAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
@@ -163,11 +167,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const colStrideBytes = dataSize;
             const rowStrideBytes = cols * colStrideBytes;
             const dataOrganization = 'ROW_MAJOR';
-            
-            const isBigEndian = getIsBigEndian(findNode(sourceZAxisNode, 'embeddeddata', 'EMBEDDEDDATA') || sourceZAxisNode);
-            const mathNode = findNode(sourceZAxisNode, 'math', 'MATH');
-            const equation = getAttr(mathNode, 'equation') || 'X';
-            const decimalplZ = parseInt(findNode(sourceZAxisNode, 'decimalpl')?.textContent || '2', 10);
             
             definitions.push({
                 uniqueId: getAttr(tableEl, 'uniqueid') || tableName,
@@ -179,9 +178,9 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 colStrideBytes,
                 rowStrideBytes,
                 dataOrganization,
-                isBigEndian,
-                equation,
-                decimalpl: decimalplZ,
+                isBigEndian: finalZIsBigEndian,
+                equation: finalZEquation,
+                decimalpl: finalZDecimalpl,
                 xAxisDef,
                 yAxisDef,
                 isPotential: false,
@@ -539,3 +538,5 @@ export function writeMapToBin(
     
     return newBuffer;
 }
+
+    
