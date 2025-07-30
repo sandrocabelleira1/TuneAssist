@@ -1,3 +1,4 @@
+
 import type { XDFDefinition, AxisDataState, AxisDimension, MapData } from './types';
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
@@ -60,69 +61,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
 
     const definitions: XDFDefinition[] = [];
 
-    const parseAxis = (axisNode: Element | null, defaultCount: number, defaultLabel: string): AxisDimension | null => {
-        if (!axisNode) return null;
-    
-        const linkInfoNode = findNode(axisNode, 'embedinfo');
-        const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
-    
-        // If this axis is a link to another table's Z-axis (common for breakpoints)
-        if (linkedTableId && allTablesById.has(linkedTableId)) {
-            const linkedTableElement = allTablesById.get(linkedTableId)!;
-            // The linked data is usually the Z-axis of the target table.
-            const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
-            
-            if (linkedZAxisNode) {
-                // Recursively call parseAxis on the linked Z-axis to get its properties.
-                // The count from the *original* referring axis node takes precedence.
-                const axisCountFromOriginal = parseInt(findNode(axisNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
-                const recursiveAxisDef = parseAxis(linkedZAxisNode, axisCountFromOriginal, defaultLabel);
-                
-                if (recursiveAxisDef) {
-                    // The label from the *original* referring axis node also takes precedence.
-                    const originalLabel = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label');
-                    recursiveAxisDef.label = originalLabel || recursiveAxisDef.label;
-                    recursiveAxisDef.count = axisCountFromOriginal;
-                    return recursiveAxisDef;
-                }
-            }
-        }
-        
-        // This is a base case: the axis is not a link, or the link couldn't be resolved.
-        // We read its properties directly.
-        const label = findNode(axisNode, 'title')?.textContent?.trim() || findNode(axisNode, 'units')?.textContent?.trim() || getAttr(axisNode, 'title') || getAttr(axisNode, 'label') || defaultLabel;
-        const count = parseInt(findNode(axisNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
-        
-        const embeddedData = findNode(axisNode, 'embeddeddata', 'EMBEDDEDDATA');
-        if(embeddedData) {
-            const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
-            if(isNaN(address)) return null; // Can't proceed without an address for embedded data.
-            
-            const dataSizeBits = parseInt(getAttr(axisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
-            const dataSize = dataSizeBits / 8;
-            
-            const isBigEndian = getIsBigEndian(embeddedData);
-            const equation = getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X';
-            const decimalpl = parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10);
-            return { count, label, address, dataSize, stride: dataSize, isBigEndian, equation, decimalpl };
-        }
-        
-        const valuesNodeList = axisNode.querySelectorAll(':scope > label, :scope > LABEL');
-        if (valuesNodeList.length > 0) {
-            const values: (string | number)[] = [];
-            valuesNodeList.forEach(ln => {
-                const val = ln.getAttribute('value') || ln.textContent || '';
-                const numVal = parseFloat(val);
-                values.push(isNaN(numVal) ? val : numVal);
-            });
-            return { count: values.length, label, values };
-        }
-
-        // Fallback for axes without embedded data or explicit labels (like simple index axes)
-        return { count, label, values: Array.from({ length: count }, (_, i) => i + 1) };
-    };
-
-
     allTableElements.forEach(tableEl => {
         try {
             const tableName = findNode(tableEl, 'title')?.textContent?.trim() || getAttr(tableEl, 'name');
@@ -131,19 +69,62 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             let zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
             if (!zAxisNode) return;
             
-            // --- Z-Axis Property Inheritance ---
-            // If the Z-axis itself is a link, find the true source of its properties.
-            const zLinkInfo = findNode(zAxisNode, 'embedinfo');
-            const zLinkedTableId = getAttr(zLinkInfo, 'linkobjid');
-            const sourceZAxisNode = (zLinkedTableId && allTablesById.has(zLinkedTableId))
-                ? findNode(allTablesById.get(zLinkedTableId)!, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]') || zAxisNode
-                : zAxisNode;
-
             const embeddedData = findNode(tableEl, 'embeddeddata', 'EMBEDDEDDATA');
             if (!embeddedData) return;
 
             const address = parseInt(getAttr(embeddedData, 'mmedaddress') || '', 16);
             if (isNaN(address)) return;
+            
+            const parseAxis = (axisNode: Element, defaultCount: number, defaultLabel: string): AxisDimension | null => {
+                let currentNode = axisNode;
+                let finalCount = parseInt(findNode(currentNode, 'indexcount')?.textContent || `${defaultCount}`, 10);
+                let finalLabel = findNode(currentNode, 'title')?.textContent?.trim() || findNode(currentNode, 'units')?.textContent?.trim() || getAttr(currentNode, 'title') || getAttr(currentNode, 'label') || defaultLabel;
+
+                // Loop to resolve links until we find the source data definition
+                for (let i = 0; i < 10; i++) { // safety break
+                    const linkInfoNode = findNode(currentNode, 'embedinfo');
+                    const linkedTableId = getAttr(linkInfoNode, 'linkobjid');
+                    
+                    if (linkedTableId && allTablesById.has(linkedTableId)) {
+                        const linkedTableElement = allTablesById.get(linkedTableId)!;
+                        const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+                        if (linkedZAxisNode) {
+                            currentNode = linkedZAxisNode;
+                            continue; // Follow the link
+                        }
+                    }
+                    break; // No more links to follow
+                }
+
+                // Now `currentNode` is the source of the data definition
+                const sourceEmbeddedData = findNode(currentNode, 'embeddeddata', 'EMBEDDEDDATA');
+                if (sourceEmbeddedData) {
+                    const sourceAddr = parseInt(getAttr(sourceEmbeddedData, 'mmedaddress') || '', 16);
+                    if (isNaN(sourceAddr)) return null;
+                    
+                    const dataSizeBits = parseInt(getAttr(currentNode, 'elementsizebits') || getAttr(sourceEmbeddedData, 'mmedelementsizebits') || '16', 10);
+                    const dataSize = dataSizeBits / 8;
+                    const isBigEndian = getIsBigEndian(sourceEmbeddedData);
+                    const equation = getAttr(findNode(currentNode, 'math', 'MATH'), 'equation') || 'X';
+                    const decimalpl = parseInt(findNode(currentNode, 'decimalpl')?.textContent || '1', 10);
+                    
+                    return { count: finalCount, label: finalLabel, address: sourceAddr, dataSize, stride: dataSize, isBigEndian, equation, decimalpl };
+                }
+
+                const valuesNodeList = currentNode.querySelectorAll(':scope > label, :scope > LABEL');
+                if (valuesNodeList.length > 0) {
+                    const values: (string | number)[] = [];
+                    valuesNodeList.forEach(ln => {
+                        const val = ln.getAttribute('value') || ln.textContent || '';
+                        const numVal = parseFloat(val);
+                        values.push(isNaN(numVal) ? val : numVal);
+                    });
+                    return { count: values.length, label: finalLabel, values };
+                }
+
+                return { count: finalCount, label: finalLabel, values: Array.from({ length: finalCount }, (_, i) => i + 1) };
+            };
+
 
             const xAxisNode = findNode(tableEl, 'xaxis', 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'yaxis', 'XDFAXIS[id="y"]');
@@ -159,16 +140,30 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             
             const rows = yAxisDef.count;
             const cols = xAxisDef.count;
-            
+
+            // --- Resolve Z-Axis Properties ---
+            let sourceZAxisNode = zAxisNode;
+            for (let i = 0; i < 10; i++) { // safety break
+                const zLinkInfo = findNode(sourceZAxisNode, 'embedinfo');
+                const zLinkedTableId = getAttr(zLinkInfo, 'linkobjid');
+                if (zLinkedTableId && allTablesById.has(zLinkedTableId)) {
+                    const linkedTableElement = allTablesById.get(zLinkedTableId)!;
+                    const linkedZAxisNode = findNode(linkedTableElement, 'XDFAXIS[id="z"]', 'XDFAXIS[id="Z"]');
+                     if (linkedZAxisNode) {
+                        sourceZAxisNode = linkedZAxisNode;
+                        continue;
+                    }
+                }
+                break;
+            }
+
             const dataSizeBits = parseInt(getAttr(sourceZAxisNode, 'elementsizebits') || getAttr(embeddedData, 'mmedelementsizebits') || '16', 10);
             const dataSize = dataSizeBits / 8;
             
             const colStrideBytes = dataSize;
             const rowStrideBytes = cols * colStrideBytes;
-            
             const dataOrganization = 'ROW_MAJOR';
             
-            // Inherit from the source Z-axis node
             const isBigEndian = getIsBigEndian(findNode(sourceZAxisNode, 'embeddeddata', 'EMBEDDEDDATA') || sourceZAxisNode);
             const mathNode = findNode(sourceZAxisNode, 'math', 'MATH');
             const equation = getAttr(mathNode, 'equation') || 'X';
@@ -263,7 +258,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
 function sortAxis(axisData: AxisDataState): AxisDataState {
     const isNumeric = axisData.calculated.every(v => typeof v === 'number' && isFinite(v));
     if (!isNumeric) {
-        // Cannot sort non-numeric axes, return original
         return axisData;
     }
 
@@ -283,7 +277,7 @@ function sortAxis(axisData: AxisDataState): AxisDataState {
         ...axisData,
         raw: sortedRaw,
         calculated: sortedCalculated,
-        originalIndices: sortedOriginalIndices, // this now maps sorted position to original position
+        originalIndices: sortedOriginalIndices,
     };
 }
 
@@ -318,7 +312,6 @@ export function readAndCalculateMapFromBin(
 
     const originalRawMap: MapData = Array.from({ length: actualRows }, () => Array(actualCols).fill(null));
 
-    // First, read the map in its original (unsorted) order from the BIN
     for (let r = 0; r < actualRows; r++) {
         for (let c = 0; c < actualCols; c++) {
             const offset = dataOrganization === 'COL_MAJOR'
@@ -335,8 +328,7 @@ export function readAndCalculateMapFromBin(
             }
         }
     }
-
-    // Now, create the sorted maps by remapping the data according to the sorted axes' original indices.
+    
     const sortedRawMap = sortedYAxis.originalIndices.map(originalRowIndex => 
         sortedXAxis.originalIndices.map(originalColIndex => originalRawMap[originalRowIndex]?.[originalColIndex] ?? null)
     );
@@ -345,7 +337,8 @@ export function readAndCalculateMapFromBin(
         row.map(cellValue => {
             if (cellValue === null) return null;
             try {
-                return zEquationFunc(cellValue) as number;
+                const result = zEquationFunc(cellValue);
+                return typeof result === 'number' ? result : parseFloat(result);
             } catch {
                 return cellValue;
             }
@@ -454,8 +447,6 @@ export function recalculateRawMapFromCalculated(
         throw new Error("Os índices originais dos eixos são necessários para o recálculo.");
     }
     
-    // We need to 'unsort' the map data before calculating the raw values,
-    // as the raw map must be in the original layout to be written to the BIN.
     const unsortedCalculatedMap: MapData = Array(calculatedMap.length).fill(null).map(() => Array(calculatedMap[0].length).fill(null));
     
     sourceAxes.y.originalIndices.forEach((originalRow, sortedRow) => {
