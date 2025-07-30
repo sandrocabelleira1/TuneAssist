@@ -207,7 +207,10 @@ export default function EcuTuningPage() {
                             <div>
                                 <label htmlFor="aggressiveness" className="block mb-2 text-sm font-medium">Agressividade da Correção: <span id="aggressivenessValue" className="font-bold text-blue-400">20%</span></label>
                                 <input type="range" id="aggressiveness" min="1" max="100" defaultValue="20" className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider-thumb" onChange={(e) => {
-                                    (document.getElementById('aggressivenessValue') as HTMLElement).textContent = `${e.target.value}%`;
+                                    const target = document.getElementById('aggressivenessValue');
+                                    if (target) {
+                                      target.textContent = `${e.target.value}%`;
+                                    }
                                 }}/>
                             </div>
                             <button id="analyzeButton" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md transition-all disabled:bg-gray-500 disabled:cursor-not-allowed" disabled={!selectedMapName || !mapData}>Analisar e Gerar Mapa</button>
@@ -242,7 +245,7 @@ export default function EcuTuningPage() {
                                     <thead>
                                         <tr>
                                             <th className="sticky top-0 left-0 z-20 bg-gray-700 p-2 border border-gray-600 text-left">
-                                                {selectedMapDefinition.yAxisDef.label} \ {selectedMapDefinition.xAxisDef.label}
+                                                {axes.y.label} \ {axes.x.label}
                                             </th>
                                             {axes.x.calculated.map((x, i) => <th key={i} className="sticky top-0 bg-gray-700 p-2 border border-gray-600">{typeof x === 'number' ? x.toFixed(2) : x}</th>)}
                                         </tr>

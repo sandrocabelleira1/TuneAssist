@@ -159,6 +159,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
             const cols = xAxisDef.count;
             const rows = yAxisDef.count;
             if (cols === 0 || rows === 0) {
+                // This will be caught and the table will be skipped.
                 throw new Error("Dimensões da tabela (linhas/colunas) não podem ser zero.");
             }
 
@@ -386,7 +387,7 @@ export function generateChecksum(buffer: ArrayBuffer): string {
 }
 
 export function bufferToHex(buffer: ArrayBuffer): string {
-  return [...new Uint8(buffer)]
+  return [...new Uint8Array(buffer)]
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }
