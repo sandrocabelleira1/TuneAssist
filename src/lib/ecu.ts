@@ -386,7 +386,7 @@ export function generateChecksum(buffer: ArrayBuffer): string {
 }
 
 export function bufferToHex(buffer: ArrayBuffer): string {
-  return [...new Uint8Array(buffer)]
+  return [...new Uint8(buffer)]
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }
@@ -405,25 +405,28 @@ export function invertEquation(
         return finalValue;
     }
 
-    // Tenta resolver equações simples como Y = X * C, Y = X / C, etc.
-    const simpleMatch = sanitizedEq.match(/^X\s*([*\/+-])\s*([\d.]+)$/) || sanitizedEq.match(/^([\d.]+)\s*([*\/+-])\s*X$/);
+    // Tenta resolver equações simples como Y = X * C, Y = X / C, Y = X + C, Y = X - C
+    // ou Y = C * X, Y = C / X, Y = C + X, Y = C - X
+    const simpleMatch = sanitizedEq.match(/^(X\s*([*\/+-])\s*([\d.]+))|(([\d.]+)\s*([*\/+-])\s*X)$/);
 
     if (simpleMatch) {
-        const op = simpleMatch[1] || simpleMatch[2];
-        const valStr = simpleMatch[2] || simpleMatch[1];
+        // Ex: X / 2.56 -> simpleMatch = ['X / 2.56', 'X / 2.56', '/', '2.56', undefined, undefined, undefined]
+        // Ex: 128 - X -> simpleMatch = [ '128 - X', undefined, undefined, undefined, '128 - X', '128', '-' ]
+        const isXFirst = !!simpleMatch[1];
+        const op = isXFirst ? simpleMatch[2] : simpleMatch[6];
+        const valStr = isXFirst ? simpleMatch[3] : simpleMatch[5];
         const val = parseFloat(valStr);
 
         if(!isNaN(val)) {
             switch (op) {
                 case '*': return finalValue / val;
-                case '/': return finalValue * val; // Se Y = X/C, então X = Y*C
+                case '/': return isXFirst ? (finalValue * val) : (val / finalValue);
                 case '+': return finalValue - val;
-                case '-': 
-                  // Se a equação for C - X, a inversão é C - Y. Se for X - C, é Y + C
-                  return sanitizedEq.startsWith('X') ? finalValue + val : val - finalValue;
+                case '-': return isXFirst ? (finalValue + val) : (val - finalValue);
             }
         }
     }
+
 
     // Tenta resolver equações como Y = (X - 128) * 0.5
     const complexMatch = sanitizedEq.match(/^\(\s*X\s*([+\-])\s*([\d.]+)\s*\)\s*([*\/])\s*([\d.]+)$/);
