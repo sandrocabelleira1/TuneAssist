@@ -541,7 +541,6 @@ export default function EcuTuningAssistant() {
                                                 xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
                                                 yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
                                                 zAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
-                                                className="flex-1"
                                             />
                                         ) : (
                                             <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -559,7 +558,6 @@ export default function EcuTuningAssistant() {
                                             selectedLineIndex={selectedLine}
                                             onLineSelect={setSelectedLine}
                                             onPointChange={handleCellChange}
-                                            className="flex-1"
                                         />
                                     </TabsContent>
                                 </>
@@ -572,4 +570,3 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
-

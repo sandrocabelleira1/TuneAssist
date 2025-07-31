@@ -199,9 +199,9 @@ export default function LinePlot2D({
   }
 
   return (
-    <div className={cn('h-full w-full flex bg-card rounded-lg border p-4', className)} {...props}>
+    <div className={cn('h-full w-full flex bg-card rounded-lg border p-4 flex-1', className)} {...props}>
         <RPMSelector yAxis={yAxis} selectedLineIndex={selectedLineIndex} onLineSelect={onLineSelect} />
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
             {selectedLineIndex === null ? (
                 <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
                     <div>
