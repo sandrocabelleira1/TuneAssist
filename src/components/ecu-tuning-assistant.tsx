@@ -503,67 +503,65 @@ export default function EcuTuningAssistant() {
                     </div>
                     <div className="flex-1 p-4 min-h-0">
                         <Tabs defaultValue="view-table" className="w-full h-full flex flex-col">
-                            <TabsList>
+                            <TabsList className="shrink-0">
                                 <TabsTrigger value="view-table"><Table2 className="mr-2"/>Tabela de Dados</TabsTrigger>
                                 <TabsTrigger value="view-3d"><BarChart3 className="mr-2"/>Gráfico 3D</TabsTrigger>
                                 <TabsTrigger value="view-2d"><BarChart3 className="mr-2"/>Gráfico 2D</TabsTrigger>
                             </TabsList>
-                             <div className="flex-1 mt-4 min-h-0">
-                                {isProcessing ? (
-                                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                                        <Loader2 className="mr-2 h-8 w-8 animate-spin" />
-                                        <p>A processar o mapa...</p>
+                            {isProcessing ? (
+                                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                                    <Loader2 className="mr-2 h-8 w-8 animate-spin" />
+                                    <p>A processar o mapa...</p>
+                                </div>
+                            ) : !processedMap ? (
+                                <div className="flex-1 flex items-center justify-center text-muted-foreground text-center">
+                                    <div>
+                                        <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+                                        <p className="mt-2 font-semibold">Nenhum dado para exibir.</p>
+                                        <p className="text-sm">Carregue os seus ficheiros e selecione um mapa para iniciar.</p>
                                     </div>
-                                ) : !processedMap ? (
-                                    <div className="flex items-center justify-center h-full text-muted-foreground text-center">
-                                        <div>
-                                            <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
-                                            <p className="mt-2 font-semibold">Nenhum dado para exibir.</p>
-                                            <p className="text-sm">Carregue os seus ficheiros e selecione um mapa para iniciar.</p>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <TabsContent value="view-table" className="h-full m-0">
-                                           <DataTable
-                                                mapData={processedMap?.calculatedMap ?? null}
-                                                addresses={processedMap?.addresses ?? null}
-                                                axes={processedMap?.axes ?? null}
-                                                selectedMapDefinition={selectedMapDefinition}
-                                                onCellChange={handleCellChange}
-                                           />
-                                        </TabsContent>
-                                        <TabsContent value="view-3d" className="h-full m-0">
-                                            {processedMap?.axes && processedMap?.calculatedMap ? (
-                                                <SurfacePlot3D 
-                                                    mapData={processedMap.calculatedMap}
-                                                    xAxis={processedMap.axes.x.calculated}
-                                                    yAxis={processedMap.axes.y.calculated}
-                                                    xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
-                                                    yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
-                                                    zAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
-                                                />
-                                            ) : (
-                                                <div className="flex items-center justify-center h-full text-muted-foreground">
-                                                    <p>A aguardar dados completos do mapa para o gráfico 3D.</p>
-                                                </div>
-                                            )}
-                                        </TabsContent>
-                                        <TabsContent value="view-2d" className="h-full m-0">
-                                            <LinePlot2D
-                                                mapData={processedMap?.calculatedMap ?? null}
-                                                xAxis={processedMap?.axes?.x ?? null}
-                                                yAxis={processedMap?.axes?.y ?? null}
-                                                xAxisLabel={processedMap?.axes?.x.label}
-                                                yAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
-                                                selectedLineIndex={selectedLine}
-                                                onLineSelect={setSelectedLine}
-                                                onPointChange={handleCellChange}
+                                </div>
+                            ) : (
+                                <>
+                                    <TabsContent value="view-table" className="flex-1 min-h-0 mt-4">
+                                       <DataTable
+                                            mapData={processedMap?.calculatedMap ?? null}
+                                            addresses={processedMap?.addresses ?? null}
+                                            axes={processedMap?.axes ?? null}
+                                            selectedMapDefinition={selectedMapDefinition}
+                                            onCellChange={handleCellChange}
+                                       />
+                                    </TabsContent>
+                                    <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4">
+                                        {processedMap?.axes && processedMap?.calculatedMap ? (
+                                            <SurfacePlot3D 
+                                                mapData={processedMap.calculatedMap}
+                                                xAxis={processedMap.axes.x.calculated}
+                                                yAxis={processedMap.axes.y.calculated}
+                                                xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
+                                                yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
+                                                zAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
                                             />
-                                        </TabsContent>
-                                    </>
-                                )}
-                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-center h-full text-muted-foreground">
+                                                <p>A aguardar dados completos do mapa para o gráfico 3D.</p>
+                                            </div>
+                                        )}
+                                    </TabsContent>
+                                    <TabsContent value="view-2d" className="flex-1 min-h-0 mt-4">
+                                        <LinePlot2D
+                                            mapData={processedMap?.calculatedMap ?? null}
+                                            xAxis={processedMap?.axes?.x ?? null}
+                                            yAxis={processedMap?.axes?.y ?? null}
+                                            xAxisLabel={processedMap?.axes?.x.label}
+                                            yAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
+                                            selectedLineIndex={selectedLine}
+                                            onLineSelect={setSelectedLine}
+                                            onPointChange={handleCellChange}
+                                        />
+                                    </TabsContent>
+                                </>
+                            )}
                         </Tabs>
                     </div>
                 </main>
