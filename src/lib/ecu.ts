@@ -476,7 +476,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, proces
             const calculatedValue = calculatedMap[r][c];
             const address = addresses[r]?.[c];
 
-            if (calculatedValue === null || address === null || address === undefined) {
+            if (calculatedValue === null || calculatedValue === undefined || address === null || address === undefined) {
                 continue; // Skip if no value or address
             }
             
