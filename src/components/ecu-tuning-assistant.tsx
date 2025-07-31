@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -139,7 +140,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
 const initialManualConfig: ManualAxisConfig = {
     x: { equation: '', stride: undefined },
     y: { equation: '', stride: undefined },
-    z: { equation: '', stride: undefined },
+    z: { equation: '', stride: undefined, rowStride: undefined },
     isBigEndian: true,
     sortX: false,
     sortY: false,
@@ -264,7 +265,7 @@ export default function EcuTuningAssistant() {
             setManualConfig({
                 x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef.dataSize },
                 y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef.dataSize },
-                z: { equation: def.equation || 'x', stride: def.dataSize },
+                z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: undefined },
                 isBigEndian: def.isBigEndian,
                 sortX: def.xAxisDef.requiresSort,
                 sortY: def.yAxisDef.requiresSort,
@@ -281,10 +282,10 @@ export default function EcuTuningAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedMapName]);
     
-    const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | null = null) => {
+    const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
             if (subfield && (axis === 'x' || axis === 'y' || axis === 'z')) {
-                 const numValue = (subfield === 'stride' && value === '') ? undefined : value;
+                 const numValue = ((subfield === 'stride' || subfield === 'rowStride') && value === '') ? undefined : value;
                  return { ...prev, [axis]: { ...prev[axis], [subfield]: numValue }};
             }
             return { ...prev, [axis]: value };
@@ -519,7 +520,7 @@ export default function EcuTuningAssistant() {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label
                         htmlFor="z-equation"
@@ -559,6 +560,29 @@ export default function EcuTuningAssistant() {
                         }
                       />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                        htmlFor="z-row-stride"
+                        className="font-semibold text-sm"
+                    >
+                        Passo da Linha (bytes)
+                    </Label>
+                    <Input
+                        id="z-row-stride"
+                        type="number"
+                        placeholder="Automático (Cols * Passo Z)"
+                        value={manualConfig.z.rowStride ?? ''}
+                        onChange={(e) =>
+                          handleManualConfigChange(
+                            'z',
+                             e.target.value === ''
+                              ? undefined
+                              : parseInt(e.target.value),
+                            'rowStride'
+                          )
+                        }
+                    />
                   </div>
 
                   <div className="flex items-center space-x-4">

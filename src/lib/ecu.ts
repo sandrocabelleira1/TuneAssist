@@ -319,12 +319,13 @@ function processMap(
     sortX: boolean,
     sortY: boolean,
     zStride?: number,
+    rowStride?: number,
 ): ProcessedMap {
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !def.isBigEndian;
     const effectiveZStride = zStride ?? def.dataSize;
 
-    const rowStrideInBytes = def.cols * effectiveZStride;
+    const rowStrideInBytes = rowStride ?? (def.cols * effectiveZStride);
     const colStrideInBytes = def.rows * effectiveZStride;
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
@@ -413,7 +414,7 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
     const tempConfig: ManualAxisConfig = {
         x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
         y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
-        z: { equation: def.equation || 'x', stride: def.dataSize },
+        z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: undefined },
         isBigEndian: def.isBigEndian,
         sortX: def.xAxisDef.requiresSort,
         sortY: def.yAxisDef.requiresSort,
@@ -465,7 +466,7 @@ export function readAndCalculateMapFromBinManual(
          throw new Error(`Contagem de linhas do eixo Y (${yAxisData.label}: ${yAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.rows}).`);
     }
 
-    return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY, manualConfig.z.stride);
+    return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY, manualConfig.z.stride, manualConfig.z.rowStride);
 }
 
 export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, processedMap: ProcessedMap): ArrayBuffer {
