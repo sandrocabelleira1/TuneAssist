@@ -28,6 +28,7 @@ export type XDFDefinition = {
   cols: number;
   dataSize: number; // in bytes
   isBigEndian: boolean;
+  isRowMajor: boolean;
   equation: string;
   decimalpl: number;
   xAxisDef: AxisDimension;

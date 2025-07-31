@@ -228,6 +228,9 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
 
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap, manualEndian);
             const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap, manualEndian);
+
+            const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG')).map(f => f.textContent?.trim().toLowerCase());
+            const isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
             
             definitions.push({
                 uniqueId,
@@ -237,6 +240,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
                 cols: xAxisDef.count,
                 dataSize: getDataSizeInBytes(embeddedData),
                 isBigEndian: getIsBigEndian(embeddedData, manualEndian),
+                isRowMajor,
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'x',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
                 xAxisDef,
@@ -320,14 +324,18 @@ function processMap(
     const useLittleEndianForZ = !def.isBigEndian;
     const effectiveZStride = zStride ?? def.dataSize;
 
-    const yStrideInBytes = def.cols * effectiveZStride;
+    const rowStrideInBytes = def.cols * effectiveZStride;
+    const colStrideInBytes = def.rows * effectiveZStride;
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     const addressMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
 
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
-            const offset = def.address + (r * yStrideInBytes) + (c * effectiveZStride);
+            const offset = def.isRowMajor 
+                ? def.address + (r * rowStrideInBytes) + (c * effectiveZStride)
+                : def.address + (c * colStrideInBytes) + (r * effectiveZStride);
+            
             addressMap[r][c] = offset;
 
             if (offset === null || isNaN(offset) || offset + def.dataSize > view.byteLength) continue;
