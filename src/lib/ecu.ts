@@ -1,4 +1,5 @@
-import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
+
+import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap } from './types';
 
 // #region Utility Functions
 
@@ -345,29 +346,15 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
 export function readAndCalculateMapFromBinManual(
     binBuffer: ArrayBuffer, 
     def: XDFDefinition, 
-    manualConfig: ManualAxisConfig,
-    allTables: Map<string, Element>
+    manualAxes: {x: AxisDimension, y: AxisDimension}
 ): ProcessedMap {
-    const manualToAxisDim = (manual: ManualAxisConfig['x'] | ManualAxisConfig['y']): AxisDimension => ({
-        label: manual.label,
-        count: parseInt(manual.count, 10),
-        address: parseAddress(manual.address),
-        dataSize: parseInt(manual.dataSize, 10) / 8,
-        isBigEndian: manual.isBigEndian === 'true',
-        equation: manual.equation,
-        decimalpl: 2,
-    });
 
-    const xAxisDef = manualToAxisDim(manualConfig.x);
-    const yAxisDef = manualToAxisDim(manualConfig.y);
+    const { x: xAxisDef, y: yAxisDef } = manualAxes;
+
+    if(!xAxisDef || !yAxisDef){
+         throw new Error("Definições de eixo manuais são inválidas.");
+    }
     
-    if(isNaN(xAxisDef.count) || isNaN(yAxisDef.count) || xAxisDef.count <= 0 || yAxisDef.count <= 0) {
-        throw new Error("A contagem dos eixos (linhas/colunas) deve ser um número maior que zero.");
-    }
-    if(isNaN(xAxisDef.address) || isNaN(yAxisDef.address)) {
-        throw new Error("Endereço inválido para eixos manuais. Use o formato hexadecimal (ex: 8AF4).");
-    }
-
     const newDef = {...def, cols: xAxisDef.count, rows: yAxisDef.count };
 
     const xAxisData = readAxisFromBin(binBuffer, xAxisDef);

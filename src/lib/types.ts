@@ -1,5 +1,6 @@
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -53,19 +54,10 @@ export type ProcessedMap = {
 
 export type ManualAxisConfig = {
   x: {
-    address: string;
-    count: string;
     equation: string;
-    dataSize: '8' | '16';
-    isBigEndian: 'true' | 'false';
-    label: string;
   };
   y: {
-    address: string;
-    count: string;
     equation: string;
-    dataSize: '8' | '16';
-    isBigEndian: 'true' | 'false';
-    label: string;
   };
 };
+

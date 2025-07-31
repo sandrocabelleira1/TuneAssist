@@ -11,13 +11,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, readAndCalculateMapFromBinManual, readAxisFromBin } from '@/lib/ecu';
-import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData } from '@/lib/types';
+import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, AxisDimension } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { getHeatmapColor, getTextColorForBackground } from '@/lib/colors';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -120,8 +119,8 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
 
 
 const initialManualConfig: ManualAxisConfig = {
-    x: { address: '', count: '', equation: 'x', dataSize: '16', isBigEndian: 'false', label: 'Carga' },
-    y: { address: '', count: '', equation: 'x', dataSize: '16', isBigEndian: 'false', label: 'RPM' },
+    x: { equation: '' },
+    y: { equation: '' },
 };
 
 export default function EcuTuningAssistant() {
@@ -210,8 +209,14 @@ export default function EcuTuningAssistant() {
         try {
             let result: ProcessedMap;
             if (isManual) {
-                addLog("A processar com configuração manual dos eixos...", 'info');
-                result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig, xdfFile.allTables);
+                addLog("A processar com equações manuais...", 'info');
+                if (!def.xAxisDef || !def.yAxisDef) throw new Error("As definições de eixo originais são necessárias para o recálculo manual.");
+                
+                result = readAndCalculateMapFromBinManual(binFile.buffer, def, {
+                    x: { ...def.xAxisDef, equation: manualConfig.x.equation || def.xAxisDef.equation },
+                    y: { ...def.yAxisDef, equation: manualConfig.y.equation || def.yAxisDef.equation },
+                });
+
             } else {
                 addLog("A processar com as definições do XDF...", 'info');
                 result = readAndCalculateMapFromBin(binFile.buffer, def, xdfFile.allTables);
@@ -234,6 +239,15 @@ export default function EcuTuningAssistant() {
     const handleMapSelect = (name: string) => {
         setSelectedMapName(name);
         setProcessedMap(null); 
+        const def = xdfFile?.definitions.find(d => d.name === name);
+        if (def) {
+            setManualConfig({
+                x: { equation: def.xAxisDef?.equation || 'x' },
+                y: { equation: def.yAxisDef?.equation || 'x' },
+            });
+        } else {
+             setManualConfig(initialManualConfig);
+        }
     };
 
     useEffect(() => {
@@ -243,12 +257,12 @@ export default function EcuTuningAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedMapName, binFile, xdfFile]);
     
-    const handleManualConfigChange = (axis: 'x' | 'y', field: keyof ManualAxisConfig['x'], value: string) => {
+    const handleManualConfigChange = (axis: 'x' | 'y', value: string) => {
         setManualConfig(prev => ({
             ...prev,
             [axis]: {
                 ...prev[axis],
-                [field]: value
+                equation: value
             }
         }));
     };
@@ -316,35 +330,17 @@ export default function EcuTuningAssistant() {
 
                         <Card>
                             <CardHeader className="p-4">
-                                <CardTitle className="text-base flex items-center gap-2"><Settings2 size={18} /> Configuração Manual dos Eixos</CardTitle>
-                                <CardDescription className="text-xs">Use para substituir a leitura do XDF. Útil para depuração.</CardDescription>
+                                <CardTitle className="text-base flex items-center gap-2"><Settings2 size={18} /> Substituir Equações</CardTitle>
+                                <CardDescription className="text-xs">Use para substituir a equação do XDF. Útil para depuração.</CardDescription>
                             </CardHeader>
                             <CardContent className="p-4 pt-0 space-y-4">
-                                <div className="space-y-3">
-                                    <h4 className="font-semibold text-sm">Eixo Y (Linhas)</h4>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Input placeholder="Endereço (ex: 8AF4)" value={manualConfig.y.address} onChange={e => handleManualConfigChange('y', 'address', e.target.value)} />
-                                        <Input placeholder="Nº de Linhas" value={manualConfig.y.count} onChange={e => handleManualConfigChange('y', 'count', e.target.value)} />
-                                    </div>
-                                    <Input placeholder="Equação (ex: x)" value={manualConfig.y.equation} onChange={e => handleManualConfigChange('y', 'equation', e.target.value)} />
-                                    <RadioGroup value={manualConfig.y.dataSize} onValueChange={val => handleManualConfigChange('y', 'dataSize', val as '8' | '16')} className="flex items-center space-x-4">
-                                        <Label>Tamanho:</Label>
-                                        <div className="flex items-center space-x-2"><RadioGroupItem value="8" id="y-8bit" /><Label htmlFor="y-8bit">8-bit</Label></div>
-                                        <div className="flex items-center space-x-2"><RadioGroupItem value="16" id="y-16bit" /><Label htmlFor="y-16bit">16-bit</Label></div>
-                                    </RadioGroup>
+                                <div className="space-y-2">
+                                    <Label htmlFor="y-equation" className="font-semibold text-sm">Equação Eixo Y ({selectedMapDefinition?.yAxisDef?.label ?? 'Linhas'})</Label>
+                                    <Input id="y-equation" placeholder="ex: x" value={manualConfig.y.equation} onChange={e => handleManualConfigChange('y', e.target.value)} />
                                 </div>
-                                <div className="space-y-3">
-                                    <h4 className="font-semibold text-sm">Eixo X (Colunas)</h4>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Input placeholder="Endereço (ex: 8B14)" value={manualConfig.x.address} onChange={e => handleManualConfigChange('x', 'address', e.target.value)} />
-                                        <Input placeholder="Nº de Colunas" value={manualConfig.x.count} onChange={e => handleManualConfigChange('x', 'count', e.target.value)} />
-                                    </div>
-                                    <Input placeholder="Equação (ex: x/69.6)" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', 'equation', e.target.value)} />
-                                     <RadioGroup value={manualConfig.x.dataSize} onValueChange={val => handleManualConfigChange('x', 'dataSize', val as '8' | '16')} className="flex items-center space-x-4">
-                                        <Label>Tamanho:</Label>
-                                        <div className="flex items-center space-x-2"><RadioGroupItem value="8" id="x-8bit" /><Label htmlFor="x-8bit">8-bit</Label></div>
-                                        <div className="flex items-center space-x-2"><RadioGroupItem value="16" id="x-16bit" /><Label htmlFor="x-16bit">16-bit</Label></div>
-                                    </RadioGroup>
+                                <div className="space-y-2">
+                                    <Label htmlFor="x-equation" className="font-semibold text-sm">Equação Eixo X ({selectedMapDefinition?.xAxisDef?.label ?? 'Colunas'})</Label>
+                                    <Input id="x-equation" placeholder="ex: x/10" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', e.target.value)} />
                                 </div>
                                 <Button size="sm" onClick={handleManualRecalculate} disabled={!selectedMapName || isProcessing}>
                                     {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
