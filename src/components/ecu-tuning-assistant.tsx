@@ -209,41 +209,30 @@ export default function EcuTuningAssistant() {
 
         try {
             addLog(`[INÍCIO] A processar o mapa: ${def.name}`, 'info');
-            await delay(200);
+            await delay(100);
 
-            // Step 1: Axes
-            let xAxisData, yAxisData;
+            let result: ProcessedMap;
             if (isManual) {
                 addLog("A usar configuração manual para os eixos...", 'info');
-                await delay(200);
-                // For simplicity, manual recalculation will be instant
-                 const result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig, xdfFile.allTables);
-                 setProcessedMap(result);
-                 addLog(`[SUCESSO] Mapa reprocessado com eixos manuais.`, 'success');
-                 setIsProcessing(false);
-                 return;
+                await delay(100);
+                result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig, xdfFile.allTables);
             } else {
-                addLog("Passo 1/4: A ler e a calcular eixos do XDF...", 'info');
-                await delay(300);
-                xAxisData = readAxisFromBin(binFile.buffer, def.xAxisDef);
-                yAxisData = readAxisFromBin(binFile.buffer, def.yAxisDef);
-                setProcessedMap({ axes: { x: xAxisData, y: yAxisData }, calculatedMap: null, rawMap: null });
-                addLog(`Eixo X: ${def.xAxisDef.label} (${xAxisData.calculated.length} valores)`, 'debug');
-                addLog(`Eixo Y: ${def.yAxisDef.label} (${yAxisData.calculated.length} valores)`, 'debug');
+                addLog("Passo 1/3: A ler e a calcular os eixos e o mapa...", 'info');
+                await delay(100);
+                result = readAndCalculateMapFromBin(binFile.buffer, def, xdfFile.allTables);
             }
             
-            addLog("Passo 2/4: A ler e a calcular o mapa principal (Z)...", 'info');
-            await delay(300);
-            const result = readAndCalculateMapFromBin(binFile.buffer, def, xdfFile.allTables);
+            addLog(`Eixo X (${result?.axes.x.label}): ${result?.axes.x.calculated.length} valores`, 'debug');
+            addLog(`Eixo Y (${result?.axes.y.label}): ${result?.axes.y.calculated.length} valores`, 'debug');
             
-            addLog("Passo 3/4: A ordenar eixos e a remapear os dados...", 'info');
-            setProcessedMap(prev => ({ ...prev!, calculatedMap: result.calculatedMap, rawMap: result.rawMap }));
-            await delay(300);
+            addLog("Passo 2/3: A ordenar eixos e a remapear os dados...", 'info');
+            setProcessedMap(result); // Set intermediate for rendering
+            await delay(100);
             
-            addLog("Passo 4/4: A renderizar os dados finais...", 'info');
+            addLog("Passo 3/3: A renderizar os dados finais...", 'info');
             setProcessedMap(result);
-            setSelectedLine(result.axes.y.calculated.length > 0 ? 0 : null);
-            await delay(200);
+            setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
+            await delay(100);
             
             addLog(`[SUCESSO] Mapa carregado e ordenado: ${def.name}`, 'success');
 
@@ -365,7 +354,7 @@ export default function EcuTuningAssistant() {
                                         <Input placeholder="Endereço (ex: 8B14)" value={manualConfig.x.address} onChange={e => handleManualConfigChange('x', 'address', e.target.value)} />
                                         <Input placeholder="Nº de Colunas" value={manualConfig.x.count} onChange={e => handleManualConfigChange('x', 'count', e.target.value)} />
                                     </div>
-                                    <Input placeholder="Equação (ex: x/69.6)" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', 'equation', e.target.value)} />
+                                    <Input placeholder="Equação (ex: x/69.6)" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', 'equation', e'target.value)} />
                                      <RadioGroup value={manualConfig.x.dataSize} onValueChange={val => handleManualConfigChange('x', 'dataSize', val as '8' | '16')} className="flex items-center space-x-4">
                                         <Label>Tamanho:</Label>
                                         <div className="flex items-center space-x-2"><RadioGroupItem value="8" id="x-8bit" /><Label htmlFor="x-8bit">8-bit</Label></div>
@@ -488,4 +477,5 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+
 

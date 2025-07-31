@@ -94,12 +94,12 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
         if (isNaN(address)) throw new Error(`Endereço inválido (NaN) na tabela vinculada "${linkId}".`);
 
-        const count = parseInt(getAttr(embeddedData, 'mmedrowcount') || getAttr(embeddedData, 'mmedcolcount') || '0', 10) || indexcount;
-        if (count === 0) throw new Error(`Contagem de eixo é zero para a tabela vinculada "${linkId}".`);
+        // IMPORTANT FIX: The count MUST come from the main table's axis definition, not the linked one.
+        if (indexcount === 0) throw new Error(`Contagem do eixo (indexcount) é zero para o eixo que referencia a tabela "${linkId}".`);
         
         return {
             label: findNode(linkedTable, 'title')?.textContent?.trim() || defaultLabel,
-            count,
+            count: indexcount,
             address,
             dataSize: getDataSizeInBytes(embeddedData),
             isBigEndian: getIsBigEndian(embeddedData),
@@ -369,3 +369,4 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMap
     return newBuffer;
 }
 // #endregion
+
