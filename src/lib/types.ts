@@ -53,9 +53,9 @@ export type ProcessedMap = {
 } | null;
 
 export type ManualAxisConfig = {
-  x: { equation: string };
-  y: { equation: string };
-  z: { equation: string };
+  x: { equation: string, stride?: number };
+  y: { equation: string, stride?: number };
+  z: { equation: string, stride?: number };
   isBigEndian: boolean | null;
   sortX?: boolean;
   sortY?: boolean;

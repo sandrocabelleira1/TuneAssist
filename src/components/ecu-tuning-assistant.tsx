@@ -121,9 +121,9 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
 
 
 const initialManualConfig: ManualAxisConfig = {
-    x: { equation: '' },
-    y: { equation: '' },
-    z: { equation: '' },
+    x: { equation: '', stride: undefined },
+    y: { equation: '', stride: undefined },
+    z: { equation: '', stride: undefined },
     isBigEndian: true,
     sortX: undefined,
     sortY: undefined,
@@ -249,9 +249,9 @@ export default function EcuTuningAssistant() {
         const def = xdfFile?.definitions.find(d => d.name === name);
         if (def) {
             setManualConfig({
-                x: { equation: def.xAxisDef?.equation || 'x' },
-                y: { equation: def.yAxisDef?.equation || 'x' },
-                z: { equation: def.equation || 'x' },
+                x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef.dataSize },
+                y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef.dataSize },
+                z: { equation: def.equation || 'x', stride: def.dataSize },
                 isBigEndian: true,
                 sortX: def.xAxisDef.requiresSort,
                 sortY: def.yAxisDef.requiresSort,
@@ -268,12 +268,12 @@ export default function EcuTuningAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedMapName, binFile, xdfFile]);
     
-    const handleManualConfigChange = (field: keyof ManualAxisConfig, value: any) => {
+    const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY', value: any, subfield: 'equation' | 'stride' | null = null) => {
         setManualConfig(prev => {
-            if (field === 'x' || field === 'y' || field === 'z') {
-                return { ...prev, [field]: { equation: value }};
+            if (subfield && (axis === 'x' || axis === 'y' || axis === 'z')) {
+                 return { ...prev, [axis]: { ...prev[axis], [subfield]: value }};
             }
-            return { ...prev, [field]: value };
+            return { ...prev, [axis]: value };
         });
     };
     
@@ -344,18 +344,37 @@ export default function EcuTuningAssistant() {
                                 <CardDescription className="text-xs">Use para substituir a configuração do XDF. Útil para depuração.</CardDescription>
                             </CardHeader>
                             <CardContent className="p-4 pt-0 space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="y-equation" className="font-semibold text-sm">Equação Eixo Y ({selectedMapDefinition?.yAxisDef?.label ?? 'Linhas'})</Label>
-                                    <Input id="y-equation" placeholder="ex: x" value={manualConfig.y.equation} onChange={e => handleManualConfigChange('y', e.target.value)} />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="y-equation" className="font-semibold text-sm">Equação Y</Label>
+                                        <Input id="y-equation" placeholder="x" value={manualConfig.y.equation} onChange={e => handleManualConfigChange('y', e.target.value, 'equation')} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="y-stride" className="font-semibold text-sm">Passo Y (bytes)</Label>
+                                        <Input id="y-stride" type="number" placeholder="2" value={manualConfig.y.stride} onChange={e => handleManualConfigChange('y', parseInt(e.target.value), 'stride')} />
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="x-equation" className="font-semibold text-sm">Equação Eixo X ({selectedMapDefinition?.xAxisDef?.label ?? 'Colunas'})</Label>
-                                    <Input id="x-equation" placeholder="ex: x/10" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', e.target.value)} />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="x-equation" className="font-semibold text-sm">Equação X</Label>
+                                        <Input id="x-equation" placeholder="x" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', e.target.value, 'equation')} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="x-stride" className="font-semibold text-sm">Passo X (bytes)</Label>
+                                        <Input id="x-stride" type="number" placeholder="2" value={manualConfig.x.stride} onChange={e => handleManualConfigChange('x', parseInt(e.target.value), 'stride')} />
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="z-equation" className="font-semibold text-sm">Equação Eixo Z (Mapa)</Label>
-                                    <Input id="z-equation" placeholder="ex: x*0.75" value={manualConfig.z.equation} onChange={e => handleManualConfigChange('z', e.target.value)} />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="z-equation" className="font-semibold text-sm">Equação Z (Mapa)</Label>
+                                        <Input id="z-equation" placeholder="x" value={manualConfig.z.equation} onChange={e => handleManualConfigChange('z', e.target.value, 'equation')} />
+                                    </div>
+                                     <div className="space-y-2">
+                                        <Label htmlFor="z-stride" className="font-semibold text-sm">Passo Z (bytes)</Label>
+                                        <Input id="z-stride" type="number" placeholder="1" value={manualConfig.z.stride} onChange={e => handleManualConfigChange('z', parseInt(e.target.value), 'stride')} />
+                                    </div>
                                 </div>
+                                
                                 <div className="flex items-center space-x-4">
                                     <div className="flex items-center space-x-2">
                                         <Switch

@@ -217,7 +217,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
 
 // #region BIN Reading and Processing
 
-export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisData {
+export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, stride?: number): AxisData {
     if (!axisDef) throw new Error("Definição de eixo fornecida é inválida.");
     
     if (axisDef.values) {
@@ -226,6 +226,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     }
 
     const { address, count, dataSize = 2, equation = 'x', isBigEndian = false } = axisDef;
+    const effectiveStride = stride ?? dataSize;
+
     if (address === undefined || address === null || isNaN(address)) {
         throw new Error(`Endereço do eixo "${axisDef.label}" é inválido.`);
     }
@@ -238,7 +240,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     const rawValues: number[] = [];
 
     for (let i = 0; i < count; i++) {
-        const offset = address + (i * dataSize);
+        const offset = address + (i * effectiveStride);
         if (offset + dataSize > view.byteLength) {
             throw new Error(`Offset de leitura (0x${offset.toString(16)}) para o eixo "${axisDef.label}" está fora dos limites do ficheiro BIN.`);
         };
@@ -269,15 +271,18 @@ function processMap(
     xAxisData: AxisData, 
     yAxisData: AxisData,
     sortX: boolean,
-    sortY: boolean
+    sortY: boolean,
+    zStride?: number
 ): ProcessedMap {
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !def.isBigEndian;
+    const effectiveZStride = zStride ?? def.dataSize;
     
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
-            const offset = def.address + (r * def.cols * def.dataSize) + (c * def.dataSize);
+            // NOTE: Stride for Z is within the columns, not rows.
+            const offset = def.address + (r * def.cols * effectiveZStride) + (c * effectiveZStride);
             if (offset === null || isNaN(offset) || offset + def.dataSize > view.byteLength) continue;
             
             let rawValue;
@@ -368,10 +373,10 @@ export function readAndCalculateMapFromBinManual(
     const sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
     const sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
 
-    const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef);
-    const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef);
+    const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualConfig.x.stride);
+    const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualConfig.y.stride);
 
-    return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY);
+    return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY, manualConfig.z.stride);
 }
 
 export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMapData: MapData): ArrayBuffer {
