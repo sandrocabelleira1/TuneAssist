@@ -1,8 +1,5 @@
 
 
-
-
-
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -20,6 +17,7 @@ export type AxisDimension = {
   equation?: string;
   decimalpl?: number;
   values?: (string | number)[]; // For hardcoded labels
+  requiresSort: boolean;
 };
 
 export type XDFDefinition = {
@@ -59,8 +57,6 @@ export type ManualAxisConfig = {
   y: { equation: string };
   z: { equation: string };
   isBigEndian: boolean | null;
+  sortX?: boolean;
+  sortY?: boolean;
 };
-
-
-
-    

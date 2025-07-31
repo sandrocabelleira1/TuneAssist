@@ -125,6 +125,8 @@ const initialManualConfig: ManualAxisConfig = {
     y: { equation: '' },
     z: { equation: '' },
     isBigEndian: true,
+    sortX: undefined,
+    sortY: undefined,
 };
 
 export default function EcuTuningAssistant() {
@@ -174,7 +176,7 @@ export default function EcuTuningAssistant() {
             } else if (type === 'xdf' && typeof buffer === 'string') {
                  try {
                     addLog('A processar o ficheiro XDF com leitura Big-Endian por defeito...');
-                    const { definitions, allTables } = parseXDF(buffer, true); // <--- FORÇAR BIG ENDIAN
+                    const { definitions, allTables } = parseXDF(buffer, true); 
                     if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     setXdfFile({ name: file.name, content: buffer, definitions, allTables });
                     const successMessage = `XDF carregado: ${file.name} com ${definitions.length} mapas.`;
@@ -214,9 +216,6 @@ export default function EcuTuningAssistant() {
             let result: ProcessedMap;
             if (isManual) {
                 addLog("A processar com configurações manuais...", 'info');
-                if(manualConfig.isBigEndian !== null) {
-                    addLog(`Forçando Endianness para: ${manualConfig.isBigEndian ? 'Big-Endian' : 'Little-Endian'}`, 'debug');
-                }
                 result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
 
             } else {
@@ -247,7 +246,9 @@ export default function EcuTuningAssistant() {
                 x: { equation: def.xAxisDef?.equation || 'x' },
                 y: { equation: def.yAxisDef?.equation || 'x' },
                 z: { equation: def.equation || 'x' },
-                isBigEndian: true, // Manter o padrão
+                isBigEndian: true,
+                sortX: def.xAxisDef.requiresSort,
+                sortY: def.yAxisDef.requiresSort,
             });
         } else {
              setManualConfig(initialManualConfig);
@@ -333,8 +334,8 @@ export default function EcuTuningAssistant() {
 
                         <Card>
                             <CardHeader className="p-4">
-                                <CardTitle className="text-base flex items-center gap-2"><Settings2 size={18} /> Substituir Equações</CardTitle>
-                                <CardDescription className="text-xs">Use para substituir a equação do XDF. Útil para depuração.</CardDescription>
+                                <CardTitle className="text-base flex items-center gap-2"><Settings2 size={18} /> Substituir</CardTitle>
+                                <CardDescription className="text-xs">Use para substituir a configuração do XDF. Útil para depuração.</CardDescription>
                             </CardHeader>
                             <CardContent className="p-4 pt-0 space-y-4">
                                 <div className="space-y-2">
@@ -348,6 +349,26 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <Label htmlFor="z-equation" className="font-semibold text-sm">Equação Eixo Z (Mapa)</Label>
                                     <Input id="z-equation" placeholder="ex: x*0.75" value={manualConfig.z.equation} onChange={e => handleManualConfigChange('z', e.target.value)} />
+                                </div>
+                                <div className="flex items-center space-x-4">
+                                    <div className="flex items-center space-x-2">
+                                        <Switch
+                                            id="sort-x"
+                                            checked={manualConfig.sortX}
+                                            onCheckedChange={checked => handleManualConfigChange('sortX', checked)}
+                                            disabled={!selectedMapDefinition}
+                                        />
+                                        <Label htmlFor="sort-x">Ordenar Eixo X</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <Switch
+                                            id="sort-y"
+                                            checked={manualConfig.sortY}
+                                            onCheckedChange={checked => handleManualConfigChange('sortY', checked)}
+                                            disabled={!selectedMapDefinition}
+                                        />
+                                        <Label htmlFor="sort-y">Ordenar Eixo Y</Label>
+                                    </div>
                                 </div>
                                 <Button size="sm" onClick={handleManualRecalculate} disabled={!selectedMapName || isProcessing}>
                                     {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -465,7 +486,3 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
-
-    
-
-    

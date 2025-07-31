@@ -12,7 +12,6 @@ function evaluateEquation(equation: string, value: number): number {
         const sanitizedEq = equation.trim().toLowerCase().replace(/\s/g, '');
         if (sanitizedEq === 'x' || sanitizedEq === '') return value;
 
-        // Basic safety: prevent access to global objects
         if (/[^a-zA-Z0-9x\s\.\+\-\*\/()\^]/.test(sanitizedEq.replace(/pi/g, '').replace(/e/g, ''))) {
              throw new Error(`Equação contém caracteres inválidos: "${equation}"`);
         }
@@ -68,9 +67,7 @@ function parseAddress(addressStr: string | null): number {
 
 
 function getDataSizeInBytes(element: Element | null): number {
-    if (!element) return 2; // Default to 16-bit if element is null
-
-    // Look for size attributes directly on the element first.
+    if (!element) return 2;
     const sizeBitsAttr = getAttr(element, 'mmedelementsizebits') || getAttr(element, 'elementsizebits');
     if (sizeBitsAttr) {
         const sizeBits = parseInt(sizeBitsAttr, 10);
@@ -78,20 +75,7 @@ function getDataSizeInBytes(element: Element | null): number {
             return sizeBits / 8;
         }
     }
-    
-    // Fallback for linked tables where the size might be on the parent XDFTABLE's z-axis
-    const parentTable = element.closest('XDFTABLE');
-    const zAxisInParent = findNode(parentTable, 'XDFAXIS[id="z"]');
-    const embeddedDataInZ = findNode(zAxisInParent, 'embeddeddata', 'EMBEDDEDDATA');
-    if(embeddedDataInZ) {
-        const parentZSizeBits = getAttr(embeddedDataInZ, 'mmedelementsizebits') || getAttr(embeddedDataInZ, 'elementsizebits');
-        if(parentZSizeBits) {
-             const sizeBits = parseInt(parentZSizeBits, 10);
-             if (!isNaN(sizeBits) && sizeBits > 0) return sizeBits / 8;
-        }
-    }
-    
-    return 2; // Default to 2 bytes (16-bit) if no specific size is found
+    return 2; 
 }
 
 // #endregion
@@ -110,6 +94,12 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
     
     const defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
     
+    // Check for sorting flag
+    const sortFlag = Array.from(axisNode.querySelectorAll(':scope > FLAG'))
+                          .some(flag => flag.textContent?.trim().toLowerCase() === 'sort');
+    const requiresSort = sortFlag || getAttr(axisNode, 'sort') === '1';
+
+
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
         if (!linkedTable) throw new Error(`Tabela de eixos vinculada com ID "${linkId}" não foi encontrada.`);
@@ -131,6 +121,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
             isBigEndian: getIsBigEndian(embeddedData, manualEndian),
             equation: getAttr(findNode(zAxisOfLinkedTable, 'math', 'MATH'), 'equation') || 'x',
             decimalpl: parseInt(findNode(zAxisOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
+            requiresSort: requiresSort
         };
     }
     
@@ -145,6 +136,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
             isBigEndian: getIsBigEndian(sourceEmbeddedData, manualEndian),
             equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'x',
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
+            requiresSort: requiresSort
         };
     }
     
@@ -155,6 +147,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
             count: labels.length || indexcount,
             values: labels.map(l => getAttr(l, 'value') || l.textContent || ''),
             decimalpl: -1,
+            requiresSort: requiresSort
         };
     }
     
@@ -270,11 +263,13 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
 }
 
 
-function processAndSortMap(
+function processMap(
     binBuffer: ArrayBuffer, 
     def: XDFDefinition, 
     xAxisData: AxisData, 
-    yAxisData: AxisData
+    yAxisData: AxisData,
+    sortX: boolean,
+    sortY: boolean
 ): ProcessedMap {
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !def.isBigEndian;
@@ -295,13 +290,15 @@ function processAndSortMap(
         }
     }
     
-    const createSortMap = (axis: AxisData) => {
+    const createSortMap = (axis: AxisData, shouldSort: boolean) => {
         const indexed = axis.calculated.map((val, index) => ({ val, index }));
         
-        if (typeof indexed[0]?.val === 'number') {
-            indexed.sort((a, b) => (a.val as number) - (b.val as number));
-        } else {
-             indexed.sort((a,b) => String(a.val).localeCompare(String(b.val)));
+        if (shouldSort) {
+            if (typeof indexed[0]?.val === 'number') {
+                indexed.sort((a, b) => (a.val as number) - (b.val as number));
+            } else {
+                 indexed.sort((a,b) => String(a.val).localeCompare(String(b.val)));
+            }
         }
         return {
             sortedValues: indexed.map(item => item.val),
@@ -309,13 +306,13 @@ function processAndSortMap(
         };
     };
 
-    const xSort = createSortMap(xAxisData);
-    const ySort = createSortMap(yAxisData);
+    const xSortMap = createSortMap(xAxisData, sortX);
+    const ySortMap = createSortMap(yAxisData, sortY);
 
     const calculatedMap: MapData = [];
-    for (const yOrigIndex of ySort.originalIndices) {
+    for (const yOrigIndex of ySortMap.originalIndices) {
         const sortedRow: (number | null)[] = [];
-        for (const xOrigIndex of xSort.originalIndices) {
+        for (const xOrigIndex of xSortMap.originalIndices) {
             const rawValue = rawMap[yOrigIndex]?.[xOrigIndex];
             if(rawValue === null || rawValue === undefined || isNaN(rawValue)) {
                 sortedRow.push(null);
@@ -327,13 +324,13 @@ function processAndSortMap(
         calculatedMap.push(sortedRow);
     }
 
-    const sortedXAxis: AxisData = { ...xAxisData, calculated: xSort.sortedValues, originalIndices: xSort.originalIndices };
-    const sortedYAxis: AxisData = { ...yAxisData, calculated: ySort.sortedValues, originalIndices: ySort.originalIndices };
+    const finalXAxis: AxisData = { ...xAxisData, calculated: xSortMap.sortedValues, originalIndices: xSortMap.originalIndices };
+    const finalYAxis: AxisData = { ...yAxisData, calculated: ySortMap.sortedValues, originalIndices: ySortMap.originalIndices };
     
     return { 
         calculatedMap: calculatedMap,
         rawMap, 
-        axes: { x: sortedXAxis, y: sortedYAxis } 
+        axes: { x: finalXAxis, y: finalYAxis } 
     };
 }
 
@@ -351,7 +348,7 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
          throw new Error(`Contagem de linhas do eixo Y (${yAxisData.label}: ${yAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.rows}).`);
     }
 
-    return processAndSortMap(binBuffer, def, xAxisData, yAxisData);
+    return processMap(binBuffer, def, xAxisData, yAxisData, def.xAxisDef.requiresSort, def.yAxisDef.requiresSort);
 }
 
 export function readAndCalculateMapFromBinManual(
@@ -367,11 +364,14 @@ export function readAndCalculateMapFromBinManual(
     const manualXAxisDef: AxisDimension = { ...def.xAxisDef, equation: manualConfig.x.equation };
     const manualYAxisDef: AxisDimension = { ...def.yAxisDef, equation: manualConfig.y.equation };
     const manualMapDef: XDFDefinition = { ...def, equation: manualConfig.z.equation };
+    
+    const sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
+    const sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
 
     const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef);
     const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef);
 
-    return processAndSortMap(binBuffer, manualMapDef, xAxisData, yAxisData);
+    return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY);
 }
 
 export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMapData: MapData): ArrayBuffer {
@@ -380,5 +380,3 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMap
     return newBuffer;
 }
 // #endregion
-
-    
