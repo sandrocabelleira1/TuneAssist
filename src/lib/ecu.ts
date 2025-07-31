@@ -68,14 +68,21 @@ function parseAddress(addressStr: string | null): number {
 
 function getDataSizeInBytes(element: Element | null): number {
     if (!element) return 2;
-    const sizeBitsAttr = getAttr(element, 'mmedelementsizebits') || getAttr(element, 'elementsizebits');
+    // Check the element itself first
+    let sizeBitsAttr = getAttr(element, 'mmedelementsizebits') || getAttr(element, 'elementsizebits');
+    
+    // If not on the element, check its parent (the axis definition)
+    if (!sizeBitsAttr && element.parentElement) {
+        sizeBitsAttr = getAttr(element.parentElement, 'mmedelementsizebits') || getAttr(element.parentElement, 'elementsizebits');
+    }
+
     if (sizeBitsAttr) {
         const sizeBits = parseInt(sizeBitsAttr, 10);
         if (!isNaN(sizeBits) && sizeBits > 0) {
             return sizeBits / 8;
         }
     }
-    return 2; 
+    return 2; // Default if attribute is missing or invalid
 }
 
 // #endregion
@@ -272,17 +279,23 @@ function processMap(
     yAxisData: AxisData,
     sortX: boolean,
     sortY: boolean,
-    zStride?: number
+    zStride?: number,
 ): ProcessedMap {
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !def.isBigEndian;
     const effectiveZStride = zStride ?? def.dataSize;
-    
+
+    // The stride for an entire row is the number of columns multiplied by the Z stride.
+    const yStrideInBytes = def.cols * effectiveZStride;
+
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
+    const addressMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
+
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
-            // NOTE: Stride for Z is within the columns, not rows.
-            const offset = def.address + (r * def.cols * effectiveZStride) + (c * effectiveZStride);
+            const offset = def.address + (r * yStrideInBytes) + (c * effectiveZStride);
+            addressMap[r][c] = offset; // Store the calculated address
+
             if (offset === null || isNaN(offset) || offset + def.dataSize > view.byteLength) continue;
             
             let rawValue;
@@ -315,10 +328,14 @@ function processMap(
     const ySortMap = createSortMap(yAxisData, sortY);
 
     const calculatedMap: MapData = [];
+    const sortedAddresses: MapData = [];
     for (const yOrigIndex of ySortMap.originalIndices) {
         const sortedRow: (number | null)[] = [];
+        const sortedAddressRow: (number | null)[] = [];
         for (const xOrigIndex of xSortMap.originalIndices) {
             const rawValue = rawMap[yOrigIndex]?.[xOrigIndex];
+            sortedAddressRow.push(addressMap[yOrigIndex]?.[xOrigIndex] ?? null);
+
             if(rawValue === null || rawValue === undefined || isNaN(rawValue)) {
                 sortedRow.push(null);
             } else {
@@ -327,14 +344,16 @@ function processMap(
             }
         }
         calculatedMap.push(sortedRow);
+        sortedAddresses.push(sortedAddressRow);
     }
 
     const finalXAxis: AxisData = { ...xAxisData, calculated: xSortMap.sortedValues, originalIndices: xSortMap.originalIndices };
     const finalYAxis: AxisData = { ...yAxisData, calculated: ySortMap.sortedValues, originalIndices: ySortMap.originalIndices };
     
     return { 
-        calculatedMap: calculatedMap,
+        calculatedMap,
         rawMap, 
+        addresses: sortedAddresses,
         axes: { x: finalXAxis, y: finalYAxis } 
     };
 }
@@ -343,17 +362,17 @@ function processMap(
 export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
     if (!def.xAxisDef || !def.yAxisDef) throw new Error(`Definições de eixo para o mapa "${def.name}" estão em falta.`);
     
-    const xAxisData = readAxisFromBin(binBuffer, def.xAxisDef);
-    const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef);
+    // Construct a temporary manual config from the definition to pass to the manual function
+    const tempConfig: ManualAxisConfig = {
+        x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
+        y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
+        z: { equation: def.equation || 'x', stride: def.dataSize },
+        isBigEndian: def.isBigEndian,
+        sortX: def.xAxisDef.requiresSort,
+        sortY: def.yAxisDef.requiresSort,
+    };
     
-    if (xAxisData.calculated.length !== def.cols) {
-         throw new Error(`Contagem de colunas do eixo X (${xAxisData.label}: ${xAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.cols}).`);
-    }
-    if(yAxisData.calculated.length !== def.rows){
-         throw new Error(`Contagem de linhas do eixo Y (${yAxisData.label}: ${yAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.rows}).`);
-    }
-
-    return processMap(binBuffer, def, xAxisData, yAxisData, def.xAxisDef.requiresSort, def.yAxisDef.requiresSort);
+    return readAndCalculateMapFromBinManual(binBuffer, def, tempConfig);
 }
 
 export function readAndCalculateMapFromBinManual(
@@ -366,15 +385,36 @@ export function readAndCalculateMapFromBinManual(
          throw new Error("As definições de eixo originais são inválidas e necessárias para o recálculo manual.");
     }
     
-    const manualXAxisDef: AxisDimension = { ...def.xAxisDef, equation: manualConfig.x.equation };
-    const manualYAxisDef: AxisDimension = { ...def.yAxisDef, equation: manualConfig.y.equation };
-    const manualMapDef: XDFDefinition = { ...def, equation: manualConfig.z.equation };
+    // Create new definitions with manual overrides
+    const manualXAxisDef: AxisDimension = { 
+        ...def.xAxisDef, 
+        equation: manualConfig.x.equation,
+        dataSize: manualConfig.x.stride ?? def.xAxisDef.dataSize // Fallback to original stride
+    };
+    const manualYAxisDef: AxisDimension = { 
+        ...def.yAxisDef, 
+        equation: manualConfig.y.equation,
+        dataSize: manualConfig.y.stride ?? def.yAxisDef.dataSize
+    };
+    const manualMapDef: XDFDefinition = { 
+        ...def, 
+        equation: manualConfig.z.equation,
+        dataSize: manualConfig.z.stride ?? def.dataSize,
+        isBigEndian: manualConfig.isBigEndian ?? def.isBigEndian
+    };
     
     const sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
     const sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
 
     const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualConfig.x.stride);
     const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualConfig.y.stride);
+    
+    if (xAxisData.calculated.length !== def.cols) {
+         throw new Error(`Contagem de colunas do eixo X (${xAxisData.label}: ${xAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.cols}).`);
+    }
+    if(yAxisData.calculated.length !== def.rows){
+         throw new Error(`Contagem de linhas do eixo Y (${yAxisData.label}: ${yAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.rows}).`);
+    }
 
     return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY, manualConfig.z.stride);
 }

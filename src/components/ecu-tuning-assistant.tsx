@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getHeatmapColor, getTextColorForBackground } from '@/lib/colors';
 import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -31,8 +32,9 @@ const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     )
 });
 
-function DataTable({ mapData, axes, selectedMapDefinition }: {
+function DataTable({ mapData, addresses, axes, selectedMapDefinition }: {
     mapData: MapData | null;
+    addresses: MapData | null;
     axes: { x: AxisData, y: AxisData } | null;
     selectedMapDefinition: XDFDefinition | undefined;
 }) {
@@ -97,11 +99,19 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
                             {mapData ? mapData[yi]?.map((cell, xi) => {
                                 const bgColor = getHeatmapColor(cell, minVal, maxVal);
                                 const textColor = getTextColorForBackground(bgColor);
+                                const address = addresses?.[yi]?.[xi];
                                 return (
                                     <td key={xi} className="p-0 border border-border text-center h-10" style={{ backgroundColor: bgColor, color: textColor }}>
-                                         <div className="w-full h-full flex items-center justify-center p-1">
-                                            {cell !== null && cell !== undefined ? cell.toFixed(zAxisDecimalPlaces) : '-'}
-                                        </div>
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger className="w-full h-full flex items-center justify-center p-1">
+                                                    {cell !== null && cell !== undefined ? cell.toFixed(zAxisDecimalPlaces) : '-'}
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    {address !== null && address !== undefined ? `Endereço: 0x${address.toString(16).toUpperCase()}` : 'Endereço indisponível'}
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
                                     </td>
                                 );
                             }) : (
@@ -212,12 +222,6 @@ export default function EcuTuningAssistant() {
         setProcessedMap(null); 
         addLog(`A processar o mapa: ${def.name}...`, 'info');
         
-        if (!isManual) {
-            addLog(`Eixo Z (${def.name}): Tamanho de dados detetado: ${def.dataSize} bytes.`, 'debug');
-            addLog(`Eixo X (${def.xAxisDef.label}): Tamanho de dados detetado: ${def.xAxisDef.dataSize} bytes.`, 'debug');
-            addLog(`Eixo Y (${def.yAxisDef.label}): Tamanho de dados detetado: ${def.yAxisDef.dataSize} bytes.`, 'debug');
-        }
-
         try {
             let result: ProcessedMap;
             if (isManual) {
@@ -271,7 +275,8 @@ export default function EcuTuningAssistant() {
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY', value: any, subfield: 'equation' | 'stride' | null = null) => {
         setManualConfig(prev => {
             if (subfield && (axis === 'x' || axis === 'y' || axis === 'z')) {
-                 return { ...prev, [axis]: { ...prev[axis], [subfield]: value }};
+                 const numValue = (subfield === 'stride' && value === '') ? undefined : value;
+                 return { ...prev, [axis]: { ...prev[axis], [subfield]: numValue }};
             }
             return { ...prev, [axis]: value };
         });
@@ -351,7 +356,7 @@ export default function EcuTuningAssistant() {
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="y-stride" className="font-semibold text-sm">Passo Y (bytes)</Label>
-                                        <Input id="y-stride" type="number" placeholder="2" value={manualConfig.y.stride} onChange={e => handleManualConfigChange('y', parseInt(e.target.value), 'stride')} />
+                                        <Input id="y-stride" type="number" placeholder="2" value={manualConfig.y.stride ?? ''} onChange={e => handleManualConfigChange('y', e.target.value === '' ? undefined : parseInt(e.target.value), 'stride')} />
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -361,7 +366,7 @@ export default function EcuTuningAssistant() {
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="x-stride" className="font-semibold text-sm">Passo X (bytes)</Label>
-                                        <Input id="x-stride" type="number" placeholder="2" value={manualConfig.x.stride} onChange={e => handleManualConfigChange('x', parseInt(e.target.value), 'stride')} />
+                                        <Input id="x-stride" type="number" placeholder="2" value={manualConfig.x.stride ?? ''} onChange={e => handleManualConfigChange('x', e.target.value === '' ? undefined : parseInt(e.target.value), 'stride')} />
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -371,7 +376,7 @@ export default function EcuTuningAssistant() {
                                     </div>
                                      <div className="space-y-2">
                                         <Label htmlFor="z-stride" className="font-semibold text-sm">Passo Z (bytes)</Label>
-                                        <Input id="z-stride" type="number" placeholder="1" value={manualConfig.z.stride} onChange={e => handleManualConfigChange('z', parseInt(e.target.value), 'stride')} />
+                                        <Input id="z-stride" type="number" placeholder="1" value={manualConfig.z.stride ?? ''} onChange={e => handleManualConfigChange('z', e.target.value === '' ? undefined : parseInt(e.target.value), 'stride')} />
                                     </div>
                                 </div>
                                 
@@ -379,7 +384,7 @@ export default function EcuTuningAssistant() {
                                     <div className="flex items-center space-x-2">
                                         <Switch
                                             id="sort-x"
-                                            checked={manualConfig.sortX}
+                                            checked={manualConfig.sortX ?? false}
                                             onCheckedChange={checked => handleManualConfigChange('sortX', checked)}
                                             disabled={!selectedMapDefinition}
                                         />
@@ -388,7 +393,7 @@ export default function EcuTuningAssistant() {
                                     <div className="flex items-center space-x-2">
                                         <Switch
                                             id="sort-y"
-                                            checked={manualConfig.sortY}
+                                            checked={manualConfig.sortY ?? false}
                                             onCheckedChange={checked => handleManualConfigChange('sortY', checked)}
                                             disabled={!selectedMapDefinition}
                                         />
@@ -468,6 +473,7 @@ export default function EcuTuningAssistant() {
                                         <TabsContent value="view-table" className="h-full m-0">
                                            <DataTable
                                                 mapData={processedMap?.calculatedMap ?? null}
+                                                addresses={processedMap?.addresses ?? null}
                                                 axes={processedMap?.axes ?? null}
                                                 selectedMapDefinition={selectedMapDefinition}
                                            />
@@ -511,3 +517,4 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+

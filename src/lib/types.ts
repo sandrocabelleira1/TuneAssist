@@ -46,6 +46,7 @@ export type MapData = (number | null)[][];
 export type ProcessedMap = {
   calculatedMap: MapData | null; 
   rawMap: MapData | null;
+  addresses: MapData | null;
   axes: {
     x: AxisData;
     y: AxisData;
