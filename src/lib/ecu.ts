@@ -44,14 +44,12 @@ function getAttr(element: Element | null, attrName: string): string | null {
     return element?.getAttribute(attrName) ?? null;
 }
 
-// CORRECTED: This was a major source of errors. It now correctly checks the flag.
 function getIsBigEndian(element: Element | null, manualOverride?: boolean | null): boolean {
     if (typeof manualOverride === 'boolean') {
         return manualOverride;
     }
-    if (!element) return false; // Default to little-endian
+    if (!element) return false;
     const attr = getAttr(element, 'bigendian');
-    // The XDF spec says "1" is big-endian. Absence or "0" is little-endian.
     return attr === '1' || attr?.toLowerCase() === 'true';
 }
 
@@ -70,22 +68,30 @@ function parseAddress(addressStr: string | null): number {
 
 
 function getDataSizeInBytes(element: Element | null): number {
+    if (!element) return 2; // Default to 16-bit if element is null
+
+    // Look for size attributes directly on the element first.
     const sizeBitsAttr = getAttr(element, 'mmedelementsizebits') || getAttr(element, 'elementsizebits');
     if (sizeBitsAttr) {
         const sizeBits = parseInt(sizeBitsAttr, 10);
-        if (!isNaN(sizeBits) && sizeBits > 0) return sizeBits / 8;
-    }
-    
-    const parent = element?.parentElement;
-    if(parent) {
-        const parentSizeBits = getAttr(parent, 'elementsizebits');
-         if (parentSizeBits) {
-            const sizeBits = parseInt(parentSizeBits, 10);
-            if (!isNaN(sizeBits) && sizeBits > 0) return sizeBits / 8;
+        if (!isNaN(sizeBits) && sizeBits > 0) {
+            return sizeBits / 8;
         }
     }
-
-    return 2; // Default to 2 bytes (16-bit)
+    
+    // Fallback for linked tables where the size might be on the parent XDFTABLE's z-axis
+    const parentTable = element.closest('XDFTABLE');
+    const zAxisInParent = findNode(parentTable, 'XDFAXIS[id="z"]');
+    const embeddedDataInZ = findNode(zAxisInParent, 'embeddeddata', 'EMBEDDEDDATA');
+    if(embeddedDataInZ) {
+        const parentZSizeBits = getAttr(embeddedDataInZ, 'mmedelementsizebits') || getAttr(embeddedDataInZ, 'elementsizebits');
+        if(parentZSizeBits) {
+             const sizeBits = parseInt(parentZSizeBits, 10);
+             if (!isNaN(sizeBits) && sizeBits > 0) return sizeBits / 8;
+        }
+    }
+    
+    return 2; // Default to 2 bytes (16-bit) if no specific size is found
 }
 
 // #endregion
@@ -97,7 +103,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
     
-    // CRITICAL: The count MUST come from the main table's axis definition.
     const indexCountNode = findNode(axisNode, 'indexcount');
     if (!indexCountNode) throw new Error(`Nó 'indexcount' não encontrado na definição do eixo.`);
     const indexcount = parseInt(indexCountNode.textContent || '0', 10);
@@ -183,7 +188,6 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
         try {
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
-            // This is a main map table, it MUST have a direct address for its data
             if (isNaN(address)) return;
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
@@ -237,8 +241,6 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     }
     
     const view = new DataView(binBuffer);
-    // DataView's second parameter for getUint16/32 is `littleEndian`.
-    // So if our data IS big endian, this parameter should be false.
     const useLittleEndian = !isBigEndian;
     const rawValues: number[] = [];
 
@@ -286,7 +288,7 @@ function processAndSortMap(
             let rawValue;
             if (def.dataSize === 1) rawValue = view.getUint8(offset);
             else if (def.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndianForZ);
-            else if (def.dataSise === 4) rawValue = view.getUint32(offset, useLittleEndianForZ);
+            else if (def.dataSize === 4) rawValue = view.getUint32(offset, useLittleEndianForZ);
             else rawValue = 0;
             
             rawMap[r][c] = rawValue;
@@ -362,12 +364,9 @@ export function readAndCalculateMapFromBinManual(
          throw new Error("As definições de eixo originais são inválidas e necessárias para o recálculo manual.");
     }
     
-    // Create new axis definitions with the overriden equations
-    const manualXAxisDef: AxisDimension = { ...def.xAxisDef, equation: manualConfig.x.equation, isBigEndian: manualConfig.isBigEndian ?? def.xAxisDef.isBigEndian };
-    const manualYAxisDef: AxisDimension = { ...def.yAxisDef, equation: manualConfig.y.equation, isBigEndian: manualConfig.isBigEndian ?? def.yAxisDef.isBigEndian };
-
-    // Create a new map definition with the overriden Z-axis equation
-    const manualMapDef: XDFDefinition = { ...def, equation: manualConfig.z.equation, isBigEndian: manualConfig.isBigEndian ?? def.isBigEndian };
+    const manualXAxisDef: AxisDimension = { ...def.xAxisDef, equation: manualConfig.x.equation };
+    const manualYAxisDef: AxisDimension = { ...def.yAxisDef, equation: manualConfig.y.equation };
+    const manualMapDef: XDFDefinition = { ...def, equation: manualConfig.z.equation };
 
     const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef);
     const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef);
@@ -381,3 +380,5 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMap
     return newBuffer;
 }
 // #endregion
+
+    
