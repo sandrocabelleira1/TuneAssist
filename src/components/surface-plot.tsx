@@ -84,7 +84,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
   };
 
   return (
-    <div className={cn("h-full w-full bg-card rounded-lg border", className)} {...props}>
+    <div className={cn("h-full w-full bg-card rounded-lg border flex flex-col", className)} {...props}>
       <div className="h-full w-full flex-1">
         <Plot
           data={data}
