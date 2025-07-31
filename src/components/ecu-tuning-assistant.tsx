@@ -501,8 +501,8 @@ export default function EcuTuningAssistant() {
                             {isProcessing && <Loader2 className="ml-3 h-5 w-5 animate-spin" />}
                          </div>
                     </div>
-                    <div className="flex-1 p-4 min-h-0">
-                        <Tabs defaultValue="view-table" className="w-full h-full flex flex-col">
+                    <div className="flex-1 p-4 min-h-0 flex flex-col">
+                        <Tabs defaultValue="view-table" className="w-full flex-1 flex flex-col">
                             <TabsList className="shrink-0">
                                 <TabsTrigger value="view-table"><Table2 className="mr-2"/>Tabela de Dados</TabsTrigger>
                                 <TabsTrigger value="view-3d"><BarChart3 className="mr-2"/>Gráfico 3D</TabsTrigger>
