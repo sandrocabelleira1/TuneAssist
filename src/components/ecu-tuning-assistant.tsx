@@ -345,7 +345,7 @@ export default function EcuTuningAssistant() {
       <SidebarProvider>
         <div className="flex flex-col h-screen bg-background">
             <Header />
-            <div className="flex flex-1 min-h-0 w-full">
+            <div className="flex flex-1 min-h-0">
                 <Sidebar side="left" className="border-r">
                     <SidebarHeader>
                         <h2 className="text-lg font-semibold flex items-center gap-2"><Cpu size={20} /> Painel de Controlo</h2>
