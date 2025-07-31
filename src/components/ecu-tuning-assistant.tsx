@@ -345,7 +345,7 @@ export default function EcuTuningAssistant() {
       <SidebarProvider>
         <div className="flex flex-col h-screen bg-background">
             <Header />
-            <div className="flex flex-1 min-h-0">
+            <div className="flex flex-1 min-h-0 w-full">
                 <Sidebar side="left" className="border-r">
                     <SidebarHeader>
                         <h2 className="text-lg font-semibold flex items-center gap-2"><Cpu size={20} /> Painel de Controlo</h2>
@@ -532,7 +532,7 @@ export default function EcuTuningAssistant() {
                                             onCellChange={handleCellChange}
                                        />
                                     </TabsContent>
-                                    <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4">
+                                    <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4 flex flex-col">
                                         {processedMap?.axes && processedMap?.calculatedMap ? (
                                             <SurfacePlot3D 
                                                 mapData={processedMap.calculatedMap}
@@ -541,6 +541,7 @@ export default function EcuTuningAssistant() {
                                                 xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
                                                 yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
                                                 zAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
+                                                className="flex-1"
                                             />
                                         ) : (
                                             <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -548,7 +549,7 @@ export default function EcuTuningAssistant() {
                                             </div>
                                         )}
                                     </TabsContent>
-                                    <TabsContent value="view-2d" className="flex-1 min-h-0 mt-4">
+                                    <TabsContent value="view-2d" className="flex-1 min-h-0 mt-4 flex flex-col">
                                         <LinePlot2D
                                             mapData={processedMap?.calculatedMap ?? null}
                                             xAxis={processedMap?.axes?.x ?? null}
@@ -558,6 +559,7 @@ export default function EcuTuningAssistant() {
                                             selectedLineIndex={selectedLine}
                                             onLineSelect={setSelectedLine}
                                             onPointChange={handleCellChange}
+                                            className="flex-1"
                                         />
                                     </TabsContent>
                                 </>
