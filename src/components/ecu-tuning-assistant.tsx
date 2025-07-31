@@ -124,7 +124,7 @@ const initialManualConfig: ManualAxisConfig = {
     x: { equation: '' },
     y: { equation: '' },
     z: { equation: '' },
-    isBigEndian: null,
+    isBigEndian: true,
 };
 
 export default function EcuTuningAssistant() {
@@ -173,8 +173,8 @@ export default function EcuTuningAssistant() {
                 toast({ title: 'Ficheiro Carregado', description: successMessage });
             } else if (type === 'xdf' && typeof buffer === 'string') {
                  try {
-                    addLog('A processar o ficheiro XDF...');
-                    const { definitions, allTables } = parseXDF(buffer);
+                    addLog('A processar o ficheiro XDF com leitura Big-Endian por defeito...');
+                    const { definitions, allTables } = parseXDF(buffer, true); // <--- FORÇAR BIG ENDIAN
                     if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     setXdfFile({ name: file.name, content: buffer, definitions, allTables });
                     const successMessage = `XDF carregado: ${file.name} com ${definitions.length} mapas.`;
@@ -247,7 +247,7 @@ export default function EcuTuningAssistant() {
                 x: { equation: def.xAxisDef?.equation || 'x' },
                 y: { equation: def.yAxisDef?.equation || 'x' },
                 z: { equation: def.equation || 'x' },
-                isBigEndian: null,
+                isBigEndian: true, // Manter o padrão
             });
         } else {
              setManualConfig(initialManualConfig);
@@ -256,29 +256,10 @@ export default function EcuTuningAssistant() {
 
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
-            // Se a configuração manual de endianness estiver ativa, re-parse o XDF com ela
-            if (manualConfig.isBigEndian !== null) {
-                addLog("A re-analisar o XDF com a inversão de bytes manual...", 'info');
-                try {
-                    const { definitions, allTables } = parseXDF(xdfFile.content, manualConfig.isBigEndian);
-                    setXdfFile(prev => prev ? {...prev, definitions, allTables} : null);
-                } catch(error) {
-                    addLog(`Erro ao re-analisar XDF: ${(error as Error).message}`, 'error');
-                }
-            } else {
-                 processMap(false);
-            }
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName, binFile, xdfFile?.content]);
-
-    useEffect(() => {
-        // Trigger re-processing when xdfFile definitions actually change from re-parsing
-        if (selectedMapName && binFile && xdfFile) {
             processMap(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [xdfFile?.definitions]);
+    }, [selectedMapName, binFile, xdfFile]);
     
     const handleManualConfigChange = (field: keyof ManualAxisConfig, value: any) => {
         setManualConfig(prev => {
@@ -367,14 +348,6 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <Label htmlFor="z-equation" className="font-semibold text-sm">Equação Eixo Z (Mapa)</Label>
                                     <Input id="z-equation" placeholder="ex: x*0.75" value={manualConfig.z.equation} onChange={e => handleManualConfigChange('z', e.target.value)} />
-                                </div>
-                                 <div className="flex items-center space-x-2 pt-2">
-                                    <Switch 
-                                        id="endian-switch" 
-                                        checked={manualConfig.isBigEndian === true}
-                                        onCheckedChange={(checked) => handleManualConfigChange('isBigEndian', checked)}
-                                    />
-                                    <Label htmlFor="endian-switch">Forçar Big-Endian (Inverter Bytes)</Label>
                                 </div>
                                 <Button size="sm" onClick={handleManualRecalculate} disabled={!selectedMapName || isProcessing}>
                                     {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
