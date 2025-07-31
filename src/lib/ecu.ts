@@ -10,11 +10,18 @@ function evaluateEquation(equation: string, value: number): number {
         const sanitizedEq = equation.trim().toLowerCase().replace(/\s/g, '');
         if (sanitizedEq === 'x' || sanitizedEq === '') return value;
 
+        // Basic safety: prevent access to global objects like 'window' or 'document'
+        if (/[^a-zA-Z0-9x\s\.\+\-\*\/()\^]/.test(sanitizedEq.replace(/pi/g, '').replace(/e/g, ''))) {
+            // Allow basic math, x, pi, e
+             console.error(`Equação potencialmente insegura ou inválida: "${equation}"`);
+             return NaN;
+        }
+
         const expr = sanitizedEq.replace(/\bx\b/g, `(${value.toString()})`);
         // eslint-disable-next-line no-new-func
         return new Function('return ' + expr)();
     } catch (e) {
-        console.error(`Error evaluating equation "${equation}" with value ${value}:`, e);
+        console.error(`Erro ao avaliar a equação "${equation}" com o valor ${value}:`, e);
         return NaN; // Return NaN on error to signify failed calculation
     }
 }
@@ -22,7 +29,6 @@ function evaluateEquation(equation: string, value: number): number {
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
     for (const selector of selectors) {
-        // Use :scope to ensure we are searching direct children first
         const node = parent.querySelector(`:scope > ${selector}`);
         if (node) return node;
     }
@@ -43,7 +49,7 @@ function parseAddress(addressStr: string | null): number {
     try {
         const cleanedStr = addressStr.startsWith('0x') ? addressStr : '0x' + addressStr;
         if (BigInt(cleanedStr) > Number.MAX_SAFE_INTEGER) {
-             console.warn(`Address ${addressStr} is very large, potential for precision issues.`);
+             console.warn(`Endereço ${addressStr} é muito grande, potencial para problemas de precisão.`);
         }
         return Number(BigInt(cleanedStr));
     } catch {
@@ -59,11 +65,13 @@ function getDataSizeInBytes(element: Element | null): number {
         if (!isNaN(sizeBits) && sizeBits > 0) return sizeBits / 8;
     }
     
-    // Fallback for parent nodes if direct child attribute is missing
-    const parentSizeBits = getAttr(element?.parentElement, 'elementsizebits');
-     if (parentSizeBits) {
-        const sizeBits = parseInt(parentSizeBits, 10);
-        if (!isNaN(sizeBits) && sizeBits > 0) return sizeBits / 8;
+    const parent = element?.parentElement;
+    if(parent) {
+        const parentSizeBits = getAttr(parent, 'elementsizebits');
+         if (parentSizeBits) {
+            const sizeBits = parseInt(parentSizeBits, 10);
+            if (!isNaN(sizeBits) && sizeBits > 0) return sizeBits / 8;
+        }
     }
 
     return 2; // Default to 2 bytes (16-bit) if not found
@@ -77,7 +85,13 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
-    const indexcount = parseInt(findNode(axisNode, 'indexcount')?.textContent || '0', 10);
+    
+    // CRITICAL: The count MUST come from the main table's axis definition.
+    const indexCountNode = findNode(axisNode, 'indexcount');
+    if (!indexCountNode) throw new Error(`Nó 'indexcount' não encontrado na definição do eixo.`);
+    const indexcount = parseInt(indexCountNode.textContent || '0', 10);
+    if (indexcount === 0) throw new Error(`Contagem do eixo (indexcount) é zero.`);
+    
     const defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
     
     // Case 1: Axis data is linked from another table (common for breakpoints)
@@ -93,9 +107,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         
         const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
         if (isNaN(address)) throw new Error(`Endereço inválido (NaN) na tabela vinculada "${linkId}".`);
-
-        // IMPORTANT FIX: The count MUST come from the main table's axis definition, not the linked one.
-        if (indexcount === 0) throw new Error(`Contagem do eixo (indexcount) é zero para o eixo que referencia a tabela "${linkId}".`);
         
         return {
             label: findNode(linkedTable, 'title')?.textContent?.trim() || defaultLabel,
@@ -112,12 +123,9 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
     const sourceAddress = parseAddress(getAttr(sourceEmbeddedData, 'mmedaddress'));
     if (sourceEmbeddedData && !isNaN(sourceAddress)) {
-         const count = parseInt(getAttr(sourceEmbeddedData, 'mmedcolcount') || getAttr(sourceEmbeddedData, 'mmedrowcount') || `${indexcount}` || '0', 10);
-        if (count === 0) throw new Error(`Contagem de eixo é zero para o eixo com endereço ${sourceAddress.toString(16)}.`);
-        
         return {
             label: defaultLabel,
-            count: count,
+            count: indexcount,
             address: sourceAddress,
             dataSize: getDataSizeInBytes(sourceEmbeddedData),
             isBigEndian: getIsBigEndian(sourceEmbeddedData),
@@ -137,7 +145,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    throw new Error(`Definição de eixo não suportada para: ${defaultLabel}. Verifique se está vinculada ou se tem um endereço.`);
+    throw new Error(`Definição de eixo não suportada para: ${defaultLabel}. Verifique se está vinculada ou se tem um endereço e um 'indexcount' válido.`);
 }
 
 
@@ -175,8 +183,6 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], all
 
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
             const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap);
-            
-            if (xAxisDef.count === 0 || yAxisDef.count === 0) return;
             
             definitions.push({
                 uniqueId,
@@ -259,7 +265,7 @@ function processAndSortMap(
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             const offset = def.address + (r * def.cols * def.dataSize) + (c * def.dataSize);
-            if (offset === null || offset + def.dataSize > view.byteLength) continue;
+            if (offset === null || isNaN(offset) || offset + def.dataSize > view.byteLength) continue;
             
             let rawValue;
             if (def.dataSize === 1) rawValue = view.getUint8(offset);
@@ -319,10 +325,10 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
     const yAxisData = readAxisFromBin(binBuffer, def.yAxisDef);
     
     if (xAxisData.calculated.length !== def.cols) {
-         throw new Error(`Contagem de eixo X (${xAxisData.label}: ${xAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.cols}).`);
+         throw new Error(`Contagem de colunas do eixo X (${xAxisData.label}: ${xAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.cols}).`);
     }
     if(yAxisData.calculated.length !== def.rows){
-         throw new Error(`Contagem de eixo Y (${yAxisData.label}: ${yAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.rows}).`);
+         throw new Error(`Contagem de linhas do eixo Y (${yAxisData.label}: ${yAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.rows}).`);
     }
 
     return processAndSortMap(binBuffer, def, xAxisData, yAxisData, allTables);
@@ -369,4 +375,3 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMap
     return newBuffer;
 }
 // #endregion
-

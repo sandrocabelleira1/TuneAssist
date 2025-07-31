@@ -170,6 +170,7 @@ export default function EcuTuningAssistant() {
                 toast({ title: 'Ficheiro Carregado', description: successMessage });
             } else if (type === 'xdf' && typeof buffer === 'string') {
                  try {
+                    addLog('A processar o ficheiro XDF...');
                     const { definitions, allTables } = parseXDF(buffer);
                     if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     setXdfFile({ name: file.name, content: buffer, definitions, allTables });
@@ -203,44 +204,28 @@ export default function EcuTuningAssistant() {
         }
         
         setIsProcessing(true);
-        setProcessedMap(null); // Clear previous map
-        
-        const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+        setProcessedMap(null); 
+        addLog(`[INÍCIO] A processar o mapa: ${def.name}`, 'info');
 
         try {
-            addLog(`[INÍCIO] A processar o mapa: ${def.name}`, 'info');
-            await delay(100);
-
             let result: ProcessedMap;
             if (isManual) {
-                addLog("A usar configuração manual para os eixos...", 'info');
-                await delay(100);
+                addLog("A processar com configuração manual dos eixos...", 'info');
                 result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig, xdfFile.allTables);
             } else {
-                addLog("Passo 1/3: A ler e a calcular os eixos e o mapa...", 'info');
-                await delay(100);
+                addLog("A processar com as definições do XDF...", 'info');
                 result = readAndCalculateMapFromBin(binFile.buffer, def, xdfFile.allTables);
             }
             
-            addLog(`Eixo X (${result?.axes.x.label}): ${result?.axes.x.calculated.length} valores`, 'debug');
-            addLog(`Eixo Y (${result?.axes.y.label}): ${result?.axes.y.calculated.length} valores`, 'debug');
-            
-            addLog("Passo 2/3: A ordenar eixos e a remapear os dados...", 'info');
-            setProcessedMap(result); // Set intermediate for rendering
-            await delay(100);
-            
-            addLog("Passo 3/3: A renderizar os dados finais...", 'info');
             setProcessedMap(result);
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
-            await delay(100);
-            
-            addLog(`[SUCESSO] Mapa carregado e ordenado: ${def.name}`, 'success');
+            addLog(`[SUCESSO] Mapa carregado e processado: ${def.name}`, 'success');
 
         } catch (error) {
             const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
             addLog(errorMessage, 'error');
             toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
-            setProcessedMap(null); // Clear map on error
+            setProcessedMap(null);
         } finally {
             setIsProcessing(false);
         }
@@ -256,7 +241,7 @@ export default function EcuTuningAssistant() {
             processMap(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName]);
+    }, [selectedMapName, binFile, xdfFile]);
     
     const handleManualConfigChange = (axis: 'x' | 'y', field: keyof ManualAxisConfig['x'], value: string) => {
         setManualConfig(prev => ({
@@ -382,7 +367,7 @@ export default function EcuTuningAssistant() {
                     </SidebarContent>
                     <SidebarFooter>
                         <div className="p-2">
-                             <h3 className="font-semibold text-sm mb-2 px-2">Motor de Cálculo</h3>
+                             <h3 className="font-semibold text-sm mb-2 px-2">Log de Processamento</h3>
                              <ScrollArea className="h-48 w-full rounded-md border p-2 font-mono text-xs">
                                 {logs.length > 0 ? logs.map(log => (
                                     <div key={log.id} className="flex items-start">
@@ -416,10 +401,10 @@ export default function EcuTuningAssistant() {
                                 <TabsTrigger value="view-2d"><BarChart3 className="mr-2"/>Gráfico 2D</TabsTrigger>
                             </TabsList>
                              <div className="flex-1 mt-4 min-h-0">
-                                {isProcessing && !processedMap ? (
+                                {isProcessing ? (
                                     <div className="flex items-center justify-center h-full text-muted-foreground">
-                                        <Play className="mr-2 h-8 w-8 animate-pulse" />
-                                        <p>A executar o motor de cálculo...</p>
+                                        <Loader2 className="mr-2 h-8 w-8 animate-spin" />
+                                        <p>A processar o mapa...</p>
                                     </div>
                                 ) : !processedMap ? (
                                     <div className="flex items-center justify-center h-full text-muted-foreground text-center">
