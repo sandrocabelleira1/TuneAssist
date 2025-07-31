@@ -205,7 +205,7 @@ export default function EcuTuningAssistant() {
         
         setIsProcessing(true);
         setProcessedMap(null); 
-        addLog(`[INÍCIO] A processar o mapa: ${def.name}`, 'info');
+        addLog(`A processar o mapa: ${def.name}...`, 'info');
 
         try {
             let result: ProcessedMap;
@@ -219,12 +219,12 @@ export default function EcuTuningAssistant() {
             
             setProcessedMap(result);
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
-            addLog(`[SUCESSO] Mapa carregado e processado: ${def.name}`, 'success');
+            addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
 
         } catch (error) {
-            const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
+            const errorMessage = `ERRO ao processar o mapa "${def.name}": ${(error as Error).message}`;
             addLog(errorMessage, 'error');
-            toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
+            toast({ title: 'Erro ao Processar Mapa', description: (error as Error).message, variant: 'destructive' });
             setProcessedMap(null);
         } finally {
             setIsProcessing(false);
@@ -462,3 +462,5 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+
+    

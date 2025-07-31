@@ -10,19 +10,22 @@ function evaluateEquation(equation: string, value: number): number {
         const sanitizedEq = equation.trim().toLowerCase().replace(/\s/g, '');
         if (sanitizedEq === 'x' || sanitizedEq === '') return value;
 
-        // Basic safety: prevent access to global objects like 'window' or 'document'
+        // Basic safety: prevent access to global objects
         if (/[^a-zA-Z0-9x\s\.\+\-\*\/()\^]/.test(sanitizedEq.replace(/pi/g, '').replace(/e/g, ''))) {
-            // Allow basic math, x, pi, e
-             console.error(`Equação potencialmente insegura ou inválida: "${equation}"`);
-             return NaN;
+             throw new Error(`Equação contém caracteres inválidos: "${equation}"`);
         }
 
         const expr = sanitizedEq.replace(/\bx\b/g, `(${value.toString()})`);
         // eslint-disable-next-line no-new-func
-        return new Function('return ' + expr)();
+        const result = new Function('return ' + expr)();
+        if (typeof result !== 'number' || !isFinite(result)) {
+            return NaN;
+        }
+        return result;
+
     } catch (e) {
         console.error(`Erro ao avaliar a equação "${equation}" com o valor ${value}:`, e);
-        return NaN; // Return NaN on error to signify failed calculation
+        return NaN; 
     }
 }
 
@@ -74,7 +77,7 @@ function getDataSizeInBytes(element: Element | null): number {
         }
     }
 
-    return 2; // Default to 2 bytes (16-bit) if not found
+    return 2; // Default to 2 bytes (16-bit)
 }
 
 // #endregion
@@ -94,7 +97,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
     
     const defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
     
-    // Case 1: Axis data is linked from another table (common for breakpoints)
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
         if (!linkedTable) throw new Error(`Tabela de eixos vinculada com ID "${linkId}" não foi encontrada.`);
@@ -119,7 +121,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    // Case 2: Axis data is embedded directly within the axis definition
     const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
     const sourceAddress = parseAddress(getAttr(sourceEmbeddedData, 'mmedaddress'));
     if (sourceEmbeddedData && !isNaN(sourceAddress)) {
@@ -134,7 +135,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
         };
     }
     
-    // Case 3: Axis has hardcoded labels instead of memory addresses
     const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
     if (labels.length > 0) {
         return {
@@ -175,6 +175,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], all
         try {
             const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
             const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
+            // This is a main map table, it MUST have a direct address for its data
             if (isNaN(address)) return;
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
@@ -205,15 +206,14 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], all
         }
     });
 
-    return { definitions, allTables };
+    return { definitions, allTablesMap };
 }
 // #endregion
 
 // #region BIN Reading and Processing
 
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisData {
-    const defaultState: AxisData = { label: 'Indefinido', raw: [], calculated: [], address: null, originalIndices: [] };
-    if (!axisDef) return defaultState;
+    if (!axisDef) throw new Error("Definição de eixo fornecida é inválida.");
     
     if (axisDef.values) {
         const indices = axisDef.values.map((_, i) => i);
@@ -221,8 +221,11 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     }
 
     const { address, count, dataSize = 2, equation = 'x', isBigEndian = false } = axisDef;
-    if (address === undefined || address === null || isNaN(address) || !count || count === 0) {
-        throw new Error(`Definição de eixo inválida para "${axisDef.label}". Verifique endereço e contagem.`);
+    if (address === undefined || address === null || isNaN(address)) {
+        throw new Error(`Endereço do eixo "${axisDef.label}" é inválido.`);
+    }
+    if (!count || count <= 0) {
+        throw new Error(`Contagem do eixo "${axisDef.label}" deve ser maior que zero.`);
     }
     
     const view = new DataView(binBuffer);
@@ -245,6 +248,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     }
     
     const calculatedValues = rawValues.map(r => evaluateEquation(equation, r));
+    if(calculatedValues.some(isNaN)) {
+        throw new Error(`Erro ao aplicar equação "${equation}" ao eixo "${axisDef.label}". Verifique a equação e os dados.`);
+    }
+
     const originalIndices = rawValues.map((_, i) => i);
     
     return { raw: rawValues, calculated: calculatedValues, label: axisDef.label, address, originalIndices };
@@ -255,8 +262,7 @@ function processAndSortMap(
     binBuffer: ArrayBuffer, 
     def: XDFDefinition, 
     xAxisData: AxisData, 
-    yAxisData: AxisData,
-    allTables: Map<string, Element>
+    yAxisData: AxisData
 ): ProcessedMap {
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !def.isBigEndian;
@@ -278,9 +284,6 @@ function processAndSortMap(
     }
     
     const createSortMap = (axis: AxisData) => {
-        if (!axis || !Array.isArray(axis.calculated) || axis.calculated.length === 0) {
-             return { sortedValues: [], originalIndices: [] };
-        }
         const indexed = axis.calculated.map((val, index) => ({ val, index }));
         
         if (typeof indexed[0]?.val === 'number') {
@@ -302,7 +305,12 @@ function processAndSortMap(
         const sortedRow: (number | null)[] = [];
         for (const xOrigIndex of xSort.originalIndices) {
             const rawValue = rawMap[yOrigIndex]?.[xOrigIndex];
-            sortedRow.push(rawValue !== null && rawValue !== undefined && !isNaN(rawValue) ? evaluateEquation(def.equation, rawValue) : null);
+            if(rawValue === null || rawValue === undefined || isNaN(rawValue)) {
+                sortedRow.push(null);
+            } else {
+                const calculatedValue = evaluateEquation(def.equation, rawValue);
+                sortedRow.push(isNaN(calculatedValue) ? null : calculatedValue);
+            }
         }
         calculatedMap.push(sortedRow);
     }
@@ -331,7 +339,7 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
          throw new Error(`Contagem de linhas do eixo Y (${yAxisData.label}: ${yAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.rows}).`);
     }
 
-    return processAndSortMap(binBuffer, def, xAxisData, yAxisData, allTables);
+    return processAndSortMap(binBuffer, def, xAxisData, yAxisData);
 }
 
 export function readAndCalculateMapFromBinManual(
@@ -365,13 +373,14 @@ export function readAndCalculateMapFromBinManual(
     const xAxisData = readAxisFromBin(binBuffer, xAxisDef);
     const yAxisData = readAxisFromBin(binBuffer, yAxisDef);
 
-    return processAndSortMap(binBuffer, newDef, xAxisData, yAxisData, allTables);
+    return processAndSortMap(binBuffer, newDef, xAxisData, yAxisData);
 }
 
 export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMapData: MapData): ArrayBuffer {
     const newBuffer = binBuffer.slice(0);
-    // Writing functionality is complex and requires inverse equation evaluation. Not implemented.
     console.error("A funcionalidade de escrita (writeMapToBin) não está implementada.");
     return newBuffer;
 }
 // #endregion
+
+    
