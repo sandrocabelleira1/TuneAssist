@@ -560,7 +560,7 @@ export default function EcuTuningAssistant() {
                                                 onLineSelect={setSelectedLine}
                                                 onPointChange={handleCellChange}
                                             />
-                                        </Tabs-Content>
+                                        </TabsContent>
                                     </>
                                 )}
                             </div>
