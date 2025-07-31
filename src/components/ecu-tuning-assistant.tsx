@@ -121,6 +121,7 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
 const initialManualConfig: ManualAxisConfig = {
     x: { equation: '' },
     y: { equation: '' },
+    z: { equation: '' },
 };
 
 export default function EcuTuningAssistant() {
@@ -210,12 +211,7 @@ export default function EcuTuningAssistant() {
             let result: ProcessedMap;
             if (isManual) {
                 addLog("A processar com equações manuais...", 'info');
-                if (!def.xAxisDef || !def.yAxisDef) throw new Error("As definições de eixo originais são necessárias para o recálculo manual.");
-                
-                result = readAndCalculateMapFromBinManual(binFile.buffer, def, {
-                    x: { ...def.xAxisDef, equation: manualConfig.x.equation || def.xAxisDef.equation },
-                    y: { ...def.yAxisDef, equation: manualConfig.y.equation || def.yAxisDef.equation },
-                });
+                result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
 
             } else {
                 addLog("A processar com as definições do XDF...", 'info');
@@ -244,6 +240,7 @@ export default function EcuTuningAssistant() {
             setManualConfig({
                 x: { equation: def.xAxisDef?.equation || 'x' },
                 y: { equation: def.yAxisDef?.equation || 'x' },
+                z: { equation: def.equation || 'x' },
             });
         } else {
              setManualConfig(initialManualConfig);
@@ -257,7 +254,7 @@ export default function EcuTuningAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedMapName, binFile, xdfFile]);
     
-    const handleManualConfigChange = (axis: 'x' | 'y', value: string) => {
+    const handleManualConfigChange = (axis: 'x' | 'y' | 'z', value: string) => {
         setManualConfig(prev => ({
             ...prev,
             [axis]: {
@@ -341,6 +338,10 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <Label htmlFor="x-equation" className="font-semibold text-sm">Equação Eixo X ({selectedMapDefinition?.xAxisDef?.label ?? 'Colunas'})</Label>
                                     <Input id="x-equation" placeholder="ex: x/10" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', e.target.value)} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="z-equation" className="font-semibold text-sm">Equação Eixo Z (Mapa)</Label>
+                                    <Input id="z-equation" placeholder="ex: x*0.75" value={manualConfig.z.equation} onChange={e => handleManualConfigChange('z', e.target.value)} />
                                 </div>
                                 <Button size="sm" onClick={handleManualRecalculate} disabled={!selectedMapName || isProcessing}>
                                     {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -458,5 +459,7 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+
+    
 
     

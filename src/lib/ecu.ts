@@ -1,5 +1,5 @@
 
-import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap } from './types';
+import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
 
 // #region Utility Functions
 
@@ -346,21 +346,24 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
 export function readAndCalculateMapFromBinManual(
     binBuffer: ArrayBuffer, 
     def: XDFDefinition, 
-    manualAxes: {x: AxisDimension, y: AxisDimension}
+    manualConfig: ManualAxisConfig
 ): ProcessedMap {
 
-    const { x: xAxisDef, y: yAxisDef } = manualAxes;
-
-    if(!xAxisDef || !yAxisDef){
-         throw new Error("Definições de eixo manuais são inválidas.");
+    if(!def.xAxisDef || !def.yAxisDef){
+         throw new Error("As definições de eixo originais são inválidas e necessárias para o recálculo manual.");
     }
     
-    const newDef = {...def, cols: xAxisDef.count, rows: yAxisDef.count };
+    // Create new axis definitions with the overriden equations
+    const manualXAxisDef: AxisDimension = { ...def.xAxisDef, equation: manualConfig.x.equation };
+    const manualYAxisDef: AxisDimension = { ...def.yAxisDef, equation: manualConfig.y.equation };
 
-    const xAxisData = readAxisFromBin(binBuffer, xAxisDef);
-    const yAxisData = readAxisFromBin(binBuffer, yAxisDef);
+    // Create a new map definition with the overriden Z-axis equation
+    const manualMapDef: XDFDefinition = { ...def, equation: manualConfig.z.equation };
 
-    return processAndSortMap(binBuffer, newDef, xAxisData, yAxisData);
+    const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef);
+    const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef);
+
+    return processAndSortMap(binBuffer, manualMapDef, xAxisData, yAxisData);
 }
 
 export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMapData: MapData): ArrayBuffer {
@@ -369,5 +372,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMap
     return newBuffer;
 }
 // #endregion
+
+    
 
     

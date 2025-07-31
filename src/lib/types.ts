@@ -1,6 +1,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -53,11 +54,11 @@ export type ProcessedMap = {
 } | null;
 
 export type ManualAxisConfig = {
-  x: {
-    equation: string;
-  };
-  y: {
-    equation: string;
-  };
+  x: { equation: string };
+  y: { equation: string };
+  z: { equation: string };
 };
 
+
+
+    
