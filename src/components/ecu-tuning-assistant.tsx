@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -32,13 +30,14 @@ const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     )
 });
 
-function DataTable({ mapData, addresses, axes, selectedMapDefinition }: {
+function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChange }: {
     mapData: MapData | null;
     addresses: MapData | null;
     axes: { x: AxisData, y: AxisData } | null;
     selectedMapDefinition: XDFDefinition | undefined;
+    onCellChange: (y: number, x: number, value: number) => void;
 }) {
-    if (!axes || !selectedMapDefinition) {
+    if (!axes || !selectedMapDefinition || !mapData) {
         return (
             <div className="flex items-center justify-center h-full text-muted-foreground">
                 <p>Carregue os ficheiros e selecione um mapa para ver a tabela de dados.</p>
@@ -74,6 +73,13 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition }: {
     const xAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.xAxisDef);
     const yAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.yAxisDef);
     const zAxisDecimalPlaces = selectedMapDefinition.decimalpl ?? 2;
+
+    const handleCellBlur = (e: React.FocusEvent<HTMLInputElement>, yi: number, xi: number) => {
+        const newValue = parseFloat(e.target.value);
+        if (!isNaN(newValue)) {
+            onCellChange(yi, xi, newValue);
+        }
+    };
     
     return (
         <div className="overflow-auto h-full w-full">
@@ -96,7 +102,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition }: {
                             <td className="sticky left-0 bg-muted p-2 border border-border font-bold text-right">
                                 {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
                             </td>
-                            {mapData ? mapData[yi]?.map((cell, xi) => {
+                            {mapData[yi]?.map((cell, xi) => {
                                 const bgColor = getHeatmapColor(cell, minVal, maxVal);
                                 const textColor = getTextColorForBackground(bgColor);
                                 const address = addresses?.[yi]?.[xi];
@@ -104,8 +110,14 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition }: {
                                     <td key={xi} className="p-0 border border-border text-center h-10" style={{ backgroundColor: bgColor, color: textColor }}>
                                         <TooltipProvider>
                                             <Tooltip>
-                                                <TooltipTrigger className="w-full h-full flex items-center justify-center p-1">
-                                                    {cell !== null && cell !== undefined ? cell.toFixed(zAxisDecimalPlaces) : '-'}
+                                                <TooltipTrigger className="w-full h-full flex items-center justify-center p-0">
+                                                    <input
+                                                        type="text"
+                                                        defaultValue={cell !== null && cell !== undefined ? cell.toFixed(zAxisDecimalPlaces) : '-'}
+                                                        onBlur={(e) => handleCellBlur(e, yi, xi)}
+                                                        className="w-full h-full text-center bg-transparent border-none p-1 focus:outline-none focus:ring-2 focus:ring-ring"
+                                                        style={{ color: 'inherit' }}
+                                                    />
                                                 </TooltipTrigger>
                                                 <TooltipContent>
                                                     {address !== null && address !== undefined ? `Endereço: 0x${address.toString(16).toUpperCase()}` : 'Endereço indisponível'}
@@ -114,13 +126,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition }: {
                                         </TooltipProvider>
                                     </td>
                                 );
-                            }) : (
-                                Array.from({ length: axes.x.calculated.length }).map((_, xi) => (
-                                    <td key={xi} className="p-0 border border-border text-center h-10 bg-muted/50">
-                                        <div className="w-full h-full flex items-center justify-center p-1">-</div>
-                                    </td>
-                                ))
-                            )}
+                            })}
                         </tr>
                     ))}
                 </tbody>
@@ -135,8 +141,8 @@ const initialManualConfig: ManualAxisConfig = {
     y: { equation: '', stride: undefined },
     z: { equation: '', stride: undefined },
     isBigEndian: true,
-    sortX: undefined,
-    sortY: undefined,
+    sortX: false,
+    sortY: false,
 };
 
 export default function EcuTuningAssistant() {
@@ -147,6 +153,7 @@ export default function EcuTuningAssistant() {
     
     const [selectedMapName, setSelectedMapName] = useState<string>('');
     const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
+    const [isModified, setIsModified] = useState(false);
     
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
 
@@ -208,7 +215,7 @@ export default function EcuTuningAssistant() {
 
     const processMap = useCallback(async (isManual: boolean = false) => {
         if (!selectedMapName || !binFile || !xdfFile) {
-            addLog("Selecione os ficheiros BIN e XDF e um mapa para processar.", 'error');
+            // This is a normal condition, not an error
             return;
         }
 
@@ -220,6 +227,7 @@ export default function EcuTuningAssistant() {
         
         setIsProcessing(true);
         setProcessedMap(null); 
+        setIsModified(false);
         addLog(`A processar o mapa: ${def.name}...`, 'info');
         
         try {
@@ -249,14 +257,15 @@ export default function EcuTuningAssistant() {
 
     const handleMapSelect = (name: string) => {
         setSelectedMapName(name);
-        setProcessedMap(null); 
+        setProcessedMap(null);
+        setIsModified(false);
         const def = xdfFile?.definitions.find(d => d.name === name);
         if (def) {
             setManualConfig({
                 x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef.dataSize },
                 y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef.dataSize },
                 z: { equation: def.equation || 'x', stride: def.dataSize },
-                isBigEndian: true,
+                isBigEndian: def.isBigEndian,
                 sortX: def.xAxisDef.requiresSort,
                 sortY: def.yAxisDef.requiresSort,
             });
@@ -270,9 +279,9 @@ export default function EcuTuningAssistant() {
             processMap(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName, binFile, xdfFile]);
+    }, [selectedMapName]);
     
-    const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY', value: any, subfield: 'equation' | 'stride' | null = null) => {
+    const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | null = null) => {
         setManualConfig(prev => {
             if (subfield && (axis === 'x' || axis === 'y' || axis === 'z')) {
                  const numValue = (subfield === 'stride' && value === '') ? undefined : value;
@@ -285,13 +294,51 @@ export default function EcuTuningAssistant() {
     const handleManualRecalculate = () => {
         processMap(true);
     };
-    
+
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
-        addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)} (Funcionalidade de escrita desativada)`, 'info');
+        if (!processedMap || !processedMap.calculatedMap) return;
+
+        addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)}`, 'info');
+        const newMap = processedMap.calculatedMap.map(row => [...row]);
+        newMap[rowIndex][colIndex] = newValue;
+        
+        setProcessedMap(prev => prev ? { ...prev, calculatedMap: newMap } : null);
+        setIsModified(true);
     };
     
     const handleSave = () => {
-        toast({ title: 'Funcionalidade Indisponível', description: 'A funcionalidade de salvar foi temporariamente desativada.', variant: 'destructive' });
+        if (!binFile || !processedMap || !selectedMapDefinition) {
+            const msg = "Faltam dados para salvar. Carregue os ficheiros e processe um mapa primeiro.";
+            addLog(msg, 'error');
+            toast({ title: 'Erro ao Salvar', description: msg, variant: 'destructive' });
+            return;
+        }
+
+        try {
+            addLog("A preparar para salvar o ficheiro BIN...", 'info');
+            const newBinBuffer = writeMapToBin(binFile.buffer, selectedMapDefinition, processedMap);
+            
+            const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const originalName = binFile.name.replace(/\.[^/.]+$/, "");
+            a.download = `${originalName}_mod.bin`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            const successMsg = `Ficheiro ${a.download} salvo com sucesso.`;
+            addLog(successMsg, 'success');
+            toast({ title: 'Salvo com Sucesso', description: successMsg });
+            setIsModified(false);
+
+        } catch (error) {
+            const errorMsg = `Falha ao salvar o ficheiro BIN: ${(error as Error).message}`;
+            addLog(errorMsg, 'error');
+            toast({ title: 'Erro ao Salvar', description: errorMsg, variant: 'destructive' });
+        }
     }
     
     return (
@@ -356,7 +403,7 @@ export default function EcuTuningAssistant() {
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="y-stride" className="font-semibold text-sm">Passo Y (bytes)</Label>
-                                        <Input id="y-stride" type="number" placeholder="2" value={manualConfig.y.stride ?? ''} onChange={e => handleManualConfigChange('y', e.target.value === '' ? undefined : parseInt(e.target.value), 'stride')} />
+                                        <Input id="y-stride" type="number" placeholder="-" value={manualConfig.y.stride ?? ''} onChange={e => handleManualConfigChange('y', e.target.value === '' ? undefined : parseInt(e.target.value), 'stride')} />
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -366,7 +413,7 @@ export default function EcuTuningAssistant() {
                                     </div>
                                     <div className="space-y-2">
                                         <Label htmlFor="x-stride" className="font-semibold text-sm">Passo X (bytes)</Label>
-                                        <Input id="x-stride" type="number" placeholder="2" value={manualConfig.x.stride ?? ''} onChange={e => handleManualConfigChange('x', e.target.value === '' ? undefined : parseInt(e.target.value), 'stride')} />
+                                        <Input id="x-stride" type="number" placeholder="-" value={manualConfig.x.stride ?? ''} onChange={e => handleManualConfigChange('x', e.target.value === '' ? undefined : parseInt(e.target.value), 'stride')} />
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -376,7 +423,7 @@ export default function EcuTuningAssistant() {
                                     </div>
                                      <div className="space-y-2">
                                         <Label htmlFor="z-stride" className="font-semibold text-sm">Passo Z (bytes)</Label>
-                                        <Input id="z-stride" type="number" placeholder="1" value={manualConfig.z.stride ?? ''} onChange={e => handleManualConfigChange('z', e.target.value === '' ? undefined : parseInt(e.target.value), 'stride')} />
+                                        <Input id="z-stride" type="number" placeholder="-" value={manualConfig.z.stride ?? ''} onChange={e => handleManualConfigChange('z', e.target.value === '' ? undefined : parseInt(e.target.value), 'stride')} />
                                     </div>
                                 </div>
                                 
@@ -386,7 +433,6 @@ export default function EcuTuningAssistant() {
                                             id="sort-x"
                                             checked={manualConfig.sortX ?? false}
                                             onCheckedChange={checked => handleManualConfigChange('sortX', checked)}
-                                            disabled={!selectedMapDefinition}
                                         />
                                         <Label htmlFor="sort-x">Ordenar Eixo X</Label>
                                     </div>
@@ -395,10 +441,17 @@ export default function EcuTuningAssistant() {
                                             id="sort-y"
                                             checked={manualConfig.sortY ?? false}
                                             onCheckedChange={checked => handleManualConfigChange('sortY', checked)}
-                                            disabled={!selectedMapDefinition}
                                         />
                                         <Label htmlFor="sort-y">Ordenar Eixo Y</Label>
                                     </div>
+                                </div>
+                                 <div className="flex items-center space-x-2">
+                                    <Switch
+                                        id="big-endian"
+                                        checked={manualConfig.isBigEndian ?? false}
+                                        onCheckedChange={checked => handleManualConfigChange('isBigEndian', checked)}
+                                    />
+                                    <Label htmlFor="big-endian">Big Endian</Label>
                                 </div>
                                 <Button size="sm" onClick={handleManualRecalculate} disabled={!selectedMapName || isProcessing}>
                                     {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -412,7 +465,7 @@ export default function EcuTuningAssistant() {
                                 <CardTitle className="text-base flex items-center gap-2"><BrainCircuit size={18} /> Ações</CardTitle>
                             </CardHeader>
                             <CardContent className="p-4 pt-0 flex flex-col gap-3">
-                               <Button variant="default" size="sm" disabled={!processedMap} onClick={handleSave}>
+                               <Button variant="default" size="sm" disabled={!isModified || !processedMap} onClick={handleSave}>
                                    <Save className="mr-2" /> Salvar .BIN Modificado
                                </Button>
                             </CardContent>
@@ -444,6 +497,7 @@ export default function EcuTuningAssistant() {
                          <SidebarTrigger />
                          <div className="flex items-center ml-2">
                             <h1 className="text-lg font-semibold">{selectedMapName || "Nenhum Mapa Selecionado"}</h1>
+                             {isModified && <span className="ml-2 text-xs font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">Modificado</span>}
                             {isProcessing && <Loader2 className="ml-3 h-5 w-5 animate-spin" />}
                          </div>
                     </div>
@@ -476,6 +530,7 @@ export default function EcuTuningAssistant() {
                                                 addresses={processedMap?.addresses ?? null}
                                                 axes={processedMap?.axes ?? null}
                                                 selectedMapDefinition={selectedMapDefinition}
+                                                onCellChange={handleCellChange}
                                            />
                                         </TabsContent>
                                         <TabsContent value="view-3d" className="h-full m-0">
@@ -505,7 +560,7 @@ export default function EcuTuningAssistant() {
                                                 onLineSelect={setSelectedLine}
                                                 onPointChange={handleCellChange}
                                             />
-                                        </TabsContent>
+                                        </Tabs-Content>
                                     </>
                                 )}
                             </div>
@@ -517,4 +572,3 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
-

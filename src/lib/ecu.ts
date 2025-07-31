@@ -30,6 +30,38 @@ function evaluateEquation(equation: string, value: number): number {
     }
 }
 
+function invertEquation(equation: string, value: number): number {
+    if (value === null || value === undefined || isNaN(value)) {
+        return NaN;
+    }
+    try {
+        const sanitizedEq = equation.trim().toLowerCase().replace(/\s/g, '');
+        if (sanitizedEq === 'x' || sanitizedEq === '') return value;
+
+        // Simple inverse for common patterns: y = x * a -> x = y / a, y = x + a -> x = y - a etc.
+        // This is a simplified approach and won't handle complex math.
+        const mult = /^\s*x\s*\*\s*([\d\.]+)\s*$/.exec(sanitizedEq);
+        if (mult) return value / parseFloat(mult[1]);
+
+        const div = /^\s*x\s*\/\s*([\d\.]+)\s*$/.exec(sanitizedEq);
+        if (div) return value * parseFloat(div[1]);
+
+        const add = /^\s*x\s*\+\s*([\d\.]+)\s*$/.exec(sanitizedEq);
+        if (add) return value - parseFloat(add[1]);
+
+        const sub = /^\s*x\s*-\s*([\d\.]+)\s*$/.exec(sanitizedEq);
+        if (sub) return value + parseFloat(sub[1]);
+        
+        console.warn(`A inversão da equação "${equation}" não é suportada, o valor bruto pode estar incorreto.`);
+        // Fallback for non-trivial equations - this is a weak point.
+        return value;
+
+    } catch (e) {
+        console.error(`Erro ao inverter a equação "${equation}" com o valor ${value}:`, e);
+        return NaN;
+    }
+}
+
 
 function findNode(parent: Element | Document, ...selectors: string[]): Element | null {
     for (const selector of selectors) {
@@ -68,12 +100,12 @@ function parseAddress(addressStr: string | null): number {
 
 function getDataSizeInBytes(element: Element | null): number {
     if (!element) return 2;
-    // Check the element itself first
-    let sizeBitsAttr = getAttr(element, 'mmedelementsizebits') || getAttr(element, 'elementsizebits');
+    // Check the element itself first for the most specific size
+    let sizeBitsAttr = getAttr(element, 'mmedelementsizebits');
     
-    // If not on the element, check its parent (the axis definition)
+    // If not on the element, check its direct parent (the axis definition node)
     if (!sizeBitsAttr && element.parentElement) {
-        sizeBitsAttr = getAttr(element.parentElement, 'mmedelementsizebits') || getAttr(element.parentElement, 'elementsizebits');
+         sizeBitsAttr = getAttr(element.parentElement, 'elementsizebits');
     }
 
     if (sizeBitsAttr) {
@@ -82,7 +114,7 @@ function getDataSizeInBytes(element: Element | null): number {
             return sizeBits / 8;
         }
     }
-    return 2; // Default if attribute is missing or invalid
+    return 2; // Default to 16-bit if attribute is missing or invalid
 }
 
 // #endregion
@@ -263,7 +295,10 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
     
     const calculatedValues = rawValues.map(r => evaluateEquation(equation, r));
     if(calculatedValues.some(isNaN)) {
-        throw new Error(`Erro ao aplicar equação "${equation}" ao eixo "${axisDef.label}". Verifique a equação e os dados.`);
+        // Only throw error if equation was something other than 'x'
+        if (equation !== 'x') {
+            throw new Error(`Erro ao aplicar equação "${equation}" ao eixo "${axisDef.label}". Verifique a equação e os dados.`);
+        }
     }
 
     const originalIndices = rawValues.map((_, i) => i);
@@ -285,7 +320,6 @@ function processMap(
     const useLittleEndianForZ = !def.isBigEndian;
     const effectiveZStride = zStride ?? def.dataSize;
 
-    // The stride for an entire row is the number of columns multiplied by the Z stride.
     const yStrideInBytes = def.cols * effectiveZStride;
 
     const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
@@ -294,7 +328,7 @@ function processMap(
     for (let r = 0; r < def.rows; r++) {
         for (let c = 0; c < def.cols; c++) {
             const offset = def.address + (r * yStrideInBytes) + (c * effectiveZStride);
-            addressMap[r][c] = offset; // Store the calculated address
+            addressMap[r][c] = offset;
 
             if (offset === null || isNaN(offset) || offset + def.dataSize > view.byteLength) continue;
             
@@ -329,22 +363,28 @@ function processMap(
 
     const calculatedMap: MapData = [];
     const sortedAddresses: MapData = [];
+    const finalRawMap: MapData = [];
+
     for (const yOrigIndex of ySortMap.originalIndices) {
         const sortedRow: (number | null)[] = [];
         const sortedAddressRow: (number | null)[] = [];
+        const sortedRawRow: (number | null)[] = [];
+
         for (const xOrigIndex of xSortMap.originalIndices) {
             const rawValue = rawMap[yOrigIndex]?.[xOrigIndex];
             sortedAddressRow.push(addressMap[yOrigIndex]?.[xOrigIndex] ?? null);
+            sortedRawRow.push(rawValue ?? null);
 
             if(rawValue === null || rawValue === undefined || isNaN(rawValue)) {
                 sortedRow.push(null);
             } else {
                 const calculatedValue = evaluateEquation(def.equation, rawValue);
-                sortedRow.push(isNaN(calculatedValue) ? null : calculatedValue);
+                sortedRow.push(isNaN(calculatedValue) ? rawValue : calculatedValue); // Fallback to raw if calc fails
             }
         }
         calculatedMap.push(sortedRow);
         sortedAddresses.push(sortedAddressRow);
+        finalRawMap.push(sortedRawRow);
     }
 
     const finalXAxis: AxisData = { ...xAxisData, calculated: xSortMap.sortedValues, originalIndices: xSortMap.originalIndices };
@@ -352,7 +392,7 @@ function processMap(
     
     return { 
         calculatedMap,
-        rawMap, 
+        rawMap: finalRawMap, 
         addresses: sortedAddresses,
         axes: { x: finalXAxis, y: finalYAxis } 
     };
@@ -362,7 +402,6 @@ function processMap(
 export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
     if (!def.xAxisDef || !def.yAxisDef) throw new Error(`Definições de eixo para o mapa "${def.name}" estão em falta.`);
     
-    // Construct a temporary manual config from the definition to pass to the manual function
     const tempConfig: ManualAxisConfig = {
         x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
         y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
@@ -389,12 +428,14 @@ export function readAndCalculateMapFromBinManual(
     const manualXAxisDef: AxisDimension = { 
         ...def.xAxisDef, 
         equation: manualConfig.x.equation,
-        dataSize: manualConfig.x.stride ?? def.xAxisDef.dataSize // Fallback to original stride
+        dataSize: manualConfig.x.stride ?? def.xAxisDef.dataSize,
+        isBigEndian: manualConfig.isBigEndian ?? def.xAxisDef.isBigEndian
     };
     const manualYAxisDef: AxisDimension = { 
         ...def.yAxisDef, 
         equation: manualConfig.y.equation,
-        dataSize: manualConfig.y.stride ?? def.yAxisDef.dataSize
+        dataSize: manualConfig.y.stride ?? def.yAxisDef.dataSize,
+        isBigEndian: manualConfig.isBigEndian ?? def.yAxisDef.isBigEndian
     };
     const manualMapDef: XDFDefinition = { 
         ...def, 
@@ -419,9 +460,56 @@ export function readAndCalculateMapFromBinManual(
     return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY, manualConfig.z.stride);
 }
 
-export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMapData: MapData): ArrayBuffer {
-    const newBuffer = binBuffer.slice(0);
-    console.error("A funcionalidade de escrita (writeMapToBin) não está implementada.");
+export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, processedMap: ProcessedMap): ArrayBuffer {
+    if (!processedMap || !processedMap.calculatedMap || !processedMap.addresses) {
+        throw new Error("Dados do mapa processado são inválidos ou estão em falta para a escrita.");
+    }
+
+    const newBuffer = binBuffer.slice(0); // Create a mutable copy
+    const view = new DataView(newBuffer);
+    const useLittleEndian = !def.isBigEndian;
+
+    const { calculatedMap, addresses } = processedMap;
+
+    for (let r = 0; r < calculatedMap.length; r++) {
+        for (let c = 0; c < calculatedMap[r].length; c++) {
+            const calculatedValue = calculatedMap[r][c];
+            const address = addresses[r]?.[c];
+
+            if (calculatedValue === null || address === null || address === undefined) {
+                continue; // Skip if no value or address
+            }
+            
+            const rawValue = invertEquation(def.equation, calculatedValue);
+            if (isNaN(rawValue)) {
+                console.warn(`Aviso: O valor invertido para ${calculatedValue} na célula [${r},${c}] é NaN. A saltar a escrita.`);
+                continue;
+            }
+
+            // Ensure the raw value fits within the data type
+            let maxVal;
+            if (def.dataSize === 1) maxVal = 0xFF;
+            else if (def.dataSize === 2) maxVal = 0xFFFF;
+            else if (def.dataSize === 4) maxVal = 0xFFFFFFFF;
+            else maxVal = Infinity;
+
+            const clampedValue = Math.max(0, Math.min(Math.round(rawValue), maxVal));
+
+            if (address + def.dataSize > view.byteLength) {
+                 console.error(`Erro: Endereço de escrita 0x${address.toString(16)} está fora dos limites do ficheiro.`);
+                 continue;
+            }
+
+            if (def.dataSize === 1) {
+                view.setUint8(address, clampedValue);
+            } else if (def.dataSize === 2) {
+                view.setUint16(address, clampedValue, useLittleEndian);
+            } else if (def.dataSize === 4) {
+                view.setUint32(address, clampedValue, useLittleEndian);
+            }
+        }
+    }
+
     return newBuffer;
 }
 // #endregion
