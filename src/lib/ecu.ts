@@ -313,7 +313,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
 
 function processMap(
     binBuffer: ArrayBuffer, 
-    def: XDFDefinition, 
+    mapDef: XDFDefinition, 
     xAxisData: AxisData, 
     yAxisData: AxisData,
     sortX: boolean,
@@ -322,29 +322,30 @@ function processMap(
     rowStride?: number,
 ): ProcessedMap {
     const view = new DataView(binBuffer);
-    const useLittleEndianForZ = !def.isBigEndian;
-    const effectiveZStride = zStride ?? def.dataSize;
+    const useLittleEndianForZ = !mapDef.isBigEndian;
+    const effectiveZStride = zStride ?? mapDef.dataSize;
 
-    const rowStrideInBytes = rowStride ?? (def.cols * effectiveZStride);
-    const colStrideInBytes = def.rows * effectiveZStride;
+    const rowStrideInBytes = rowStride ?? (mapDef.cols * effectiveZStride);
+    const colStrideInBytes = mapDef.isRowMajor ? effectiveZStride : (mapDef.rows * effectiveZStride);
 
-    const rawMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
-    const addressMap: MapData = Array.from({ length: def.rows }, () => Array(def.cols).fill(null));
 
-    for (let r = 0; r < def.rows; r++) {
-        for (let c = 0; c < def.cols; c++) {
-            const offset = def.isRowMajor 
-                ? def.address + (r * rowStrideInBytes) + (c * effectiveZStride)
-                : def.address + (c * colStrideInBytes) + (r * effectiveZStride);
+    const rawMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
+    const addressMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
+
+    for (let r = 0; r < mapDef.rows; r++) {
+        for (let c = 0; c < mapDef.cols; c++) {
+            const offset = mapDef.isRowMajor 
+                ? mapDef.address + (r * rowStrideInBytes) + (c * colStrideInBytes)
+                : mapDef.address + (c * (mapDef.rows * effectiveZStride)) + (r * effectiveZStride);
             
             addressMap[r][c] = offset;
 
-            if (offset === null || isNaN(offset) || offset + def.dataSize > view.byteLength) continue;
+            if (offset === null || isNaN(offset) || offset + mapDef.dataSize > view.byteLength) continue;
             
             let rawValue;
-            if (def.dataSize === 1) rawValue = view.getUint8(offset);
-            else if (def.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndianForZ);
-            else if (def.dataSize === 4) rawValue = view.getUint32(offset, useLittleEndianForZ);
+            if (mapDef.dataSize === 1) rawValue = view.getUint8(offset);
+            else if (mapDef.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndianForZ);
+            else if (mapDef.dataSize === 4) rawValue = view.getUint32(offset, useLittleEndianForZ);
             else rawValue = 0;
             
             rawMap[r][c] = rawValue;
@@ -387,7 +388,7 @@ function processMap(
             if(rawValue === null || rawValue === undefined || isNaN(rawValue)) {
                 sortedRow.push(null);
             } else {
-                const calculatedValue = evaluateEquation(def.equation, rawValue);
+                const calculatedValue = evaluateEquation(mapDef.equation, rawValue);
                 sortedRow.push(isNaN(calculatedValue) ? rawValue : calculatedValue); // Fallback to raw if calc fails
             }
         }
