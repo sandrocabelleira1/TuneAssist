@@ -95,7 +95,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
             address: address,
             dataSize: getDataSizeInBytes(embeddedData, zAxisOfLinkedTable),
             isBigEndian: getIsBigEndian(embeddedData),
-            equation: getAttr(findNode(zAxisOfLinkedTable, 'math', 'MATH'), 'equation') || 'X',
+            equation: getAttr(findNode(zAxisOfLinkedTable, 'math', 'MATH'), 'equation') || 'x',
             decimalpl: parseInt(findNode(zAxisOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
         };
     }
@@ -110,7 +110,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
             address: sourceAddress,
             dataSize: getDataSizeInBytes(sourceEmbeddedData, axisNode),
             isBigEndian: getIsBigEndian(sourceEmbeddedData),
-            equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'X',
+            equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'x',
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
         };
     }
@@ -176,7 +176,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], bra
                 cols: xAxisDef.count,
                 dataSize: getDataSizeInBytes(embeddedData, zAxisNode),
                 isBigEndian: getIsBigEndian(embeddedData),
-                equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'X',
+                equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'x',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
                 xAxisDef,
                 yAxisDef,
@@ -204,7 +204,7 @@ function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension): AxisDa
         return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null, originalIndices: indices };
     }
 
-    const { address, count, dataSize = 2, equation = 'X', isBigEndian = false } = axisDef;
+    const { address, count, dataSize = 2, equation = 'x', isBigEndian = false } = axisDef;
     if (address === undefined || address === null || isNaN(address) || count === 0) {
         return { ...defaultState, label: axisDef.label };
     }
@@ -322,7 +322,7 @@ export function readAndCalculateMapFromBinManual(binBuffer: ArrayBuffer, def: XD
     const yAxisDef = manualToAxisDim(manualConfig.y);
     
     if(isNaN(xAxisDef.count) || isNaN(yAxisDef.count) || xAxisDef.count <= 0 || yAxisDef.count <= 0) {
-        throw new Error("A contagem dos eixos deve ser um número maior que zero.");
+        throw new Error("A contagem dos eixos (linhas/colunas) deve ser um número maior que zero.");
     }
     if(isNaN(xAxisDef.address) || isNaN(yAxisDef.address)) {
         throw new Error("Endereço inválido para eixos manuais. Use o formato hexadecimal (ex: 8AF4).");
