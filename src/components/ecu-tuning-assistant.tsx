@@ -165,7 +165,7 @@ export default function EcuTuningAssistant() {
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         const id = `${Date.now()}-${Math.random()}`;
-        setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), message, type }, ...prev]);
+        setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev]);
     }, []);
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.name === selectedMapName);
@@ -572,3 +572,4 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+
