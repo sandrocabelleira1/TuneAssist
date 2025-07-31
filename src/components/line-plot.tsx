@@ -47,10 +47,12 @@ type EditingPoint = {
 
 
 const yAxisTickFormatter = (value: any) => {
+    if (typeof value === 'string') return value;
     return typeof value === 'number' ? value.toFixed(1) : value;
 };
   
 const xAxisTickFormatter = (value: any) => {
+    if (typeof value === 'string') return value;
     return typeof value === 'number' ? Math.round(value) : value;
 };
 
@@ -115,12 +117,13 @@ export default function LinePlot2D({
             const yVal = lineData[i];
             const numX = Number(xVal);
             const numY = Number(yVal);
-            if (isFinite(numX) && isFinite(numY)) {
+            if (isFinite(numX) && yVal !== null && yVal !== undefined && isFinite(numY)) {
                 return { x: numX, y: numY, originalIndex: i };
             }
-            return null;
+            return { x: numX, y: null, originalIndex: i }; // Keep point for connectNulls
         })
-        .filter(Boolean) as { x: number; y: number, originalIndex: number }[];
+        .filter(d => d && isFinite(d.x)) as { x: number; y: number | null, originalIndex: number }[];
+
 
     if (preparedData.length === 0) {
         return { chartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
@@ -137,15 +140,8 @@ export default function LinePlot2D({
 
 
   const handlePointClick = (dotProps: any) => {
-    if (selectedLineIndex === null || !xAxis || !yAxis) return;
+    if (selectedLineIndex === null || !xAxis || !yAxis || !dotProps.payload.y) return;
     const { payload } = dotProps;
-
-    const originalXIndex = xAxis.originalIndices.findIndex(i => i === payload.originalIndex)
-    
-    // We need to find the original index in the UNSORTED map
-    // The chart data is sorted, but our mapData passed to onPointChange is not
-    // The `processedMap.axes.y.originalIndices` gives us the original row index
-    // The `processedMap.axes.x.originalIndices` gives us the original col index
     
     const originalRowIndex = yAxis.originalIndices[selectedLineIndex];
     const originalColIndex = xAxis.originalIndices[payload.originalIndex];
@@ -166,7 +162,8 @@ export default function LinePlot2D({
   };
 
   const CustomDot = (props: any) => {
-      const { cx, cy } = props;
+      const { cx, cy, payload } = props;
+      if (payload.y === null || payload.y === undefined) return null;
       return (
           <g onClick={() => handlePointClick(props)} className="cursor-pointer">
               <circle

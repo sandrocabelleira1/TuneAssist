@@ -12,8 +12,8 @@ interface SurfacePlot3DProps extends React.HTMLAttributes<HTMLDivElement> {
   mapData: MapData; 
   xAxis: (string | number)[]; 
   yAxis: (string | number)[]; 
-  xAxisLabel: string; 
-  yAxisLabel: string;
+  xAxisLabel?: string; 
+  yAxisLabel?: string;
   zAxisLabel?: string;
 }
 
@@ -60,6 +60,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     type: 'surface',
     connectgaps: false,
     colorscale: 'Viridis',
+    reversescale: true,
     colorbar: {
       title: zAxisLabel,
       tickfont: { color: 'hsl(var(--foreground))' },
@@ -74,9 +75,9 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     plot_bgcolor: 'transparent',
     font: { color: 'hsl(var(--foreground))' },
     scene: {
-      xaxis: { title: xAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
-      yaxis: { title: yAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
-      zaxis: { title: zAxisLabel, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+      xaxis: { title: xAxisLabel ?? 'Eixo X', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+      yaxis: { title: yAxisLabel ?? 'Eixo Y', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+      zaxis: { title: zAxisLabel ?? 'Valor', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
       camera: { eye: {x: 1.8, y: -1.8, z: 1.2} }
     },
     margin: { l: 0, r: 0, b: 0, t: 0 },

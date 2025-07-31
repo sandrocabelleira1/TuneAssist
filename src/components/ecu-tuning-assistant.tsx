@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2 } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2 } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, readAndCalculateMapFromBinManual } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +18,7 @@ import LinePlot2D from '@/components/line-plot';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { getHeatmapColor, getTextColorForBackground } from '@/lib/colors';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -41,24 +42,31 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
             </div>
         );
     }
+    
+    const { minVal, maxVal } = mapData.flat().reduce((acc, val) => {
+        if (val === null) return acc;
+        return {
+            minVal: Math.min(acc.minVal, val),
+            maxVal: Math.max(acc.maxVal, val),
+        };
+    }, { minVal: Infinity, maxVal: -Infinity });
 
-    const formatAxisLabel = (axis: any) => {
-        let label = axis.label || 'Eixo';
+    const formatAxisLabel = (axis: any, defaultLabel: string) => {
+        let label = axis.label || defaultLabel;
         if (axis.address) {
             label += ` (0x${axis.address.toString(16).toUpperCase()})`;
         }
         return label;
     };
     
-    const yAxisLabel = formatAxisLabel(axes.y);
-    const xAxisLabel = formatAxisLabel(axes.x);
+    const yAxisLabel = formatAxisLabel(axes.y, 'Eixo Y');
+    const xAxisLabel = formatAxisLabel(axes.x, 'Eixo X');
 
     const getAxisDecimalPlaces = (axisDef: any) => {
         if (!axisDef) return 2;
-        // if it's a label-based axis, no decimals needed
-        if (axisDef.values) return -1; 
+        if (axisDef.values) return -1;
         return axisDef.decimalpl ?? 2;
-    }
+    };
     
     const xAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.xAxisDef);
     const yAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.yAxisDef);
@@ -86,8 +94,10 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
                                 {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
                             </td>
                             {mapData[yi]?.map((cell, xi) => {
+                                const bgColor = getHeatmapColor(cell, minVal, maxVal);
+                                const textColor = getTextColorForBackground(bgColor);
                                 return (
-                                    <td key={xi} className="p-0 border border-border text-center h-10">
+                                    <td key={xi} className="p-0 border border-border text-center h-10" style={{ backgroundColor: bgColor, color: textColor }}>
                                          <div className="w-full h-full flex items-center justify-center p-1">
                                             {cell !== null && cell !== undefined ? cell.toFixed(zAxisDecimalPlaces) : '-'}
                                         </div>
@@ -121,7 +131,6 @@ export default function EcuTuningAssistant() {
     const [manualConfig, setManualConfig] = useState<ManualAxisConfig>(initialManualConfig);
     const [isManualMode, setIsManualMode] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
@@ -177,39 +186,44 @@ export default function EcuTuningAssistant() {
 
     const processMap = useCallback((useManualConfig: boolean = false) => {
         if (!selectedMapName || !binFile) return;
-        const def = xdfFile?.definitions.find(d => d.name === selectedMapName);
-        if (!def) {
-             addLog(`Definição de mapa "${selectedMapName}" não encontrada.`, 'error');
-             return;
-        }
-    
+        
         setIsProcessing(true);
-        try {
-            let result: ProcessedMap;
-            if (useManualConfig) {
-                addLog('A processar mapa com configuração manual dos eixos...', 'info');
-                result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
-            } else {
-                if (!xdfFile) {
-                    addLog('Ficheiro XDF não carregado para processamento automático.', 'error');
-                    setIsProcessing(false);
-                    return;
+        // Use a timeout to allow the UI to update to the processing state
+        setTimeout(() => {
+            try {
+                const def = xdfFile?.definitions.find(d => d.name === selectedMapName);
+                if (!def) {
+                     addLog(`Definição de mapa "${selectedMapName}" não encontrada.`, 'error');
+                     setIsProcessing(false);
+                     return;
                 }
-                addLog(`A processar mapa com eixos do XDF: ${def.name}`, 'info');
-                result = readAndCalculateMapFromBin(binFile.buffer, def);
+        
+                let result: ProcessedMap;
+                if (useManualConfig) {
+                    addLog('A processar mapa com configuração manual dos eixos...', 'info');
+                    result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
+                } else {
+                    if (!xdfFile) {
+                        addLog('Ficheiro XDF não carregado para processamento automático.', 'error');
+                        setIsProcessing(false);
+                        return;
+                    }
+                    addLog(`A processar mapa com eixos do XDF: ${def.name}`, 'info');
+                    result = readAndCalculateMapFromBin(binFile.buffer, def);
+                }
+        
+                setProcessedMap(result);
+                setSelectedLine(result.axes.y.calculated.length > 0 ? 0 : null);
+                addLog(`Mapa carregado e ordenado: ${def.name}`, 'success');
+            } catch (error) {
+                const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
+                addLog(errorMessage, 'error');
+                toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
+                // Don't clear the old map on error, so user can still see it
+            } finally {
+                setIsProcessing(false);
             }
-    
-            setProcessedMap(result);
-            setSelectedLine(result.axes.y.calculated.length > 0 ? 0 : null);
-            addLog(`Mapa carregado e ordenado: ${def.name}`, 'success');
-        } catch (error) {
-            const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
-            addLog(errorMessage, 'error');
-            toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
-            // Don't clear the old map on error, so user can still see it
-        } finally {
-            setIsProcessing(false);
-        }
+        }, 10);
     }, [selectedMapName, binFile, xdfFile, manualConfig, addLog, toast]);
 
     const handleMapSelect = (name: string) => {
@@ -342,7 +356,6 @@ export default function EcuTuningAssistant() {
                             </CardContent>
                         </Card>
 
-
                         <Card>
                              <CardHeader className="p-4">
                                 <CardTitle className="text-base flex items-center gap-2"><BrainCircuit size={18} /> Ações</CardTitle>
@@ -403,7 +416,7 @@ export default function EcuTuningAssistant() {
                                         yAxis={processedMap.axes.y.calculated}
                                         xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
                                         yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
-                                        zAxisLabel={selectedMapDefinition?.name}
+                                        zAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
                                     />
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -417,7 +430,7 @@ export default function EcuTuningAssistant() {
                                     xAxis={processedMap?.axes?.x ?? null}
                                     yAxis={processedMap?.axes?.y ?? null}
                                     xAxisLabel={processedMap?.axes?.x.label}
-                                    yAxisLabel={selectedMapDefinition?.name}
+                                    yAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
                                     selectedLineIndex={selectedLine}
                                     onLineSelect={setSelectedLine}
                                     onPointChange={handleCellChange}
@@ -431,5 +444,3 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
-
-    
