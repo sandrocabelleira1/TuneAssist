@@ -502,7 +502,7 @@ export default function EcuTuningAssistant() {
                          </div>
                     </div>
                     <div className="flex-1 p-4 min-h-0 flex flex-col">
-                        <Tabs defaultValue="view-table" className="w-full flex-1 flex flex-col">
+                        <Tabs defaultValue="view-table" className="w-full flex-1 flex flex-col min-h-0">
                             <TabsList className="shrink-0">
                                 <TabsTrigger value="view-table"><Table2 className="mr-2"/>Tabela de Dados</TabsTrigger>
                                 <TabsTrigger value="view-3d"><BarChart3 className="mr-2"/>Gráfico 3D</TabsTrigger>
