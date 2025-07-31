@@ -354,7 +354,7 @@ export default function EcuTuningAssistant() {
                                         <Input placeholder="Endereço (ex: 8B14)" value={manualConfig.x.address} onChange={e => handleManualConfigChange('x', 'address', e.target.value)} />
                                         <Input placeholder="Nº de Colunas" value={manualConfig.x.count} onChange={e => handleManualConfigChange('x', 'count', e.target.value)} />
                                     </div>
-                                    <Input placeholder="Equação (ex: x/69.6)" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', 'equation', e'target.value)} />
+                                    <Input placeholder="Equação (ex: x/69.6)" value={manualConfig.x.equation} onChange={e => handleManualConfigChange('x', 'equation', e.target.value)} />
                                      <RadioGroup value={manualConfig.x.dataSize} onValueChange={val => handleManualConfigChange('x', 'dataSize', val as '8' | '16')} className="flex items-center space-x-4">
                                         <Label>Tamanho:</Label>
                                         <div className="flex items-center space-x-2"><RadioGroupItem value="8" id="x-8bit" /><Label htmlFor="x-8bit">8-bit</Label></div>
@@ -477,5 +477,3 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
-
-
