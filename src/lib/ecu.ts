@@ -1,4 +1,5 @@
 
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
 
 // #region Utility Functions
@@ -43,8 +44,14 @@ function getAttr(element: Element | null, attrName: string): string | null {
     return element?.getAttribute(attrName) ?? null;
 }
 
-function getIsBigEndian(element: Element | null): boolean {
+// CORRECTED: This was a major source of errors. It now correctly checks the flag.
+function getIsBigEndian(element: Element | null, manualOverride?: boolean | null): boolean {
+    if (typeof manualOverride === 'boolean') {
+        return manualOverride;
+    }
+    if (!element) return false; // Default to little-endian
     const attr = getAttr(element, 'bigendian');
+    // The XDF spec says "1" is big-endian. Absence or "0" is little-endian.
     return attr === '1' || attr?.toLowerCase() === 'true';
 }
 
@@ -85,7 +92,7 @@ function getDataSizeInBytes(element: Element | null): number {
 
 // #region XDF Parsing
 
-function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>): AxisDimension {
+function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, manualEndian?: boolean | null): AxisDimension {
     const embedInfo = findNode(axisNode, 'embedinfo', 'EMBEDDEDDATA');
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
@@ -116,7 +123,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
             count: indexcount,
             address,
             dataSize: getDataSizeInBytes(embeddedData),
-            isBigEndian: getIsBigEndian(embeddedData),
+            isBigEndian: getIsBigEndian(embeddedData, manualEndian),
             equation: getAttr(findNode(zAxisOfLinkedTable, 'math', 'MATH'), 'equation') || 'x',
             decimalpl: parseInt(findNode(zAxisOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
         };
@@ -130,7 +137,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
             count: indexcount,
             address: sourceAddress,
             dataSize: getDataSizeInBytes(sourceEmbeddedData),
-            isBigEndian: getIsBigEndian(sourceEmbeddedData),
+            isBigEndian: getIsBigEndian(sourceEmbeddedData, manualEndian),
             equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'x',
             decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
         };
@@ -150,7 +157,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>):
 }
 
 
-export function parseXDF(xmlString: string): { definitions: XDFDefinition[], allTables: Map<string, Element> } {
+export function parseXDF(xmlString: string, manualEndian?: boolean | null): { definitions: XDFDefinition[], allTables: Map<string, Element> } {
     if (typeof DOMParser === 'undefined') throw new Error("O ambiente não suporta DOMParser.");
     
     const parser = new DOMParser();
@@ -183,8 +190,8 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], all
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
             if (!xAxisNode || !yAxisNode) return;
 
-            const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap);
-            const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap);
+            const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap, manualEndian);
+            const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap, manualEndian);
             
             definitions.push({
                 uniqueId,
@@ -193,7 +200,7 @@ export function parseXDF(xmlString: string): { definitions: XDFDefinition[], all
                 rows: yAxisDef.count,
                 cols: xAxisDef.count,
                 dataSize: getDataSizeInBytes(embeddedData),
-                isBigEndian: getIsBigEndian(embeddedData),
+                isBigEndian: getIsBigEndian(embeddedData, manualEndian),
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'x',
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
                 xAxisDef,
@@ -230,6 +237,8 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension):
     }
     
     const view = new DataView(binBuffer);
+    // DataView's second parameter for getUint16/32 is `littleEndian`.
+    // So if our data IS big endian, this parameter should be false.
     const useLittleEndian = !isBigEndian;
     const rawValues: number[] = [];
 
@@ -277,7 +286,7 @@ function processAndSortMap(
             let rawValue;
             if (def.dataSize === 1) rawValue = view.getUint8(offset);
             else if (def.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndianForZ);
-            else if (def.dataSize === 4) rawValue = view.getUint32(offset, useLittleEndianForZ);
+            else if (def.dataSise === 4) rawValue = view.getUint32(offset, useLittleEndianForZ);
             else rawValue = 0;
             
             rawMap[r][c] = rawValue;
@@ -327,7 +336,7 @@ function processAndSortMap(
 }
 
 
-export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition, allTables: Map<string, Element>): ProcessedMap {
+export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
     if (!def.xAxisDef || !def.yAxisDef) throw new Error(`Definições de eixo para o mapa "${def.name}" estão em falta.`);
     
     const xAxisData = readAxisFromBin(binBuffer, def.xAxisDef);
@@ -354,11 +363,11 @@ export function readAndCalculateMapFromBinManual(
     }
     
     // Create new axis definitions with the overriden equations
-    const manualXAxisDef: AxisDimension = { ...def.xAxisDef, equation: manualConfig.x.equation };
-    const manualYAxisDef: AxisDimension = { ...def.yAxisDef, equation: manualConfig.y.equation };
+    const manualXAxisDef: AxisDimension = { ...def.xAxisDef, equation: manualConfig.x.equation, isBigEndian: manualConfig.isBigEndian ?? def.xAxisDef.isBigEndian };
+    const manualYAxisDef: AxisDimension = { ...def.yAxisDef, equation: manualConfig.y.equation, isBigEndian: manualConfig.isBigEndian ?? def.yAxisDef.isBigEndian };
 
     // Create a new map definition with the overriden Z-axis equation
-    const manualMapDef: XDFDefinition = { ...def, equation: manualConfig.z.equation };
+    const manualMapDef: XDFDefinition = { ...def, equation: manualConfig.z.equation, isBigEndian: manualConfig.isBigEndian ?? def.isBigEndian };
 
     const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef);
     const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef);
@@ -372,7 +381,3 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, rawMap
     return newBuffer;
 }
 // #endregion
-
-    
-
-    

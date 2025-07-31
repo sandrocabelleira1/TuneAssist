@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -18,6 +19,7 @@ import LinePlot2D from '@/components/line-plot';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getHeatmapColor, getTextColorForBackground } from '@/lib/colors';
+import { Switch } from '@/components/ui/switch';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -122,6 +124,7 @@ const initialManualConfig: ManualAxisConfig = {
     x: { equation: '' },
     y: { equation: '' },
     z: { equation: '' },
+    isBigEndian: null,
 };
 
 export default function EcuTuningAssistant() {
@@ -210,12 +213,15 @@ export default function EcuTuningAssistant() {
         try {
             let result: ProcessedMap;
             if (isManual) {
-                addLog("A processar com equações manuais...", 'info');
+                addLog("A processar com configurações manuais...", 'info');
+                if(manualConfig.isBigEndian !== null) {
+                    addLog(`Forçando Endianness para: ${manualConfig.isBigEndian ? 'Big-Endian' : 'Little-Endian'}`, 'debug');
+                }
                 result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
 
             } else {
                 addLog("A processar com as definições do XDF...", 'info');
-                result = readAndCalculateMapFromBin(binFile.buffer, def, xdfFile.allTables);
+                result = readAndCalculateMapFromBin(binFile.buffer, def);
             }
             
             setProcessedMap(result);
@@ -241,6 +247,7 @@ export default function EcuTuningAssistant() {
                 x: { equation: def.xAxisDef?.equation || 'x' },
                 y: { equation: def.yAxisDef?.equation || 'x' },
                 z: { equation: def.equation || 'x' },
+                isBigEndian: null,
             });
         } else {
              setManualConfig(initialManualConfig);
@@ -249,21 +256,39 @@ export default function EcuTuningAssistant() {
 
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
+            // Se a configuração manual de endianness estiver ativa, re-parse o XDF com ela
+            if (manualConfig.isBigEndian !== null) {
+                addLog("A re-analisar o XDF com a inversão de bytes manual...", 'info');
+                try {
+                    const { definitions, allTables } = parseXDF(xdfFile.content, manualConfig.isBigEndian);
+                    setXdfFile(prev => prev ? {...prev, definitions, allTables} : null);
+                } catch(error) {
+                    addLog(`Erro ao re-analisar XDF: ${(error as Error).message}`, 'error');
+                }
+            } else {
+                 processMap(false);
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedMapName, binFile, xdfFile?.content]);
+
+    useEffect(() => {
+        // Trigger re-processing when xdfFile definitions actually change from re-parsing
+        if (selectedMapName && binFile && xdfFile) {
             processMap(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName, binFile, xdfFile]);
+    }, [xdfFile?.definitions]);
     
-    const handleManualConfigChange = (axis: 'x' | 'y' | 'z', value: string) => {
-        setManualConfig(prev => ({
-            ...prev,
-            [axis]: {
-                ...prev[axis],
-                equation: value
+    const handleManualConfigChange = (field: keyof ManualAxisConfig, value: any) => {
+        setManualConfig(prev => {
+            if (field === 'x' || field === 'y' || field === 'z') {
+                return { ...prev, [field]: { equation: value }};
             }
-        }));
+            return { ...prev, [field]: value };
+        });
     };
-
+    
     const handleManualRecalculate = () => {
         processMap(true);
     };
@@ -342,6 +367,14 @@ export default function EcuTuningAssistant() {
                                 <div className="space-y-2">
                                     <Label htmlFor="z-equation" className="font-semibold text-sm">Equação Eixo Z (Mapa)</Label>
                                     <Input id="z-equation" placeholder="ex: x*0.75" value={manualConfig.z.equation} onChange={e => handleManualConfigChange('z', e.target.value)} />
+                                </div>
+                                 <div className="flex items-center space-x-2 pt-2">
+                                    <Switch 
+                                        id="endian-switch" 
+                                        checked={manualConfig.isBigEndian === true}
+                                        onCheckedChange={(checked) => handleManualConfigChange('isBigEndian', checked)}
+                                    />
+                                    <Label htmlFor="endian-switch">Forçar Big-Endian (Inverter Bytes)</Label>
                                 </div>
                                 <Button size="sm" onClick={handleManualRecalculate} disabled={!selectedMapName || isProcessing}>
                                     {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

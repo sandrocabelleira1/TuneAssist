@@ -2,6 +2,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -57,6 +58,7 @@ export type ManualAxisConfig = {
   x: { equation: string };
   y: { equation: string };
   z: { equation: string };
+  isBigEndian: boolean | null;
 };
 
 
