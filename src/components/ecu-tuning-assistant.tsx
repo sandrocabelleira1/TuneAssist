@@ -9,9 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2 } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, readAndCalculateMapFromBinManual } from '@/lib/ecu';
-import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig } from '@/lib/types';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle } from 'lucide-react';
+import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, readAndCalculateMapFromBinManual, readAxisFromBin } from '@/lib/ecu';
+import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -32,10 +32,10 @@ const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
 
 function DataTable({ mapData, axes, selectedMapDefinition }: {
     mapData: MapData | null;
-    axes: { x: any, y: any } | null;
+    axes: { x: AxisData, y: AxisData } | null;
     selectedMapDefinition: XDFDefinition | undefined;
 }) {
-    if (!mapData || !axes || !selectedMapDefinition) {
+    if (!axes || !selectedMapDefinition) {
         return (
             <div className="flex items-center justify-center h-full text-muted-foreground">
                 <p>Carregue os ficheiros e selecione um mapa para ver a tabela de dados.</p>
@@ -43,17 +43,17 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
         );
     }
     
-    const { minVal, maxVal } = mapData.flat().reduce((acc, val) => {
+    const { minVal, maxVal } = mapData ? mapData.flat().reduce((acc, val) => {
         if (val === null) return acc;
         return {
             minVal: Math.min(acc.minVal, val),
             maxVal: Math.max(acc.maxVal, val),
         };
-    }, { minVal: Infinity, maxVal: -Infinity });
+    }, { minVal: Infinity, maxVal: -Infinity }) : { minVal: 0, maxVal: 1 };
 
-    const formatAxisLabel = (axis: any, defaultLabel: string) => {
-        let label = axis.label || defaultLabel;
-        if (axis.address) {
+    const formatAxisLabel = (axis: AxisData | undefined, defaultLabel: string) => {
+        let label = axis?.label || defaultLabel;
+        if (axis?.address) {
             label += ` (0x${axis.address.toString(16).toUpperCase()})`;
         }
         return label;
@@ -93,7 +93,7 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
                             <td className="sticky left-0 bg-muted p-2 border border-border font-bold text-right">
                                 {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
                             </td>
-                            {mapData[yi]?.map((cell, xi) => {
+                            {mapData ? mapData[yi]?.map((cell, xi) => {
                                 const bgColor = getHeatmapColor(cell, minVal, maxVal);
                                 const textColor = getTextColorForBackground(bgColor);
                                 return (
@@ -103,7 +103,13 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
                                         </div>
                                     </td>
                                 );
-                            })}
+                            }) : (
+                                Array.from({ length: axes.x.calculated.length }).map((_, xi) => (
+                                    <td key={xi} className="p-0 border border-border text-center h-10 bg-muted/50">
+                                        <div className="w-full h-full flex items-center justify-center p-1">-</div>
+                                    </td>
+                                ))
+                            )}
                         </tr>
                     ))}
                 </tbody>
@@ -111,6 +117,7 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
         </div>
     );
 }
+
 
 const initialManualConfig: ManualAxisConfig = {
     x: { address: '', count: '', equation: 'x', dataSize: '16', isBigEndian: 'false', label: 'Carga' },
@@ -120,7 +127,7 @@ const initialManualConfig: ManualAxisConfig = {
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
-    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFDefinition[] } | null>(null);
+    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFDefinition[], allTables: Map<string, Element> } | null>(null);
     const [logs, setLogs] = useState<LogMessage[]>([]);
     
     const [selectedMapName, setSelectedMapName] = useState<string>('');
@@ -129,7 +136,6 @@ export default function EcuTuningAssistant() {
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
 
     const [manualConfig, setManualConfig] = useState<ManualAxisConfig>(initialManualConfig);
-    const [isManualMode, setIsManualMode] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -164,9 +170,9 @@ export default function EcuTuningAssistant() {
                 toast({ title: 'Ficheiro Carregado', description: successMessage });
             } else if (type === 'xdf' && typeof buffer === 'string') {
                  try {
-                    const { definitions } = parseXDF(buffer);
+                    const { definitions, allTables } = parseXDF(buffer);
                     if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
-                    setXdfFile({ name: file.name, content: buffer, definitions });
+                    setXdfFile({ name: file.name, content: buffer, definitions, allTables });
                     const successMessage = `XDF carregado: ${file.name} com ${definitions.length} mapas.`;
                     addLog(successMessage, 'success');
                     toast({ title: 'Ficheiro Carregado', description: successMessage });
@@ -184,46 +190,71 @@ export default function EcuTuningAssistant() {
         e.target.value = '';
     };
 
-    const processMap = useCallback((useManualConfig: boolean = false) => {
-        if (!selectedMapName || !binFile) return;
+    const processMap = useCallback(async (isManual: boolean = false) => {
+        if (!selectedMapName || !binFile || !xdfFile) {
+            addLog("Selecione os ficheiros BIN e XDF e um mapa para processar.", 'error');
+            return;
+        }
+
+        const def = xdfFile.definitions.find(d => d.name === selectedMapName);
+        if (!def) {
+            addLog(`Definição de mapa "${selectedMapName}" não encontrada.`, 'error');
+            return;
+        }
         
         setIsProcessing(true);
-        // Use a timeout to allow the UI to update to the processing state
-        setTimeout(() => {
-            try {
-                const def = xdfFile?.definitions.find(d => d.name === selectedMapName);
-                if (!def) {
-                     addLog(`Definição de mapa "${selectedMapName}" não encontrada.`, 'error');
-                     setIsProcessing(false);
-                     return;
-                }
+        setProcessedMap(null); // Clear previous map
         
-                let result: ProcessedMap;
-                if (useManualConfig) {
-                    addLog('A processar mapa com configuração manual dos eixos...', 'info');
-                    result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
-                } else {
-                    if (!xdfFile) {
-                        addLog('Ficheiro XDF não carregado para processamento automático.', 'error');
-                        setIsProcessing(false);
-                        return;
-                    }
-                    addLog(`A processar mapa com eixos do XDF: ${def.name}`, 'info');
-                    result = readAndCalculateMapFromBin(binFile.buffer, def);
-                }
-        
-                setProcessedMap(result);
-                setSelectedLine(result.axes.y.calculated.length > 0 ? 0 : null);
-                addLog(`Mapa carregado e ordenado: ${def.name}`, 'success');
-            } catch (error) {
-                const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
-                addLog(errorMessage, 'error');
-                toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
-                // Don't clear the old map on error, so user can still see it
-            } finally {
-                setIsProcessing(false);
+        const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+        try {
+            addLog(`[INÍCIO] A processar o mapa: ${def.name}`, 'info');
+            await delay(200);
+
+            // Step 1: Axes
+            let xAxisData, yAxisData;
+            if (isManual) {
+                addLog("A usar configuração manual para os eixos...", 'info');
+                await delay(200);
+                // For simplicity, manual recalculation will be instant
+                 const result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig, xdfFile.allTables);
+                 setProcessedMap(result);
+                 addLog(`[SUCESSO] Mapa reprocessado com eixos manuais.`, 'success');
+                 setIsProcessing(false);
+                 return;
+            } else {
+                addLog("Passo 1/4: A ler e a calcular eixos do XDF...", 'info');
+                await delay(300);
+                xAxisData = readAxisFromBin(binFile.buffer, def.xAxisDef);
+                yAxisData = readAxisFromBin(binFile.buffer, def.yAxisDef);
+                setProcessedMap({ axes: { x: xAxisData, y: yAxisData }, calculatedMap: null, rawMap: null });
+                addLog(`Eixo X: ${def.xAxisDef.label} (${xAxisData.calculated.length} valores)`, 'debug');
+                addLog(`Eixo Y: ${def.yAxisDef.label} (${yAxisData.calculated.length} valores)`, 'debug');
             }
-        }, 10);
+            
+            addLog("Passo 2/4: A ler e a calcular o mapa principal (Z)...", 'info');
+            await delay(300);
+            const result = readAndCalculateMapFromBin(binFile.buffer, def, xdfFile.allTables);
+            
+            addLog("Passo 3/4: A ordenar eixos e a remapear os dados...", 'info');
+            setProcessedMap(prev => ({ ...prev!, calculatedMap: result.calculatedMap, rawMap: result.rawMap }));
+            await delay(300);
+            
+            addLog("Passo 4/4: A renderizar os dados finais...", 'info');
+            setProcessedMap(result);
+            setSelectedLine(result.axes.y.calculated.length > 0 ? 0 : null);
+            await delay(200);
+            
+            addLog(`[SUCESSO] Mapa carregado e ordenado: ${def.name}`, 'success');
+
+        } catch (error) {
+            const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
+            addLog(errorMessage, 'error');
+            toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
+            setProcessedMap(null); // Clear map on error
+        } finally {
+            setIsProcessing(false);
+        }
     }, [selectedMapName, binFile, xdfFile, manualConfig, addLog, toast]);
 
     const handleMapSelect = (name: string) => {
@@ -232,11 +263,11 @@ export default function EcuTuningAssistant() {
     };
 
     useEffect(() => {
-        if (selectedMapName && binFile && !isManualMode && xdfFile) {
+        if (selectedMapName && binFile && xdfFile) {
             processMap(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName, binFile, isManualMode, xdfFile]); // added xdfFile dependency
+    }, [selectedMapName]);
     
     const handleManualConfigChange = (axis: 'x' | 'y', field: keyof ManualAxisConfig['x'], value: string) => {
         setManualConfig(prev => ({
@@ -249,18 +280,10 @@ export default function EcuTuningAssistant() {
     };
 
     const handleManualRecalculate = () => {
-        setIsManualMode(true); 
         processMap(true);
     };
     
-    // When a new map is selected via dropdown, disable manual mode
-    useEffect(() => {
-        setIsManualMode(false);
-    }, [selectedMapName]);
-
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
-        // This functionality needs careful implementation to write back to the correct
-        // location in the UNSORTED raw map. For now, it's just a log.
         addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)} (Funcionalidade de escrita desativada)`, 'info');
     };
     
@@ -320,7 +343,7 @@ export default function EcuTuningAssistant() {
                         <Card>
                             <CardHeader className="p-4">
                                 <CardTitle className="text-base flex items-center gap-2"><Settings2 size={18} /> Configuração Manual dos Eixos</CardTitle>
-                                <CardDescription className="text-xs">Use para substituir a leitura do XDF. Desativa o modo manual ao trocar de mapa.</CardDescription>
+                                <CardDescription className="text-xs">Use para substituir a leitura do XDF. Útil para depuração.</CardDescription>
                             </CardHeader>
                             <CardContent className="p-4 pt-0 space-y-4">
                                 <div className="space-y-3">
@@ -370,14 +393,16 @@ export default function EcuTuningAssistant() {
                     </SidebarContent>
                     <SidebarFooter>
                         <div className="p-2">
-                             <h3 className="font-semibold text-sm mb-2 px-2">Log de Operações</h3>
+                             <h3 className="font-semibold text-sm mb-2 px-2">Motor de Cálculo</h3>
                              <ScrollArea className="h-48 w-full rounded-md border p-2 font-mono text-xs">
                                 {logs.length > 0 ? logs.map(log => (
                                     <div key={log.id} className="flex items-start">
                                       <span className="text-muted-foreground/60 mr-2 shrink-0">{log.timestamp}</span>
                                       <span className={`break-words ${
-                                        log.type === 'error' ? 'text-destructive' : 
-                                        log.type === 'success' ? 'text-green-500' : 'text-foreground/80'
+                                        log.type === 'error' ? 'text-destructive font-semibold' : 
+                                        log.type === 'success' ? 'text-green-500 font-semibold' : 
+                                        log.type === 'debug' ? 'text-amber-500' :
+                                        'text-foreground/80'
                                       }`}>{log.message}</span>
                                     </div>
                                 )) : <div className="text-muted-foreground/60 text-center py-4">Aguardando ações...</div>}
@@ -401,41 +426,60 @@ export default function EcuTuningAssistant() {
                                 <TabsTrigger value="view-3d"><BarChart3 className="mr-2"/>Gráfico 3D</TabsTrigger>
                                 <TabsTrigger value="view-2d"><BarChart3 className="mr-2"/>Gráfico 2D</TabsTrigger>
                             </TabsList>
-                            <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
-                               <DataTable
-                                    mapData={processedMap?.calculatedMap ?? null}
-                                    axes={processedMap?.axes ?? null}
-                                    selectedMapDefinition={selectedMapDefinition}
-                               />
-                            </TabsContent>
-                            <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
-                                {processedMap?.axes && processedMap?.calculatedMap ? (
-                                    <SurfacePlot3D 
-                                        mapData={processedMap.calculatedMap}
-                                        xAxis={processedMap.axes.x.calculated}
-                                        yAxis={processedMap.axes.y.calculated}
-                                        xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
-                                        yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
-                                        zAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
-                                    />
-                                ) : (
+                             <div className="flex-1 mt-4 min-h-0">
+                                {isProcessing && !processedMap ? (
                                     <div className="flex items-center justify-center h-full text-muted-foreground">
-                                        <p>Carregue os ficheiros e selecione um mapa para ver o gráfico 3D.</p>
+                                        <Play className="mr-2 h-8 w-8 animate-pulse" />
+                                        <p>A executar o motor de cálculo...</p>
                                     </div>
+                                ) : !processedMap ? (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground text-center">
+                                        <div>
+                                            <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+                                            <p className="mt-2 font-semibold">Nenhum dado para exibir.</p>
+                                            <p className="text-sm">Carregue os seus ficheiros e selecione um mapa para iniciar.</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <TabsContent value="view-table" className="h-full m-0">
+                                           <DataTable
+                                                mapData={processedMap?.calculatedMap ?? null}
+                                                axes={processedMap?.axes ?? null}
+                                                selectedMapDefinition={selectedMapDefinition}
+                                           />
+                                        </TabsContent>
+                                        <TabsContent value="view-3d" className="h-full m-0">
+                                            {processedMap?.axes && processedMap?.calculatedMap ? (
+                                                <SurfacePlot3D 
+                                                    mapData={processedMap.calculatedMap}
+                                                    xAxis={processedMap.axes.x.calculated}
+                                                    yAxis={processedMap.axes.y.calculated}
+                                                    xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
+                                                    yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
+                                                    zAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
+                                                />
+                                            ) : (
+                                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                                    <p>A aguardar dados completos do mapa para o gráfico 3D.</p>
+                                                </div>
+                                            )}
+                                        </TabsContent>
+                                        <TabsContent value="view-2d" className="h-full m-0">
+                                            <LinePlot2D
+                                                mapData={processedMap?.calculatedMap ?? null}
+                                                xAxis={processedMap?.axes?.x ?? null}
+                                                yAxis={processedMap?.axes?.y ?? null}
+                                                xAxisLabel={processedMap?.axes?.x.label}
+                                                yAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
+                                                selectedLineIndex={selectedLine}
+                                                onLineSelect={setSelectedLine}
+                                                onPointChange={handleCellChange}
+                                            />
+                                        </TabsContent>
+                                    </>
                                 )}
-                            </TabsContent>
-                            <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
-                                <LinePlot2D
-                                    mapData={processedMap?.calculatedMap ?? null}
-                                    xAxis={processedMap?.axes?.x ?? null}
-                                    yAxis={processedMap?.axes?.y ?? null}
-                                    xAxisLabel={processedMap?.axes?.x.label}
-                                    yAxisLabel={selectedMapDefinition?.name || 'Mapa Principal'}
-                                    selectedLineIndex={selectedLine}
-                                    onLineSelect={setSelectedLine}
-                                    onPointChange={handleCellChange}
-                                />
-                            </TabsContent>
+                            </div>
                         </Tabs>
                     </div>
                 </main>
@@ -444,3 +488,4 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+
