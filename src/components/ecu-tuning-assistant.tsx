@@ -211,6 +211,12 @@ export default function EcuTuningAssistant() {
         setIsProcessing(true);
         setProcessedMap(null); 
         addLog(`A processar o mapa: ${def.name}...`, 'info');
+        
+        if (!isManual) {
+            addLog(`Eixo Z (${def.name}): Tamanho de dados detetado: ${def.dataSize} bytes.`, 'debug');
+            addLog(`Eixo X (${def.xAxisDef.label}): Tamanho de dados detetado: ${def.xAxisDef.dataSize} bytes.`, 'debug');
+            addLog(`Eixo Y (${def.yAxisDef.label}): Tamanho de dados detetado: ${def.yAxisDef.dataSize} bytes.`, 'debug');
+        }
 
         try {
             let result: ProcessedMap;
