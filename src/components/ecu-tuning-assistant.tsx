@@ -532,7 +532,7 @@ export default function EcuTuningAssistant() {
                                             onCellChange={handleCellChange}
                                        />
                                     </TabsContent>
-                                    <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4 flex flex-col">
+                                    <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4">
                                         {processedMap?.axes && processedMap?.calculatedMap ? (
                                             <SurfacePlot3D 
                                                 mapData={processedMap.calculatedMap}
@@ -548,7 +548,7 @@ export default function EcuTuningAssistant() {
                                             </div>
                                         )}
                                     </TabsContent>
-                                    <TabsContent value="view-2d" className="flex-1 min-h-0 mt-4 flex flex-col">
+                                    <TabsContent value="view-2d" className="flex-1 min-h-0 mt-4">
                                         <LinePlot2D
                                             mapData={processedMap?.calculatedMap ?? null}
                                             xAxis={processedMap?.axes?.x ?? null}
