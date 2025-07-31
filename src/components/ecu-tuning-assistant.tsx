@@ -9,8 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Pencil, Loader2, Settings2 } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, recalculateRawMapFromCalculated, getCellAddress, readAndCalculateMapFromBinManual } from '@/lib/ecu';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2 } from 'lucide-react';
+import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, readAndCalculateMapFromBinManual } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -55,12 +55,14 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
 
     const getAxisDecimalPlaces = (axisDef: any) => {
         if (!axisDef) return 2;
-        if (axisDef.values) return -1;
+        // if it's a label-based axis, no decimals needed
+        if (axisDef.values) return -1; 
         return axisDef.decimalpl ?? 2;
     }
     
     const xAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.xAxisDef);
     const yAxisDecimalPlaces = getAxisDecimalPlaces(selectedMapDefinition.yAxisDef);
+    const zAxisDecimalPlaces = selectedMapDefinition.decimalpl ?? 2;
     
     return (
         <div className="overflow-auto h-full w-full">
@@ -87,7 +89,7 @@ function DataTable({ mapData, axes, selectedMapDefinition }: {
                                 return (
                                     <td key={xi} className="p-0 border border-border text-center h-10">
                                          <div className="w-full h-full flex items-center justify-center p-1">
-                                            {cell !== null ? cell.toFixed(selectedMapDefinition.decimalpl ?? 2) : '-'}
+                                            {cell !== null && cell !== undefined ? cell.toFixed(zAxisDecimalPlaces) : '-'}
                                         </div>
                                     </td>
                                 );
@@ -118,6 +120,8 @@ export default function EcuTuningAssistant() {
 
     const [manualConfig, setManualConfig] = useState<ManualAxisConfig>(initialManualConfig);
     const [isManualMode, setIsManualMode] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
@@ -179,6 +183,7 @@ export default function EcuTuningAssistant() {
              return;
         }
     
+        setIsProcessing(true);
         try {
             let result: ProcessedMap;
             if (useManualConfig) {
@@ -187,6 +192,7 @@ export default function EcuTuningAssistant() {
             } else {
                 if (!xdfFile) {
                     addLog('Ficheiro XDF não carregado para processamento automático.', 'error');
+                    setIsProcessing(false);
                     return;
                 }
                 addLog(`A processar mapa com eixos do XDF: ${def.name}`, 'info');
@@ -200,6 +206,9 @@ export default function EcuTuningAssistant() {
             const errorMessage = `Erro ao processar o mapa: ${(error as Error).message}`;
             addLog(errorMessage, 'error');
             toast({ title: 'Erro ao Processar Mapa', description: errorMessage, variant: 'destructive' });
+            // Don't clear the old map on error, so user can still see it
+        } finally {
+            setIsProcessing(false);
         }
     }, [selectedMapName, binFile, xdfFile, manualConfig, addLog, toast]);
 
@@ -209,11 +218,11 @@ export default function EcuTuningAssistant() {
     };
 
     useEffect(() => {
-        if (selectedMapName && binFile && !isManualMode) {
+        if (selectedMapName && binFile && !isManualMode && xdfFile) {
             processMap(false);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName, binFile, isManualMode]);
+    }, [selectedMapName, binFile, isManualMode, xdfFile]); // added xdfFile dependency
     
     const handleManualConfigChange = (axis: 'x' | 'y', field: keyof ManualAxisConfig['x'], value: string) => {
         setManualConfig(prev => ({
@@ -230,11 +239,14 @@ export default function EcuTuningAssistant() {
         processMap(true);
     };
     
+    // When a new map is selected via dropdown, disable manual mode
     useEffect(() => {
         setIsManualMode(false);
     }, [selectedMapName]);
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
+        // This functionality needs careful implementation to write back to the correct
+        // location in the UNSORTED raw map. For now, it's just a log.
         addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)} (Funcionalidade de escrita desativada)`, 'info');
     };
     
@@ -323,7 +335,10 @@ export default function EcuTuningAssistant() {
                                         <div className="flex items-center space-x-2"><RadioGroupItem value="16" id="x-16bit" /><Label htmlFor="x-16bit">16-bit</Label></div>
                                     </RadioGroup>
                                 </div>
-                                <Button size="sm" onClick={handleManualRecalculate} disabled={!selectedMapName}>Aplicar e Recalcular Mapa</Button>
+                                <Button size="sm" onClick={handleManualRecalculate} disabled={!selectedMapName || isProcessing}>
+                                    {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Aplicar e Recalcular
+                                </Button>
                             </CardContent>
                         </Card>
 
@@ -361,7 +376,10 @@ export default function EcuTuningAssistant() {
                 <main className="flex-1 flex flex-col min-h-0">
                     <div className="flex items-center p-2 border-b">
                          <SidebarTrigger />
-                         <h1 className="text-lg font-semibold ml-2">{selectedMapName || "Nenhum Mapa Selecionado"}</h1>
+                         <div className="flex items-center ml-2">
+                            <h1 className="text-lg font-semibold">{selectedMapName || "Nenhum Mapa Selecionado"}</h1>
+                            {isProcessing && <Loader2 className="ml-3 h-5 w-5 animate-spin" />}
+                         </div>
                     </div>
                     <div className="flex-1 p-4 min-h-0">
                         <Tabs defaultValue="view-table" className="w-full h-full flex flex-col">
@@ -413,3 +431,5 @@ export default function EcuTuningAssistant() {
       </SidebarProvider>
     );
 }
+
+    
