@@ -325,7 +325,7 @@ function processMap(
     const useLittleEndianForZ = !mapDef.isBigEndian;
     const effectiveZStride = zStride ?? mapDef.dataSize;
 
-    const rowStrideInBytes = rowStride ?? (mapDef.cols * effectiveZStride);
+    const effectiveRowStride = rowStride ?? (mapDef.cols * effectiveZStride);
     const colStrideInBytes = mapDef.isRowMajor ? effectiveZStride : (mapDef.rows * effectiveZStride);
 
 
@@ -335,7 +335,7 @@ function processMap(
     for (let r = 0; r < mapDef.rows; r++) {
         for (let c = 0; c < mapDef.cols; c++) {
             const offset = mapDef.isRowMajor 
-                ? mapDef.address + (r * rowStrideInBytes) + (c * colStrideInBytes)
+                ? mapDef.address + (r * effectiveRowStride) + (c * colStrideInBytes)
                 : mapDef.address + (c * (mapDef.rows * effectiveZStride)) + (r * effectiveZStride);
             
             addressMap[r][c] = offset;
@@ -438,13 +438,13 @@ export function readAndCalculateMapFromBinManual(
     const manualXAxisDef: AxisDimension = { 
         ...def.xAxisDef, 
         equation: manualConfig.x.equation,
-        dataSize: manualConfig.x.stride ?? def.xAxisDef.dataSize,
+        dataSize: manualConfig.x.stride, // Use manual stride directly
         isBigEndian: manualConfig.isBigEndian ?? def.xAxisDef.isBigEndian
     };
     const manualYAxisDef: AxisDimension = { 
         ...def.yAxisDef, 
         equation: manualConfig.y.equation,
-        dataSize: manualConfig.y.stride ?? def.yAxisDef.dataSize,
+        dataSize: manualConfig.y.stride, // Use manual stride directly
         isBigEndian: manualConfig.isBigEndian ?? def.yAxisDef.isBigEndian
     };
     const manualMapDef: XDFDefinition = { 
@@ -457,6 +457,7 @@ export function readAndCalculateMapFromBinManual(
     const sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
     const sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
 
+    // Reread axes and map from scratch using manual configuration
     const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualConfig.x.stride);
     const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualConfig.y.stride);
     
@@ -523,3 +524,4 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, proces
     return newBuffer;
 }
 // #endregion
+
