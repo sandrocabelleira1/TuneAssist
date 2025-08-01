@@ -335,8 +335,8 @@ function processMap(
     for (let r = 0; r < mapDef.rows; r++) {
         for (let c = 0; c < mapDef.cols; c++) {
             const offset = mapDef.isRowMajor 
-                ? mapDef.address + (r * effectiveRowStride) + (c * colStrideInBytes)
-                : mapDef.address + (c * (mapDef.rows * effectiveZStride)) + (r * effectiveZStride);
+                ? mapDef.address + (r * effectiveRowStride) + (c * effectiveZStride)
+                : mapDef.address + (c * colStrideInBytes) + (r * effectiveZStride);
             
             addressMap[r][c] = offset;
 
