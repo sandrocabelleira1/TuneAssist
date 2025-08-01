@@ -319,14 +319,15 @@ function processMap(
     sortX: boolean,
     sortY: boolean,
     zStride?: number,
-    rowStride?: number,
+    rowStrideOverride?: number,
 ): ProcessedMap {
     const view = new DataView(binBuffer);
     const useLittleEndianForZ = !mapDef.isBigEndian;
     const effectiveZStride = zStride ?? mapDef.dataSize;
 
-    const effectiveRowStride = rowStride ?? (mapDef.cols * effectiveZStride);
-    const colStrideInBytes = mapDef.isRowMajor ? effectiveZStride : (mapDef.rows * effectiveZStride);
+    // Correct calculation for strides
+    const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
+    const colStride = mapDef.rows * effectiveZStride;
 
 
     const rawMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
@@ -335,17 +336,17 @@ function processMap(
     for (let r = 0; r < mapDef.rows; r++) {
         for (let c = 0; c < mapDef.cols; c++) {
             const offset = mapDef.isRowMajor 
-                ? mapDef.address + (r * effectiveRowStride) + (c * effectiveZStride)
-                : mapDef.address + (c * colStrideInBytes) + (r * effectiveZStride);
+                ? mapDef.address + (r * rowStride) + (c * effectiveZStride)
+                : mapDef.address + (c * colStride) + (r * effectiveZStride);
             
             addressMap[r][c] = offset;
 
-            if (offset === null || isNaN(offset) || offset + mapDef.dataSize > view.byteLength) continue;
+            if (offset === null || isNaN(offset) || offset + effectiveZStride > view.byteLength) continue;
             
             let rawValue;
-            if (mapDef.dataSize === 1) rawValue = view.getUint8(offset);
-            else if (mapDef.dataSize === 2) rawValue = view.getUint16(offset, useLittleEndianForZ);
-            else if (mapDef.dataSize === 4) rawValue = view.getUint32(offset, useLittleEndianForZ);
+            if (effectiveZStride === 1) rawValue = view.getUint8(offset);
+            else if (effectiveZStride === 2) rawValue = view.getUint16(offset, useLittleEndianForZ);
+            else if (effectiveZStride === 4) rawValue = view.getUint32(offset, useLittleEndianForZ);
             else rawValue = 0;
             
             rawMap[r][c] = rawValue;
