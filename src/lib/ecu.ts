@@ -326,6 +326,7 @@ function processMap(
     const effectiveZStride = zStride ?? mapDef.dataSize;
 
     const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
+    const colStride = mapDef.rows * effectiveZStride;
     
     const rawMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
     const addressMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
@@ -338,7 +339,6 @@ function processMap(
                 offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
             } else {
                 // Correct calculation for column-major
-                const colStride = mapDef.rows * effectiveZStride;
                 offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
             }
             
@@ -528,6 +528,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, proces
     return newBuffer;
 }
 // #endregion
+
 
 
 
