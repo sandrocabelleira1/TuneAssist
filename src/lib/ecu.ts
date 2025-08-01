@@ -327,17 +327,19 @@ function processMap(
 
     const rawMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
     const addressMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
+    
+    const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
+    const colStride = rowStrideOverride ?? (mapDef.rows * effectiveZStride); // Though less common, handle override for col-major too
 
     for (let r = 0; r < mapDef.rows; r++) {
         for (let c = 0; c < mapDef.cols; c++) {
             let offset: number;
+            
             if (mapDef.isRowMajor) {
-                // Corrected calculation for row-major
-                const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
+                // Correct formula for row-major addressing
                 offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
             } else {
-                // Corrected calculation for column-major
-                const colStride = rowStrideOverride ?? (mapDef.rows * effectiveZStride);
+                // Correct formula for column-major addressing
                 offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
             }
             
@@ -441,13 +443,13 @@ export function readAndCalculateMapFromBinManual(
     const manualXAxisDef: AxisDimension = { 
         ...def.xAxisDef, 
         equation: manualConfig.x.equation,
-        dataSize: manualConfig.x.stride, // Use manual stride directly
+        dataSize: manualConfig.x.stride ?? def.xAxisDef.dataSize,
         isBigEndian: manualConfig.isBigEndian ?? def.xAxisDef.isBigEndian
     };
     const manualYAxisDef: AxisDimension = { 
         ...def.yAxisDef, 
         equation: manualConfig.y.equation,
-        dataSize: manualConfig.y.stride, // Use manual stride directly
+        dataSize: manualConfig.y.stride ?? def.yAxisDef.dataSize,
         isBigEndian: manualConfig.isBigEndian ?? def.yAxisDef.isBigEndian
     };
     const manualMapDef: XDFDefinition = { 
