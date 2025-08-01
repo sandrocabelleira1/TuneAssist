@@ -1,5 +1,4 @@
 
-
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
 
 // #region Utility Functions
@@ -329,17 +328,15 @@ function processMap(
     const addressMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
     
     const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
-    const colStride = rowStrideOverride ?? (mapDef.rows * effectiveZStride); // Though less common, handle override for col-major too
+    const colStride = mapDef.rows * effectiveZStride; // Only for col-major
 
     for (let r = 0; r < mapDef.rows; r++) {
         for (let c = 0; c < mapDef.cols; c++) {
             let offset: number;
             
             if (mapDef.isRowMajor) {
-                // Correct formula for row-major addressing
                 offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
             } else {
-                // Correct formula for column-major addressing
                 offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
             }
             
@@ -476,7 +473,7 @@ export function readAndCalculateMapFromBinManual(
     return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY, manualConfig.z.stride, manualConfig.z.rowStride);
 }
 
-export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, processedMap: ProcessedMap): ArrayBuffer {
+export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processedMap: ProcessedMap): ArrayBuffer {
     if (!processedMap || !processedMap.calculatedMap || !processedMap.addresses) {
         throw new Error("Dados do mapa processado são inválidos ou estão em falta para a escrita.");
     }
@@ -536,5 +533,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, proces
 
 
 
+
+    
 
     
