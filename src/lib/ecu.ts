@@ -325,7 +325,6 @@ function processMap(
     const useLittleEndianForZ = !mapDef.isBigEndian;
     const effectiveZStride = zStride ?? mapDef.dataSize;
 
-    // Correct calculation for strides
     const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
     const colStride = mapDef.rows * effectiveZStride;
 
@@ -524,4 +523,5 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, proces
     return newBuffer;
 }
 // #endregion
+
 
