@@ -335,10 +335,8 @@ function processMap(
         for (let c = 0; c < mapDef.cols; c++) {
             let offset: number;
             if (mapDef.isRowMajor) {
-                // Address = Base + (RowIndex * RowStride) + (ColIndex * CellStride)
                 offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
             } else {
-                // Address = Base + (ColIndex * ColStride) + (RowIndex * CellStride)
                 offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
             }
             
@@ -528,6 +526,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, proces
     return newBuffer;
 }
 // #endregion
+
 
 
 
