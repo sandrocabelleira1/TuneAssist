@@ -1,4 +1,5 @@
 
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
 
 // #region Utility Functions
@@ -328,16 +329,16 @@ function processMap(
     const addressMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
     
     const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
-    const colStride = mapDef.rows * effectiveZStride; // Only for col-major
+    const colStride = mapDef.rows * effectiveZStride;
 
     for (let r = 0; r < mapDef.rows; r++) {
         for (let c = 0; c < mapDef.cols; c++) {
             let offset: number;
             
             if (mapDef.isRowMajor) {
-                offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
+                 offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
             } else {
-                offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
+                 offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
             }
             
             addressMap[r][c] = offset;
@@ -456,12 +457,18 @@ export function readAndCalculateMapFromBinManual(
         isBigEndian: manualConfig.isBigEndian ?? def.isBigEndian
     };
     
-    const sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
-    const sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
+    let sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
+    let sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
 
+    // If any manual stride is provided, assume the user wants the original file order.
+    if (manualConfig.x.stride || manualConfig.y.stride || manualConfig.z.stride || manualConfig.z.rowStride) {
+        sortX = false;
+        sortY = false;
+    }
+    
     // Reread axes and map from scratch using manual configuration
-    const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualConfig.x.stride);
-    const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualConfig.y.stride);
+    const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualXAxisDef.dataSize);
+    const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualYAxisDef.dataSize);
     
     if (xAxisData.calculated.length !== def.cols) {
          throw new Error(`Contagem de colunas do eixo X (${xAxisData.label}: ${xAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.cols}).`);
