@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -346,6 +347,7 @@ export default function EcuTuningAssistant() {
       <div className="flex h-full w-full bg-background">
         <SidebarProvider>
           <Sidebar side="left" className="border-r">
+            <SidebarRail />
             <SidebarHeader>
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Cpu size={20} /> Painel de Controlo
@@ -684,7 +686,7 @@ export default function EcuTuningAssistant() {
               </div>
             </SidebarFooter>
           </Sidebar>
-          <div className="flex-1 flex flex-col min-h-0">
+          <SidebarInset className="flex-1 flex flex-col min-h-0">
             <Header />
             <main className="flex-1 flex flex-col min-h-0">
               <div className="flex items-center p-2 border-b">
@@ -791,7 +793,7 @@ export default function EcuTuningAssistant() {
                 </Tabs>
               </div>
             </main>
-          </div>
+          </SidebarInset>
         </SidebarProvider>
       </div>
     );

@@ -114,7 +114,7 @@ function getDataSizeInBytes(element: Element | null): number {
             return sizeBits / 8;
         }
     }
-    return 2; // Default to 16-bit if attribute is missing or invalid
+    return 1; // Default to 8-bit if attribute is missing or invalid
 }
 
 // #endregion
@@ -268,7 +268,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
         return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null, originalIndices: indices };
     }
 
-    const { address, count, dataSize = 2, equation = 'x', isBigEndian = false } = axisDef;
+    const { address, count, dataSize = 1, equation = 'x', isBigEndian = false } = axisDef;
     const effectiveStride = stride ?? dataSize;
 
     if (address === undefined || address === null || isNaN(address)) {
@@ -328,7 +328,6 @@ function processMap(
     // Correct calculation for strides
     const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
     const colStride = mapDef.rows * effectiveZStride;
-
 
     const rawMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
     const addressMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
@@ -525,4 +524,3 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFDefinition, proces
     return newBuffer;
 }
 // #endregion
-
