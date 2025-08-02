@@ -243,9 +243,12 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
                 rowStride = parseInt(rowStrideAttr, 16);
             }
 
-            // Special rule: Override row stride for specific map dimensions (16x16, 8-bit data)
-            const isSpecialMap = yAxisDef.count === 16 && xAxisDef.count === 16 && dataSize === 1;
-            if (isSpecialMap) {
+            // Correct rule implementation as per user specification.
+            // This rule has priority over any value from the XDF file.
+            const xAxisTotalBytes = xAxisDef.count * (xAxisDef.dataSize || 1);
+            const yAxisTotalBytes = yAxisDef.count * (yAxisDef.dataSize || 1);
+
+            if (xAxisTotalBytes === 16 && yAxisTotalBytes === 16 && dataSize === 1) {
                 rowStride = 20;
             }
 
@@ -430,7 +433,7 @@ function processMap(
 }
 
 
-export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
+export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFinition): ProcessedMap {
     if (!def.xAxisDef || !def.yAxisDef) throw new Error(`Definições de eixo para o mapa "${def.name}" estão em falta.`);
     
     const tempConfig: ManualAxisConfig = {
@@ -561,6 +564,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
