@@ -266,7 +266,7 @@ export default function EcuTuningAssistant() {
             setManualConfig({
                 x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef.dataSize },
                 y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef.dataSize },
-                z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: undefined },
+                z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: def.rowStride },
                 isBigEndian: def.isBigEndian,
                 sortX: def.xAxisDef.requiresSort,
                 sortY: def.yAxisDef.requiresSort,
@@ -382,7 +382,7 @@ export default function EcuTuningAssistant() {
                     size="sm"
                     onClick={() => xdfInputRef.current?.click()}
                   >
-                    <FileCog className="mr-2" />{' '}
+                    <FileCog className="mr-2" />{'_'}
                     {xdfFile?.name ? 'Trocar XDF' : 'Carregar .XDF'}
                   </Button>
                   <input

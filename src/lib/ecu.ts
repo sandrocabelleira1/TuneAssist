@@ -228,10 +228,16 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
 
             const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap, manualEndian);
             const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap, manualEndian);
-
-            const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG')).map(f => f.textContent?.trim().toLowerCase());
-            const isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
             
+            const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG')).map(f => f.textContent?.trim().toLowerCase());
+            let isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
+            
+            const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
+            let rowStride;
+            if(rowStrideAttr) {
+                rowStride = parseInt(rowStrideAttr, 16);
+            }
+
             definitions.push({
                 uniqueId,
                 name: tableName,
@@ -245,6 +251,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
                 decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
                 xAxisDef,
                 yAxisDef,
+                rowStride
             });
 
         } catch (e) {
@@ -328,7 +335,7 @@ function processMap(
     const rawMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
     const addressMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
     
-    const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
+    const rowStride = rowStrideOverride ?? mapDef.rowStride ?? (mapDef.cols * effectiveZStride);
 
     for (let r = 0; r < mapDef.rows; r++) {
         for (let c = 0; c < mapDef.cols; c++) {
@@ -418,7 +425,7 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
     const tempConfig: ManualAxisConfig = {
         x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
         y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
-        z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: undefined },
+        z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: def.rowStride },
         isBigEndian: def.isBigEndian,
         sortX: def.xAxisDef.requiresSort,
         sortY: def.yAxisDef.requiresSort,

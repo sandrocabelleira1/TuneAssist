@@ -33,6 +33,7 @@ export type XDFDefinition = {
   decimalpl: number;
   xAxisDef: AxisDimension;
   yAxisDef: AxisDimension;
+  rowStride?: number;
 };
 
 export type LogMessage = {
