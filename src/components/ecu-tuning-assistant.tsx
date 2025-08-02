@@ -47,10 +47,10 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     }
     
     const { minVal, maxVal } = mapData ? mapData.flat().reduce((acc, val) => {
-        if (val === null) return acc;
+        if (val === null || val === undefined) return acc;
         return {
             minVal: Math.min(acc.minVal, val),
-            maxVal: Math.max(acc.max.val, val),
+            maxVal: Math.max(acc.maxVal, val),
         };
     }, { minVal: Infinity, maxVal: -Infinity }) : { minVal: 0, maxVal: 1 };
 
@@ -209,8 +209,7 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // If a new pair of files is being loaded (e.g., a new XDF when a BIN and XDF are already loaded), reset everything.
-        if ((type === 'xdf' && binFile && xdfFile) || (type === 'bin' && binFile && xdfFile)) {
+        if ((type === 'bin' && binFile && xdfFile) || (type === 'xdf' && binFile && xdfFile)) {
             resetSession();
         }
 
@@ -246,7 +245,7 @@ export default function EcuTuningAssistant() {
                     const errorMessage = `Erro ao processar XDF: ${(error as Error).message}`;
                     addLog(errorMessage, 'error');
                     toast({ title: 'Erro de XDF', description: errorMessage, variant: 'destructive' });
-                    setXdfFile(null); // Clear out partial or errored data
+                    setXdfFile(null);
                  }
             }
         };
@@ -306,9 +305,6 @@ export default function EcuTuningAssistant() {
         const configChanged = JSON.stringify(manualConfig) !== JSON.stringify(initialManualConfig);
         if (selectedMapId && binFile && xdfFile && configChanged) {
              const isMapInCache = !!processedMapCache[selectedMapId];
-            // Only auto-reprocess if the map isn't already cached with its own state.
-            // This condition might need tweaking depending on desired behavior.
-            // For now, let's stick to explicit processing via button if config is manually changed.
         }
     }, [manualConfig, selectedMapId, binFile, xdfFile, processedMapCache]);
 
@@ -352,7 +348,6 @@ export default function EcuTuningAssistant() {
         
         let configToApply = initialManualConfig;
         
-        // Base config from XDF
         if (def.xAxisDef && def.yAxisDef) {
             configToApply = {
                 x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
@@ -364,7 +359,6 @@ export default function EcuTuningAssistant() {
             };
         }
 
-        // Check if a template exists for this structure and apply it
         if (templateConfig && templateConfig.structureKey === mapStructureKey) {
             addLog(`Padrão encontrado para estrutura ${mapStructureKey}. A aplicar substituições.`, 'info');
             configToApply = { ...configToApply, ...templateConfig.config };
@@ -385,8 +379,6 @@ export default function EcuTuningAssistant() {
         setProcessedMap(newProcessedMap);
         
         setIsModified(true);
-        // We update the cache on map switch or save, not on every cell change, for performance.
-        // Let's change this to update cache immediately to ensure data is not lost.
         setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
     };
@@ -401,14 +393,9 @@ export default function EcuTuningAssistant() {
         
         addLog("A preparar para salvar o ficheiro BIN...", 'info');
         
-        // Ensure the latest modifications for the current map are in the cache
         const updatedCache = { ...processedMapCache, [selectedMapId]: processedMap };
 
         try {
-            // This is complex. Writing multiple modified maps to one BIN requires iterating through all modified maps.
-            // For now, let's just save the CURRENTLY VIEWED modified map.
-            // A more advanced implementation would iterate through all modified maps in the cache.
-            
             const newBinBuffer = writeMapToBin(binFile.buffer, selectedMapDefinition, processedMap);
             
             const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
@@ -426,10 +413,8 @@ export default function EcuTuningAssistant() {
             addLog(successMsg, 'success');
             toast({ title: 'Salvo com Sucesso', description: successMsg });
             
-            // After saving, we can consider the saved map as "not modified" relative to the new state.
             setIsModified(false);
             setModifiedStatusCache(prev => ({...prev, [selectedMapId]: false}));
-            // We should also update the base binFile state if we want to continue editing from the saved state.
             setBinFile(prev => prev ? { ...prev, buffer: newBinBuffer } : null);
 
         } catch (error) {
