@@ -251,12 +251,13 @@ export default function EcuTuningAssistant() {
     }, [selectedMapName, binFile, xdfFile, manualConfig, addLog, toast]);
 
     const handleMapSelect = (name: string) => {
+        setSelectedMapName(name);
         const def = xdfFile?.definitions.find(d => d.name === name);
+
         if (!def) {
-            setSelectedMapName(name);
+            setManualConfig(initialManualConfig);
             setProcessedMap(null);
             setIsModified(false);
-            setManualConfig(initialManualConfig);
             return;
         }
     
@@ -279,7 +280,6 @@ export default function EcuTuningAssistant() {
         }
     
         setManualConfig(newManualConfig);
-        setSelectedMapName(name);
         setProcessedMap(null);
         setIsModified(false);
     };
