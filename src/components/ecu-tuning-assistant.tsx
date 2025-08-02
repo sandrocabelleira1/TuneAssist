@@ -155,10 +155,10 @@ type StructureTemplate = {
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
-    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFDefinition[], allTables: Map<string, Element> } | null>(null);
+    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFinition[], allTables: Map<string, Element> } | null>(null);
     const [logs, setLogs] = useState<LogMessage[]>([]);
     
-    const [selectedMapName, setSelectedMapName] = useState<string>('');
+    const [selectedMapId, setSelectedMapId] = useState<string>('');
     const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
     const [isModified, setIsModified] = useState(false);
     
@@ -181,13 +181,13 @@ export default function EcuTuningAssistant() {
         setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev]);
     }, []);
 
-    const selectedMapDefinition = xdfFile?.definitions.find(def => def.name === selectedMapName);
+    const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
     
-    const resetSession = useCallback(() => {
-        addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
+    const resetSession = useCallback((isNewFile = false) => {
+        if(isNewFile) addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
         setBinFile(null);
         setXdfFile(null);
-        setSelectedMapName('');
+        setSelectedMapId('');
         setProcessedMap(null);
         setIsModified(false);
         setLogs(prevLogs => {
@@ -197,7 +197,7 @@ export default function EcuTuningAssistant() {
                 message: "Sessão reiniciada. Carregue os ficheiros necessários.",
                 type: 'info'
             };
-            return [resetMessage];
+            return isNewFile ? [resetMessage] : [];
         });
         setManualConfig(initialManualConfig);
         setTemplateConfig(null); 
@@ -209,7 +209,12 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        addLog(`A ler o ficheiro ${file.name}...`);
+        // Reset if a new pair of files is being started
+        if ((type === 'bin' && xdfFile) || (type === 'xdf' && binFile)) {
+             resetSession(true);
+        }
+
+        addLog(`A ler o ficheiro ${file.name}...`, 'info');
         
         const reader = new FileReader();
         
@@ -229,7 +234,7 @@ export default function EcuTuningAssistant() {
                 toast({ title: 'Ficheiro Carregado', description: successMessage });
             } else if (type === 'xdf' && typeof buffer === 'string') {
                  try {
-                    addLog('A processar o ficheiro XDF...');
+                    addLog('A processar o ficheiro XDF...', 'info');
                     const { definitions, allTables } = parseXDF(buffer, true); 
                     if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     
@@ -241,6 +246,7 @@ export default function EcuTuningAssistant() {
                     const errorMessage = `Erro ao processar XDF: ${(error as Error).message}`;
                     addLog(errorMessage, 'error');
                     toast({ title: 'Erro de XDF', description: errorMessage, variant: 'destructive' });
+                    setXdfFile(null); // Clear out partial or errored data
                  }
             }
         };
@@ -260,12 +266,12 @@ export default function EcuTuningAssistant() {
         e.target.value = '';
     };
 
-    const processMap = useCallback(async (mapName: string, configToProcess: ManualAxisConfig) => {
-        if (!mapName || !binFile || !xdfFile) return;
+    const processMap = useCallback(async (mapId: string, configToProcess: ManualAxisConfig) => {
+        if (!mapId || !binFile || !xdfFile) return;
 
-        const def = xdfFile.definitions.find(d => d.name === mapName);
+        const def = xdfFile.definitions.find(d => d.uniqueId === mapId);
         if (!def) {
-            addLog(`Definição de mapa "${mapName}" não encontrada.`, 'error');
+            addLog(`Definição de mapa com ID "${mapId}" não encontrada.`, 'error');
             return;
         }
         
@@ -280,8 +286,8 @@ export default function EcuTuningAssistant() {
             const result = readAndCalculateMapFromBinManual(binFile.buffer, def, configToProcess);
             
             setProcessedMap(result);
-            setProcessedMapCache(prev => ({...prev, [mapName]: result}));
-            setModifiedStatusCache(prev => ({...prev, [mapName]: false}));
+            setProcessedMapCache(prev => ({...prev, [mapId]: result}));
+            setModifiedStatusCache(prev => ({...prev, [mapId]: false}));
             setIsModified(false);
 
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
@@ -298,13 +304,13 @@ export default function EcuTuningAssistant() {
     
     useEffect(() => {
         const configChanged = JSON.stringify(manualConfig) !== JSON.stringify(initialManualConfig);
-        if (selectedMapName && binFile && xdfFile && configChanged) {
-             const isMapInCache = !!processedMapCache[selectedMapName];
+        if (selectedMapId && binFile && xdfFile && configChanged) {
+             const isMapInCache = !!processedMapCache[selectedMapId];
             // Only auto-reprocess if the map isn't already cached with its own state.
             // This condition might need tweaking depending on desired behavior.
             // For now, let's stick to explicit processing via button if config is manually changed.
         }
-    }, [manualConfig, selectedMapName, binFile, xdfFile, processedMapCache]);
+    }, [manualConfig, selectedMapId, binFile, xdfFile, processedMapCache]);
 
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -319,27 +325,27 @@ export default function EcuTuningAssistant() {
         });
     };
     
-    const handleMapSelect = (name: string) => {
+    const handleMapSelect = (id: string) => {
         if (!xdfFile || !binFile) return;
         
-        if (isModified && selectedMapName) {
-            addLog(`Salvando alterações para "${selectedMapName}" na cache antes de trocar.`, 'info');
+        if (isModified && selectedMapId) {
+            addLog(`Salvando alterações para "${selectedMapDefinition?.name}" na cache antes de trocar.`, 'info');
             if (processedMap) {
-                setProcessedMapCache(prev => ({ ...prev, [selectedMapName]: processedMap }));
+                setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: processedMap }));
             }
         }
         
-        setSelectedMapName(name);
+        setSelectedMapId(id);
 
-        if (processedMapCache[name]) {
-            addLog(`A carregar o mapa "${name}" da cache.`, 'info');
-            setProcessedMap(processedMapCache[name]);
-            setIsModified(modifiedStatusCache[name] ?? false);
-            setSelectedLine(processedMapCache[name]?.axes.y.calculated.length > 0 ? 0 : null);
+        if (processedMapCache[id]) {
+            addLog(`A carregar o mapa "${xdfFile.definitions.find(d=>d.uniqueId === id)?.name}" da cache.`, 'info');
+            setProcessedMap(processedMapCache[id]);
+            setIsModified(modifiedStatusCache[id] ?? false);
+            setSelectedLine(processedMapCache[id]?.axes.y.calculated.length > 0 ? 0 : null);
             return;
         }
         
-        const def = xdfFile.definitions.find(d => d.name === name);
+        const def = xdfFile.definitions.find(d => d.uniqueId === id);
         if (!def) return;
         
         const mapStructureKey = `${def.rows}x${def.cols}`;
@@ -365,11 +371,11 @@ export default function EcuTuningAssistant() {
         }
         
         setManualConfig(configToApply);
-        processMap(name, configToApply);
+        processMap(id, configToApply);
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
-        if (!processedMap || !processedMap.calculatedMap || !selectedMapName) return;
+        if (!processedMap || !processedMap.calculatedMap || !selectedMapId) return;
 
         addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)}`, 'info');
         const newMap = processedMap.calculatedMap.map(row => [...row]);
@@ -381,8 +387,8 @@ export default function EcuTuningAssistant() {
         setIsModified(true);
         // We update the cache on map switch or save, not on every cell change, for performance.
         // Let's change this to update cache immediately to ensure data is not lost.
-        setProcessedMapCache(prev => ({ ...prev, [selectedMapName]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({...prev, [selectedMapName]: true}));
+        setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
+        setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
     };
     
     const handleSave = () => {
@@ -396,7 +402,7 @@ export default function EcuTuningAssistant() {
         addLog("A preparar para salvar o ficheiro BIN...", 'info');
         
         // Ensure the latest modifications for the current map are in the cache
-        const updatedCache = { ...processedMapCache, [selectedMapName]: processedMap };
+        const updatedCache = { ...processedMapCache, [selectedMapId]: processedMap };
 
         try {
             // This is complex. Writing multiple modified maps to one BIN requires iterating through all modified maps.
@@ -422,7 +428,7 @@ export default function EcuTuningAssistant() {
             
             // After saving, we can consider the saved map as "not modified" relative to the new state.
             setIsModified(false);
-            setModifiedStatusCache(prev => ({...prev, [selectedMapName]: false}));
+            setModifiedStatusCache(prev => ({...prev, [selectedMapId]: false}));
             // We should also update the base binFile state if we want to continue editing from the saved state.
             setBinFile(prev => prev ? { ...prev, buffer: newBinBuffer } : null);
 
@@ -510,7 +516,7 @@ export default function EcuTuningAssistant() {
                 <CardContent className="p-4 pt-0">
                   <Select
                     onValueChange={handleMapSelect}
-                    value={selectedMapName}
+                    value={selectedMapId}
                     disabled={!binFile || !xdfFile}
                   >
                     <SelectTrigger>
@@ -526,7 +532,7 @@ export default function EcuTuningAssistant() {
                       {xdfFile?.definitions
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .map((def) => (
-                          <SelectItem key={def.uniqueId} value={def.name}>
+                          <SelectItem key={def.uniqueId} value={def.uniqueId}>
                             {def.name}
                           </SelectItem>
                         ))}
@@ -728,8 +734,8 @@ export default function EcuTuningAssistant() {
                   <div className="flex flex-col gap-2">
                     <Button
                       size="sm"
-                      onClick={() => processMap(selectedMapName, manualConfig)}
-                      disabled={!selectedMapName || isProcessing}
+                      onClick={() => processMap(selectedMapId, manualConfig)}
+                      disabled={!selectedMapId || isProcessing}
                     >
                       {isProcessing ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -740,7 +746,7 @@ export default function EcuTuningAssistant() {
                         size="sm"
                         variant="secondary"
                         onClick={handleSetTemplate}
-                        disabled={!selectedMapName}
+                        disabled={!selectedMapId}
                     >
                         <Star className="mr-2" />
                         Usar como Padrão
@@ -810,7 +816,7 @@ export default function EcuTuningAssistant() {
                 <SidebarTrigger />
                 <div className="flex items-center ml-2">
                   <h1 className="text-lg font-semibold">
-                    {selectedMapName || 'Nenhum Mapa Selecionado'}
+                    {selectedMapDefinition?.name || 'Nenhum Mapa Selecionado'}
                   </h1>
                   {isModified && (
                     <span className="ml-2 text-xs font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
@@ -863,7 +869,7 @@ export default function EcuTuningAssistant() {
                     <>
                       <TabsContent value="view-table" className="flex-1 min-h-0 mt-4">
                         <DataTable
-                          key={selectedMapName + JSON.stringify(processedMap?.addresses)}
+                          key={selectedMapId + JSON.stringify(processedMap?.addresses)}
                           mapData={processedMap?.calculatedMap ?? null}
                           addresses={processedMap?.addresses ?? null}
                           axes={processedMap?.axes ?? null}
@@ -916,11 +922,3 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
-
-    
-
-    
-
-    
-
-    

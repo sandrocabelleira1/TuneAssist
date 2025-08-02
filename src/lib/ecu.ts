@@ -203,31 +203,54 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
     const parseError = xmlDoc.querySelector("parsererror");
     if (parseError) throw new Error(`Erro de análise do XDF: ${parseError.textContent}`);
 
-    const allTablesMap = new Map<string, Element>();
-    xmlDoc.querySelectorAll('XDFTABLE').forEach(tableEl => {
-        const id = getAttr(tableEl, 'uniqueid');
-        if (id) allTablesMap.set(id, tableEl);
-    });
-
+    const allTables = new Map<string, Element>();
     const definitions: XDFinition[] = [];
+    const usedIds = new Set<string>();
 
-    allTablesMap.forEach((tableEl, uniqueId) => {
+    xmlDoc.querySelectorAll('XDFTABLE').forEach(tableEl => {
+        const originalId = getAttr(tableEl, 'uniqueid');
         const tableName = findNode(tableEl, 'title')?.textContent?.trim();
         const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
         
         if (!tableName || !zAxisNode) return;
+        
+        const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
+        const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
+        
+        let uniqueId = originalId;
+        
+        if (!uniqueId || uniqueId === "0x0" || usedIds.has(uniqueId)) {
+            uniqueId = `${tableName}-${getAttr(embeddedData, 'mmedaddress') || Math.random()}`;
+        }
+        
+        if (usedIds.has(uniqueId)) {
+             console.warn(`Aviso: ID único duplicado gerado "${uniqueId}" para a tabela "${tableName}". A tabela será ignorada.`);
+             return;
+        }
+        
+        usedIds.add(uniqueId);
+        if (originalId) { // Still map the original ID for axis lookups
+             allTables.set(originalId, tableEl);
+        }
+        allTables.set(uniqueId, tableEl);
+
 
         try {
-            const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
-            const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
             if (isNaN(address)) return;
 
             const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
             if (!xAxisNode || !yAxisNode) return;
 
-            const xAxisDef = parseAxisDimension(xAxisNode, allTablesMap, manualEndian);
-            const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap, manualEndian);
+            // When parsing axis, we must provide the full map of tables using original IDs for lookups
+             const allOriginalTablesMap = new Map<string, Element>();
+             xmlDoc.querySelectorAll('XDFTABLE').forEach(tEl => {
+                 const id = getAttr(tEl, 'uniqueid');
+                 if (id && id !== "0x0") allOriginalTablesMap.set(id, tEl);
+             });
+
+            const xAxisDef = parseAxisDimension(xAxisNode, allOriginalTablesMap, manualEndian);
+            const yAxisDef = parseAxisDimension(yAxisNode, allOriginalTablesMap, manualEndian);
             
             const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG')).map(f => f.textContent?.trim().toLowerCase());
             const isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
@@ -265,7 +288,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
         }
     });
 
-    return { definitions, allTablesMap };
+    return { definitions, allTables };
 }
 // #endregion
 
@@ -542,5 +565,3 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     return newBuffer;
 }
 // #endregion
-
-    
