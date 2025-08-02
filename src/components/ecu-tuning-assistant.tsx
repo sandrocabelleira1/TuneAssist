@@ -22,6 +22,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
     loading: () => <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>
@@ -53,8 +54,8 @@ function MassEditDialog({
 
     const handleAction = (operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate') => {
         const numericValue = parseFloat(value);
-        if (isNaN(numericValue)) {
-            // Optionally show a toast or error message
+        if (isNaN(numericValue) && operation !== 'interpolate') { // Interpolate might not need a value
+            toast({ title: "Valor Inválido", description: "Por favor, insira um número válido.", variant: "destructive"});
             return;
         }
         onMassEdit(payload.selection, operation, numericValue);
@@ -81,16 +82,16 @@ function MassEditDialog({
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
                             className="col-span-3"
-                            placeholder="Ex: 10 para 10%"
+                            placeholder="Ex: 10 para 10% ou um valor absoluto"
                             autoFocus
                         />
                     </div>
                 </div>
-                <DialogFooter className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                     <Button onClick={() => handleAction('add_percent')}><Plus className="mr-2" /> Adicionar %</Button>
-                     <Button onClick={() => handleAction('sub_percent')}><Minus className="mr-2" /> Subtrair %</Button>
-                     <Button variant="secondary" onClick={() => handleAction('set_value')}><Edit className="mr-2" /> Definir Valor</Button>
-                     <Button variant="secondary" onClick={() => handleAction('interpolate')}><Blend className="mr-2"/> Interpolar</Button>
+                <DialogFooter className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-1">
+                     <Button size="sm" onClick={() => handleAction('add_percent')}><Plus className="mr-1 h-4 w-4" /> Add %</Button>
+                     <Button size="sm" onClick={() => handleAction('sub_percent')}><Minus className="mr-1 h-4 w-4" /> Sub %</Button>
+                     <Button size="sm" variant="secondary" onClick={() => handleAction('set_value')}><Edit className="mr-1 h-4 w-4" /> Definir</Button>
+                     <Button size="sm" variant="secondary" onClick={() => handleAction('interpolate')}><Blend className="mr-1 h-4 w-4"/> Interpolar</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -105,6 +106,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     onCellChange: (y: number, x: number, value: number) => void;
     onMassUpdate: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', value: number) => void;
 }) {
+    const { toast } = useToast();
     const [isSelecting, setIsSelecting] = useState(false);
     const [selection, setSelection] = useState<CellSelection>({ start: null, end: null });
     const [massEditPayload, setMassEditPayload] = useState<MassEditPayload | null>(null);
@@ -122,15 +124,22 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = useCallback(() => {
         if (isSelecting) {
             setIsSelecting(false);
             if (selection.start && selection.end && mapData) {
-                // Open dialog for mass edit
-                setMassEditPayload({ selection, currentMapData: mapData });
+                // Check if more than one cell is selected
+                const start = selection.start;
+                const end = selection.end;
+                 if (start.y !== end.y || start.x !== end.x) {
+                    setMassEditPayload({ selection, currentMapData: mapData });
+                 } else {
+                    // If only one cell is selected, clear selection
+                    setSelection({ start: null, end: null });
+                 }
             }
         }
-    };
+    }, [isSelecting, selection, mapData]);
 
     useEffect(() => {
         const handleMouseUpOutside = (e: MouseEvent) => {
@@ -141,9 +150,9 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
             }
         };
 
-        document.addEventListener('mouseup', handleMouseUpOutside);
+        window.addEventListener('mouseup', handleMouseUpOutside);
         return () => {
-            document.removeEventListener('mouseup', handleMouseUpOutside);
+            window.removeEventListener('mouseup', handleMouseUpOutside);
         };
     }, [isSelecting, handleMouseUp]);
 
@@ -189,6 +198,8 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         const newValue = parseFloat(e.target.value);
         if (!isNaN(newValue)) {
             onCellChange(yi, xi, newValue);
+        } else {
+             e.target.value = mapData?.[yi]?.[xi]?.toFixed(zAxisDecimalPlaces) ?? '';
         }
     };
 
@@ -207,7 +218,11 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                 <thead>
                     <tr>
                         <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-left font-semibold">
-                            {yAxisLabel} \ {xAxisLabel}
+                            <span className="flex items-center justify-between">
+                                <span>{yAxisLabel}</span>
+                                <span>\</span>
+                                <span>{xAxisLabel}</span>
+                            </span>
                         </th>
                         {axes.x.calculated.map((x: any, i: number) => (
                             <th key={i} className="sticky top-0 bg-muted p-2 border border-border font-semibold">
@@ -230,7 +245,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                                 return (
                                     <td
                                         key={xi}
-                                        className={cn("p-0 border border-border text-center h-10", { 'outline outline-2 outline-offset-[-2px] outline-primary': selected })}
+                                        className={cn("p-0 border border-border text-center h-10 transition-colors", { 'outline outline-2 outline-offset-[-2px] outline-primary': selected })}
                                         style={{ backgroundColor: bgColor, color: textColor }}
                                         onMouseDown={(e) => handleMouseDown(e, yi, xi)}
                                         onMouseMove={() => handleMouseMove(yi, xi)}
@@ -241,6 +256,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                                                     <input
                                                         type="text"
                                                         defaultValue={cell !== null && cell !== undefined ? cell.toFixed(zAxisDecimalPlaces) : '-'}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                                                         onBlur={(e) => handleCellBlur(e, yi, xi)}
                                                         className="w-full h-full text-center bg-transparent border-none p-1 focus:outline-none focus:ring-2 focus:ring-ring"
                                                         style={{ color: 'inherit' }}
@@ -314,23 +330,19 @@ export default function EcuTuningAssistant() {
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         const id = `${Date.now()}-${Math.random()}`;
-        setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev]);
+        setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev].slice(0, 100));
     }, []);
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
-    
-    const resetSession = useCallback(() => {
-        addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
-        setBinFile(null);
-        setXdfFile(null);
+
+    const clearMapState = useCallback(() => {
         setSelectedMapId('');
         setProcessedMap(null);
         setIsModified(false);
-        setLogs([]);
-        setManualConfig(initialManualConfig);
-        setTemplateConfig(null);
         setProcessedMapCache({});
         setModifiedStatusCache({});
+        setManualConfig(initialManualConfig);
+        addLog('Seleção de mapa e cache limpos.', 'info');
     }, [addLog]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
@@ -349,6 +361,9 @@ export default function EcuTuningAssistant() {
                 toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
                 return;
             }
+
+            // Clear map-related state when a new file of any type is loaded
+            clearMapState();
 
             if (type === 'bin' && buffer instanceof ArrayBuffer) {
                 setBinFile({ name: file.name, buffer });
@@ -386,6 +401,7 @@ export default function EcuTuningAssistant() {
             reader.readAsArrayBuffer(file);
         }
         
+        // Reset the input value to allow re-uploading the same file
         e.target.value = '';
     };
 
@@ -403,6 +419,7 @@ export default function EcuTuningAssistant() {
         addLog(`A processar o mapa: ${def.name}...`, 'info');
         
         try {
+            // Allow UI to update before blocking operation
             await new Promise(resolve => setTimeout(resolve, 0));
 
             addLog("A processar com as definições atuais (XDF/Manual)...", 'info');
@@ -446,13 +463,13 @@ export default function EcuTuningAssistant() {
     };
     
     const handleMapSelect = (id: string) => {
-        if (!xdfFile || !binFile) return;
+        if (!xdfFile || !binFile || !id) return;
         
-        if (isModified && selectedMapId) {
+        // Save current modifications before switching
+        if (isModified && selectedMapId && processedMap) {
             addLog(`Salvando alterações para "${selectedMapDefinition?.name}" na cache antes de trocar.`, 'info');
-            if (processedMap) {
-                setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: processedMap }));
-            }
+            setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: processedMap }));
+            setModifiedStatusCache(prev => ({ ...prev, [selectedMapId]: true }));
         }
         
         setSelectedMapId(id);
@@ -518,12 +535,13 @@ export default function EcuTuningAssistant() {
         const { start, end } = selection;
         const minY = Math.min(start.y, end.y);
         const maxY = Math.max(start.y, end.y);
-        const minX = Math.min(start.x, end.y);
+        const minX = Math.min(start.x, end.x);
+        const maxX = Math.max(start.x, end.x);
 
         for (let y = minY; y <= maxY; y++) {
             for (let x = minX; x <= maxX; x++) {
                 const currentValue = newMap[y][x];
-                if (currentValue !== null) {
+                if (currentValue !== null && currentValue !== undefined) {
                     let newValue = currentValue;
                     switch (operation) {
                         case 'add_percent':
@@ -535,11 +553,22 @@ export default function EcuTuningAssistant() {
                         case 'set_value':
                              newValue = value;
                              break;
-                        // Interpolate logic can be complex. Linear interpolation for now.
-                        case 'interpolate':
-                             // This is a placeholder. A proper implementation would need corner values.
-                             newValue = currentValue;
-                             break;
+                        // Interpolate logic can be complex. For now, linear interpolation between corners.
+                        case 'interpolate': {
+                            const topLeft = newMap[minY][minX]!;
+                            const topRight = newMap[minY][maxX]!;
+                            const bottomLeft = newMap[maxY][minX]!;
+                            const bottomRight = newMap[maxY][maxX]!;
+                            
+                            const xRatio = (maxX - minX === 0) ? 0 : (x - minX) / (maxX - minX);
+                            const yRatio = (maxY - minY === 0) ? 0 : (y - minY) / (maxY - minY);
+
+                            const topInterpolation = topLeft + (topRight - topLeft) * xRatio;
+                            const bottomInterpolation = bottomLeft + (bottomRight - bottomLeft) * xRatio;
+
+                            newValue = topInterpolation + (bottomInterpolation - topInterpolation) * yRatio;
+                            break;
+                        }
                     }
                      newMap[y][x] = newValue;
                 }
@@ -896,7 +925,7 @@ export default function EcuTuningAssistant() {
                     >
                       {isProcessing ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : <Play className="mr-2" /> }
+                      ) : <Play className="mr-2 h-4 w-4" /> }
                       Aplicar e Recalcular
                     </Button>
                      <Button
@@ -905,7 +934,7 @@ export default function EcuTuningAssistant() {
                         onClick={handleSetTemplate}
                         disabled={!selectedMapId}
                     >
-                        <Star className="mr-2" />
+                        <Star className="mr-2 h-4 w-4" />
                         Usar como Padrão
                     </Button>
                   </div>
@@ -925,7 +954,7 @@ export default function EcuTuningAssistant() {
                     disabled={!isModified || !processedMap}
                     onClick={handleSave}
                   >
-                    <Save className="mr-2" /> Salvar .BIN Modificado
+                    <Save className="mr-2 h-4 w-4" /> Salvar .BIN Modificado
                   </Button>
                 </CardContent>
               </Card>
@@ -1080,5 +1109,3 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
-
-    
