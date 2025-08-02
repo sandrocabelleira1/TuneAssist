@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -193,7 +194,7 @@ export default function EcuTuningAssistant() {
                 toast({ title: 'Ficheiro Carregado', description: successMessage });
             } else if (type === 'xdf' && typeof buffer === 'string') {
                  try {
-                    addLog('A processar o ficheiro XDF com leitura Big-Endian por defeito...');
+                    addLog('A processar o ficheiro XDF...');
                     const { definitions, allTables } = parseXDF(buffer, true); 
                     if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
                     setXdfFile({ name: file.name, content: buffer, definitions, allTables });
@@ -274,21 +275,16 @@ export default function EcuTuningAssistant() {
             sortY: def.yAxisDef.requiresSort,
         };
 
-        const isSpecial16x16Map = def.dataSize === 1 && def.cols === 16 && def.rows === 16;
-        if (isSpecial16x16Map) {
-            newManualConfig.z.rowStride = 20;
-        }
-
         setManualConfig(newManualConfig);
         setProcessedMap(null);
         setIsModified(false);
     };
-
+    
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
             processMap();
         }
-    }, [selectedMapName, manualConfig, binFile, xdfFile, processMap]);
+    }, [selectedMapName, binFile, xdfFile, processMap]); // `manualConfig` is the trigger, so remove from here
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {

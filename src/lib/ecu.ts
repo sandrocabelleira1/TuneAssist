@@ -238,13 +238,20 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
                 rowStride = parseInt(rowStrideAttr, 16);
             }
 
+            const dataSize = getDataSizeInBytes(embeddedData);
+
+            // Special override for 16x16 8-bit maps
+            if (yAxisDef.count === 16 && xAxisDef.count === 16 && dataSize === 1) {
+                rowStride = 20;
+            }
+
             definitions.push({
                 uniqueId,
                 name: tableName,
                 address,
                 rows: yAxisDef.count,
                 cols: xAxisDef.count,
-                dataSize: getDataSizeInBytes(embeddedData),
+                dataSize,
                 isBigEndian: getIsBigEndian(embeddedData, manualEndian),
                 isRowMajor,
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'x',
@@ -550,6 +557,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
