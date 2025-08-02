@@ -344,7 +344,7 @@ function processMap(
             if (mapDef.isRowMajor) {
                  offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
             } else { // col_major
-                 const colStride = mapDef.rows * effectiveZStride; // Calculate col stride here
+                 const colStride = mapDef.rows * effectiveZStride;
                  offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
             }
             
@@ -444,19 +444,21 @@ export function readAndCalculateMapFromBinManual(
          throw new Error("As definições de eixo originais são inválidas e necessárias para o recálculo manual.");
     }
     
+    const xStride = manualConfig.x.stride ?? def.xAxisDef.dataSize;
+    const yStride = manualConfig.y.stride ?? def.yAxisDef.dataSize;
     const zStride = manualConfig.z.stride ?? def.dataSize;
 
     // Create new definitions with manual overrides
     const manualXAxisDef: AxisDimension = { 
         ...def.xAxisDef, 
         equation: manualConfig.x.equation,
-        dataSize: manualConfig.x.stride ?? def.xAxisDef.dataSize,
+        dataSize: xStride,
         isBigEndian: manualConfig.isBigEndian ?? def.xAxisDef.isBigEndian
     };
     const manualYAxisDef: AxisDimension = { 
         ...def.yAxisDef, 
         equation: manualConfig.y.equation,
-        dataSize: manualConfig.y.stride ?? def.yAxisDef.dataSize,
+        dataSize: yStride,
         isBigEndian: manualConfig.isBigEndian ?? def.yAxisDef.isBigEndian
     };
     const manualMapDef: XDFDefinition = { 
@@ -468,12 +470,6 @@ export function readAndCalculateMapFromBinManual(
     
     let sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
     let sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
-
-    // If any manual stride is provided, assume the user wants the original file order.
-    if (manualConfig.x.stride !== undefined || manualConfig.y.stride !== undefined || manualConfig.z.stride !== undefined || manualConfig.z.rowStride !== undefined) {
-        sortX = false;
-        sortY = false;
-    }
     
     // Reread axes and map from scratch using manual configuration
     const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualXAxisDef.dataSize);
@@ -553,5 +549,6 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 

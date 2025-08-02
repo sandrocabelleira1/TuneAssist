@@ -746,7 +746,7 @@ export default function EcuTuningAssistant() {
                     <>
                       <TabsContent value="view-table" className="flex-1 min-h-0 mt-4">
                         <DataTable
-                          key={selectedMapName + JSON.stringify(manualConfig)}
+                          key={selectedMapName + JSON.stringify(processedMap?.addresses)}
                           mapData={processedMap?.calculatedMap ?? null}
                           addresses={processedMap?.addresses ?? null}
                           axes={processedMap?.axes ?? null}
