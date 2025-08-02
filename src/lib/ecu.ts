@@ -329,7 +329,6 @@ function processMap(
     const addressMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
     
     const rowStride = rowStrideOverride ?? (mapDef.cols * effectiveZStride);
-    const colStride = mapDef.rows * effectiveZStride;
 
     for (let r = 0; r < mapDef.rows; r++) {
         for (let c = 0; c < mapDef.cols; c++) {
@@ -337,7 +336,8 @@ function processMap(
             
             if (mapDef.isRowMajor) {
                  offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
-            } else {
+            } else { // col_major
+                 const colStride = mapDef.rows * effectiveZStride; // Calculate col stride here
                  offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
             }
             
@@ -467,8 +467,8 @@ export function readAndCalculateMapFromBinManual(
     }
     
     // Reread axes and map from scratch using manual configuration
-    const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualXAxisDef.dataSize);
-    const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualYAxisDef.dataSize);
+    const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualConfig.x.stride);
+    const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualConfig.y.stride);
     
     if (xAxisData.calculated.length !== def.cols) {
          throw new Error(`Contagem de colunas do eixo X (${xAxisData.label}: ${xAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.cols}).`);
@@ -544,3 +544,4 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
