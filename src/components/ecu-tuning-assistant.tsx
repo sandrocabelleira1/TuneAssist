@@ -284,7 +284,7 @@ export default function EcuTuningAssistant() {
         if (selectedMapName && binFile && xdfFile) {
             processMap();
         }
-    }, [selectedMapName, binFile, xdfFile, processMap]); // `manualConfig` is the trigger, so remove from here
+    }, [selectedMapName, binFile, xdfFile, manualConfig, processMap]);
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -806,3 +806,4 @@ export default function EcuTuningAssistant() {
     
 
     
+

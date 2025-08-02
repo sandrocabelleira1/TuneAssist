@@ -231,9 +231,9 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const yAxisDef = parseAxisDimension(yAxisNode, allTablesMap, manualEndian);
             
             const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG')).map(f => f.textContent?.trim().toLowerCase());
-            let isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
+            const isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
             
-            // Get Z-axis data size directly from the correct attribute for the rule check
+            // Correctly get Z-axis data size directly from the mmedelementsizebits attribute.
             const zDataSizeBitsAttr = getAttr(embeddedData, 'mmedelementsizebits');
             const zDataSizeBits = zDataSizeBitsAttr ? parseInt(zDataSizeBitsAttr, 10) : 0;
             const dataSize = (zDataSizeBits > 0) ? zDataSizeBits / 8 : 1;
@@ -245,7 +245,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             }
 
             // --- APLICAÇÃO DA REGRA DE SUBSTITUIÇÃO ---
-            // Aplica o passo de linha de 20 se o mapa for 16x16 com dados de 8 bits (1 byte)
+            // Aplica o passo de linha de 20 se o mapa for 16x16 com dados de 8 bits (1 byte).
             if (xAxisDef.count === 16 && yAxisDef.count === 16 && zDataSizeBits === 8) {
                 rowStride = 20;
             }
@@ -563,6 +563,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
