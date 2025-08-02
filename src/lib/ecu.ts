@@ -211,6 +211,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
     });
 
     const definitions: XDFinition[] = [];
+    const specialIgnitionMaps = ['ign1', 'ign2', 'ign3', 'ign4', 'ign5/6'];
 
     allTablesMap.forEach((tableEl, uniqueId) => {
         const tableName = findNode(tableEl, 'title')?.textContent?.trim();
@@ -241,6 +242,11 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
             if(rowStrideAttr) {
                 rowStride = parseInt(rowStrideAttr, 16);
+            }
+            
+            // Override rule: Apply row stride of 20 for specific ignition maps
+            if (specialIgnitionMaps.includes(tableName.toLowerCase())) {
+                rowStride = 20;
             }
 
             definitions.push({

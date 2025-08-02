@@ -256,20 +256,25 @@ export default function EcuTuningAssistant() {
     }, [selectedMapName, binFile, xdfFile, addLog, toast]);
     
     useEffect(() => {
-        // This effect now only triggers a re-process if the config is changed manually by the user
-        // The initial processing is handled by handleMapSelect
         if (selectedMapName && binFile && xdfFile) {
             processMap(manualConfig);
         }
-    }, [manualConfig, selectedMapName, binFile, xdfFile, processMap]);
+    }, [manualConfig]); // This effect now only triggers a re-process when manualConfig changes.
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
+            let newConfig;
             if (subfield && (axis === 'x' || axis === 'y' || axis === 'z')) {
                  const numValue = ((subfield === 'stride' || subfield === 'rowStride') && value === '') ? undefined : value;
-                 return { ...prev, [axis]: { ...prev[axis], [subfield]: numValue }};
+                 newConfig = { ...prev, [axis]: { ...prev[axis], [subfield]: numValue }};
+            } else {
+                 newConfig = { ...prev, [axis]: value };
             }
-            return { ...prev, [axis]: value };
+            // Trigger re-processing by calling processMap directly after state change
+            if (selectedMapName && binFile) {
+                processMap(newConfig);
+            }
+            return newConfig;
         });
     };
     
@@ -283,33 +288,23 @@ export default function EcuTuningAssistant() {
 
         if (!def.xAxisDef || !def.yAxisDef) {
             setManualConfig(initialManualConfig);
-            processMap(initialManualConfig);
             return;
         }
 
-        // 1. Create base config from XDF
         const newManualConfig: ManualAxisConfig = {
             x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
             y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
             z: {
                 equation: def.equation || 'x',
                 stride: def.dataSize,
-                rowStride: def.rowStride
+                rowStride: def.rowStride // This will now correctly have 20 if the rule in `parseXDF` was applied
             },
             isBigEndian: def.isBigEndian,
             sortX: def.xAxisDef.requiresSort,
             sortY: def.yAxisDef.requiresSort,
         };
         
-        // 2. Apply special override rule
-        const specialIgnitionMaps = ['ign1', 'ign2', 'ign3', 'ign4', 'ign5/6'];
-        if (specialIgnitionMaps.includes(def.name.toLowerCase())) {
-            newManualConfig.z.rowStride = 20;
-        }
-
-        // 3. Set state and trigger processing with the new config
         setManualConfig(newManualConfig);
-        processMap(newManualConfig);
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
