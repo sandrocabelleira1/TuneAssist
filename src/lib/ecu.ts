@@ -98,12 +98,13 @@ function parseAddress(addressStr: string | null): number {
 }
 
 
-function getDataSizeInBytes(element: Element | null): number {
-    if (!element) return 2;
-    // Check the element itself first for the most specific size
+function getDataSizeInBytes(element: Element | null, defaultSize: number = 1): number {
+    if (!element) return defaultSize;
+
+    // Favor 'mmedelementsizebits' as it's the most specific for raw data reads.
     let sizeBitsAttr = getAttr(element, 'mmedelementsizebits');
     
-    // If not on the element, check its direct parent (the axis definition node)
+    // Fallback to 'elementsizebits' on the parent axis definition if specific one not found.
     if (!sizeBitsAttr && element.parentElement) {
          sizeBitsAttr = getAttr(element.parentElement, 'elementsizebits');
     }
@@ -114,7 +115,7 @@ function getDataSizeInBytes(element: Element | null): number {
             return sizeBits / 8;
         }
     }
-    return 1; // Default to 8-bit if attribute is missing or invalid
+    return defaultSize; 
 }
 
 // #endregion
@@ -232,18 +233,23 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG')).map(f => f.textContent?.trim().toLowerCase());
             let isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
             
-            const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
+            // Get Z-axis data size directly from the correct attribute for the rule check
+            const zDataSizeBitsAttr = getAttr(embeddedData, 'mmedelementsizebits');
+            const zDataSizeBits = zDataSizeBitsAttr ? parseInt(zDataSizeBitsAttr, 10) : 0;
+            const dataSize = (zDataSizeBits > 0) ? zDataSizeBits / 8 : 1;
+            
             let rowStride;
+            const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
             if(rowStrideAttr) {
                 rowStride = parseInt(rowStrideAttr, 16);
             }
 
-            const dataSize = getDataSizeInBytes(embeddedData);
-
-            // Special override for 16x16, 8-bit maps which often have a stride of 20 (0x14) bytes.
-            if (xAxisDef.count === 16 && yAxisDef.count === 16 && dataSize === 1) {
+            // --- APLICAÇÃO DA REGRA DE SUBSTITUIÇÃO ---
+            // Aplica o passo de linha de 20 se o mapa for 16x16 com dados de 8 bits (1 byte)
+            if (xAxisDef.count === 16 && yAxisDef.count === 16 && zDataSizeBits === 8) {
                 rowStride = 20;
             }
+            // --- FIM DA APLICAÇÃO DA REGRA ---
 
             definitions.push({
                 uniqueId,
@@ -426,7 +432,7 @@ function processMap(
 }
 
 
-export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
+export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFinition): ProcessedMap {
     if (!def.xAxisDef || !def.yAxisDef) throw new Error(`Definições de eixo para o mapa "${def.name}" estão em falta.`);
     
     const tempConfig: ManualAxisConfig = {
@@ -557,6 +563,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
