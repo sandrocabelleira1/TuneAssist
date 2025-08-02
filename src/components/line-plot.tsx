@@ -107,6 +107,7 @@ export default function LinePlot2D({
     const graphAxis = isYvsX ? xAxis : yAxis;
     
     if(selectedLineIndex >= selectorAxis.calculated.length) {
+        // onLineSelect(0); // Reset selection if out of bounds
         return { chartData: null, lineDataKey: null, error: 'Índice da linha selecionada fora dos limites.', chartXAxis: null, chartXAxisLabel: '' };
     }
 
@@ -157,19 +158,26 @@ export default function LinePlot2D({
     const { payload } = dotProps;
 
     const isYvsX = orientation === 'y-vs-x';
-    const selectorOriginalIndex = isYvsX 
-        ? yAxis.originalIndices[selectedLineIndex] 
-        : xAxis.originalIndices[selectedLineIndex];
-    const graphOriginalIndex = isYvsX
-        ? xAxis.originalIndices[payload.originalIndex]
-        : yAxis.originalIndices[payload.originalIndex];
+    
+    // The clicked point's originalIndex refers to its position in the *graph's* axis data.
+    // The selectedLineIndex refers to its position in the *selector's* axis data.
+    // We need to find the original, unsorted row and column index in the map data.
+    const graphAxis = isYvsX ? xAxis : yAxis;
+    const selectorAxis = isYvsX ? yAxis : xAxis;
 
+    const graphOriginalIndex = graphAxis.originalIndices[payload.originalIndex];
+    const selectorOriginalIndex = selectorAxis.originalIndices[selectedLineIndex];
+    
     const rowIndex = isYvsX ? selectorOriginalIndex : graphOriginalIndex;
     const colIndex = isYvsX ? graphOriginalIndex : selectorOriginalIndex;
+    
+    // Now we need the row/col index in the *sorted* mapData for the onPointChange callback
+    const sortedRowIndex = isYvsX ? selectedLineIndex : payload.originalIndex;
+    const sortedColIndex = isYvsX ? payload.originalIndex : selectedLineIndex;
 
     setEditingPoint({
-      rowIndex: rowIndex,
-      colIndex: colIndex,
+      rowIndex: sortedRowIndex,
+      colIndex: sortedColIndex,
       currentValue: payload.y,
       xValue: payload.x
     });

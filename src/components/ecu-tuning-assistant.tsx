@@ -363,15 +363,14 @@ export default function EcuTuningAssistant() {
                 toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
                 return;
             }
-
-            if (type === 'bin' && binFile?.name !== file.name) {
+            
+            // If we are loading a new file of any type, we should clear the processed map state
+            // because the combination is now different.
+            if ((type === 'bin' && binFile?.name !== file.name) || (type === 'xdf' && xdfFile?.name !== file.name)) {
                 clearMapState();
+                if (type === 'xdf' && binFile) addLog(`Ficheiro BIN "${binFile.name}" mantido.`, "info");
+                if (type === 'bin' && xdfFile) addLog(`Ficheiro XDF "${xdfFile.name}" mantido.`, "info");
             }
-             if (type === 'xdf' && xdfFile?.name !== file.name) {
-                clearMapState();
-                if(binFile) addLog(`Ficheiro BIN "${binFile.name}" mantido.`, "info");
-            }
-
 
             if (type === 'bin' && buffer instanceof ArrayBuffer) {
                 setBinFile({ name: file.name, buffer });
