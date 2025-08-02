@@ -240,8 +240,8 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
 
             const dataSize = getDataSizeInBytes(embeddedData);
 
-            // Special override for 16x16 8-bit maps
-            if (yAxisDef.count === 16 && xAxisDef.count === 16 && dataSize === 1) {
+            // Special override for 16-column, 8-bit maps which often have a stride of 20 (0x14) bytes.
+            if (xAxisDef.count === 16 && dataSize === 1) {
                 rowStride = 20;
             }
 
@@ -443,7 +443,7 @@ export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefin
 
 export function readAndCalculateMapFromBinManual(
     binBuffer: ArrayBuffer, 
-    def: XDFDefinition, 
+    def: XDFinition, 
     manualConfig: ManualAxisConfig
 ): ProcessedMap {
 
@@ -468,7 +468,7 @@ export function readAndCalculateMapFromBinManual(
         dataSize: yStride,
         isBigEndian: manualConfig.isBigEndian ?? def.yAxisDef.isBigEndian
     };
-    const manualMapDef: XDFDefinition = { 
+    const manualMapDef: XDFinition = { 
         ...def, 
         equation: manualConfig.z.equation,
         dataSize: zStride,
@@ -557,6 +557,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
