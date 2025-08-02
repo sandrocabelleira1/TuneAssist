@@ -215,7 +215,7 @@ export default function EcuTuningAssistant() {
         e.target.value = '';
     };
 
-    const processMap = useCallback(async () => {
+    const processMap = useCallback(async (configToProcess: ManualAxisConfig) => {
         if (!selectedMapName || !binFile || !xdfFile) {
             return;
         }
@@ -234,13 +234,13 @@ export default function EcuTuningAssistant() {
             await new Promise(resolve => setTimeout(resolve, 0));
 
             addLog("A processar com as definições atuais (XDF/Manual)...", 'info');
-            const result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
+            const result = readAndCalculateMapFromBinManual(binFile.buffer, def, configToProcess);
             
             setProcessedMap(result);
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
             setIsModified(false);
             addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
-            if (manualConfig.z.rowStride === 20) {
+            if (configToProcess.z.rowStride === 20) {
                  addLog("Regra especial aplicada: Passo da linha forçado para 20.", 'info');
             }
 
@@ -253,13 +253,15 @@ export default function EcuTuningAssistant() {
         } finally {
             setIsProcessing(false);
         }
-    }, [selectedMapName, binFile, xdfFile, addLog, toast, manualConfig]);
+    }, [selectedMapName, binFile, xdfFile, addLog, toast]);
     
     useEffect(() => {
+        // This effect now only triggers a re-process if the config is changed manually by the user
+        // The initial processing is handled by handleMapSelect
         if (selectedMapName && binFile && xdfFile) {
-            processMap();
+            processMap(manualConfig);
         }
-    }, [selectedMapName, binFile, xdfFile, manualConfig, processMap]);
+    }, [manualConfig, selectedMapName, binFile, xdfFile, processMap]);
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -272,11 +274,16 @@ export default function EcuTuningAssistant() {
     };
     
     const handleMapSelect = (name: string) => {
-        if (!xdfFile) return;
+        if (!xdfFile || !binFile) return;
         const def = xdfFile.definitions.find(d => d.name === name);
-        if (!def || !def.xAxisDef || !def.yAxisDef) {
+        if (!def) return;
+        
+        setSelectedMapName(name);
+        setProcessedMap(null);
+
+        if (!def.xAxisDef || !def.yAxisDef) {
             setManualConfig(initialManualConfig);
-            setSelectedMapName(name);
+            processMap(initialManualConfig);
             return;
         }
 
@@ -300,11 +307,9 @@ export default function EcuTuningAssistant() {
             newManualConfig.z.rowStride = 20;
         }
 
-        // 3. Set state
+        // 3. Set state and trigger processing with the new config
         setManualConfig(newManualConfig);
-        setIsModified(false);
-        setProcessedMap(null);
-        setSelectedMapName(name);
+        processMap(newManualConfig);
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
@@ -631,7 +636,7 @@ export default function EcuTuningAssistant() {
                   </div>
                   <Button
                     size="sm"
-                    onClick={processMap}
+                    onClick={() => processMap(manualConfig)}
                     disabled={!selectedMapName || isProcessing}
                   >
                     {isProcessing && (
@@ -809,11 +814,3 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
-
-    
-
-    
-
-
-
-

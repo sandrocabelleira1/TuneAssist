@@ -544,32 +544,3 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     return newBuffer;
 }
 // #endregion
-
-
-
-
-
-
-
-
-    
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
