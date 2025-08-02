@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/chart';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { MapData, AxisData } from '@/lib/types';
+import type { MapData, AxisData, PlotOrientation } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -30,11 +30,11 @@ interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   mapData: MapData | null;
   xAxis: AxisData | null;
   yAxis: AxisData | null;
-  xAxisLabel?: string;
-  yAxisLabel?: string;
+  mapName?: string;
   selectedLineIndex: number | null;
   onLineSelect: (index: number) => void;
   onPointChange: (rowIndex: number, colIndex: number, newValue: number) => void;
+  orientation: PlotOrientation;
 }
 
 // State for the editing modal
@@ -46,35 +46,31 @@ type EditingPoint = {
 } | null;
 
 
-const yAxisTickFormatter = (value: any) => {
+const tickFormatter = (value: any) => {
     if (typeof value === 'string') return value;
     return typeof value === 'number' ? value.toFixed(1) : value;
 };
-  
-const xAxisTickFormatter = (value: any) => {
-    if (typeof value === 'string') return value;
-    return typeof value === 'number' ? Math.round(value) : value;
-};
 
 
-const RPMSelector = ({ yAxis, selectedLineIndex, onLineSelect }: { 
-    yAxis: AxisData,
+const AxisSelector = ({ axis, selectedLineIndex, onLineSelect, className }: { 
+    axis: AxisData,
     selectedLineIndex: number | null,
-    onLineSelect: (index: number) => void 
+    onLineSelect: (index: number) => void,
+    className?: string,
 }) => {
     return (
-        <ScrollArea className="h-full w-48 flex-shrink-0 border-r pr-2">
+        <ScrollArea className={cn("h-full w-48 flex-shrink-0 border-r pr-2", className)}>
             <div className="flex flex-col gap-1 py-1">
-                <h3 className="font-semibold text-sm px-3 py-1 text-muted-foreground">{yAxis.label}</h3>
-                {yAxis.calculated.map((rpm, index) => (
+                <h3 className="font-semibold text-sm px-3 py-1 text-muted-foreground">{axis.label}</h3>
+                {axis.calculated.map((val, index) => (
                     <Button
-                        key={`rpm-select-${index}`}
+                        key={`axis-select-${index}`}
                         variant={selectedLineIndex === index ? 'secondary' : 'ghost'}
                         size="sm"
                         className="w-full justify-start"
                         onClick={() => onLineSelect(index)}
                     >
-                        {yAxisTickFormatter(rpm)}
+                        {tickFormatter(val)}
                     </Button>
                 ))}
             </div>
@@ -86,33 +82,43 @@ export default function LinePlot2D({
   mapData,
   xAxis,
   yAxis,
-  xAxisLabel = 'Eixo X',
-  yAxisLabel = 'Valores',
+  mapName = 'Valores',
   className,
   selectedLineIndex,
   onLineSelect,
   onPointChange,
+  orientation,
   ...props
 }: LinePlot2DProps) {
 
   const [currentChartData, setCurrentChartData] = useState<any[] | null>(null);
-  const [editingPoint, setEditingPoint] = useState<EditingPoint>(null);
+  const [editingPoint, setEditingPoint] = useState<EditingPoint | null>(null);
 
-  const { chartData, lineDataKey, error } = useMemo(() => {
+  const { chartData, lineDataKey, error, chartXAxis, chartXAxisLabel } = useMemo(() => {
     if (
       !mapData || !xAxis?.calculated || !yAxis?.calculated ||
-      selectedLineIndex === null ||
-      selectedLineIndex >= mapData.length
+      selectedLineIndex === null
     ) {
-      return { chartData: null, lineDataKey: null, error: null };
+      return { chartData: null, lineDataKey: null, error: 'Dados em falta.', chartXAxis: null, chartXAxisLabel: '' };
     }
 
-    const lineData = mapData[selectedLineIndex];
+    const isYvsX = orientation === 'y-vs-x';
+    const selectorAxis = isYvsX ? yAxis : xAxis;
+    const graphAxis = isYvsX ? xAxis : yAxis;
+    
+    if(selectedLineIndex >= selectorAxis.calculated.length) {
+        return { chartData: null, lineDataKey: null, error: 'Índice da linha selecionada fora dos limites.', chartXAxis: null, chartXAxisLabel: '' };
+    }
+
+    const lineData = isYvsX
+      ? mapData[selectedLineIndex]
+      : mapData.map(row => row[selectedLineIndex]);
+
     if (!lineData) {
-      return { chartData: null, lineDataKey: null, error: 'Linha de dados selecionada é inválida.' };
+      return { chartData: null, lineDataKey: null, error: 'Linha de dados selecionada é inválida.', chartXAxis: null, chartXAxisLabel: '' };
     }
 
-    const preparedData = xAxis.calculated
+    const preparedData = graphAxis.calculated
         .map((xVal, i) => {
             const yVal = lineData[i];
             const numX = Number(xVal);
@@ -120,19 +126,26 @@ export default function LinePlot2D({
             if (isFinite(numX) && yVal !== null && yVal !== undefined && isFinite(numY)) {
                 return { x: numX, y: numY, originalIndex: i };
             }
-            return { x: numX, y: null, originalIndex: i }; // Keep point for connectNulls
+            return { x: numX, y: null, originalIndex: i };
         })
         .filter(d => d && isFinite(d.x)) as { x: number; y: number | null, originalIndex: number }[];
 
 
     if (preparedData.length === 0) {
-        return { chartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.' };
+        return { chartData: null, lineDataKey: null, error: 'Não há pontos de dados válidos para exibir para a linha selecionada.', chartXAxis: null, chartXAxisLabel: '' };
     }
+    
+    const selectedValue = selectorAxis.calculated[selectedLineIndex];
+    const lineDataKey = `${selectorAxis.label} ${tickFormatter(selectedValue)}`;
 
-    const lineDataKey = `${yAxis.label} ${yAxisTickFormatter(yAxis.calculated[selectedLineIndex])}`;
-
-    return { chartData: preparedData, lineDataKey, error: null };
-  }, [mapData, xAxis, yAxis, selectedLineIndex]);
+    return { 
+        chartData: preparedData, 
+        lineDataKey, 
+        error: null,
+        chartXAxis: graphAxis,
+        chartXAxisLabel: graphAxis.label,
+    };
+  }, [mapData, xAxis, yAxis, selectedLineIndex, orientation]);
   
   useEffect(() => {
     setCurrentChartData(chartData);
@@ -142,13 +155,21 @@ export default function LinePlot2D({
   const handlePointClick = (dotProps: any) => {
     if (selectedLineIndex === null || !xAxis || !yAxis || !dotProps.payload.y) return;
     const { payload } = dotProps;
-    
-    const originalRowIndex = yAxis.originalIndices[selectedLineIndex];
-    const originalColIndex = xAxis.originalIndices[payload.originalIndex];
+
+    const isYvsX = orientation === 'y-vs-x';
+    const selectorOriginalIndex = isYvsX 
+        ? yAxis.originalIndices[selectedLineIndex] 
+        : xAxis.originalIndices[selectedLineIndex];
+    const graphOriginalIndex = isYvsX
+        ? xAxis.originalIndices[payload.originalIndex]
+        : yAxis.originalIndices[payload.originalIndex];
+
+    const rowIndex = isYvsX ? selectorOriginalIndex : graphOriginalIndex;
+    const colIndex = isYvsX ? graphOriginalIndex : selectorOriginalIndex;
 
     setEditingPoint({
-      rowIndex: originalRowIndex,
-      colIndex: originalColIndex,
+      rowIndex: rowIndex,
+      colIndex: colIndex,
       currentValue: payload.y,
       xValue: payload.x
     });
@@ -198,16 +219,18 @@ export default function LinePlot2D({
     );
   }
 
+  const selectorAxis = orientation === 'y-vs-x' ? yAxis : xAxis;
+
   return (
     <div className={cn('h-full w-full bg-card rounded-lg border p-4 flex', className)} {...props}>
-        <RPMSelector yAxis={yAxis} selectedLineIndex={selectedLineIndex} onLineSelect={onLineSelect} />
+        <AxisSelector axis={selectorAxis} selectedLineIndex={selectedLineIndex} onLineSelect={onLineSelect} />
         <div className="flex-1 min-w-0">
             {selectedLineIndex === null ? (
                 <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
                     <div>
                         <AlertCircle className="mx-auto h-12 w-12" />
                         <p className="mt-4 font-semibold">Nenhuma Linha Selecionada</p>
-                        <p className="text-sm">Clique num valor de {yAxis.label} à esquerda para visualizar os seus dados.</p>
+                        <p className="text-sm">Clique num valor de {selectorAxis.label} à esquerda para visualizar os seus dados.</p>
                     </div>
                 </div>
             ) : error || !currentChartData || !lineDataKey ? (
@@ -229,15 +252,15 @@ export default function LinePlot2D({
                         type="number"
                         dataKey="x"
                         domain={['dataMin', 'dataMax']}
-                        tickFormatter={xAxisTickFormatter}
-                        label={{ value: xAxisLabel, position: 'insideBottom', offset: -15 }}
+                        tickFormatter={tickFormatter}
+                        label={{ value: chartXAxisLabel, position: 'insideBottom', offset: -15 }}
                         allowDuplicatedCategory={false}
                     />
                     <YAxis
                         type="number"
                         domain={['auto', 'auto']}
-                        tickFormatter={yAxisTickFormatter}
-                        label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }}
+                        tickFormatter={tickFormatter}
+                        label={{ value: mapName, angle: -90, position: 'insideLeft' }}
                     />
                     <Tooltip content={<ChartTooltipContent indicator="dot" />} />
                     <Legend verticalAlign="top" />
@@ -261,8 +284,8 @@ export default function LinePlot2D({
                 point={editingPoint}
                 onSave={handleSavePointChange}
                 onClose={() => setEditingPoint(null)}
-                yAxisLabel={yAxisLabel ?? "Valor"}
-                xAxisLabel={xAxisLabel ?? "Ponto"}
+                yAxisLabel={mapName}
+                xAxisLabel={chartXAxisLabel ?? "Ponto"}
             />
         )}
     </div>
@@ -295,7 +318,7 @@ function EditPointModal({ point, onSave, onClose, yAxisLabel, xAxisLabel }: {
                 <DialogHeader>
                     <DialogTitle>Editar Ponto do Gráfico</DialogTitle>
                     <DialogDescription>
-                        Modifique o valor para o ponto em {xAxisLabel} = {xAxisTickFormatter(point.xValue)}.
+                        Modifique o valor para o ponto em {xAxisLabel} = {tickFormatter(point.xValue)}.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">

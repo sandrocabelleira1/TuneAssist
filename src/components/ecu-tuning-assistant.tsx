@@ -9,9 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
-import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData } from '@/lib/types';
+import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -316,6 +316,7 @@ export default function EcuTuningAssistant() {
     const [isModified, setIsModified] = useState(false);
     
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
+    const [plotOrientation, setPlotOrientation] = useState<PlotOrientation>('y-vs-x');
 
     const [manualConfig, setManualConfig] = useState<ManualAxisConfig>(initialManualConfig);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -363,8 +364,14 @@ export default function EcuTuningAssistant() {
                 return;
             }
 
-            // A new file of any type invalidates the old map processing results
-            clearMapState();
+            if (type === 'bin' && binFile?.name !== file.name) {
+                clearMapState();
+            }
+             if (type === 'xdf' && xdfFile?.name !== file.name) {
+                clearMapState();
+                if(binFile) addLog(`Ficheiro BIN "${binFile.name}" mantido.`, "info");
+            }
+
 
             if (type === 'bin' && buffer instanceof ArrayBuffer) {
                 setBinFile({ name: file.name, buffer });
@@ -431,7 +438,8 @@ export default function EcuTuningAssistant() {
             setModifiedStatusCache(prev => ({...prev, [mapId]: false}));
             setIsModified(false);
 
-            setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
+            setSelectedLine(0);
+            setPlotOrientation('y-vs-x');
             addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
         } catch (error) {
             const errorMessage = `ERRO ao processar o mapa "${def.name}": ${(error as Error).message}`;
@@ -474,12 +482,13 @@ export default function EcuTuningAssistant() {
         }
         
         setSelectedMapId(id);
+        setSelectedLine(0);
+        setPlotOrientation('y-vs-x');
 
         if (processedMapCache[id]) {
             addLog(`A carregar o mapa "${xdfFile.definitions.find(d=>d.uniqueId === id)?.name}" da cache.`, 'info');
             setProcessedMap(processedMapCache[id]);
             setIsModified(modifiedStatusCache[id] ?? false);
-            setSelectedLine(processedMapCache[id]?.axes.y.calculated.length > 0 ? 0 : null);
             return;
         }
         
@@ -524,6 +533,33 @@ export default function EcuTuningAssistant() {
         setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
     };
+
+    const handlePointChange = (rowIndex: number, colIndex: number, newValue: number) => {
+        if (!processedMap || !processedMap.calculatedMap || !selectedMapId) return;
+    
+        const { originalIndices: xOriginalIndices } = processedMap.axes.x;
+        const { originalIndices: yOriginalIndices } = processedMap.axes.y;
+    
+        // The rowIndex and colIndex from the point change event are based on the *sorted* view.
+        // We need to map them back to the original, unsorted indices to update the correct cell.
+        const originalRowIdx = yOriginalIndices[rowIndex];
+        const originalColIdx = xOriginalIndices[colIndex];
+    
+        addLog(`Alteração de ponto [${rowIndex}, ${colIndex}] (Original [${originalRowIdx}, ${originalColIdx}]) para ${newValue.toFixed(2)}`, 'info');
+    
+        const newMap = processedMap.calculatedMap.map(row => [...row]);
+        newMap[rowIndex][colIndex] = newValue; // Update the sorted map for immediate UI feedback
+    
+        // We also need to update the raw map if we want saving to work correctly.
+        // This part can be tricky if the inversion is complex. For now, let's update calculatedMap and handle saving later.
+        const newProcessedMap = { ...processedMap, calculatedMap: newMap };
+        setProcessedMap(newProcessedMap);
+        
+        setIsModified(true);
+        setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
+        setModifiedStatusCache(prev => ({ ...prev, [selectedMapId]: true }));
+    };
+
 
     const handleMassUpdate = (
         selection: CellSelection,
@@ -640,6 +676,11 @@ export default function EcuTuningAssistant() {
         const successMsg = `Padrão salvo para mapas ${structureKey}. Será aplicado automaticamente.`;
         addLog(successMsg, "success");
         toast({ title: "Padrão Salvo", description: successMsg });
+    };
+
+    const togglePlotOrientation = () => {
+        setPlotOrientation(prev => prev === 'y-vs-x' ? 'x-vs-y' : 'y-vs-x');
+        setSelectedLine(0); // Reset selection when toggling
     };
 
     return (
@@ -1086,18 +1127,32 @@ export default function EcuTuningAssistant() {
                           </div>
                         )}
                       </TabsContent>
-                      <TabsContent value="view-2d" className="flex-1 min-h-0 mt-4">
+                      <TabsContent value="view-2d" className="flex-1 min-h-0 mt-4 flex flex-col gap-2">
+                         <div className="flex items-center gap-2 self-start">
+                           <TooltipProvider>
+                             <Tooltip>
+                               <TooltipTrigger asChild>
+                                  <Button variant="outline" size="icon" onClick={togglePlotOrientation}>
+                                    <ArrowRightLeft className="h-4 w-4" />
+                                  </Button>
+                               </TooltipTrigger>
+                               <TooltipContent>
+                                 <p>Inverter Eixos do Gráfico</p>
+                               </TooltipContent>
+                             </Tooltip>
+                           </TooltipProvider>
+                          </div>
                         <LinePlot2D
                           mapData={processedMap?.calculatedMap ?? null}
                           xAxis={processedMap?.axes?.x ?? null}
                           yAxis={processedMap?.axes?.y ?? null}
-                          xAxisLabel={processedMap?.axes?.x.label}
-                          yAxisLabel={
+                          mapName={
                             selectedMapDefinition?.name || 'Mapa Principal'
                           }
                           selectedLineIndex={selectedLine}
                           onLineSelect={setSelectedLine}
-                          onPointChange={handleCellChange}
+                          onPointChange={handlePointChange}
+                          orientation={plotOrientation}
                         />
                       </TabsContent>
                     </>

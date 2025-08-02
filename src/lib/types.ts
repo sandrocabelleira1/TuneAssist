@@ -1,5 +1,6 @@
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -20,7 +21,7 @@ export type AxisDimension = {
   requiresSort: boolean;
 };
 
-export type XDFDefinition = {
+export type XDFinition = {
   uniqueId: string;
   name:string;
   address: number;
@@ -63,3 +64,5 @@ export type ManualAxisConfig = {
   sortX?: boolean;
   sortY?: boolean;
 };
+
+export type PlotOrientation = 'y-vs-x' | 'x-vs-y';
