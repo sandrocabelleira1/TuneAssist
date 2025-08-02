@@ -237,19 +237,16 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const zDataSizeBits = zDataSizeBitsAttr ? parseInt(zDataSizeBitsAttr, 10) : 0;
             const dataSize = (zDataSizeBits > 0) ? zDataSizeBits / 8 : 1;
             
-            // Start with the row stride from the file, if it exists
+            // Read row stride from the file first, if it exists.
             let rowStride;
             const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
             if(rowStrideAttr) {
                 rowStride = parseInt(rowStrideAttr, 16);
             }
 
-            // Correct rule implementation as per user specification.
-            // This rule has priority over any value from the XDF file.
-            const xAxisTotalBytes = xAxisDef.count * (xAxisDef.dataSize || 1);
-            const yAxisTotalBytes = yAxisDef.count * (yAxisDef.dataSize || 1);
-
-            if (xAxisTotalBytes === 16 && yAxisTotalBytes === 16 && dataSize === 1) {
+            // Override Rule: This is the final check and will override any value from the XDF.
+            // This rule is applied based on the common memory architecture for these specific map types.
+            if (xAxisDef.count === 16 && yAxisDef.count === 16 && zDataSizeBits === 8) {
                 rowStride = 20;
             }
 
@@ -565,6 +562,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
