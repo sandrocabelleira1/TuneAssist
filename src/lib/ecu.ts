@@ -211,6 +211,8 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
     });
 
     const definitions: XDFinition[] = [];
+    const specialIgnitionMaps = ['ign1', 'ign2', 'ign3', 'ign4', 'ign5/6'];
+
 
     allTablesMap.forEach((tableEl, uniqueId) => {
         const tableName = findNode(tableEl, 'title')?.textContent?.trim();
@@ -237,16 +239,13 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const zDataSizeBits = zDataSizeBitsAttr ? parseInt(zDataSizeBitsAttr, 10) : 0;
             const dataSize = (zDataSizeBits > 0) ? zDataSizeBits / 8 : 1;
             
-            // Read row stride from the file first, if it exists.
             let rowStride;
             const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
             if(rowStrideAttr) {
                 rowStride = parseInt(rowStrideAttr, 16);
             }
 
-            // Override Rule: This is the final check and will override any value from the XDF.
-            // This rule is applied based on the common memory architecture for these specific map types.
-            if (xAxisDef.count === 16 && yAxisDef.count === 16 && zDataSizeBits === 8) {
+            if (specialIgnitionMaps.includes(tableName.toLowerCase())) {
                 rowStride = 20;
             }
 
@@ -562,6 +561,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
