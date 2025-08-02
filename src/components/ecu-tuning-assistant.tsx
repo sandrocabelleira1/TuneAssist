@@ -209,10 +209,6 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if ((type === 'bin' && xdfFile) || (type === 'xdf' && binFile)) {
-             resetSession();
-        }
-
         addLog(`A ler o ficheiro ${file.name}...`);
         
         const reader = new FileReader();
@@ -920,6 +916,8 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
 
     
 
