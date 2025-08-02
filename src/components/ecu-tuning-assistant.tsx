@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -252,10 +252,9 @@ export default function EcuTuningAssistant() {
 
     const handleMapSelect = (name: string) => {
         setSelectedMapName(name);
-
         const def = xdfFile?.definitions.find(d => d.name === name);
 
-        if (!def) {
+        if (!def || !def.xAxisDef || !def.yAxisDef) {
             setManualConfig(initialManualConfig);
             setProcessedMap(null);
             setIsModified(false);
@@ -263,23 +262,23 @@ export default function EcuTuningAssistant() {
         }
 
         const newManualConfig: ManualAxisConfig = {
-            x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef?.dataSize },
-            y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef?.dataSize },
-            z: { 
-                equation: def.equation || 'x', 
-                stride: def.dataSize, 
-                rowStride: def.rowStride 
+            x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
+            y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
+            z: {
+                equation: def.equation || 'x',
+                stride: def.dataSize,
+                rowStride: def.rowStride
             },
             isBigEndian: def.isBigEndian,
-            sortX: def.xAxisDef?.requiresSort,
-            sortY: def.yAxisDef?.requiresSort,
+            sortX: def.xAxisDef.requiresSort,
+            sortY: def.yAxisDef.requiresSort,
         };
 
         const isSpecial16x16Map = def.dataSize === 1 && def.cols === 16 && def.rows === 16;
         if (isSpecial16x16Map) {
             newManualConfig.z.rowStride = 20;
         }
-    
+
         setManualConfig(newManualConfig);
         setProcessedMap(null);
         setIsModified(false);
@@ -289,8 +288,7 @@ export default function EcuTuningAssistant() {
         if (selectedMapName && binFile && xdfFile) {
             processMap();
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName, manualConfig, binFile, xdfFile]);
+    }, [selectedMapName, manualConfig, binFile, xdfFile, processMap]);
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -808,5 +806,7 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
 
     
