@@ -262,16 +262,16 @@ export default function EcuTuningAssistant() {
         }
     
         const newManualConfig: ManualAxisConfig = {
-            x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef.dataSize },
-            y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef.dataSize },
+            x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef?.dataSize },
+            y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef?.dataSize },
             z: { 
                 equation: def.equation || 'x', 
                 stride: def.dataSize, 
                 rowStride: def.rowStride 
             },
             isBigEndian: def.isBigEndian,
-            sortX: def.xAxisDef.requiresSort,
-            sortY: def.yAxisDef.requiresSort,
+            sortX: def.xAxisDef?.requiresSort,
+            sortY: def.yAxisDef?.requiresSort,
         };
         
         const isSpecial16x16Map = def.dataSize === 1 && def.cols === 16 && def.rows === 16;
