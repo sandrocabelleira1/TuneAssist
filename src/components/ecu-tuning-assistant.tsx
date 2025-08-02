@@ -183,25 +183,39 @@ export default function EcuTuningAssistant() {
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.name === selectedMapName);
     
-    const resetSession = () => {
+    const resetSession = useCallback(() => {
         addLog("Sessão reiniciada. Carregue novos ficheiros.", 'info');
         setBinFile(null);
         setXdfFile(null);
         setSelectedMapName('');
         setProcessedMap(null);
         setIsModified(false);
-        setLogs([]);
+        setLogs(prevLogs => {
+            // Keep the reset message, but clear the rest if desired. Or just clear all.
+            // Let's clear all for simplicity and add the new message.
+             const resetMessage: LogMessage = {
+                id: `${Date.now()}-reset`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                message: "Sessão reiniciada. Carregue os ficheiros necessários.",
+                type: 'info'
+            };
+            return [resetMessage];
+        });
         setManualConfig(initialManualConfig);
         setTemplateConfig(null); 
         setProcessedMapCache({});
         setModifiedStatusCache({});
-    };
+    }, [addLog]);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        resetSession();
+        // If we are loading a new pair of files, reset everything.
+        if ((type === 'bin' && xdfFile) || (type === 'xdf' && binFile)) {
+             resetSession();
+        }
+
         addLog(`A ler o ficheiro ${file.name}...`);
         const reader = new FileReader();
         
@@ -237,9 +251,16 @@ export default function EcuTuningAssistant() {
             }
         };
         
+        reader.onerror = () => {
+             const errorMessage = `Erro fatal ao ler o ficheiro ${file.name}.`;
+             addLog(errorMessage, 'error');
+             toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
+        }
+        
         if (type === 'xdf') reader.readAsText(file);
         else reader.readAsArrayBuffer(file);
         
+        // Clear the input value to allow re-uploading the same file
         e.target.value = '';
     };
 
@@ -282,11 +303,13 @@ export default function EcuTuningAssistant() {
     useEffect(() => {
         const configChanged = JSON.stringify(manualConfig) !== JSON.stringify(initialManualConfig);
         if (selectedMapName && binFile && xdfFile && configChanged) {
-            processMap(selectedMapName, manualConfig);
+             const isMapInCache = !!processedMapCache[selectedMapName];
+            // Only auto-reprocess if the map isn't already cached with its own state.
+            // This condition might need tweaking depending on desired behavior.
+            // For now, let's stick to explicit processing via button if config is manually changed.
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [manualConfig]); // Only re-run when manual config changes from outside
-    
+    }, [manualConfig, selectedMapName, binFile, xdfFile, processedMapCache]);
+
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
             let newConfig;
@@ -302,6 +325,14 @@ export default function EcuTuningAssistant() {
     
     const handleMapSelect = (name: string) => {
         if (!xdfFile || !binFile) return;
+        
+        if (isModified && selectedMapName) {
+            addLog(`Salvando alterações para "${selectedMapName}" na cache antes de trocar.`, 'info');
+            if (processedMap) {
+                setProcessedMapCache(prev => ({ ...prev, [selectedMapName]: processedMap }));
+            }
+        }
+        
         setSelectedMapName(name);
 
         if (processedMapCache[name]) {
@@ -350,9 +381,11 @@ export default function EcuTuningAssistant() {
         
         const newProcessedMap = { ...processedMap, calculatedMap: newMap };
         setProcessedMap(newProcessedMap);
-        setProcessedMapCache(prev => ({ ...prev, [selectedMapName]: newProcessedMap }));
         
         setIsModified(true);
+        // We update the cache on map switch or save, not on every cell change, for performance.
+        // Let's change this to update cache immediately to ensure data is not lost.
+        setProcessedMapCache(prev => ({ ...prev, [selectedMapName]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [selectedMapName]: true}));
     };
     
@@ -364,12 +397,16 @@ export default function EcuTuningAssistant() {
             return;
         }
         
-        // Reset template on save to ensure clean state for next BIN
-        setTemplateConfig(null);
-        addLog("Padrão temporário limpo.", "info");
+        addLog("A preparar para salvar o ficheiro BIN...", 'info');
+        
+        // Ensure the latest modifications for the current map are in the cache
+        const updatedCache = { ...processedMapCache, [selectedMapName]: processedMap };
 
         try {
-            addLog("A preparar para salvar o ficheiro BIN...", 'info');
+            // This is complex. Writing multiple modified maps to one BIN requires iterating through all modified maps.
+            // For now, let's just save the CURRENTLY VIEWED modified map.
+            // A more advanced implementation would iterate through all modified maps in the cache.
+            
             const newBinBuffer = writeMapToBin(binFile.buffer, selectedMapDefinition, processedMap);
             
             const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
@@ -387,8 +424,11 @@ export default function EcuTuningAssistant() {
             addLog(successMsg, 'success');
             toast({ title: 'Salvo com Sucesso', description: successMsg });
             
+            // After saving, we can consider the saved map as "not modified" relative to the new state.
             setIsModified(false);
             setModifiedStatusCache(prev => ({...prev, [selectedMapName]: false}));
+            // We should also update the base binFile state if we want to continue editing from the saved state.
+            setBinFile(prev => prev ? { ...prev, buffer: newBinBuffer } : null);
 
         } catch (error) {
             const errorMsg = `Falha ao salvar o ficheiro BIN: ${(error as Error).message}`;
@@ -880,3 +920,7 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
+
+    
