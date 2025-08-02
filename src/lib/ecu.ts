@@ -1,5 +1,4 @@
 
-
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
 
 // #region Utility Functions
@@ -211,7 +210,6 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
     });
 
     const definitions: XDFinition[] = [];
-    const specialIgnitionMaps = ['ign1', 'ign2', 'ign3', 'ign4', 'ign5/6'];
 
     allTablesMap.forEach((tableEl, uniqueId) => {
         const tableName = findNode(tableEl, 'title')?.textContent?.trim();
@@ -242,11 +240,6 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
             if(rowStrideAttr) {
                 rowStride = parseInt(rowStrideAttr, 16);
-            }
-            
-            // Override rule: Apply row stride of 20 for specific ignition maps
-            if (specialIgnitionMaps.includes(tableName.toLowerCase())) {
-                rowStride = 20;
             }
 
             definitions.push({
@@ -479,9 +472,8 @@ export function readAndCalculateMapFromBinManual(
         isBigEndian: manualConfig.isBigEndian ?? def.isBigEndian
     };
     
-    // When manual row stride is provided, it's safer to assume the original data order is desired.
-    let sortX = manualConfig.z.rowStride !== undefined ? false : (manualConfig.sortX ?? def.xAxisDef.requiresSort);
-    let sortY = manualConfig.z.rowStride !== undefined ? false : (manualConfig.sortY ?? def.yAxisDef.requiresSort);
+    let sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
+    let sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
     
     // Reread axes and map from scratch using manual configuration
     const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualXAxisDef.dataSize);
@@ -550,3 +542,5 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     return newBuffer;
 }
 // #endregion
+
+    

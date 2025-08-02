@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -10,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -147,6 +146,12 @@ const initialManualConfig: ManualAxisConfig = {
     sortY: false,
 };
 
+type StructureTemplate = {
+    structureKey: string;
+    config: ManualAxisConfig;
+};
+
+
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
@@ -161,6 +166,8 @@ export default function EcuTuningAssistant() {
 
     const [manualConfig, setManualConfig] = useState<ManualAxisConfig>(initialManualConfig);
     const [isProcessing, setIsProcessing] = useState(false);
+    
+    const [templateConfig, setTemplateConfig] = useState<StructureTemplate | null>(null);
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
@@ -171,10 +178,24 @@ export default function EcuTuningAssistant() {
     }, []);
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.name === selectedMapName);
+    
+    const resetSession = () => {
+        setBinFile(null);
+        setXdfFile(null);
+        setSelectedMapName('');
+        setProcessedMap(null);
+        setIsModified(false);
+        setLogs([]);
+        setManualConfig(initialManualConfig);
+        setTemplateConfig(null); 
+        addLog("Sessão reiniciada. Carregue novos ficheiros.", 'info');
+    };
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        resetSession();
 
         addLog(`A ler o ficheiro ${file.name}...`);
         const reader = new FileReader();
@@ -240,11 +261,6 @@ export default function EcuTuningAssistant() {
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
             setIsModified(false);
             addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
-            if (configToProcess.z.rowStride === 20) {
-                 addLog("Regra especial aplicada: Passo da linha forçado para 20.", 'info');
-            }
-
-
         } catch (error) {
             const errorMessage = `ERRO ao processar o mapa "${def.name}": ${(error as Error).message}`;
             addLog(errorMessage, 'error');
@@ -259,7 +275,7 @@ export default function EcuTuningAssistant() {
         if (selectedMapName && binFile && xdfFile) {
             processMap(manualConfig);
         }
-    }, [manualConfig]); // This effect now only triggers a re-process when manualConfig changes.
+    }, [manualConfig, selectedMapName, binFile, xdfFile, processMap]);
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -269,10 +285,6 @@ export default function EcuTuningAssistant() {
                  newConfig = { ...prev, [axis]: { ...prev[axis], [subfield]: numValue }};
             } else {
                  newConfig = { ...prev, [axis]: value };
-            }
-            // Trigger re-processing by calling processMap directly after state change
-            if (selectedMapName && binFile) {
-                processMap(newConfig);
             }
             return newConfig;
         });
@@ -284,27 +296,30 @@ export default function EcuTuningAssistant() {
         if (!def) return;
         
         setSelectedMapName(name);
-        setProcessedMap(null);
 
-        if (!def.xAxisDef || !def.yAxisDef) {
-            setManualConfig(initialManualConfig);
-            return;
+        const mapStructureKey = `${def.rows}x${def.cols}`;
+        
+        let configToApply = initialManualConfig;
+        
+        // Base config from XDF
+        if (def.xAxisDef && def.yAxisDef) {
+            configToApply = {
+                x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
+                y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
+                z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: def.rowStride },
+                isBigEndian: def.isBigEndian,
+                sortX: def.xAxisDef.requiresSort,
+                sortY: def.yAxisDef.requiresSort,
+            };
         }
 
-        const newManualConfig: ManualAxisConfig = {
-            x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
-            y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
-            z: {
-                equation: def.equation || 'x',
-                stride: def.dataSize,
-                rowStride: def.rowStride // This will now correctly have 20 if the rule in `parseXDF` was applied
-            },
-            isBigEndian: def.isBigEndian,
-            sortX: def.xAxisDef.requiresSort,
-            sortY: def.yAxisDef.requiresSort,
-        };
+        // Check if a template exists for this structure and apply it
+        if (templateConfig && templateConfig.structureKey === mapStructureKey) {
+            addLog(`Padrão encontrado para estrutura ${mapStructureKey}. A aplicar substituições.`, 'info');
+            configToApply = { ...configToApply, ...templateConfig.config };
+        }
         
-        setManualConfig(newManualConfig);
+        setManualConfig(configToApply);
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
@@ -325,6 +340,10 @@ export default function EcuTuningAssistant() {
             toast({ title: 'Erro ao Salvar', description: msg, variant: 'destructive' });
             return;
         }
+        
+        // Reset template on save to ensure clean state for next BIN
+        setTemplateConfig(null);
+        addLog("Padrão temporário limpo.", "info");
 
         try {
             addLog("A preparar para salvar o ficheiro BIN...", 'info');
@@ -353,6 +372,22 @@ export default function EcuTuningAssistant() {
         }
     }
     
+    const handleSetTemplate = () => {
+        if (!selectedMapDefinition) {
+            toast({ title: "Nenhum Mapa Selecionado", description: "Selecione um mapa primeiro para definir um padrão.", variant: "destructive"});
+            return;
+        }
+        const structureKey = `${selectedMapDefinition.rows}x${selectedMapDefinition.cols}`;
+        const newTemplate: StructureTemplate = {
+            structureKey,
+            config: manualConfig,
+        };
+        setTemplateConfig(newTemplate);
+        const successMsg = `Padrão salvo para mapas ${structureKey}. Será aplicado automaticamente.`;
+        addLog(successMsg, "success");
+        toast({ title: "Padrão Salvo", description: successMsg });
+    };
+
     return (
       <div className="flex h-full w-full bg-background">
         <SidebarProvider>
@@ -629,16 +664,27 @@ export default function EcuTuningAssistant() {
                     />
                     <Label htmlFor="big-endian">Big Endian</Label>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={() => processMap(manualConfig)}
-                    disabled={!selectedMapName || isProcessing}
-                  >
-                    {isProcessing && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Aplicar e Recalcular
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => processMap(manualConfig)}
+                      disabled={!selectedMapName || isProcessing}
+                    >
+                      {isProcessing ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : <Play className="mr-2" /> }
+                      Aplicar e Recalcular
+                    </Button>
+                     <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleSetTemplate}
+                        disabled={!selectedMapName}
+                    >
+                        <Star className="mr-2" />
+                        Usar como Padrão
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -809,3 +855,5 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
