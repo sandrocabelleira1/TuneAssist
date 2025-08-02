@@ -336,6 +336,7 @@ function processMap(
     const addressMap: MapData = Array.from({ length: mapDef.rows }, () => Array(mapDef.cols).fill(null));
     
     const rowStride = rowStrideOverride ?? mapDef.rowStride ?? (mapDef.cols * effectiveZStride);
+    const colStride = mapDef.rows * effectiveZStride;
 
     for (let r = 0; r < mapDef.rows; r++) {
         for (let c = 0; c < mapDef.cols; c++) {
@@ -344,7 +345,6 @@ function processMap(
             if (mapDef.isRowMajor) {
                  offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
             } else { // col_major
-                 const colStride = mapDef.rows * effectiveZStride;
                  offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
             }
             
@@ -468,8 +468,9 @@ export function readAndCalculateMapFromBinManual(
         isBigEndian: manualConfig.isBigEndian ?? def.isBigEndian
     };
     
-    let sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
-    let sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
+    // When manual row stride is provided, it's safer to assume the original data order is desired.
+    let sortX = manualConfig.z.rowStride !== undefined ? false : (manualConfig.sortX ?? def.xAxisDef.requiresSort);
+    let sortY = manualConfig.z.rowStride !== undefined ? false : (manualConfig.sortY ?? def.yAxisDef.requiresSort);
     
     // Reread axes and map from scratch using manual configuration
     const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualXAxisDef.dataSize);
@@ -549,6 +550,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
