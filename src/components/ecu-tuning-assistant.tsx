@@ -198,7 +198,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         const minY = Math.min(selection.start.y, selection.end.y);
         const maxY = Math.max(selection.start.y, selection.end.y);
         const minX = Math.min(selection.start.x, selection.end.x);
-        const maxX = Math.max(selection.start.x, selection.end.y);
+        const maxX = Math.max(selection.start.y, selection.end.y);
         return y >= minY && y <= maxY && x >= minX && x <= maxX;
     };
     
@@ -321,6 +321,7 @@ export default function EcuTuningAssistant() {
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
     
     const resetSession = useCallback(() => {
+        addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
         setBinFile(null);
         setXdfFile(null);
         setSelectedMapId('');
@@ -339,17 +340,19 @@ export default function EcuTuningAssistant() {
         setTemplateConfig(null); 
         setProcessedMapCache({});
         setModifiedStatusCache({});
-    }, [addLog]);
+    }, []);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Reset if we're loading a new pair of files
-        if ((type === 'bin' && xdfFile) || (type === 'xdf' && binFile)) {
-             addLog("Sessão reiniciada. A carregar novos ficheiros...", 'info');
-             resetSession();
-             await new Promise(resolve => setTimeout(resolve, 0));
+        // Determine if we need to reset the session
+        const isNewSession = (type === 'bin' && (binFile || xdfFile)) || (type === 'xdf' && (binFile || xdfFile));
+
+        if (isNewSession) {
+            resetSession();
+            // Await a tick to ensure state reset before proceeding
+            await new Promise(resolve => setTimeout(resolve, 0));
         }
 
         addLog(`A ler o ficheiro ${file.name}...`, 'info');
