@@ -253,12 +253,12 @@ export default function EcuTuningAssistant() {
 
     const handleMapSelect = (name: string) => {
         setSelectedMapName(name);
-        const def = xdfFile?.definitions.find(d => d.name === name);
+        setProcessedMap(null);
+        setIsModified(false);
 
+        const def = xdfFile?.definitions.find(d => d.name === name);
         if (!def || !def.xAxisDef || !def.yAxisDef) {
             setManualConfig(initialManualConfig);
-            setProcessedMap(null);
-            setIsModified(false);
             return;
         }
 
@@ -274,17 +274,21 @@ export default function EcuTuningAssistant() {
             sortX: def.xAxisDef.requiresSort,
             sortY: def.yAxisDef.requiresSort,
         };
+        
+        const isSpecialMap = def.cols === 16 && def.rows === 16 && def.dataSize === 1;
+        if (isSpecialMap) {
+            newManualConfig.z.rowStride = 20;
+            addLog("Regra especial aplicada: Mapa 16x16 8-bit detectado. Passo da linha definido para 20.", 'info');
+        }
 
         setManualConfig(newManualConfig);
-        setProcessedMap(null);
-        setIsModified(false);
     };
     
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
             processMap();
         }
-    }, [selectedMapName, binFile, xdfFile, manualConfig, processMap]);
+    }, [selectedMapName, processMap]); // Removed manualConfig from deps to let handleMapSelect control it
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -806,4 +810,5 @@ export default function EcuTuningAssistant() {
     
 
     
+
 

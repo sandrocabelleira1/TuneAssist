@@ -210,7 +210,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
         if (id) allTablesMap.set(id, tableEl);
     });
 
-    const definitions: XDFDefinition[] = [];
+    const definitions: XDFinition[] = [];
 
     allTablesMap.forEach((tableEl, uniqueId) => {
         const tableName = findNode(tableEl, 'title')?.textContent?.trim();
@@ -241,10 +241,6 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
             if(rowStrideAttr) {
                 rowStride = parseInt(rowStrideAttr, 16);
-            }
-
-            if (xAxisDef.count === 16 && yAxisDef.count === 16 && zDataSizeBits === 8) {
-                rowStride = 20;
             }
 
             definitions.push({
@@ -329,7 +325,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
 
 function processMap(
     binBuffer: ArrayBuffer, 
-    mapDef: XDFDefinition, 
+    mapDef: XDFinition, 
     xAxisData: AxisData, 
     yAxisData: AxisData,
     sortX: boolean,
@@ -559,6 +555,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
