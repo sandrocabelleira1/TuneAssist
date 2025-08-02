@@ -319,7 +319,7 @@ export default function EcuTuningAssistant() {
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
     
-    const resetSession = useCallback((initiatingFileType?: 'bin' | 'xdf') => {
+    const resetSession = useCallback(() => {
         addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
         setBinFile(null);
         setXdfFile(null);
@@ -333,23 +333,15 @@ export default function EcuTuningAssistant() {
         setModifiedStatusCache({});
     }, [addLog]);
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
-
-        // Determine if this is the start of a new pair of files
-        const isNewSession = (type === 'bin' && xdfFile) || (type === 'xdf' && binFile);
-        if (isNewSession) {
-             resetSession();
-             // Use a timeout to ensure state update completes before proceeding
-             await new Promise(resolve => setTimeout(resolve, 0));
-        }
 
         addLog(`A ler o ficheiro ${file.name}...`, 'info');
         
         const reader = new FileReader();
         
-        reader.onload = async (event) => {
+        reader.onload = (event) => {
             const buffer = event.target?.result;
             if (!buffer) {
                 const errorMessage = `Erro ao ler o ficheiro ${file.name}`;
@@ -526,8 +518,7 @@ export default function EcuTuningAssistant() {
         const { start, end } = selection;
         const minY = Math.min(start.y, end.y);
         const maxY = Math.max(start.y, end.y);
-        const minX = Math.min(start.x, end.x);
-        const maxX = Math.max(start.x, end.y);
+        const minX = Math.min(start.x, end.y);
 
         for (let y = minY; y <= maxY; y++) {
             for (let x = minX; x <= maxX; x++) {
