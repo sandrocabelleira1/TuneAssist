@@ -251,27 +251,37 @@ export default function EcuTuningAssistant() {
     }, [selectedMapName, binFile, xdfFile, manualConfig, addLog, toast]);
 
     const handleMapSelect = (name: string) => {
+        const def = xdfFile?.definitions.find(d => d.name === name);
+        if (!def) {
+            setSelectedMapName(name);
+            setProcessedMap(null);
+            setIsModified(false);
+            setManualConfig(initialManualConfig);
+            return;
+        }
+    
+        const newManualConfig: ManualAxisConfig = {
+            x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef.dataSize },
+            y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef.dataSize },
+            z: { 
+                equation: def.equation || 'x', 
+                stride: def.dataSize, 
+                rowStride: def.rowStride 
+            },
+            isBigEndian: def.isBigEndian,
+            sortX: def.xAxisDef.requiresSort,
+            sortY: def.yAxisDef.requiresSort,
+        };
+        
+        const isSpecial16x16Map = def.dataSize === 1 && def.cols === 16 && def.rows === 16;
+        if (isSpecial16x16Map) {
+            newManualConfig.z.rowStride = 20;
+        }
+    
+        setManualConfig(newManualConfig);
         setSelectedMapName(name);
         setProcessedMap(null);
         setIsModified(false);
-        const def = xdfFile?.definitions.find(d => d.name === name);
-        if (def) {
-            const isSpecial16x16Map = def.dataSize === 1 && def.cols === 16 && def.rows === 16;
-            setManualConfig({
-                x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef.dataSize },
-                y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef.dataSize },
-                z: { 
-                    equation: def.equation || 'x', 
-                    stride: def.dataSize, 
-                    rowStride: isSpecial16x16Map ? 20 : def.rowStride 
-                },
-                isBigEndian: def.isBigEndian,
-                sortX: def.xAxisDef.requiresSort,
-                sortY: def.yAxisDef.requiresSort,
-            });
-        } else {
-             setManualConfig(initialManualConfig);
-        }
     };
 
     useEffect(() => {
@@ -798,4 +808,5 @@ export default function EcuTuningAssistant() {
     );
 }
 
+    
     
