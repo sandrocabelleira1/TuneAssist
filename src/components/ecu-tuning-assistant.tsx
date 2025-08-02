@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -283,13 +282,21 @@ export default function EcuTuningAssistant() {
 
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
-            // Check if we are using manual overrides from the start
             const def = xdfFile?.definitions.find(d => d.name === selectedMapName);
-            const isSpecial16x16Map = def && def.dataSize === 1 && def.cols === 16 && def.rows === 16;
+            if (!def) { processMap(false); return; }
+
+            const isSpecial16x16Map = def.dataSize === 1 && def.cols === 16 && def.rows === 16;
             
-            const isManual = manualConfig.z.rowStride !== (isSpecial16x16Map ? 20 : def?.rowStride) ||
-                             manualConfig.x.stride !== def?.xAxisDef.dataSize ||
-                             manualConfig.y.stride !== def?.yAxisDef.dataSize;
+            const isManual = (manualConfig.x.stride !== def.xAxisDef.dataSize) ||
+                             (manualConfig.y.stride !== def.yAxisDef.dataSize) ||
+                             (manualConfig.z.stride !== def.dataSize) ||
+                             (manualConfig.z.rowStride !== (isSpecial16x16Map ? 20 : def.rowStride)) ||
+                             (manualConfig.x.equation !== (def.xAxisDef.equation || 'x')) ||
+                             (manualConfig.y.equation !== (def.yAxisDef.equation || 'x')) ||
+                             (manualConfig.z.equation !== (def.equation || 'x')) ||
+                             (manualConfig.isBigEndian !== def.isBigEndian) ||
+                             (manualConfig.sortX !== def.xAxisDef.requiresSort) ||
+                             (manualConfig.sortY !== def.yAxisDef.requiresSort);
 
             processMap(isManual);
         }
@@ -812,3 +819,5 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
