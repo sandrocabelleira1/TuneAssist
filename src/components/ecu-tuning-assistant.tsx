@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -240,8 +240,8 @@ export default function EcuTuningAssistant() {
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
             setIsModified(false);
             addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
-             if (def.rowStride === 20) {
-                addLog("Regra especial aplicada: Mapa 16x16 8-bit detectado. Passo da linha definido para 20.", 'info');
+            if (manualConfig.z.rowStride === 20) {
+                 addLog("Regra especial aplicada: Passo da linha forçado para 20.", 'info');
             }
 
 
@@ -255,30 +255,6 @@ export default function EcuTuningAssistant() {
         }
     }, [selectedMapName, binFile, xdfFile, addLog, toast, manualConfig]);
     
-    useEffect(() => {
-        const def = xdfFile?.definitions.find(d => d.name === selectedMapName);
-        if (!def || !def.xAxisDef || !def.yAxisDef) {
-            setManualConfig(initialManualConfig);
-            return;
-        }
-
-        const newManualConfig: ManualAxisConfig = {
-            x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
-            y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
-            z: {
-                equation: def.equation || 'x',
-                stride: def.dataSize,
-                rowStride: def.rowStride
-            },
-            isBigEndian: def.isBigEndian,
-            sortX: def.xAxisDef.requiresSort,
-            sortY: def.yAxisDef.requiresSort,
-        };
-        setManualConfig(newManualConfig);
-
-    }, [selectedMapName, xdfFile]);
-
-
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
             processMap();
@@ -296,6 +272,36 @@ export default function EcuTuningAssistant() {
     };
     
     const handleMapSelect = (name: string) => {
+        if (!xdfFile) return;
+        const def = xdfFile.definitions.find(d => d.name === name);
+        if (!def || !def.xAxisDef || !def.yAxisDef) {
+            setManualConfig(initialManualConfig);
+            setSelectedMapName(name);
+            return;
+        }
+
+        // 1. Create base config from XDF
+        const newManualConfig: ManualAxisConfig = {
+            x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
+            y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
+            z: {
+                equation: def.equation || 'x',
+                stride: def.dataSize,
+                rowStride: def.rowStride
+            },
+            isBigEndian: def.isBigEndian,
+            sortX: def.xAxisDef.requiresSort,
+            sortY: def.yAxisDef.requiresSort,
+        };
+        
+        // 2. Apply special override rule
+        const specialIgnitionMaps = ['ign1', 'ign2', 'ign3', 'ign4', 'ign5/6'];
+        if (specialIgnitionMaps.includes(def.name.toLowerCase())) {
+            newManualConfig.z.rowStride = 20;
+        }
+
+        // 3. Set state
+        setManualConfig(newManualConfig);
         setIsModified(false);
         setProcessedMap(null);
         setSelectedMapName(name);
@@ -807,6 +813,7 @@ export default function EcuTuningAssistant() {
     
 
     
+
 
 
 
