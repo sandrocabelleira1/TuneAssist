@@ -214,7 +214,7 @@ export default function EcuTuningAssistant() {
         e.target.value = '';
     };
 
-    const processMap = useCallback(async (config: ManualAxisConfig) => {
+    const processMap = useCallback(async () => {
         if (!selectedMapName || !binFile || !xdfFile) {
             return;
         }
@@ -233,7 +233,7 @@ export default function EcuTuningAssistant() {
             await new Promise(resolve => setTimeout(resolve, 0));
 
             addLog("A processar com as definições atuais (XDF/Manual)...", 'info');
-            const result = readAndCalculateMapFromBinManual(binFile.buffer, def, config);
+            const result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
             
             setProcessedMap(result);
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
@@ -248,7 +248,7 @@ export default function EcuTuningAssistant() {
         } finally {
             setIsProcessing(false);
         }
-    }, [selectedMapName, binFile, xdfFile, addLog, toast]);
+    }, [selectedMapName, binFile, xdfFile, addLog, toast, manualConfig]);
 
     const handleMapSelect = (name: string) => {
         setSelectedMapName(name);
@@ -286,7 +286,7 @@ export default function EcuTuningAssistant() {
 
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
-            processMap(manualConfig);
+            processMap();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedMapName, manualConfig, binFile, xdfFile]);
@@ -302,7 +302,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleManualRecalculate = () => {
-        processMap(manualConfig);
+        processMap();
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
@@ -809,6 +809,8 @@ export default function EcuTuningAssistant() {
 }
 
     
+    
+
     
 
     
