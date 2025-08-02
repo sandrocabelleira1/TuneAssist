@@ -263,10 +263,15 @@ export default function EcuTuningAssistant() {
         setIsModified(false);
         const def = xdfFile?.definitions.find(d => d.name === name);
         if (def) {
+            const isMapaPrincipal = name === 'Mapa Principal';
             setManualConfig({
                 x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef.dataSize },
                 y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef.dataSize },
-                z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: def.rowStride },
+                z: { 
+                    equation: def.equation || 'x', 
+                    stride: def.dataSize, 
+                    rowStride: isMapaPrincipal ? 20 : def.rowStride 
+                },
                 isBigEndian: def.isBigEndian,
                 sortX: def.xAxisDef.requiresSort,
                 sortY: def.yAxisDef.requiresSort,
@@ -278,7 +283,12 @@ export default function EcuTuningAssistant() {
 
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
-            processMap(false);
+            // Check if we are using manual overrides from the start
+            const isManual = manualConfig.z.rowStride !== undefined ||
+                             manualConfig.x.stride !== xdfFile?.definitions.find(d=>d.name===selectedMapName)?.xAxisDef.dataSize ||
+                             manualConfig.y.stride !== xdfFile?.definitions.find(d=>d.name===selectedMapName)?.yAxisDef.dataSize;
+
+            processMap(isManual);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedMapName]);
