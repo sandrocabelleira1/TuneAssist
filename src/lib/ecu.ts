@@ -233,7 +233,6 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG')).map(f => f.textContent?.trim().toLowerCase());
             const isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
             
-            // Correctly get Z-axis data size directly from the mmedelementsizebits attribute.
             const zDataSizeBitsAttr = getAttr(embeddedData, 'mmedelementsizebits');
             const zDataSizeBits = zDataSizeBitsAttr ? parseInt(zDataSizeBitsAttr, 10) : 0;
             const dataSize = (zDataSizeBits > 0) ? zDataSizeBits / 8 : 1;
@@ -244,12 +243,9 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
                 rowStride = parseInt(rowStrideAttr, 16);
             }
 
-            // --- APLICAÇÃO DA REGRA DE SUBSTITUIÇÃO ---
-            // Aplica o passo de linha de 20 se o mapa for 16x16 com dados de 8 bits (1 byte).
             if (xAxisDef.count === 16 && yAxisDef.count === 16 && zDataSizeBits === 8) {
                 rowStride = 20;
             }
-            // --- FIM DA APLICAÇÃO DA REGRA ---
 
             definitions.push({
                 uniqueId,
@@ -432,7 +428,7 @@ function processMap(
 }
 
 
-export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFinition): ProcessedMap {
+export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFDefinition): ProcessedMap {
     if (!def.xAxisDef || !def.yAxisDef) throw new Error(`Definições de eixo para o mapa "${def.name}" estão em falta.`);
     
     const tempConfig: ManualAxisConfig = {
@@ -563,6 +559,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
