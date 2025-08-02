@@ -169,6 +169,10 @@ export default function EcuTuningAssistant() {
     
     const [templateConfig, setTemplateConfig] = useState<StructureTemplate | null>(null);
 
+    const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
+    const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
+
+
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
 
@@ -180,6 +184,7 @@ export default function EcuTuningAssistant() {
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.name === selectedMapName);
     
     const resetSession = () => {
+        addLog("Sessão reiniciada. Carregue novos ficheiros.", 'info');
         setBinFile(null);
         setXdfFile(null);
         setSelectedMapName('');
@@ -188,26 +193,15 @@ export default function EcuTuningAssistant() {
         setLogs([]);
         setManualConfig(initialManualConfig);
         setTemplateConfig(null); 
-        addLog("Sessão reiniciada. Carregue novos ficheiros.", 'info');
+        setProcessedMapCache({});
+        setModifiedStatusCache({});
     };
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if (type === 'bin') {
-            resetSession();
-        } else {
-            // For XDF, only reset part of the session
-            setXdfFile(null);
-            setSelectedMapName('');
-            setProcessedMap(null);
-            setIsModified(false);
-            setLogs(prev => [ { id: `${Date.now()}-reset`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message: 'A carregar novo XDF. A sessão do mapa foi reiniciada.', type: 'info' }, ...prev]);
-            setManualConfig(initialManualConfig);
-            setTemplateConfig(null);
-        }
-
+        resetSession();
         addLog(`A ler o ficheiro ${file.name}...`);
         const reader = new FileReader();
         
@@ -249,14 +243,12 @@ export default function EcuTuningAssistant() {
         e.target.value = '';
     };
 
-    const processMap = useCallback(async (configToProcess: ManualAxisConfig) => {
-        if (!selectedMapName || !binFile || !xdfFile) {
-            return;
-        }
+    const processMap = useCallback(async (mapName: string, configToProcess: ManualAxisConfig) => {
+        if (!mapName || !binFile || !xdfFile) return;
 
-        const def = xdfFile.definitions.find(d => d.name === selectedMapName);
+        const def = xdfFile.definitions.find(d => d.name === mapName);
         if (!def) {
-            addLog(`Definição de mapa "${selectedMapName}" não encontrada.`, 'error');
+            addLog(`Definição de mapa "${mapName}" não encontrada.`, 'error');
             return;
         }
         
@@ -271,8 +263,11 @@ export default function EcuTuningAssistant() {
             const result = readAndCalculateMapFromBinManual(binFile.buffer, def, configToProcess);
             
             setProcessedMap(result);
-            setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
+            setProcessedMapCache(prev => ({...prev, [mapName]: result}));
+            setModifiedStatusCache(prev => ({...prev, [mapName]: false}));
             setIsModified(false);
+
+            setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
             addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
         } catch (error) {
             const errorMessage = `ERRO ao processar o mapa "${def.name}": ${(error as Error).message}`;
@@ -282,13 +277,15 @@ export default function EcuTuningAssistant() {
         } finally {
             setIsProcessing(false);
         }
-    }, [selectedMapName, binFile, xdfFile, addLog, toast]);
+    }, [binFile, xdfFile, addLog, toast]);
     
     useEffect(() => {
-        if (selectedMapName && binFile && xdfFile) {
-            processMap(manualConfig);
+        const configChanged = JSON.stringify(manualConfig) !== JSON.stringify(initialManualConfig);
+        if (selectedMapName && binFile && xdfFile && configChanged) {
+            processMap(selectedMapName, manualConfig);
         }
-    }, [manualConfig, selectedMapName, binFile, xdfFile, processMap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [manualConfig]); // Only re-run when manual config changes from outside
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -305,11 +302,19 @@ export default function EcuTuningAssistant() {
     
     const handleMapSelect = (name: string) => {
         if (!xdfFile || !binFile) return;
+        setSelectedMapName(name);
+
+        if (processedMapCache[name]) {
+            addLog(`A carregar o mapa "${name}" da cache.`, 'info');
+            setProcessedMap(processedMapCache[name]);
+            setIsModified(modifiedStatusCache[name] ?? false);
+            setSelectedLine(processedMapCache[name]?.axes.y.calculated.length > 0 ? 0 : null);
+            return;
+        }
+        
         const def = xdfFile.definitions.find(d => d.name === name);
         if (!def) return;
         
-        setSelectedMapName(name);
-
         const mapStructureKey = `${def.rows}x${def.cols}`;
         
         let configToApply = initialManualConfig;
@@ -333,17 +338,22 @@ export default function EcuTuningAssistant() {
         }
         
         setManualConfig(configToApply);
+        processMap(name, configToApply);
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
-        if (!processedMap || !processedMap.calculatedMap) return;
+        if (!processedMap || !processedMap.calculatedMap || !selectedMapName) return;
 
         addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)}`, 'info');
         const newMap = processedMap.calculatedMap.map(row => [...row]);
         newMap[rowIndex][colIndex] = newValue;
         
-        setProcessedMap(prev => prev ? { ...prev, calculatedMap: newMap } : null);
+        const newProcessedMap = { ...processedMap, calculatedMap: newMap };
+        setProcessedMap(newProcessedMap);
+        setProcessedMapCache(prev => ({ ...prev, [selectedMapName]: newProcessedMap }));
+        
         setIsModified(true);
+        setModifiedStatusCache(prev => ({...prev, [selectedMapName]: true}));
     };
     
     const handleSave = () => {
@@ -376,7 +386,9 @@ export default function EcuTuningAssistant() {
             const successMsg = `Ficheiro ${a.download} salvo com sucesso.`;
             addLog(successMsg, 'success');
             toast({ title: 'Salvo com Sucesso', description: successMsg });
+            
             setIsModified(false);
+            setModifiedStatusCache(prev => ({...prev, [selectedMapName]: false}));
 
         } catch (error) {
             const errorMsg = `Falha ao salvar o ficheiro BIN: ${(error as Error).message}`;
@@ -680,7 +692,7 @@ export default function EcuTuningAssistant() {
                   <div className="flex flex-col gap-2">
                     <Button
                       size="sm"
-                      onClick={() => processMap(manualConfig)}
+                      onClick={() => processMap(selectedMapName, manualConfig)}
                       disabled={!selectedMapName || isProcessing}
                     >
                       {isProcessing ? (
