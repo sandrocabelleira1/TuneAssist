@@ -1,6 +1,5 @@
 
 
-
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
 
 // #region Utility Functions
@@ -241,8 +240,8 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
 
             const dataSize = getDataSizeInBytes(embeddedData);
 
-            // Special override for 16-column, 8-bit maps which often have a stride of 20 (0x14) bytes.
-            if (xAxisDef.count === 16 && dataSize === 1) {
+            // Special override for 16x16, 8-bit maps which often have a stride of 20 (0x14) bytes.
+            if (xAxisDef.count === 16 && yAxisDef.count === 16 && dataSize === 1) {
                 rowStride = 20;
             }
 
@@ -558,6 +557,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
