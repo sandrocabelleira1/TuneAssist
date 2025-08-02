@@ -195,10 +195,22 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        resetSession();
+        if (type === 'bin') {
+            resetSession();
+        } else {
+            // For XDF, only reset part of the session
+            setXdfFile(null);
+            setSelectedMapName('');
+            setProcessedMap(null);
+            setIsModified(false);
+            setLogs(prev => [ { id: `${Date.now()}-reset`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message: 'A carregar novo XDF. A sessão do mapa foi reiniciada.', type: 'info' }, ...prev]);
+            setManualConfig(initialManualConfig);
+            setTemplateConfig(null);
+        }
 
         addLog(`A ler o ficheiro ${file.name}...`);
         const reader = new FileReader();
+        
         reader.onload = async (event) => {
             const buffer = event.target?.result;
             if (!buffer) {
@@ -218,6 +230,7 @@ export default function EcuTuningAssistant() {
                     addLog('A processar o ficheiro XDF...');
                     const { definitions, allTables } = parseXDF(buffer, true); 
                     if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
+                    
                     setXdfFile({ name: file.name, content: buffer, definitions, allTables });
                     const successMessage = `XDF carregado: ${file.name} com ${definitions.length} mapas.`;
                     addLog(successMessage, 'success');
@@ -855,5 +868,3 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
-
-    
