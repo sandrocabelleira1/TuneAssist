@@ -184,15 +184,13 @@ export default function EcuTuningAssistant() {
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.name === selectedMapName);
     
     const resetSession = useCallback(() => {
-        addLog("Sessão reiniciada. Carregue novos ficheiros.", 'info');
+        addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
         setBinFile(null);
         setXdfFile(null);
         setSelectedMapName('');
         setProcessedMap(null);
         setIsModified(false);
         setLogs(prevLogs => {
-            // Keep the reset message, but clear the rest if desired. Or just clear all.
-            // Let's clear all for simplicity and add the new message.
              const resetMessage: LogMessage = {
                 id: `${Date.now()}-reset`,
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -211,12 +209,12 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // If we are loading a new pair of files, reset everything.
         if ((type === 'bin' && xdfFile) || (type === 'xdf' && binFile)) {
              resetSession();
         }
 
         addLog(`A ler o ficheiro ${file.name}...`);
+        
         const reader = new FileReader();
         
         reader.onload = async (event) => {
@@ -257,10 +255,12 @@ export default function EcuTuningAssistant() {
              toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
         }
         
-        if (type === 'xdf') reader.readAsText(file);
-        else reader.readAsArrayBuffer(file);
+        if (type === 'xdf') {
+            reader.readAsText(file);
+        } else {
+            reader.readAsArrayBuffer(file);
+        }
         
-        // Clear the input value to allow re-uploading the same file
         e.target.value = '';
     };
 
@@ -920,6 +920,8 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
 
     
 
