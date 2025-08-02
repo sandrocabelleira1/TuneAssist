@@ -444,6 +444,8 @@ export function readAndCalculateMapFromBinManual(
          throw new Error("As definições de eixo originais são inválidas e necessárias para o recálculo manual.");
     }
     
+    const zStride = manualConfig.z.stride ?? def.dataSize;
+
     // Create new definitions with manual overrides
     const manualXAxisDef: AxisDimension = { 
         ...def.xAxisDef, 
@@ -460,7 +462,7 @@ export function readAndCalculateMapFromBinManual(
     const manualMapDef: XDFDefinition = { 
         ...def, 
         equation: manualConfig.z.equation,
-        dataSize: manualConfig.z.stride ?? def.dataSize,
+        dataSize: zStride,
         isBigEndian: manualConfig.isBigEndian ?? def.isBigEndian
     };
     
@@ -468,14 +470,14 @@ export function readAndCalculateMapFromBinManual(
     let sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
 
     // If any manual stride is provided, assume the user wants the original file order.
-    if (manualConfig.x.stride || manualConfig.y.stride || manualConfig.z.stride || manualConfig.z.rowStride) {
+    if (manualConfig.x.stride !== undefined || manualConfig.y.stride !== undefined || manualConfig.z.stride !== undefined || manualConfig.z.rowStride !== undefined) {
         sortX = false;
         sortY = false;
     }
     
     // Reread axes and map from scratch using manual configuration
-    const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualConfig.x.stride);
-    const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualConfig.y.stride);
+    const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualXAxisDef.dataSize);
+    const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualYAxisDef.dataSize);
     
     if (xAxisData.calculated.length !== def.cols) {
          throw new Error(`Contagem de colunas do eixo X (${xAxisData.label}: ${xAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.cols}).`);
@@ -484,7 +486,7 @@ export function readAndCalculateMapFromBinManual(
          throw new Error(`Contagem de linhas do eixo Y (${yAxisData.label}: ${yAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.rows}).`);
     }
 
-    return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY, manualConfig.z.stride, manualConfig.z.rowStride);
+    return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY, zStride, manualConfig.z.rowStride);
 }
 
 export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processedMap: ProcessedMap): ArrayBuffer {
@@ -551,4 +553,5 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
