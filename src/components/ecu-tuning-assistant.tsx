@@ -10,8 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBin, writeMapToBin, readAndCalculateMapFromBinManual, readAxisFromBin } from '@/lib/ecu';
-import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, AxisDimension } from '@/lib/types';
+import { parseXDF, readAndCalculateMapFromBinManual } from '@/lib/ecu';
+import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -237,7 +237,7 @@ export default function EcuTuningAssistant() {
             
             setProcessedMap(result);
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
-            setIsModified(false); // Reset modification state on recalculation
+            setIsModified(false);
             addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
 
         } catch (error) {
@@ -252,6 +252,7 @@ export default function EcuTuningAssistant() {
 
     const handleMapSelect = (name: string) => {
         setSelectedMapName(name);
+
         const def = xdfFile?.definitions.find(d => d.name === name);
 
         if (!def) {
@@ -390,7 +391,7 @@ export default function EcuTuningAssistant() {
                     size="sm"
                     onClick={() => xdfInputRef.current?.click()}
                   >
-                    <FileCog className="mr-2" />{'_'}
+                    <FileCog className="mr-2" />{' '}
                     {xdfFile?.name ? 'Trocar XDF' : 'Carregar .XDF'}
                   </Button>
                   <input
@@ -807,10 +808,5 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
-
-    
-    
-
-    
 
     
