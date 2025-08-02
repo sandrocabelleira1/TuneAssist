@@ -320,15 +320,19 @@ export default function EcuTuningAssistant() {
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
     
-    const resetSession = useCallback(() => {
+    const resetSession = useCallback((initiatingFileType: 'bin' | 'xdf') => {
         addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
-        setBinFile(null);
-        setXdfFile(null);
+        // Only reset the file that is NOT being uploaded
+        if (initiatingFileType === 'bin') {
+            setXdfFile(null);
+        } else {
+            setBinFile(null);
+        }
         setSelectedMapId('');
         setProcessedMap(null);
         setIsModified(false);
         setLogs(prevLogs => {
-             const resetMessage: LogMessage = {
+            const resetMessage: LogMessage = {
                 id: `${Date.now()}-reset`,
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 message: "Sessão reiniciada. Carregue os ficheiros necessários.",
@@ -337,22 +341,19 @@ export default function EcuTuningAssistant() {
             return [resetMessage];
         });
         setManualConfig(initialManualConfig);
-        setTemplateConfig(null); 
+        setTemplateConfig(null);
         setProcessedMapCache({});
         setModifiedStatusCache({});
-    }, []);
+    }, [addLog]);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Determine if we need to reset the session
-        const isNewSession = (type === 'bin' && (binFile || xdfFile)) || (type === 'xdf' && (binFile || xdfFile));
-
-        if (isNewSession) {
-            resetSession();
-            // Await a tick to ensure state reset before proceeding
-            await new Promise(resolve => setTimeout(resolve, 0));
+        // Reset logic: if you load a new BIN, the old XDF is invalid. If you load a new XDF, the old BIN is also invalid for this new context.
+        if ((type === 'bin' && (binFile || xdfFile)) || (type === 'xdf' && (binFile || xdfFile))) {
+             resetSession(type);
+             await new Promise(resolve => setTimeout(resolve, 0));
         }
 
         addLog(`A ler o ficheiro ${file.name}...`, 'info');
