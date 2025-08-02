@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -22,6 +23,10 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
+    ssr: false,
+    loading: () => <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>
+});
 
 
 type CellSelection = {
@@ -193,7 +198,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         const minY = Math.min(selection.start.y, selection.end.y);
         const maxY = Math.max(selection.start.y, selection.end.y);
         const minX = Math.min(selection.start.x, selection.end.x);
-        const maxX = Math.max(selection.start.x, selection.end.x);
+        const maxX = Math.max(selection.start.x, selection.end.y);
         return y >= minY && y <= maxY && x >= minX && x <= maxX;
     };
     
@@ -316,7 +321,6 @@ export default function EcuTuningAssistant() {
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
     
     const resetSession = useCallback(() => {
-        addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
         setBinFile(null);
         setXdfFile(null);
         setSelectedMapId('');
@@ -341,23 +345,11 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if ((type === 'bin' && binFile) || (type === 'xdf' && xdfFile)) {
-            const newLogs: LogMessage[] = [{
-                id: `${Date.now()}-reset`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                message: "Sessão reiniciada. Carregue novos ficheiros.",
-                type: 'info'
-            }];
-            setLogs(newLogs);
-            setBinFile(null);
-            setXdfFile(null);
-            setSelectedMapId('');
-            setProcessedMap(null);
-            setIsModified(false);
-            setManualConfig(initialManualConfig);
-            setTemplateConfig(null);
-            setProcessedMapCache({});
-            setModifiedStatusCache({});
+        // Reset if we're loading a new pair of files
+        if ((type === 'bin' && xdfFile) || (type === 'xdf' && binFile)) {
+             addLog("Sessão reiniciada. A carregar novos ficheiros...", 'info');
+             resetSession();
+             await new Promise(resolve => setTimeout(resolve, 0));
         }
 
         addLog(`A ler o ficheiro ${file.name}...`, 'info');
@@ -542,7 +534,7 @@ export default function EcuTuningAssistant() {
         const minY = Math.min(start.y, end.y);
         const maxY = Math.max(start.y, end.y);
         const minX = Math.min(start.x, end.x);
-        const maxX = Math.max(start.x, end.x);
+        const maxX = Math.max(start.x, end.y);
 
         for (let y = minY; y <= maxY; y++) {
             for (let x = minX; x <= maxX; x++) {
