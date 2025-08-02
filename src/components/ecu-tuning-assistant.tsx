@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -198,7 +197,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         const minY = Math.min(selection.start.y, selection.end.y);
         const maxY = Math.max(selection.start.y, selection.end.y);
         const minX = Math.min(selection.start.x, selection.end.x);
-        const maxX = Math.max(selection.start.y, selection.end.y);
+        const maxX = Math.max(selection.start.x, selection.end.x);
         return y >= minY && y <= maxY && x >= minX && x <= maxX;
     };
     
@@ -320,26 +319,14 @@ export default function EcuTuningAssistant() {
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
     
-    const resetSession = useCallback((initiatingFileType: 'bin' | 'xdf') => {
+    const resetSession = useCallback((initiatingFileType?: 'bin' | 'xdf') => {
         addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
-        // Only reset the file that is NOT being uploaded
-        if (initiatingFileType === 'bin') {
-            setXdfFile(null);
-        } else {
-            setBinFile(null);
-        }
+        setBinFile(null);
+        setXdfFile(null);
         setSelectedMapId('');
         setProcessedMap(null);
         setIsModified(false);
-        setLogs(prevLogs => {
-            const resetMessage: LogMessage = {
-                id: `${Date.now()}-reset`,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                message: "Sessão reiniciada. Carregue os ficheiros necessários.",
-                type: 'info'
-            };
-            return [resetMessage];
-        });
+        setLogs([]);
         setManualConfig(initialManualConfig);
         setTemplateConfig(null);
         setProcessedMapCache({});
@@ -350,9 +337,11 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Reset logic: if you load a new BIN, the old XDF is invalid. If you load a new XDF, the old BIN is also invalid for this new context.
-        if ((type === 'bin' && (binFile || xdfFile)) || (type === 'xdf' && (binFile || xdfFile))) {
-             resetSession(type);
+        // Determine if this is the start of a new pair of files
+        const isNewSession = (type === 'bin' && xdfFile) || (type === 'xdf' && binFile);
+        if (isNewSession) {
+             resetSession();
+             // Use a timeout to ensure state update completes before proceeding
              await new Promise(resolve => setTimeout(resolve, 0));
         }
 
@@ -1100,3 +1089,5 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
