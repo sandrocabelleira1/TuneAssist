@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -20,24 +20,130 @@ import { Label } from '@/components/ui/label';
 import { getHeatmapColor, getTextColorForBackground } from '@/lib/colors';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
-const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
-    ssr: false,
-    loading: () => (
-        <div className="flex items-center justify-center h-full text-muted-foreground">
-            <Loader2 className="mr-2 h-8 w-8 animate-spin" />
-            <p>A carregar o gráfico 3D...</p>
-        </div>
-    )
-});
 
-function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChange }: {
+type CellSelection = {
+    start: { y: number; x: number } | null;
+    end: { y: number; x: number } | null;
+};
+
+type MassEditPayload = {
+    selection: CellSelection;
+    currentMapData: MapData;
+};
+
+function MassEditDialog({
+    payload,
+    onClose,
+    onMassEdit,
+}: {
+    payload: MassEditPayload;
+    onClose: () => void;
+    onMassEdit: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', value: number) => void;
+}) {
+    const [value, setValue] = useState('');
+
+    if (!payload.selection.start || !payload.selection.end) return null;
+
+    const handleAction = (operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate') => {
+        const numericValue = parseFloat(value);
+        if (isNaN(numericValue)) {
+            // Optionally show a toast or error message
+            return;
+        }
+        onMassEdit(payload.selection, operation, numericValue);
+        onClose();
+    };
+
+    return (
+        <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Edição em Massa</DialogTitle>
+                    <DialogDescription>
+                        Aplique uma operação a todas as células selecionadas.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="mass-edit-value" className="text-right">
+                            Valor
+                        </Label>
+                        <Input
+                            id="mass-edit-value"
+                            type="number"
+                            value={value}
+                            onChange={(e) => setValue(e.target.value)}
+                            className="col-span-3"
+                            placeholder="Ex: 10 para 10%"
+                            autoFocus
+                        />
+                    </div>
+                </div>
+                <DialogFooter className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                     <Button onClick={() => handleAction('add_percent')}><Plus className="mr-2" /> Adicionar %</Button>
+                     <Button onClick={() => handleAction('sub_percent')}><Minus className="mr-2" /> Subtrair %</Button>
+                     <Button variant="secondary" onClick={() => handleAction('set_value')}><Edit className="mr-2" /> Definir Valor</Button>
+                     <Button variant="secondary" onClick={() => handleAction('interpolate')}><Blend className="mr-2"/> Interpolar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChange, onMassUpdate }: {
     mapData: MapData | null;
     addresses: MapData | null;
     axes: { x: AxisData, y: AxisData } | null;
     selectedMapDefinition: XDFDefinition | undefined;
     onCellChange: (y: number, x: number, value: number) => void;
+    onMassUpdate: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', value: number) => void;
 }) {
+    const [isSelecting, setIsSelecting] = useState(false);
+    const [selection, setSelection] = useState<CellSelection>({ start: null, end: null });
+    const [massEditPayload, setMassEditPayload] = useState<MassEditPayload | null>(null);
+    const tableRef = useRef<HTMLDivElement>(null);
+
+    const handleMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, yi: number, xi: number) => {
+        e.preventDefault();
+        setIsSelecting(true);
+        setSelection({ start: { y: yi, x: xi }, end: { y: yi, x: xi } });
+    };
+
+    const handleMouseMove = (yi: number, xi: number) => {
+        if (isSelecting) {
+            setSelection(prev => ({ ...prev, end: { y: yi, x: xi } }));
+        }
+    };
+
+    const handleMouseUp = () => {
+        if (isSelecting) {
+            setIsSelecting(false);
+            if (selection.start && selection.end && mapData) {
+                // Open dialog for mass edit
+                setMassEditPayload({ selection, currentMapData: mapData });
+            }
+        }
+    };
+
+    useEffect(() => {
+        const handleMouseUpOutside = (e: MouseEvent) => {
+            if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
+                if (isSelecting) {
+                    handleMouseUp();
+                }
+            }
+        };
+
+        document.addEventListener('mouseup', handleMouseUpOutside);
+        return () => {
+            document.removeEventListener('mouseup', handleMouseUpOutside);
+        };
+    }, [isSelecting, handleMouseUp]);
+
+
     if (!axes || !selectedMapDefinition || !mapData) {
         return (
             <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -81,10 +187,19 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
             onCellChange(yi, xi, newValue);
         }
     };
+
+    const isCellSelected = (y: number, x: number) => {
+        if (!selection.start || !selection.end) return false;
+        const minY = Math.min(selection.start.y, selection.end.y);
+        const maxY = Math.max(selection.start.y, selection.end.y);
+        const minX = Math.min(selection.start.x, selection.end.x);
+        const maxX = Math.max(selection.start.x, selection.end.x);
+        return y >= minY && y <= maxY && x >= minX && x <= maxX;
+    };
     
     return (
-        <div className="overflow-auto h-full w-full">
-            <table className="w-full border-collapse text-xs">
+        <div className="overflow-auto h-full w-full" ref={tableRef} onMouseUp={handleMouseUp}>
+            <table className="w-full border-collapse text-xs select-none">
                 <thead>
                     <tr>
                         <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-left font-semibold">
@@ -107,8 +222,15 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                                 const bgColor = getHeatmapColor(cell, minVal, maxVal);
                                 const textColor = getTextColorForBackground(bgColor);
                                 const address = addresses?.[yi]?.[xi];
+                                const selected = isCellSelected(yi, xi);
                                 return (
-                                    <td key={xi} className="p-0 border border-border text-center h-10" style={{ backgroundColor: bgColor, color: textColor }}>
+                                    <td
+                                        key={xi}
+                                        className={cn("p-0 border border-border text-center h-10", { 'outline outline-2 outline-offset-[-2px] outline-primary': selected })}
+                                        style={{ backgroundColor: bgColor, color: textColor }}
+                                        onMouseDown={(e) => handleMouseDown(e, yi, xi)}
+                                        onMouseMove={() => handleMouseMove(yi, xi)}
+                                    >
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger className="w-full h-full flex items-center justify-center p-0">
@@ -132,6 +254,16 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                     ))}
                 </tbody>
             </table>
+             {massEditPayload && (
+                <MassEditDialog
+                    payload={massEditPayload}
+                    onClose={() => {
+                        setMassEditPayload(null);
+                        setSelection({ start: null, end: null }); // Clear visual selection
+                    }}
+                    onMassEdit={onMassUpdate}
+                />
+            )}
         </div>
     );
 }
@@ -209,8 +341,23 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if ((type === 'bin' && binFile && xdfFile) || (type === 'xdf' && binFile && xdfFile)) {
-            resetSession();
+        if ((type === 'bin' && binFile) || (type === 'xdf' && xdfFile)) {
+            const newLogs: LogMessage[] = [{
+                id: `${Date.now()}-reset`,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                message: "Sessão reiniciada. Carregue novos ficheiros.",
+                type: 'info'
+            }];
+            setLogs(newLogs);
+            setBinFile(null);
+            setXdfFile(null);
+            setSelectedMapId('');
+            setProcessedMap(null);
+            setIsModified(false);
+            setManualConfig(initialManualConfig);
+            setTemplateConfig(null);
+            setProcessedMapCache({});
+            setModifiedStatusCache({});
         }
 
         addLog(`A ler o ficheiro ${file.name}...`, 'info');
@@ -381,6 +528,55 @@ export default function EcuTuningAssistant() {
         setIsModified(true);
         setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
+    };
+
+    const handleMassUpdate = (
+        selection: CellSelection,
+        operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate',
+        value: number
+    ) => {
+        if (!processedMap || !processedMap.calculatedMap || !selection.start || !selection.end) return;
+
+        const newMap = processedMap.calculatedMap.map(row => [...row]);
+        const { start, end } = selection;
+        const minY = Math.min(start.y, end.y);
+        const maxY = Math.max(start.y, end.y);
+        const minX = Math.min(start.x, end.x);
+        const maxX = Math.max(start.x, end.x);
+
+        for (let y = minY; y <= maxY; y++) {
+            for (let x = minX; x <= maxX; x++) {
+                const currentValue = newMap[y][x];
+                if (currentValue !== null) {
+                    let newValue = currentValue;
+                    switch (operation) {
+                        case 'add_percent':
+                            newValue = currentValue * (1 + value / 100);
+                            break;
+                        case 'sub_percent':
+                            newValue = currentValue * (1 - value / 100);
+                            break;
+                        case 'set_value':
+                             newValue = value;
+                             break;
+                        // Interpolate logic can be complex. Linear interpolation for now.
+                        case 'interpolate':
+                             // This is a placeholder. A proper implementation would need corner values.
+                             newValue = currentValue;
+                             break;
+                    }
+                     newMap[y][x] = newValue;
+                }
+            }
+        }
+        
+        const newProcessedMap = { ...processedMap, calculatedMap: newMap };
+        setProcessedMap(newProcessedMap);
+        
+        setIsModified(true);
+        setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
+        setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
+        addLog(`Operação em massa "${operation}" com valor ${value} aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
     };
     
     const handleSave = () => {
@@ -860,6 +1056,7 @@ export default function EcuTuningAssistant() {
                           axes={processedMap?.axes ?? null}
                           selectedMapDefinition={selectedMapDefinition}
                           onCellChange={handleCellChange}
+                          onMassUpdate={handleMassUpdate}
                         />
                       </TabsContent>
                       <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4">
@@ -907,5 +1104,3 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
-
-    
