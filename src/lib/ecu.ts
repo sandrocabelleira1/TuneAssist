@@ -195,7 +195,7 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
 }
 
 
-export function parseXDF(xmlString: string, manualEndian?: boolean | null): { definitions: XDFDefinition[], allTables: Map<string, Element> } {
+export function parseXDF(xmlString: string, manualEndian?: boolean | null): { definitions: XDFinition[], allTables: Map<string, Element> } {
     if (typeof DOMParser === 'undefined') throw new Error("O ambiente não suporta DOMParser.");
     
     const parser = new DOMParser();
@@ -237,6 +237,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const zDataSizeBits = zDataSizeBitsAttr ? parseInt(zDataSizeBitsAttr, 10) : 0;
             const dataSize = (zDataSizeBits > 0) ? zDataSizeBits / 8 : 1;
             
+            // Start with the row stride from the file, if it exists
             let rowStride;
             const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
             if(rowStrideAttr) {
@@ -564,6 +565,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 
