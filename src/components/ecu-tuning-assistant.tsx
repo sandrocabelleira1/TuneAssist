@@ -50,7 +50,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         if (val === null) return acc;
         return {
             minVal: Math.min(acc.minVal, val),
-            maxVal: Math.max(acc.maxVal, val),
+            maxVal: Math.max(acc.max.val, val),
         };
     }, { minVal: Infinity, maxVal: -Infinity }) : { minVal: 0, maxVal: 1 };
 
@@ -155,7 +155,7 @@ type StructureTemplate = {
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
-    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFinition[], allTables: Map<string, Element> } | null>(null);
+    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFDefinition[], allTables: Map<string, Element> } | null>(null);
     const [logs, setLogs] = useState<LogMessage[]>([]);
     
     const [selectedMapId, setSelectedMapId] = useState<string>('');
@@ -183,8 +183,8 @@ export default function EcuTuningAssistant() {
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
     
-    const resetSession = useCallback((isNewFile = false) => {
-        if(isNewFile) addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
+    const resetSession = useCallback(() => {
+        addLog("Sessão reiniciada. Carregue os ficheiros necessários.", 'info');
         setBinFile(null);
         setXdfFile(null);
         setSelectedMapId('');
@@ -197,7 +197,7 @@ export default function EcuTuningAssistant() {
                 message: "Sessão reiniciada. Carregue os ficheiros necessários.",
                 type: 'info'
             };
-            return isNewFile ? [resetMessage] : [];
+            return [resetMessage];
         });
         setManualConfig(initialManualConfig);
         setTemplateConfig(null); 
@@ -209,9 +209,9 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Reset if a new pair of files is being started
-        if ((type === 'bin' && xdfFile) || (type === 'xdf' && binFile)) {
-             resetSession(true);
+        // If a new pair of files is being loaded (e.g., a new XDF when a BIN and XDF are already loaded), reset everything.
+        if ((type === 'xdf' && binFile && xdfFile) || (type === 'bin' && binFile && xdfFile)) {
+            resetSession();
         }
 
         addLog(`A ler o ficheiro ${file.name}...`, 'info');
@@ -922,3 +922,5 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
