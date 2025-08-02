@@ -214,9 +214,8 @@ export default function EcuTuningAssistant() {
         e.target.value = '';
     };
 
-    const processMap = useCallback(async (isManual: boolean = false) => {
+    const processMap = useCallback(async () => {
         if (!selectedMapName || !binFile || !xdfFile) {
-            // This is a normal condition, not an error
             return;
         }
 
@@ -228,22 +227,17 @@ export default function EcuTuningAssistant() {
         
         setIsProcessing(true);
         setProcessedMap(null); 
-        setIsModified(false);
         addLog(`A processar o mapa: ${def.name}...`, 'info');
         
         try {
-            let result: ProcessedMap;
-            if (isManual) {
-                addLog("A processar com configurações manuais...", 'info');
-                result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
+            await new Promise(resolve => setTimeout(resolve, 0));
 
-            } else {
-                addLog("A processar com as definições do XDF...", 'info');
-                result = readAndCalculateMapFromBin(binFile.buffer, def);
-            }
+            addLog("A processar com as definições atuais (XDF/Manual)...", 'info');
+            const result = readAndCalculateMapFromBinManual(binFile.buffer, def, manualConfig);
             
             setProcessedMap(result);
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
+            setIsModified(false); // Reset modification state on recalculation
             addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
 
         } catch (error) {
@@ -282,26 +276,10 @@ export default function EcuTuningAssistant() {
 
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
-            const def = xdfFile?.definitions.find(d => d.name === selectedMapName);
-            if (!def) { processMap(false); return; }
-
-            const isSpecial16x16Map = def.dataSize === 1 && def.cols === 16 && def.rows === 16;
-            
-            const isManual = (manualConfig.x.stride !== def.xAxisDef.dataSize) ||
-                             (manualConfig.y.stride !== def.yAxisDef.dataSize) ||
-                             (manualConfig.z.stride !== def.dataSize) ||
-                             (manualConfig.z.rowStride !== (isSpecial16x16Map ? 20 : def.rowStride)) ||
-                             (manualConfig.x.equation !== (def.xAxisDef.equation || 'x')) ||
-                             (manualConfig.y.equation !== (def.yAxisDef.equation || 'x')) ||
-                             (manualConfig.z.equation !== (def.equation || 'x')) ||
-                             (manualConfig.isBigEndian !== def.isBigEndian) ||
-                             (manualConfig.sortX !== def.xAxisDef.requiresSort) ||
-                             (manualConfig.sortY !== def.yAxisDef.requiresSort);
-
-            processMap(isManual);
+            processMap();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMapName]);
+    }, [selectedMapName, manualConfig]);
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -314,7 +292,7 @@ export default function EcuTuningAssistant() {
     };
     
     const handleManualRecalculate = () => {
-        processMap(true);
+        processMap();
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
