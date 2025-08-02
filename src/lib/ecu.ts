@@ -243,6 +243,12 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
                 rowStride = parseInt(rowStrideAttr, 16);
             }
 
+            // Special rule: Override row stride for specific map dimensions (16x16, 8-bit data)
+            const isSpecialMap = yAxisDef.count === 16 && xAxisDef.count === 16 && dataSize === 1;
+            if (isSpecialMap) {
+                rowStride = 20;
+            }
+
             definitions.push({
                 uniqueId,
                 name: tableName,
@@ -555,6 +561,7 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
     
 
     
+
 
 
 

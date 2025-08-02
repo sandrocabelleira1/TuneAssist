@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBinManual } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -240,6 +240,10 @@ export default function EcuTuningAssistant() {
             setSelectedLine(result?.axes.y.calculated.length > 0 ? 0 : null);
             setIsModified(false);
             addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
+             if (def.rowStride === 20) {
+                addLog("Regra especial aplicada: Mapa 16x16 8-bit detectado. Passo da linha definido para 20.", 'info');
+            }
+
 
         } catch (error) {
             const errorMessage = `ERRO ao processar o mapa "${def.name}": ${(error as Error).message}`;
@@ -250,13 +254,9 @@ export default function EcuTuningAssistant() {
             setIsProcessing(false);
         }
     }, [selectedMapName, binFile, xdfFile, addLog, toast, manualConfig]);
-
-    const handleMapSelect = (name: string) => {
-        setSelectedMapName(name);
-        setProcessedMap(null);
-        setIsModified(false);
-
-        const def = xdfFile?.definitions.find(d => d.name === name);
+    
+    useEffect(() => {
+        const def = xdfFile?.definitions.find(d => d.name === selectedMapName);
         if (!def || !def.xAxisDef || !def.yAxisDef) {
             setManualConfig(initialManualConfig);
             return;
@@ -274,21 +274,16 @@ export default function EcuTuningAssistant() {
             sortX: def.xAxisDef.requiresSort,
             sortY: def.yAxisDef.requiresSort,
         };
-        
-        const isSpecialMap = def.cols === 16 && def.rows === 16 && def.dataSize === 1;
-        if (isSpecialMap) {
-            newManualConfig.z.rowStride = 20;
-            addLog("Regra especial aplicada: Mapa 16x16 8-bit detectado. Passo da linha definido para 20.", 'info');
-        }
-
         setManualConfig(newManualConfig);
-    };
-    
+
+    }, [selectedMapName, xdfFile]);
+
+
     useEffect(() => {
         if (selectedMapName && binFile && xdfFile) {
             processMap();
         }
-    }, [selectedMapName, processMap]); // Removed manualConfig from deps to let handleMapSelect control it
+    }, [selectedMapName, binFile, xdfFile, manualConfig, processMap]);
     
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -300,8 +295,10 @@ export default function EcuTuningAssistant() {
         });
     };
     
-    const handleManualRecalculate = () => {
-        processMap();
+    const handleMapSelect = (name: string) => {
+        setIsModified(false);
+        setProcessedMap(null);
+        setSelectedMapName(name);
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
@@ -628,7 +625,7 @@ export default function EcuTuningAssistant() {
                   </div>
                   <Button
                     size="sm"
-                    onClick={handleManualRecalculate}
+                    onClick={processMap}
                     disabled={!selectedMapName || isProcessing}
                   >
                     {isProcessing && (
@@ -810,5 +807,6 @@ export default function EcuTuningAssistant() {
     
 
     
+
 
 
