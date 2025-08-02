@@ -49,6 +49,7 @@ function MassEditDialog({
     onMassEdit: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', value: number) => void;
 }) {
     const [value, setValue] = useState('');
+    const { toast } = useToast();
 
     if (!payload.selection.start || !payload.selection.end) return null;
 
@@ -362,7 +363,7 @@ export default function EcuTuningAssistant() {
                 return;
             }
 
-            // Clear map-related state when a new file of any type is loaded
+            // A new file of any type invalidates the old map processing results
             clearMapState();
 
             if (type === 'bin' && buffer instanceof ArrayBuffer) {
