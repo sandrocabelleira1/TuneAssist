@@ -1,6 +1,5 @@
 
 
-
 export type AxisData = {
   label: string;
   raw: (number|string)[];
