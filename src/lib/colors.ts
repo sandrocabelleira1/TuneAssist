@@ -1,7 +1,7 @@
 export function getHeatmapColor(value: number | null, min: number, max: number): string {
   if (value === null || isNaN(value)) return 'hsl(var(--card))';
   const range = max - min;
-  if (range <= 0) return 'rgba(128, 128, 255, 0.7)'; // Default color for single value
+  if (range <= 0) return 'hsla(240, 100%, 50%, 0.7)'; // Blue for single value
 
   const ratio = Math.max(0, Math.min(1, (value - min) / range));
 
@@ -9,6 +9,18 @@ export function getHeatmapColor(value: number | null, min: number, max: number):
   const hue = (1 - ratio) * 240;
 
   return `hsla(${hue}, 100%, 50%, 0.7)`;
+}
+
+export function getPlotlyHeatmapScale(): [number, string][] {
+    const scale: [number, string][] = [];
+    const steps = 20;
+    for (let i = 0; i <= steps; i++) {
+        const ratio = i / steps;
+        // HSL color interpolation: Blue (240) -> Green (120) -> Red (0)
+        const hue = (1 - ratio) * 240;
+        scale.push([ratio, `hsl(${hue}, 100%, 50%)`]);
+    }
+    return scale;
 }
 
 export function getTextColorForBackground(bgColor: string): string {

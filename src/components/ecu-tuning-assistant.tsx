@@ -1108,7 +1108,7 @@ export default function EcuTuningAssistant() {
                           onMassUpdate={handleMassUpdate}
                         />
                       </TabsContent>
-                      <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4">
+                      <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4 flex flex-col">
                         {processedMap?.axes && processedMap?.calculatedMap ? (
                           <SurfacePlot3D
                             mapData={processedMap.calculatedMap}

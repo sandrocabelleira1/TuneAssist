@@ -7,6 +7,7 @@ import type { PlotlyProps } from 'react-plotly.js';
 import { AlertCircle } from 'lucide-react';
 import type { MapData } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { getPlotlyHeatmapScale } from '@/lib/colors';
 
 interface SurfacePlot3DProps extends React.HTMLAttributes<HTMLDivElement> {
   mapData: MapData; 
@@ -33,11 +34,22 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
         })
     );
 
+    const { minVal, maxVal } = mapData.flat().reduce((acc, val) => {
+        if (val === null || val === undefined) return acc;
+        return {
+            minVal: Math.min(acc.minVal, val),
+            maxVal: Math.max(acc.maxVal, val),
+        };
+    }, { minVal: Infinity, maxVal: -Infinity });
+
 
     return {
       x: xAxis,
       y: yAxis,
       z: numericMapData,
+      colorscale: getPlotlyHeatmapScale(),
+      zmin: minVal,
+      zmax: maxVal,
     };
   }, [mapData, xAxis, yAxis]);
 
@@ -59,8 +71,10 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     z: plotData.z as any[][],
     type: 'surface',
     connectgaps: false,
-    colorscale: 'Viridis',
-    reversescale: true,
+    colorscale: plotData.colorscale,
+    cmin: plotData.zmin,
+    cmax: plotData.zmax,
+    reversescale: false,
     colorbar: {
       title: zAxisLabel,
       tickfont: { color: 'hsl(var(--foreground))' },
@@ -84,7 +98,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
   };
 
   return (
-    <div className={cn("h-full w-full bg-card rounded-lg border", className)} {...props}>
+    <div className={cn("h-full w-full bg-card rounded-lg border flex-1 min-h-0", className)} {...props}>
       <div className="h-full w-full">
         <Plot
           data={data}
