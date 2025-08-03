@@ -19,7 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { MapData, AxisData, PlotOrientation } from '@/lib/types';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Plus, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -307,14 +307,17 @@ function EditPointModal({ point, onSave, onClose, yAxisLabel, xAxisLabel }: {
     yAxisLabel: string;
     xAxisLabel: string;
 }) {
-    const [newValue, setNewValue] = useState(String(point?.currentValue ?? ''));
+    const [percentage, setPercentage] = useState('');
 
-    const handleConfirm = () => {
-        const numValue = parseFloat(newValue);
-        if (!isNaN(numValue)) {
-            onSave(numValue);
+    const handleConfirm = (isSubtraction: boolean = false) => {
+        const numPercentage = parseFloat(percentage);
+        if (point && !isNaN(numPercentage)) {
+            const multiplier = isSubtraction ? -1 : 1;
+            const finalPercentage = numPercentage * multiplier;
+            const newValue = point.currentValue * (1 + finalPercentage / 100);
+            onSave(newValue);
         } else {
-            console.error("Valor inválido");
+            console.error("Valor percentual inválido");
         }
     };
     
@@ -326,23 +329,25 @@ function EditPointModal({ point, onSave, onClose, yAxisLabel, xAxisLabel }: {
                 <DialogHeader>
                     <DialogTitle>Editar Ponto do Gráfico</DialogTitle>
                     <DialogDescription>
-                        Modifique o valor para o ponto em {xAxisLabel} = {tickFormatter(point.xValue)}.
+                        Modifique o valor de {yAxisLabel} para o ponto em {xAxisLabel} = {tickFormatter(point.xValue)} (Valor Atual: {point.currentValue.toFixed(2)}).
                     </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
-                    <Label htmlFor="pointValue">{yAxisLabel}</Label>
+                    <Label htmlFor="pointValue">Alteração Percentual (%)</Label>
                     <Input 
                         id="pointValue"
                         type="number"
-                        value={newValue}
-                        onChange={(e) => setNewValue(e.target.value)}
+                        placeholder="Ex: 10 ou -5"
+                        value={percentage}
+                        onChange={(e) => setPercentage(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleConfirm(); }}
                         autoFocus
                     />
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose}>Cancelar</Button>
-                    <Button onClick={handleConfirm}>Guardar</Button>
+                    <Button variant="destructive" onClick={() => handleConfirm(true)}><Minus className="mr-2 h-4 w-4" /> Subtrair %</Button>
+                    <Button onClick={() => handleConfirm(false)}><Plus className="mr-2 h-4 w-4" /> Adicionar %</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
