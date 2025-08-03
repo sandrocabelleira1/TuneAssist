@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Sidebar, SidebarProvider, SidebarHeader, SidebarContent, SidebarFooter, SidebarTrigger, SidebarRail, SidebarInset } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getHeatmapColor, getTextColorForBackground } from '@/lib/colors';
+import { getHeatmapColor, getTextColorForBackground, getPlotlyHeatmapScale } from '@/lib/colors';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -129,7 +129,13 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         if (isSelecting) {
             setIsSelecting(false);
             if (selection.start && selection.end && mapData) {
-                setMassEditPayload({ selection, currentMapData: mapData });
+                const startY = Math.min(selection.start.y, selection.end.y);
+                const endY = Math.max(selection.start.y, selection.end.y);
+                const startX = Math.min(selection.start.x, selection.end.x);
+                const endX = Math.max(selection.start.x, selection.end.x);
+                if (startY !== endY || startX !== endX) {
+                    setMassEditPayload({ selection, currentMapData: mapData });
+                }
             }
         }
     }, [isSelecting, selection, mapData]);
@@ -143,22 +149,6 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         setMassEditPayload(null);
         setSelection({ start: null, end: null });
     };
-
-    useEffect(() => {
-        const handleMouseUpOutside = (e: MouseEvent) => {
-            if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
-                if (isSelecting) {
-                    handleMouseUp();
-                }
-            }
-        };
-
-        window.addEventListener('mouseup', handleMouseUpOutside);
-        return () => {
-            window.removeEventListener('mouseup', handleMouseUpOutside);
-        };
-    }, [isSelecting, handleMouseUp]);
-
 
     if (!axes || !selectedMapDefinition || !mapData) {
         return (
@@ -221,11 +211,11 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                 <thead>
                     <tr>
                         <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-left font-semibold">
-                            <span className="flex items-center justify-between">
+                            <div className="flex items-center justify-between">
                                 <span>{yAxisLabel}</span>
-                                <span>\</span>
+                                <span className="mx-2">\</span>
                                 <span>{xAxisLabel}</span>
-                            </span>
+                            </div>
                         </th>
                         {axes.x.calculated.map((x: any, i: number) => (
                             <th key={i} className="sticky top-0 z-10 bg-muted p-2 border border-border font-semibold">
@@ -338,7 +328,7 @@ export default function EcuTuningAssistant() {
     }, []);
 
     const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
-
+    
     const clearMapState = useCallback(() => {
         setSelectedMapId('');
         setProcessedMap(null);
@@ -448,12 +438,6 @@ export default function EcuTuningAssistant() {
         }
     }, [binFile, xdfFile, addLog, toast]);
     
-    useEffect(() => {
-        const configChanged = JSON.stringify(manualConfig) !== JSON.stringify(initialManualConfig);
-        if (selectedMapId && binFile && xdfFile && configChanged) {
-             const isMapInCache = !!processedMapCache[selectedMapId];
-        }
-    }, [manualConfig, selectedMapId, binFile, xdfFile, processedMapCache]);
 
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
         setManualConfig(prev => {
@@ -1030,7 +1014,7 @@ export default function EcuTuningAssistant() {
           </Sidebar>
           <SidebarInset>
             <Header />
-            <main className="flex-1 flex flex-col min-h-0">
+            <main className="flex flex-col min-h-0 h-[calc(100%-3.5rem)]">
               <div className="flex items-center p-2 border-b">
                 <SidebarTrigger />
                 <div className="flex items-center ml-2">
