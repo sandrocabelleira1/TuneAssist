@@ -687,7 +687,7 @@ export default function EcuTuningAssistant() {
     };
 
     return (
-      <div className="flex h-full w-full bg-background">
+      <div className="h-full w-full bg-background">
         <SidebarProvider>
           <Sidebar side="left" className="border-r">
             <SidebarRail />
@@ -1059,7 +1059,7 @@ export default function EcuTuningAssistant() {
                   )}
                 </div>
               </div>
-              <div className="flex-1 flex flex-col min-h-0 p-4">
+              <div className="flex-1 p-4 flex flex-col">
                 <Tabs
                   defaultValue="view-table"
                   className="w-full flex-1 flex flex-col min-h-0"
