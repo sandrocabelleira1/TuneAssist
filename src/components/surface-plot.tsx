@@ -98,16 +98,14 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
   };
 
   return (
-    <div className={cn("h-full w-full bg-card rounded-lg border flex-1 min-h-0", className)} {...props}>
-      <div className="h-full w-full">
-        <Plot
-          data={data}
-          layout={layout}
-          useResizeHandler
-          className="h-full w-full"
-          config={{ responsive: true, displaylogo: false }}
-        />
-      </div>
+    <div className={cn("h-full w-full bg-card rounded-lg border", className)} {...props}>
+      <Plot
+        data={data}
+        layout={layout}
+        useResizeHandler
+        className="h-full w-full"
+        config={{ responsive: true, displaylogo: false }}
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ResponsiveContainer
 } from 'recharts';
 import {
   ChartContainer,
@@ -251,39 +252,41 @@ export default function LinePlot2D({
                 </div>
             ) : (
                 <ChartContainer config={{}} className="h-full w-full">
-                    <LineChart 
-                        data={currentChartData} 
-                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                    >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                        type="number"
-                        dataKey="x"
-                        domain={['dataMin', 'dataMax']}
-                        tickFormatter={tickFormatter}
-                        label={{ value: chartXAxisLabel, position: 'insideBottom', offset: -15 }}
-                        allowDuplicatedCategory={false}
-                    />
-                    <YAxis
-                        type="number"
-                        domain={['auto', 'auto']}
-                        tickFormatter={tickFormatter}
-                        label={{ value: mapName, angle: -90, position: 'insideLeft' }}
-                    />
-                    <Tooltip content={<ChartTooltipContent indicator="dot" />} />
-                    <Legend verticalAlign="top" />
-                    <Line
-                        dataKey="y"
-                        name={lineDataKey}
-                        type="monotone"
-                        stroke="hsl(var(--primary))"
-                        strokeWidth={2}
-                        dot={<CustomDot />}
-                        activeDot={false}
-                        isAnimationActive={true}
-                        connectNulls
-                    />
-                    </LineChart>
+                    <ResponsiveContainer>
+                      <LineChart 
+                          data={currentChartData} 
+                          margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                      >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis
+                          type="number"
+                          dataKey="x"
+                          domain={['dataMin', 'dataMax']}
+                          tickFormatter={tickFormatter}
+                          label={{ value: chartXAxisLabel, position: 'insideBottom', offset: -15 }}
+                          allowDuplicatedCategory={false}
+                      />
+                      <YAxis
+                          type="number"
+                          domain={['auto', 'auto']}
+                          tickFormatter={tickFormatter}
+                          label={{ value: mapName, angle: -90, position: 'insideLeft' }}
+                      />
+                      <Tooltip content={<ChartTooltipContent indicator="dot" />} />
+                      <Legend verticalAlign="top" />
+                      <Line
+                          dataKey="y"
+                          name={lineDataKey}
+                          type="monotone"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2}
+                          dot={<CustomDot />}
+                          activeDot={false}
+                          isAnimationActive={true}
+                          connectNulls
+                      />
+                      </LineChart>
+                    </ResponsiveContainer>
                 </ChartContainer>
             )}
         </div>

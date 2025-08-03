@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -1098,36 +1099,40 @@ export default function EcuTuningAssistant() {
                   ) : (
                     <>
                       <TabsContent value="view-table" className="flex-1 min-h-0 mt-4">
-                        <DataTable
-                          key={selectedMapId + JSON.stringify(processedMap?.addresses)}
-                          mapData={processedMap?.calculatedMap ?? null}
-                          addresses={processedMap?.addresses ?? null}
-                          axes={processedMap?.axes ?? null}
-                          selectedMapDefinition={selectedMapDefinition}
-                          onCellChange={handleCellChange}
-                          onMassUpdate={handleMassUpdate}
-                        />
+                         <div className="relative h-full w-full">
+                           <DataTable
+                              key={selectedMapId + JSON.stringify(processedMap?.addresses)}
+                              mapData={processedMap?.calculatedMap ?? null}
+                              addresses={processedMap?.addresses ?? null}
+                              axes={processedMap?.axes ?? null}
+                              selectedMapDefinition={selectedMapDefinition}
+                              onCellChange={handleCellChange}
+                              onMassUpdate={handleMassUpdate}
+                           />
+                         </div>
                       </TabsContent>
                       <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4">
-                        {processedMap?.axes && processedMap?.calculatedMap ? (
-                          <SurfacePlot3D
-                            mapData={processedMap.calculatedMap}
-                            xAxis={processedMap.axes.x.calculated}
-                            yAxis={processedMap.axes.y.calculated}
-                            xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
-                            yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
-                            zAxisLabel={
-                              selectedMapDefinition?.name || 'Mapa Principal'
-                            }
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-full text-muted-foreground">
-                            <p>
-                              A aguardar dados completos do mapa para o gráfico
-                              3D.
-                            </p>
-                          </div>
-                        )}
+                         <div className="relative h-full w-full">
+                            {processedMap?.axes && processedMap?.calculatedMap ? (
+                              <SurfacePlot3D
+                                mapData={processedMap.calculatedMap}
+                                xAxis={processedMap.axes.x.calculated}
+                                yAxis={processedMap.axes.y.calculated}
+                                xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
+                                yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
+                                zAxisLabel={
+                                  selectedMapDefinition?.name || 'Mapa Principal'
+                                }
+                              />
+                            ) : (
+                              <div className="flex items-center justify-center h-full text-muted-foreground">
+                                <p>
+                                  A aguardar dados completos do mapa para o gráfico
+                                  3D.
+                                </p>
+                              </div>
+                            )}
+                         </div>
                       </TabsContent>
                       <TabsContent value="view-2d" className="flex-1 min-h-0 mt-4 flex flex-col gap-2">
                          <div className="flex items-center gap-2 self-start">
@@ -1144,18 +1149,20 @@ export default function EcuTuningAssistant() {
                              </Tooltip>
                            </TooltipProvider>
                           </div>
-                        <LinePlot2D
-                          mapData={processedMap?.calculatedMap ?? null}
-                          xAxis={processedMap?.axes?.x ?? null}
-                          yAxis={processedMap?.axes?.y ?? null}
-                          mapName={
-                            selectedMapDefinition?.name || 'Mapa Principal'
-                          }
-                          selectedLineIndex={selectedLine}
-                          onLineSelect={setSelectedLine}
-                          onPointChange={handlePointChange}
-                          orientation={plotOrientation}
-                        />
+                          <div className="relative flex-1 w-full h-full">
+                            <LinePlot2D
+                              mapData={processedMap?.calculatedMap ?? null}
+                              xAxis={processedMap?.axes?.x ?? null}
+                              yAxis={processedMap?.axes?.y ?? null}
+                              mapName={
+                                selectedMapDefinition?.name || 'Mapa Principal'
+                              }
+                              selectedLineIndex={selectedLine}
+                              onLineSelect={setSelectedLine}
+                              onPointChange={handlePointChange}
+                              orientation={plotOrientation}
+                            />
+                          </div>
                       </TabsContent>
                     </>
                   )}
