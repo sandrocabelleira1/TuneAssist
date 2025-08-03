@@ -129,18 +129,21 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         if (isSelecting) {
             setIsSelecting(false);
             if (selection.start && selection.end && mapData) {
-                // Check if more than one cell is selected
-                const start = selection.start;
-                const end = selection.end;
-                 if (start.y !== end.y || start.x !== end.x) {
-                    setMassEditPayload({ selection, currentMapData: mapData });
-                 } else {
-                    // If only one cell is selected, clear selection
-                    setSelection({ start: null, end: null });
-                 }
+                // Open mass edit dialog even for a single cell selection
+                setMassEditPayload({ selection, currentMapData: mapData });
             }
         }
     }, [isSelecting, selection, mapData]);
+
+    const handleMassEditAndClose = (
+        editSelection: CellSelection, 
+        operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', 
+        value: number
+    ) => {
+        onMassUpdate(editSelection, operation, value);
+        setMassEditPayload(null);
+        setSelection({ start: null, end: null }); // Clear visual selection
+    };
 
     useEffect(() => {
         const handleMouseUpOutside = (e: MouseEvent) => {
@@ -239,10 +242,10 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                                 {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
                             </td>
                             {mapData[yi]?.map((cell, xi) => {
-                                const bgColor = getHeatmapColor(cell, minVal, maxVal);
-                                const textColor = getTextColorForBackground(bgColor);
-                                const address = addresses?.[yi]?.[xi];
                                 const selected = isCellSelected(yi, xi);
+                                const bgColor = selected ? 'hsl(var(--primary) / 0.8)' : getHeatmapColor(cell, minVal, maxVal);
+                                const textColor = selected ? 'hsl(var(--primary-foreground))' : getTextColorForBackground(bgColor);
+                                const address = addresses?.[yi]?.[xi];
                                 return (
                                     <td
                                         key={xi}
@@ -282,7 +285,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                         setMassEditPayload(null);
                         setSelection({ start: null, end: null }); // Clear visual selection
                     }}
-                    onMassEdit={onMassUpdate}
+                    onMassEdit={handleMassEditAndClose}
                 />
             )}
         </div>
