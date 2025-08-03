@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -130,7 +129,6 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         if (isSelecting) {
             setIsSelecting(false);
             if (selection.start && selection.end && mapData) {
-                // Open mass edit dialog even for a single cell selection
                 setMassEditPayload({ selection, currentMapData: mapData });
             }
         }
@@ -143,7 +141,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     ) => {
         onMassUpdate(editSelection, operation, value);
         setMassEditPayload(null);
-        setSelection({ start: null, end: null }); // Clear visual selection
+        setSelection({ start: null, end: null });
     };
 
     useEffect(() => {
@@ -230,7 +228,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                             </span>
                         </th>
                         {axes.x.calculated.map((x: any, i: number) => (
-                            <th key={i} className="sticky top-0 bg-muted p-2 border border-border font-semibold">
+                            <th key={i} className="sticky top-0 z-10 bg-muted p-2 border border-border font-semibold">
                                 {typeof x === 'number' && xAxisDecimalPlaces !== -1 ? x.toFixed(xAxisDecimalPlaces) : x}
                             </th>
                         ))}
@@ -239,7 +237,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                 <tbody>
                     {axes.y.calculated.map((y: any, yi: number) => (
                         <tr key={yi}>
-                            <td className="sticky left-0 bg-muted p-2 border border-border font-bold text-right">
+                            <td className="sticky left-0 z-10 bg-muted p-2 border border-border font-bold text-right">
                                 {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
                             </td>
                             {mapData[yi]?.map((cell, xi) => {
@@ -284,7 +282,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                     payload={massEditPayload}
                     onClose={() => {
                         setMassEditPayload(null);
-                        setSelection({ start: null, end: null }); // Clear visual selection
+                        setSelection({ start: null, end: null });
                     }}
                     onMassEdit={handleMassEditAndClose}
                 />
@@ -368,8 +366,6 @@ export default function EcuTuningAssistant() {
                 return;
             }
             
-            // If we are loading a new file of any type, we should clear the processed map state
-            // because the combination is now different.
             if ((type === 'bin' && binFile?.name !== file.name) || (type === 'xdf' && xdfFile?.name !== file.name)) {
                 clearMapState();
                 if (type === 'xdf' && binFile) addLog(`Ficheiro BIN "${binFile.name}" mantido.`, "info");
@@ -412,7 +408,6 @@ export default function EcuTuningAssistant() {
             reader.readAsArrayBuffer(file);
         }
         
-        // Reset the input value to allow re-uploading the same file
         e.target.value = '';
     };
 
@@ -430,7 +425,6 @@ export default function EcuTuningAssistant() {
         addLog(`A processar o mapa: ${def.name}...`, 'info');
         
         try {
-            // Allow UI to update before blocking operation
             await new Promise(resolve => setTimeout(resolve, 0));
 
             addLog("A processar com as definições atuais (XDF/Manual)...", 'info');
@@ -477,7 +471,6 @@ export default function EcuTuningAssistant() {
     const handleMapSelect = (id: string) => {
         if (!xdfFile || !binFile || !id) return;
         
-        // Save current modifications before switching
         if (isModified && selectedMapId && processedMap) {
             addLog(`Salvando alterações para "${selectedMapDefinition?.name}" na cache antes de trocar.`, 'info');
             setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: processedMap }));
@@ -543,18 +536,14 @@ export default function EcuTuningAssistant() {
         const { originalIndices: xOriginalIndices } = processedMap.axes.x;
         const { originalIndices: yOriginalIndices } = processedMap.axes.y;
     
-        // The rowIndex and colIndex from the point change event are based on the *sorted* view.
-        // We need to map them back to the original, unsorted indices to update the correct cell.
         const originalRowIdx = yOriginalIndices[rowIndex];
         const originalColIdx = xOriginalIndices[colIndex];
     
         addLog(`Alteração de ponto [${rowIndex}, ${colIndex}] (Original [${originalRowIdx}, ${originalColIdx}]) para ${newValue.toFixed(2)}`, 'info');
     
         const newMap = processedMap.calculatedMap.map(row => [...row]);
-        newMap[rowIndex][colIndex] = newValue; // Update the sorted map for immediate UI feedback
+        newMap[rowIndex][colIndex] = newValue;
     
-        // We also need to update the raw map if we want saving to work correctly.
-        // This part can be tricky if the inversion is complex. For now, let's update calculatedMap and handle saving later.
         const newProcessedMap = { ...processedMap, calculatedMap: newMap };
         setProcessedMap(newProcessedMap);
         
@@ -593,7 +582,6 @@ export default function EcuTuningAssistant() {
                         case 'set_value':
                              newValue = value;
                              break;
-                        // Interpolate logic can be complex. For now, linear interpolation between corners.
                         case 'interpolate': {
                             const topLeft = newMap[minY][minX]!;
                             const topRight = newMap[minY][maxX]!;
@@ -683,7 +671,7 @@ export default function EcuTuningAssistant() {
 
     const togglePlotOrientation = () => {
         setPlotOrientation(prev => prev === 'y-vs-x' ? 'x-vs-y' : 'y-vs-x');
-        setSelectedLine(0); // Reset selection when toggling
+        setSelectedLine(0);
     };
 
     return (
@@ -1059,7 +1047,7 @@ export default function EcuTuningAssistant() {
                   )}
                 </div>
               </div>
-              <div className="flex-1 p-4 flex flex-col">
+              <div className="flex-1 p-4 flex flex-col min-h-0">
                 <Tabs
                   defaultValue="view-table"
                   className="w-full flex-1 flex flex-col min-h-0"
