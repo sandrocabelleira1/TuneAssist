@@ -217,7 +217,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     };
     
     return (
-        <div className="overflow-auto h-full w-full" ref={tableRef} onMouseUp={handleMouseUp}>
+        <div className="overflow-auto h-full" ref={tableRef} onMouseUp={handleMouseUp}>
             <table className="w-full border-collapse text-xs select-none">
                 <thead>
                     <tr>
@@ -1058,7 +1058,7 @@ export default function EcuTuningAssistant() {
                   )}
                 </div>
               </div>
-              <div className="p-4 flex-1 flex flex-col min-h-0">
+              <div className="flex-1 flex flex-col min-h-0 p-4">
                 <Tabs
                   defaultValue="view-table"
                   className="w-full flex-1 flex flex-col min-h-0"
