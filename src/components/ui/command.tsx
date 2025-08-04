@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -115,22 +116,36 @@ const CommandItem = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item> & {
     keepOpenOnSelect?: boolean
   }
->(({ className, keepOpenOnSelect, onSelect, ...props }, ref) => (
-  <CommandPrimitive.Item
-    ref={ref}
-    className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      className
-    )}
-    onSelect={(value) => {
-        if (keepOpenOnSelect) {
-            (document.querySelector(`[cmdk-item][data-value="${value}"]`) as HTMLElement)?.focus();
+>(({ className, keepOpenOnSelect, onSelect, ...props }, ref) => {
+  const handleSelect = (event: React.MouseEvent) => {
+    if (keepOpenOnSelect) {
+      event.preventDefault();
+    }
+    if (onSelect) {
+        // We need to find the value from the DOM element, since onSelect in cmdk is different
+        let el = event.currentTarget as HTMLElement | null;
+        while(el && !el.getAttribute('data-value')) {
+            el = el.parentElement;
         }
-        onSelect?.(value);
-    }}
-    {...props}
-  />
-))
+        const value = el?.getAttribute('data-value');
+        if (value) {
+            onSelect(value);
+        }
+    }
+  };
+
+  return (
+    <CommandPrimitive.Item
+        ref={ref}
+        className={cn(
+        "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className
+        )}
+        onMouseDown={handleSelect} // Using onMouseDown to capture the event before the popover closes
+        {...props}
+    />
+  );
+});
 
 CommandItem.displayName = CommandPrimitive.Item.displayName
 
@@ -161,3 +176,5 @@ export {
   CommandShortcut,
   CommandSeparator,
 }
+
+    

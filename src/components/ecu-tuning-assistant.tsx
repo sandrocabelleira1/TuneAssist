@@ -932,24 +932,27 @@ export default function EcuTuningAssistant() {
 
     const handleMapSelectionChange = (id: string) => {
         const isSelected = selectedMapIds.includes(id);
-        const newSelection = isSelected
-            ? selectedMapIds.filter((mapId) => mapId !== id)
-            : [...selectedMapIds, id];
+        let newSelection;
+
+        if (isSelected) {
+            newSelection = selectedMapIds.filter((mapId) => mapId !== id);
+        } else {
+            newSelection = [...selectedMapIds, id];
+        }
 
         setSelectedMapIds(newSelection);
 
         // Logic to decide the active map
         if (newSelection.length === 0) {
-            // If all are deselected, there is no active map
             setActiveMap(null);
         } else if (isSelected && id === activeMapId) {
             // If the active map was just deselected, make the first of the remaining selected maps active
-            setActiveMap(newSelection[0]);
+            setActiveMap(newSelection[0] || null);
         } else if (!isSelected) {
             // If a new map is selected, make it active
              setActiveMap(id);
         }
-        // Otherwise, keep the current active map
+        // Otherwise (deselected a non-active map), keep the current active map
     };
 
 
@@ -1608,5 +1611,7 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
 
     
