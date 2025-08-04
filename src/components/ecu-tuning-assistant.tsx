@@ -301,6 +301,7 @@ export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
     const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFDefinition[], allTables: Map<string, Element> } | null>(null);
+    const [logFile, setLogFile] = useState<{ name: string; content: string } | null>(null);
     const [logs, setLogs] = useState<LogMessage[]>([]);
     
     const [selectedMapId, setSelectedMapId] = useState<string>('');
@@ -321,6 +322,7 @@ export default function EcuTuningAssistant() {
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
+    const logInputRef = useRef<HTMLInputElement>(null);
 
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         const id = `${Date.now()}-${Math.random()}`;
@@ -398,6 +400,38 @@ export default function EcuTuningAssistant() {
             reader.readAsArrayBuffer(file);
         }
         
+        e.target.value = '';
+    };
+
+    const handleLogFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        addLog(`A ler o ficheiro de log ${file.name}...`, 'info');
+        const reader = new FileReader();
+
+        reader.onload = (event) => {
+            const content = event.target?.result;
+            if (typeof content === 'string') {
+                setLogFile({ name: file.name, content });
+                const successMessage = `Ficheiro de log carregado: ${file.name}`;
+                addLog(successMessage, 'success');
+                toast({ title: 'Log Carregado', description: successMessage });
+                // Aqui podemos adicionar a lógica para processar o CSV no futuro
+            } else {
+                const errorMessage = `Erro ao ler o conteúdo do ficheiro de log ${file.name}`;
+                addLog(errorMessage, 'error');
+                toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
+            }
+        };
+
+        reader.onerror = () => {
+            const errorMessage = `Erro fatal ao ler o ficheiro de log ${file.name}.`;
+            addLog(errorMessage, 'error');
+            toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
+        };
+
+        reader.readAsText(file);
         e.target.value = '';
     };
 
@@ -1150,9 +1184,16 @@ export default function EcuTuningAssistant() {
                             </CardHeader>
                             <CardContent className="flex flex-col gap-4">
                                 <div className="flex items-center gap-4">
-                                    <Button variant="outline">
+                                    <Button variant="outline" onClick={() => logInputRef.current?.click()}>
                                         <UploadCloud className="mr-2" /> Carregar Log de Ensaio (.csv)
                                     </Button>
+                                    <input
+                                      ref={logInputRef}
+                                      type="file"
+                                      accept=".csv"
+                                      className="hidden"
+                                      onChange={handleLogFileChange}
+                                    />
                                 </div>
                                 <div className="flex-1 border rounded-lg p-4 flex items-center justify-center text-muted-foreground">
                                     <p>Aguardando dados do ensaio...</p>
