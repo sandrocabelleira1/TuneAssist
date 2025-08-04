@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -866,10 +867,10 @@ export default function EcuTuningAssistant() {
             let mapToProcess = processedMapCache[mapId];
             if (!mapToProcess) {
                  const config = {
-                    x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
-                    y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
+                    x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef?.dataSize },
+                    y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef?.dataSize },
                     z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: def.rowStride },
-                    isBigEndian: def.isBigEndian, sortX: def.xAxisDef.requiresSort, sortY: def.yAxisDef.requiresSort,
+                    isBigEndian: def.isBigEndian, sortX: def.xAxisDef?.requiresSort, sortY: def.yAxisDef?.requiresSort,
                 };
                 mapToProcess = await processAndCacheMap(mapId, config);
             }
@@ -1021,7 +1022,9 @@ export default function EcuTuningAssistant() {
                                     <CommandItem
                                         key={def.uniqueId}
                                         value={def.name}
-                                        onSelect={() => {
+                                        keepOpenOnSelect
+                                        onSelect={(e) => {
+                                            e.preventDefault();
                                             handleMapSelectionChange(def.uniqueId);
                                         }}
                                     >

@@ -112,14 +112,20 @@ CommandSeparator.displayName = CommandPrimitive.Separator.displayName
 
 const CommandItem = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item> & { keepOpenOnSelect?: boolean }
+>(({ className, keepOpenOnSelect, onSelect, ...props }, ref) => (
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
       "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className
     )}
+    onSelect={(e) => {
+      if (keepOpenOnSelect) {
+        e.preventDefault();
+      }
+      onSelect?.(e);
+    }}
     {...props}
   />
 ))
