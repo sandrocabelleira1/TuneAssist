@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin, calculateCorrections, writeMultipleMapsToBin } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -700,7 +700,7 @@ export default function EcuTuningAssistant() {
         setIsModified(true);
         setAiModifiedCells(new Set());
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({ ...prev, [activeMapId as string]: true }));
+        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
     };
 
 
@@ -1013,7 +1013,7 @@ export default function EcuTuningAssistant() {
                                 {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
                                     <CommandItem
                                         key={def.uniqueId}
-                                        value={def.uniqueId}
+                                        value={def.name}
                                         onSelect={() => handleMapSelectionChange(def.uniqueId)}
                                     >
                                         <div className={cn(
@@ -1022,7 +1022,7 @@ export default function EcuTuningAssistant() {
                                                 ? "bg-primary text-primary-foreground"
                                                 : "opacity-50 [&_svg]:invisible"
                                         )}>
-                                            <Wand2 className="h-4 w-4" /> {/* Check Icon */}
+                                            <Check className="h-4 w-4" />
                                         </div>
                                         <span>{def.name}</span>
                                     </CommandItem>
@@ -1585,4 +1585,5 @@ export default function EcuTuningAssistant() {
     );
 }
 
+    
     
