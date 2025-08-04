@@ -3,6 +3,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import Papa from 'papaparse';
 import { Sidebar, SidebarProvider, SidebarHeader, SidebarContent, SidebarFooter, SidebarTrigger, SidebarRail, SidebarInset } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +23,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import LogDataTable from '@/components/log-data-table';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -302,6 +304,7 @@ export default function EcuTuningAssistant() {
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
     const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFDefinition[], allTables: Map<string, Element> } | null>(null);
     const [logFile, setLogFile] = useState<{ name: string; content: string } | null>(null);
+    const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
     
     const [selectedMapId, setSelectedMapId] = useState<string>('');
@@ -408,30 +411,26 @@ export default function EcuTuningAssistant() {
         if (!file) return;
 
         addLog(`A ler o ficheiro de log ${file.name}...`, 'info');
-        const reader = new FileReader();
 
-        reader.onload = (event) => {
-            const content = event.target?.result;
-            if (typeof content === 'string') {
-                setLogFile({ name: file.name, content });
-                const successMessage = `Ficheiro de log carregado: ${file.name}`;
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            dynamicTyping: true,
+            complete: (results) => {
+                setLogFile({ name: file.name, content: Papa.unparse(results.data) });
+                setLogData(results.data);
+                const successMessage = `Ficheiro de log "${file.name}" carregado e processado com ${results.data.length} linhas.`;
                 addLog(successMessage, 'success');
                 toast({ title: 'Log Carregado', description: successMessage });
-                // Aqui podemos adicionar a lógica para processar o CSV no futuro
-            } else {
-                const errorMessage = `Erro ao ler o conteúdo do ficheiro de log ${file.name}`;
+            },
+            error: (error) => {
+                const errorMessage = `Erro ao processar CSV: ${error.message}`;
                 addLog(errorMessage, 'error');
-                toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
+                toast({ title: 'Erro de CSV', description: errorMessage, variant: 'destructive' });
+                setLogData([]);
             }
-        };
+        });
 
-        reader.onerror = () => {
-            const errorMessage = `Erro fatal ao ler o ficheiro de log ${file.name}.`;
-            addLog(errorMessage, 'error');
-            toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
-        };
-
-        reader.readAsText(file);
         e.target.value = '';
     };
 
@@ -1109,7 +1108,6 @@ export default function EcuTuningAssistant() {
                   ) : (
                     <>
                       <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
-                         <div className="h-full w-full">
                            <DataTable
                               key={selectedMapId + JSON.stringify(processedMap?.addresses)}
                               mapData={processedMap?.calculatedMap ?? null}
@@ -1119,10 +1117,8 @@ export default function EcuTuningAssistant() {
                               onCellChange={handleCellChange}
                               onMassUpdate={handleMassUpdate}
                            />
-                         </div>
                       </TabsContent>
                       <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
-                         <div className="h-full w-full">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                               <SurfacePlot3D
                                 mapData={processedMap.calculatedMap}
@@ -1142,7 +1138,6 @@ export default function EcuTuningAssistant() {
                                 </p>
                               </div>
                             )}
-                         </div>
                       </TabsContent>
                       <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
                          <div className="flex flex-col gap-2 h-full w-full">
@@ -1176,33 +1171,37 @@ export default function EcuTuningAssistant() {
                             </div>
                          </div>
                       </TabsContent>
-                      <TabsContent value="analysis" className="flex-1 mt-4 min-h-0">
-                        <Card className="h-full w-full">
-                            <CardHeader>
-                                <CardTitle>Análise de Dados de Ensaio</CardTitle>
-                                <CardDescription>Carregue um ficheiro de log (.csv) do seu dinamómetro para analisar e obter sugestões de ajuste.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-4">
-                                <div className="flex items-center gap-4">
-                                    <Button variant="outline" onClick={() => logInputRef.current?.click()}>
-                                        <UploadCloud className="mr-2" /> Carregar Log de Ensaio (.csv)
-                                    </Button>
-                                    <input
-                                      ref={logInputRef}
-                                      type="file"
-                                      accept=".csv"
-                                      className="hidden"
-                                      onChange={handleLogFileChange}
-                                    />
-                                </div>
-                                <div className="flex-1 border rounded-lg p-4 flex items-center justify-center text-muted-foreground">
-                                    <p>Aguardando dados do ensaio...</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                      </TabsContent>
                     </>
                   )}
+                  <TabsContent value="analysis" className="flex-1 mt-4 min-h-0">
+                    <Card className="h-full w-full flex flex-col">
+                        <CardHeader>
+                            <CardTitle>Análise de Dados de Ensaio</CardTitle>
+                            <CardDescription>Carregue um ficheiro de log (.csv) do seu dinamómetro para analisar e obter sugestões de ajuste.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-4 flex-1 min-h-0">
+                            <div className="flex items-center gap-4">
+                                <Button variant="outline" onClick={() => logInputRef.current?.click()}>
+                                    <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
+                                </Button>
+                                <input
+                                  ref={logInputRef}
+                                  type="file"
+                                  accept=".csv"
+                                  className="hidden"
+                                  onChange={handleLogFileChange}
+                                />
+                            </div>
+                            <div className="flex-1 border rounded-lg p-4 flex items-center justify-center text-muted-foreground min-h-0">
+                                {logData.length > 0 ? (
+                                    <LogDataTable data={logData} />
+                                ) : (
+                                    <p>Aguardando dados do ensaio...</p>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                  </TabsContent>
                 </Tabs>
               </div>
             </main>
