@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -931,29 +932,28 @@ export default function EcuTuningAssistant() {
     const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
 
     const handleMapSelectionChange = (id: string) => {
-        setSelectedMapIds((prevSelected) => {
-            const isSelected = prevSelected.includes(id);
-            let newSelectedIds: string[];
+        const isSelected = selectedMapIds.includes(id);
+        const newSelectedIds = isSelected
+            ? selectedMapIds.filter((mapId) => mapId !== id)
+            : [...selectedMapIds, id];
+        
+        setSelectedMapIds(newSelectedIds);
 
-            if (isSelected) {
-                newSelectedIds = prevSelected.filter((mapId) => mapId !== id);
-            } else {
-                newSelectedIds = [...prevSelected, id];
-            }
-
-            // Logic to set active map
-            if (newSelectedIds.length === 0) {
-                setActiveMap(null);
-            } else if (id === activeMapId && isSelected) {
+        // Logic to set active map
+        if (newSelectedIds.length === 0) {
+            setActiveMap(null);
+        } else if (isSelected) {
+            // If we are DESELECTING
+            if (id === activeMapId) {
                 // If we are deselecting the active map, make another one active
                 setActiveMap(newSelectedIds[0] ?? null);
-            } else if (!activeMapId || !newSelectedIds.includes(activeMapId!)) {
-                 // If no map is active, or we are selecting a new one, make it active
-                setActiveMap(id);
             }
-            
-            return newSelectedIds;
-        });
+        } else {
+            // If we are SELECTING a new map, make it active
+            setActiveMap(id);
+        }
+        
+        setIsPopoverOpen(true);
     };
 
 
@@ -1039,11 +1039,11 @@ export default function EcuTuningAssistant() {
                             <CommandGroup>
                                 {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
                                     <CommandItem
+                                        keepOpenOnSelect
                                         key={def.uniqueId}
                                         value={def.uniqueId}
-                                        onSelect={(currentValue) => {
-                                            handleMapSelectionChange(currentValue);
-                                            setIsPopoverOpen(true); // Keep it open
+                                        onSelect={() => {
+                                            handleMapSelectionChange(def.uniqueId);
                                         }}
                                     >
                                         <div className={cn(
