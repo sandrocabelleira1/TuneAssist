@@ -4,13 +4,16 @@
 import { useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Papa from 'papaparse';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Sidebar, SidebarProvider, SidebarHeader, SidebarContent, SidebarFooter, SidebarTrigger, SidebarRail, SidebarInset } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +27,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import LogDataTable from '@/components/log-data-table';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Separator } from '@/components/ui/separator';
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -40,6 +45,15 @@ type MassEditPayload = {
     selection: CellSelection;
     currentMapData: MapData;
 };
+
+const logEntrySchema = z.object({
+    rpm: z.coerce.number().positive("RPM deve ser positivo"),
+    load: z.coerce.number().positive("Carga deve ser positiva"),
+    afr: z.coerce.number().positive("AFR deve ser positivo"),
+});
+
+type LogEntryForm = z.infer<typeof logEntrySchema>;
+
 
 function MassEditDialog({
     payload,
@@ -327,6 +341,15 @@ export default function EcuTuningAssistant() {
     const xdfInputRef = useRef<HTMLInputElement>(null);
     const logInputRef = useRef<HTMLInputElement>(null);
 
+    const logEntryForm = useForm<LogEntryForm>({
+        resolver: zodResolver(logEntrySchema),
+        defaultValues: {
+            rpm: undefined,
+            load: undefined,
+            afr: undefined,
+        },
+    });
+
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         const id = `${Date.now()}-${Math.random()}`;
         setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev].slice(0, 100));
@@ -432,6 +455,13 @@ export default function EcuTuningAssistant() {
         });
 
         e.target.value = '';
+    };
+
+    const handleAddManualLogEntry = (data: LogEntryForm) => {
+        const newEntry = { RPM: data.rpm, Load: data.load, AFR: data.afr };
+        setLogData(prev => [...prev, newEntry]);
+        addLog(`Ponto de ensaio manual adicionado: RPM=${data.rpm}, Carga=${data.load}, AFR=${data.afr}`, 'success');
+        logEntryForm.reset();
     };
 
     const processMap = useCallback(async (mapId: string, configToProcess: ManualAxisConfig) => {
@@ -1092,19 +1122,6 @@ export default function EcuTuningAssistant() {
                       <Loader2 className="mr-2 h-8 w-8 animate-spin" />
                       <p>A processar o mapa...</p>
                     </div>
-                  ) : !processedMap ? (
-                    <div className="flex-1 flex items-center justify-center text-muted-foreground text-center">
-                      <div>
-                        <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
-                        <p className="mt-2 font-semibold">
-                          Nenhum dado para exibir.
-                        </p>
-                        <p className="text-sm">
-                          Carregue os seus ficheiros e selecione um mapa para
-                          iniciar.
-                        </p>
-                      </div>
-                    </div>
                   ) : (
                     <>
                       <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
@@ -1171,37 +1188,110 @@ export default function EcuTuningAssistant() {
                             </div>
                          </div>
                       </TabsContent>
+                      <TabsContent value="analysis" className="flex-1 mt-4 min-h-0 flex flex-col">
+                        <Card className="h-full w-full flex flex-col">
+                            <CardHeader>
+                                <CardTitle>Análise de Dados de Ensaio</CardTitle>
+                                <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-col gap-6 flex-1 min-h-0">
+                                <Form {...logEntryForm}>
+                                    <form onSubmit={logEntryForm.handleSubmit(handleAddManualLogEntry)} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
+                                        <FormField
+                                            control={logEntryForm.control}
+                                            name="rpm"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>RPM</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="number" placeholder="3000" {...field} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={logEntryForm.control}
+                                            name="load"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Carga</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="number" placeholder="80" {...field} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={logEntryForm.control}
+                                            name="afr"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>AFR (Sonda)</FormLabel>
+                                                    <FormControl>
+                                                        <Input type="number" step="0.1" placeholder="12.5" {...field} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <div className="pt-8">
+                                          <Button type="submit" className="w-full">
+                                            <PlusCircle className="mr-2" /> Adicionar Ponto
+                                          </Button>
+                                        </div>
+                                    </form>
+                                </Form>
+                                
+                                <div className="flex items-center gap-4">
+                                    <Separator />
+                                    <span className="text-xs text-muted-foreground">OU</span>
+                                    <Separator />
+                                </div>
+                                
+                                <div className="flex items-center gap-4">
+                                    <Button variant="outline" onClick={() => logInputRef.current?.click()} className="w-full sm:w-auto">
+                                        <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
+                                    </Button>
+                                    <input
+                                      ref={logInputRef}
+                                      type="file"
+                                      accept=".csv"
+                                      className="hidden"
+                                      onChange={handleLogFileChange}
+                                    />
+                                </div>
+
+                                <div className="flex-1 border rounded-lg p-2 flex items-center justify-center text-muted-foreground min-h-0">
+                                    {logData.length > 0 ? (
+                                        <LogDataTable data={logData} />
+                                    ) : (
+                                        <p>Aguardando dados do ensaio...</p>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                      </TabsContent>
                     </>
                   )}
-                  <TabsContent value="analysis" className="flex-1 mt-4 min-h-0">
-                    <Card className="h-full w-full flex flex-col">
-                        <CardHeader>
-                            <CardTitle>Análise de Dados de Ensaio</CardTitle>
-                            <CardDescription>Carregue um ficheiro de log (.csv) do seu dinamómetro para analisar e obter sugestões de ajuste.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-4 flex-1 min-h-0">
-                            <div className="flex items-center gap-4">
-                                <Button variant="outline" onClick={() => logInputRef.current?.click()}>
-                                    <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
-                                </Button>
-                                <input
-                                  ref={logInputRef}
-                                  type="file"
-                                  accept=".csv"
-                                  className="hidden"
-                                  onChange={handleLogFileChange}
-                                />
-                            </div>
-                            <div className="flex-1 border rounded-lg p-4 flex items-center justify-center text-muted-foreground min-h-0">
-                                {logData.length > 0 ? (
-                                    <LogDataTable data={logData} />
-                                ) : (
-                                    <p>Aguardando dados do ensaio...</p>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-                  </TabsContent>
+
+                  {!isProcessing && !processedMap && (
+                     <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
+                        <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
+                          <div>
+                            <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+                            <p className="mt-2 font-semibold">
+                              Nenhum dado para exibir.
+                            </p>
+                            <p className="text-sm">
+                              Carregue os seus ficheiros e selecione um mapa para
+                              iniciar.
+                            </p>
+                          </div>
+                        </div>
+                      </TabsContent>
+                  )}
                 </Tabs>
               </div>
             </main>
