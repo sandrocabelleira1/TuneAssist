@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2 } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -386,6 +386,14 @@ export default function EcuTuningAssistant() {
         setManualConfig(initialManualConfig);
         addLog('Seleção de mapa e cache limpos.', 'info');
     }, [addLog]);
+
+    const handleClearLogData = useCallback(() => {
+        setLogFile(null);
+        setLogData([]);
+        if (logInputRef.current) logInputRef.current.value = '';
+        addLog('Dados de ensaio limpos.', 'success');
+        toast({ title: 'Dados Limpos', description: 'Os dados de ensaio foram limpos com sucesso.' });
+    }, [addLog, toast]);
 
     const handleResetAll = useCallback(() => {
         setBinFile(null);
@@ -1300,9 +1308,32 @@ export default function EcuTuningAssistant() {
                                     <CardTitle>Dados de Ensaio</CardTitle>
                                     <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente.</CardDescription>
                                 </CardHeader>
-                                <CardContent className="flex flex-col gap-6">
+                                <CardContent className="flex flex-col gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
+                                            <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
+                                        </Button>
+                                        <input
+                                          ref={logInputRef}
+                                          type="file"
+                                          accept=".csv"
+                                          className="hidden"
+                                          onChange={handleLogFileChange}
+                                        />
+                                        <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={logData.length === 0}>
+                                            <Eraser className="h-4 w-4" />
+                                            <span className="sr-only">Limpar Dados de Ensaio</span>
+                                        </Button>
+                                    </div>
+
+                                    <div className="flex items-center gap-4">
+                                        <Separator />
+                                        <span className="text-xs text-muted-foreground">OU</span>
+                                        <Separator />
+                                    </div>
+                                    
                                     <Form {...logEntryForm}>
-                                        <form onSubmit={logEntryForm.handleSubmit(handleAddManualLogEntry)} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
+                                        <form onSubmit={logEntryForm.handleSubmit(handleAddManualLogEntry)} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
                                             <FormField
                                                 control={logEntryForm.control}
                                                 name="yAxis"
@@ -1342,32 +1373,11 @@ export default function EcuTuningAssistant() {
                                                     </FormItem>
                                                 )}
                                             />
-                                            <div className="pt-8">
-                                              <Button type="submit" className="w-full" disabled={!processedMap}>
+                                            <Button type="submit" className="w-full" disabled={!processedMap}>
                                                 <PlusCircle className="mr-2" /> Adicionar Ponto
-                                              </Button>
-                                            </div>
+                                            </Button>
                                         </form>
                                     </Form>
-                                    
-                                    <div className="flex items-center gap-4">
-                                        <Separator />
-                                        <span className="text-xs text-muted-foreground">OU</span>
-                                        <Separator />
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-4">
-                                        <Button variant="outline" onClick={() => logInputRef.current?.click()} className="w-full sm:w-auto">
-                                            <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
-                                        </Button>
-                                        <input
-                                          ref={logInputRef}
-                                          type="file"
-                                          accept=".csv"
-                                          className="hidden"
-                                          onChange={handleLogFileChange}
-                                        />
-                                    </div>
                                 </CardContent>
                             </Card>
                             <Card>
