@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -952,8 +953,6 @@ export default function EcuTuningAssistant() {
             // If we are SELECTING a new map, make it active
             setActiveMap(id);
         }
-        
-        setIsPopoverOpen(true);
     };
 
 
@@ -1041,9 +1040,10 @@ export default function EcuTuningAssistant() {
                                     <CommandItem
                                         keepOpenOnSelect
                                         key={def.uniqueId}
-                                        value={def.uniqueId}
+                                        value={def.name}
                                         onSelect={() => {
                                             handleMapSelectionChange(def.uniqueId);
+                                            setIsPopoverOpen(true);
                                         }}
                                     >
                                         <div className={cn(
