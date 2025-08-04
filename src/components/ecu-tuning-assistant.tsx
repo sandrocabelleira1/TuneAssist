@@ -783,7 +783,7 @@ export default function EcuTuningAssistant() {
                 const definition = xdfFile.definitions.find(def => def.uniqueId === mapId);
                 if (!definition) return null;
                 return { definition, processedMap: mapData };
-            }).filter(item => item !== null) as { definition: XDFDefinition; processedMap: ProcessedMap }[];
+            }).filter(item => item !== null) as { definition: XDFinition; processedMap: ProcessedMap }[];
             
         if (mapsToSave.length === 0) {
             const msg = "Nenhuma modificação para salvar.";
@@ -1024,7 +1024,6 @@ export default function EcuTuningAssistant() {
                                     <CommandItem
                                         key={def.uniqueId}
                                         value={def.name}
-                                        keepOpenOnSelect
                                         onSelect={() => handleMapSelectionChange(def.uniqueId)}
                                     >
                                         <div className={cn(
@@ -1600,4 +1599,5 @@ export default function EcuTuningAssistant() {
     
 
     
+
 
