@@ -112,17 +112,33 @@ CommandSeparator.displayName = CommandPrimitive.Separator.displayName
 
 const CommandItem = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.Item
-    ref={ref}
-    className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      className
-    )}
-    {...props}
-  />
-))
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item> & {
+    keepOpenOnSelect?: boolean;
+  }
+>(({ className, keepOpenOnSelect, ...props }, ref) => {
+  const handleSelect = (event: Event) => {
+    if (keepOpenOnSelect) {
+      event.preventDefault();
+    }
+    // We still call the original onSelect if it exists
+    if (typeof (props as any).onSelect === 'function') {
+      (props as any).onSelect(props.value);
+    }
+  };
+
+  return (
+    <CommandPrimitive.Item
+      ref={ref}
+      className={cn(
+        "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className
+      )}
+      {...props}
+      onSelect={(props as any).onSelect && !keepOpenOnSelect ? (props as any).onSelect : handleSelect}
+    />
+  );
+});
+
 
 CommandItem.displayName = CommandPrimitive.Item.displayName
 
