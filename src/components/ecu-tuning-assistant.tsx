@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -1594,10 +1592,3 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
-
-    
-    
-
-    
-
-
