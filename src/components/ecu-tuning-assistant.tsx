@@ -1031,10 +1031,10 @@ export default function EcuTuningAssistant() {
                   )}
                 </div>
               </div>
-              <div className="p-4 flex flex-col flex-1 min-h-0">
+              <div className="flex-1 flex flex-col p-4 min-h-0">
                 <Tabs
                   defaultValue="view-table"
-                  className="w-full flex-1 flex flex-col min-h-0"
+                  className="flex-1 flex flex-col w-full min-h-0"
                 >
                   <TabsList className="shrink-0">
                     <TabsTrigger value="view-table">
@@ -1070,7 +1070,7 @@ export default function EcuTuningAssistant() {
                     </div>
                   ) : (
                     <>
-                      <TabsContent value="view-table" className="flex-1 min-h-0 mt-4 h-full">
+                      <TabsContent value="view-table" className="flex-1 min-h-0 mt-4">
                          <div className="relative h-full w-full">
                            <DataTable
                               key={selectedMapId + JSON.stringify(processedMap?.addresses)}
