@@ -934,13 +934,27 @@ export default function EcuTuningAssistant() {
     const handleMapSelectionChange = (id: string) => {
         setSelectedMapIds((prevSelected) => {
             const isSelected = prevSelected.includes(id);
+            let newSelectedIds: string[];
+
             if (isSelected) {
-                return prevSelected.filter((mapId) => mapId !== id);
+                newSelectedIds = prevSelected.filter((mapId) => mapId !== id);
             } else {
-                return [...prevSelected, id];
+                newSelectedIds = [...prevSelected, id];
             }
+
+            // Logic to set active map
+            if (newSelectedIds.length === 0) {
+                setActiveMap(null);
+            } else if (id === activeMapId && isSelected) {
+                // If we are deselecting the active map, make another one active
+                setActiveMap(newSelectedIds[0]);
+            } else if (!activeMapId || !isSelected) {
+                // If no map is active, or we are selecting a new one, make it active
+                setActiveMap(id);
+            }
+            
+            return newSelectedIds;
         });
-        setActiveMap(id);
     };
 
 
@@ -1031,7 +1045,7 @@ export default function EcuTuningAssistant() {
                                         onSelect={(currentValue) => {
                                             handleMapSelectionChange(currentValue);
                                         }}
-                                        keepOpenOnSelect
+                                        keepOpenOnSelect={true}
                                     >
                                         <div className={cn(
                                             "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",

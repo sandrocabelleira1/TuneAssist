@@ -116,30 +116,29 @@ const CommandItem = React.forwardRef<
     keepOpenOnSelect?: boolean
   }
 >(({ className, keepOpenOnSelect, onSelect, ...props }, ref) => {
-
-  return (
-    <CommandPrimitive.Item
-        ref={ref}
-        className={cn(
-        "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-        className
-        )}
-        onSelect={(value) => {
-          if (keepOpenOnSelect) {
-            // This is the important part to prevent the popover from closing
-             const a = document.querySelector(`[cmdk-item][data-value="${value}"]`);
-             if (a) {
-                (a as HTMLElement).click();
-             }
-          }
-          if (onSelect) {
-            onSelect(value)
-          }
-        }}
-        {...props}
-    />
-  );
+    return (
+        <CommandPrimitive.Item
+            ref={ref}
+            className={cn(
+            "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+            className
+            )}
+            onSelect={(value) => {
+                if (keepOpenOnSelect) {
+                    // This is a workaround to prevent the popover from closing on select.
+                    // We stop the propagation of the event that would normally close the popover.
+                    const event = new CustomEvent('selectitem', { detail: { value }, bubbles: true, cancelable: true });
+                    (ref as React.RefObject<HTMLDivElement>)?.current?.dispatchEvent(event);
+                }
+                if (onSelect) {
+                    onSelect(value);
+                }
+            }}
+            {...props}
+        />
+    );
 });
+
 
 CommandItem.displayName = CommandPrimitive.Item.displayName
 
