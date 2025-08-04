@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2 } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -49,7 +49,7 @@ type MassEditPayload = {
 const logEntrySchema = z.object({
     rpm: z.coerce.number().positive("RPM deve ser positivo"),
     load: z.coerce.number().positive("Carga deve ser positiva"),
-    afr: z.coerce.number().positive("AFR deve ser positivo"),
+    lambda: z.coerce.number().positive("Lambda deve ser positivo"),
 });
 
 type LogEntryForm = z.infer<typeof logEntrySchema>;
@@ -332,6 +332,7 @@ export default function EcuTuningAssistant() {
     const [isProcessing, setIsProcessing] = useState(false);
     
     const [templateConfig, setTemplateConfig] = useState<StructureTemplate | null>(null);
+    const [targetLambda, setTargetLambda] = useState<number>(1.0);
 
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
@@ -346,7 +347,7 @@ export default function EcuTuningAssistant() {
         defaultValues: {
             rpm: undefined,
             load: undefined,
-            afr: undefined,
+            lambda: undefined,
         },
     });
 
@@ -458,9 +459,9 @@ export default function EcuTuningAssistant() {
     };
 
     const handleAddManualLogEntry = (data: LogEntryForm) => {
-        const newEntry = { RPM: data.rpm, Load: data.load, AFR: data.afr };
+        const newEntry = { RPM: data.rpm, Load: data.load, Lambda: data.lambda };
         setLogData(prev => [...prev, newEntry]);
-        addLog(`Ponto de ensaio manual adicionado: RPM=${data.rpm}, Carga=${data.load}, AFR=${data.afr}`, 'success');
+        addLog(`Ponto de ensaio manual adicionado: RPM=${data.rpm}, Carga=${data.load}, Lambda=${data.lambda}`, 'success');
         logEntryForm.reset();
     };
 
@@ -1156,7 +1157,7 @@ export default function EcuTuningAssistant() {
                               </div>
                             )}
                       </TabsContent>
-                      <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
+                      <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0 flex flex-col">
                          <div className="flex flex-col gap-2 h-full w-full">
                            <div className="flex items-center gap-2 self-start">
                              <TooltipProvider>
@@ -1188,90 +1189,112 @@ export default function EcuTuningAssistant() {
                             </div>
                          </div>
                       </TabsContent>
-                      <TabsContent value="analysis" className="flex-1 mt-4 min-h-0 flex flex-col">
-                        <Card className="h-full w-full flex flex-col">
-                            <CardHeader>
-                                <CardTitle>Análise de Dados de Ensaio</CardTitle>
-                                <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-6 flex-1 min-h-0">
-                                <Form {...logEntryForm}>
-                                    <form onSubmit={logEntryForm.handleSubmit(handleAddManualLogEntry)} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
-                                        <FormField
-                                            control={logEntryForm.control}
-                                            name="rpm"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>RPM</FormLabel>
-                                                    <FormControl>
-                                                        <Input type="number" placeholder="3000" {...field} />
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
+                      <TabsContent value="analysis" className="flex-1 mt-4 min-h-0 flex flex-col gap-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            <Card className="lg:col-span-2">
+                                <CardHeader>
+                                    <CardTitle>Dados de Ensaio</CardTitle>
+                                    <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex flex-col gap-6">
+                                    <Form {...logEntryForm}>
+                                        <form onSubmit={logEntryForm.handleSubmit(handleAddManualLogEntry)} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
+                                            <FormField
+                                                control={logEntryForm.control}
+                                                name="rpm"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>RPM</FormLabel>
+                                                        <FormControl>
+                                                            <Input type="number" placeholder="3000" {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={logEntryForm.control}
+                                                name="load"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Carga</FormLabel>
+                                                        <FormControl>
+                                                            <Input type="number" placeholder="80" {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={logEntryForm.control}
+                                                name="lambda"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Lambda (Sonda)</FormLabel>
+                                                        <FormControl>
+                                                            <Input type="number" step="0.01" placeholder="0.85" {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <div className="pt-8">
+                                              <Button type="submit" className="w-full">
+                                                <PlusCircle className="mr-2" /> Adicionar Ponto
+                                              </Button>
+                                            </div>
+                                        </form>
+                                    </Form>
+                                    
+                                    <div className="flex items-center gap-4">
+                                        <Separator />
+                                        <span className="text-xs text-muted-foreground">OU</span>
+                                        <Separator />
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-4">
+                                        <Button variant="outline" onClick={() => logInputRef.current?.click()} className="w-full sm:w-auto">
+                                            <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
+                                        </Button>
+                                        <input
+                                          ref={logInputRef}
+                                          type="file"
+                                          accept=".csv"
+                                          className="hidden"
+                                          onChange={handleLogFileChange}
                                         />
-                                        <FormField
-                                            control={logEntryForm.control}
-                                            name="load"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Carga</FormLabel>
-                                                    <FormControl>
-                                                        <Input type="number" placeholder="80" {...field} />
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Definições de IA</CardTitle>
+                                    <CardDescription>Configure os parâmetros para o ajuste automático.</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="target-lambda">Lambda Alvo</Label>
+                                        <Input 
+                                            id="target-lambda" 
+                                            type="number" 
+                                            step="0.01"
+                                            value={targetLambda}
+                                            onChange={(e) => setTargetLambda(parseFloat(e.target.value))}
                                         />
-                                        <FormField
-                                            control={logEntryForm.control}
-                                            name="afr"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>AFR (Sonda)</FormLabel>
-                                                    <FormControl>
-                                                        <Input type="number" step="0.1" placeholder="12.5" {...field} />
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <div className="pt-8">
-                                          <Button type="submit" className="w-full">
-                                            <PlusCircle className="mr-2" /> Adicionar Ponto
-                                          </Button>
-                                        </div>
-                                    </form>
-                                </Form>
-                                
-                                <div className="flex items-center gap-4">
-                                    <Separator />
-                                    <span className="text-xs text-muted-foreground">OU</span>
-                                    <Separator />
-                                </div>
-                                
-                                <div className="flex items-center gap-4">
-                                    <Button variant="outline" onClick={() => logInputRef.current?.click()} className="w-full sm:w-auto">
-                                        <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
+                                    </div>
+                                    <Button className="w-full" disabled>
+                                        <Wand2 className="mr-2" /> Ajustar com IA
                                     </Button>
-                                    <input
-                                      ref={logInputRef}
-                                      type="file"
-                                      accept=".csv"
-                                      className="hidden"
-                                      onChange={handleLogFileChange}
-                                    />
-                                </div>
-
-                                <div className="flex-1 border rounded-lg p-2 flex items-center justify-center text-muted-foreground min-h-0">
-                                    {logData.length > 0 ? (
-                                        <LogDataTable data={logData} />
-                                    ) : (
-                                        <p>Aguardando dados do ensaio...</p>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
+                                </CardContent>
+                            </Card>
+                        </div>
+                        <div className="flex-1 border rounded-lg p-2 flex items-center justify-center text-muted-foreground min-h-0">
+                            {logData.length > 0 ? (
+                                <LogDataTable data={logData} />
+                            ) : (
+                                <p>Aguardando dados do ensaio...</p>
+                            )}
+                        </div>
                       </TabsContent>
                     </>
                   )}
