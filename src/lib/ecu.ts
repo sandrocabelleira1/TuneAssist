@@ -587,11 +587,23 @@ function findClosestIndex(arr: (number | string)[], target: number): number {
     return closestIndex;
 }
 
-// Find a key in the log data headers that matches a target label (case-insensitive)
+// Find a key in the log data headers that matches a target label
 function findKeyInHeader(header: string[], targetLabel: string): string | undefined {
     if (!targetLabel) return undefined;
-    const lowerCaseTarget = targetLabel.toLowerCase();
-    return header.find(k => k.toLowerCase().includes(lowerCaseTarget));
+    const cleanTargetLabel = targetLabel.trim().toLowerCase();
+    
+    for (const key of header) {
+        if (key.trim().toLowerCase() === cleanTargetLabel) {
+            return key;
+        }
+    }
+    // Fallback for partial match if exact match fails
+    for (const key of header) {
+        if (key.trim().toLowerCase().includes(cleanTargetLabel)) {
+            return key;
+        }
+    }
+    return undefined;
 }
 
 
@@ -617,7 +629,8 @@ export function calculateCorrections(
     const header = Object.keys(logData[0] || {});
     const xAxisKey = findKeyInHeader(header, xAxis.label);
     const yAxisKey = findKeyInHeader(header, yAxis.label);
-    const lambdaKey = header.find(k => k.toLowerCase().includes('lambda')) || 'Lambda';
+    const lambdaKey = findKeyInHeader(header, 'lambda') || 'Lambda';
+
 
     if (!xAxisKey) {
         throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo X do mapa ("${xAxis.label}").`);
@@ -625,7 +638,7 @@ export function calculateCorrections(
     if (!yAxisKey) {
         throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo Y do mapa ("${yAxis.label}").`);
     }
-     if (!header.includes(lambdaKey)) {
+     if (!header.some(h => h.trim().toLowerCase() === lambdaKey.trim().toLowerCase())) {
         throw new Error(`Não foi possível encontrar a coluna de dados de ensaio para Lambda.`);
     }
 
