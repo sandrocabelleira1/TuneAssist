@@ -125,9 +125,7 @@ const CommandItem = React.forwardRef<
             )}
             onSelect={(value) => {
                 if (keepOpenOnSelect) {
-                    // This is a workaround to prevent the popover from closing on select.
-                    // We stop the propagation of the event that would normally close the popover.
-                    const event = new CustomEvent('selectitem', { detail: { value }, bubbles: true, cancelable: true });
+                    const event = new Event('selectitem', { bubbles: true, cancelable: true });
                     (ref as React.RefObject<HTMLDivElement>)?.current?.dispatchEvent(event);
                 }
                 if (onSelect) {
