@@ -15,7 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2 } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation } from '@/lib/types';
+import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -126,13 +126,14 @@ function MassEditDialog({
     );
 }
 
-function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChange, onMassUpdate }: {
+function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChange, onMassUpdate, aiModifiedCells }: {
     mapData: MapData | null;
     addresses: MapData | null;
     axes: { x: AxisData, y: AxisData } | null;
     selectedMapDefinition: XDFDefinition | undefined;
     onCellChange: (y: number, x: number, value: number) => void;
     onMassUpdate: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', value: number) => void;
+    aiModifiedCells: Set<string>;
 }) {
     const { toast } = useToast();
     const [isSelecting, setIsSelecting] = useState(false);
@@ -259,13 +260,17 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                             </td>
                             {mapData[yi]?.map((cell, xi) => {
                                 const selected = isCellSelected(yi, xi);
+                                const isAiModified = aiModifiedCells.has(`${yi}-${xi}`);
                                 const bgColor = selected ? 'hsl(var(--primary) / 0.8)' : getHeatmapColor(cell, minVal, maxVal);
                                 const textColor = selected ? 'hsl(var(--primary-foreground))' : getTextColorForBackground(bgColor);
                                 const address = addresses?.[yi]?.[xi];
                                 return (
                                     <td
                                         key={xi}
-                                        className={cn("p-0 border border-border text-center h-10 transition-colors", { 'outline outline-2 outline-offset-[-2px] outline-primary': selected })}
+                                        className={cn("p-0 border border-border text-center h-10 transition-colors", {
+                                            'outline outline-2 outline-offset-[-2px] outline-primary': selected,
+                                            'outline outline-2 outline-offset-[-2px] outline-amber-400': isAiModified,
+                                        })}
                                         style={{ backgroundColor: bgColor, color: textColor }}
                                         onMouseDown={(e) => handleMouseDown(e, yi, xi)}
                                         onMouseMove={() => handleMouseMove(yi, xi)}
@@ -335,6 +340,7 @@ export default function EcuTuningAssistant() {
     const [selectedMapId, setSelectedMapId] = useState<string>('');
     const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
     const [isModified, setIsModified] = useState(false);
+    const [aiModifiedCells, setAiModifiedCells] = useState<Set<string>>(new Set());
     
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
     const [plotOrientation, setPlotOrientation] = useState<PlotOrientation>('y-vs-x');
@@ -374,6 +380,7 @@ export default function EcuTuningAssistant() {
         setSelectedMapId('');
         setProcessedMap(null);
         setIsModified(false);
+        setAiModifiedCells(new Set());
         setProcessedMapCache({});
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
@@ -500,6 +507,7 @@ export default function EcuTuningAssistant() {
             setProcessedMapCache(prev => ({...prev, [mapId]: result}));
             setModifiedStatusCache(prev => ({...prev, [mapId]: false}));
             setIsModified(false);
+            setAiModifiedCells(new Set());
 
             setSelectedLine(0);
             setPlotOrientation('y-vs-x');
@@ -526,6 +534,7 @@ export default function EcuTuningAssistant() {
             }
             return newConfig;
         });
+        setAiModifiedCells(new Set());
     };
     
     const handleMapSelect = (id: string) => {
@@ -540,6 +549,7 @@ export default function EcuTuningAssistant() {
         setSelectedMapId(id);
         setSelectedLine(0);
         setPlotOrientation('y-vs-x');
+        setAiModifiedCells(new Set());
 
         if (processedMapCache[id]) {
             addLog(`A carregar o mapa "${xdfFile.definitions.find(d=>d.uniqueId === id)?.name}" da cache.`, 'info');
@@ -586,6 +596,7 @@ export default function EcuTuningAssistant() {
         setProcessedMap(newProcessedMap);
         
         setIsModified(true);
+        setAiModifiedCells(new Set());
         setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
     };
@@ -608,6 +619,7 @@ export default function EcuTuningAssistant() {
         setProcessedMap(newProcessedMap);
         
         setIsModified(true);
+        setAiModifiedCells(new Set());
         setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
         setModifiedStatusCache(prev => ({ ...prev, [selectedMapId]: true }));
     };
@@ -667,6 +679,7 @@ export default function EcuTuningAssistant() {
         setProcessedMap(newProcessedMap);
         
         setIsModified(true);
+        setAiModifiedCells(new Set());
         setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
         addLog(`Operação em massa "${operation}" com valor ${value} aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
@@ -739,10 +752,16 @@ export default function EcuTuningAssistant() {
 
         try {
             addLog(`A iniciar ajuste automático com Lambda Alvo ${targetLambda.toFixed(2)} e agressividade de ${aggressiveness}%...`, 'info');
-            const correctedMap = calculateCorrections(processedMap, logData, targetLambda, aggressiveness);
+            const { correctedMap, modifiedIndices } = calculateCorrections(processedMap, logData, targetLambda, aggressiveness);
             
             const newProcessedMap = { ...processedMap, calculatedMap: correctedMap };
             setProcessedMap(newProcessedMap);
+            
+            const newModifiedCells = new Set<string>();
+            modifiedIndices.forEach(cell => newModifiedCells.add(`${cell.y}-${cell.x}`));
+            setAiModifiedCells(newModifiedCells);
+            addLog(`${newModifiedCells.size} células foram modificadas.`, 'info');
+            
             setIsModified(true);
             setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
             setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
@@ -1176,6 +1195,7 @@ export default function EcuTuningAssistant() {
                                 selectedMapDefinition={selectedMapDefinition}
                                 onCellChange={handleCellChange}
                                 onMassUpdate={handleMassUpdate}
+                                aiModifiedCells={aiModifiedCells}
                                 />
                            </div>
                       </TabsContent>

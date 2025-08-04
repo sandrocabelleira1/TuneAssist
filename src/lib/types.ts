@@ -65,3 +65,8 @@ export type ManualAxisConfig = {
 };
 
 export type PlotOrientation = 'y-vs-x' | 'x-vs-y';
+
+export type ModifiedCell = {
+  y: number;
+  x: number;
+};

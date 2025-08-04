@@ -1,6 +1,6 @@
 
 
-import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
+import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell } from './types';
 
 // #region Utility Functions
 
@@ -592,7 +592,7 @@ export function calculateCorrections(
     logData: any[],
     targetLambda: number,
     aggressiveness: number // 0-100
-): MapData {
+): { correctedMap: MapData, modifiedIndices: ModifiedCell[] } {
     if (!processedMap || !processedMap.calculatedMap || !processedMap.axes) {
         throw new Error("Mapa processado inválido fornecido para correção.");
     }
@@ -601,6 +601,7 @@ export function calculateCorrections(
     const { x: xAxis, y: yAxis } = axes;
 
     const newMap = calculatedMap.map(row => [...row]); // Create a mutable copy
+    const modifiedIndices: ModifiedCell[] = [];
 
     // Identify the correct keys for RPM, Load, and Lambda from the log data
     const header = Object.keys(logData[0] || {});
@@ -647,9 +648,10 @@ export function calculateCorrections(
         correctedValue = currentValue + (diff * (aggressiveness / 100));
 
         newMap[yIndex][xIndex] = correctedValue;
+        modifiedIndices.push({ y: yIndex, x: xIndex });
     });
 
-    return newMap;
+    return { correctedMap: newMap, modifiedIndices };
 }
 
 
