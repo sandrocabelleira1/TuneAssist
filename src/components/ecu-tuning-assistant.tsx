@@ -353,11 +353,12 @@ export default function EcuTuningAssistant() {
     const [isProcessing, setIsProcessing] = useState(false);
     
     const [templateConfig, setTemplateConfig] = useState<StructureTemplate | null>(null);
-    const [targetLambda, setTargetLambda] = useState<number>(1.0);
+    const [targetLambda, setTargetLambda] = useState<number | ''>(1.0);
     const [aggressiveness, setAggressiveness] = useState<number>(100);
 
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
+    const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -844,8 +845,15 @@ export default function EcuTuningAssistant() {
             return;
         }
 
+        const numericTargetLambda = Number(targetLambda);
+        if(isNaN(numericTargetLambda)) {
+            addLog("Lambda Alvo inválido.", 'error');
+            toast({ title: 'Ajuste Falhou', description: 'O Lambda Alvo deve ser um número.', variant: 'destructive' });
+            return;
+        }
+
         setIsProcessing(true);
-        addLog(`A iniciar ajuste automático em ${selectedMapIds.length} mapas com Lambda Alvo ${targetLambda.toFixed(2)} e agressividade de ${aggressiveness}%...`, 'info');
+        addLog(`A iniciar ajuste automático em ${selectedMapIds.length} mapas com Lambda Alvo ${numericTargetLambda.toFixed(2)} e agressividade de ${aggressiveness}%...`, 'info');
         
         let totalModifiedCells = 0;
         
@@ -873,7 +881,7 @@ export default function EcuTuningAssistant() {
             }
 
             try {
-                const { correctedMap, modifiedIndices } = calculateCorrections(mapToProcess, logData, targetLambda, aggressiveness);
+                const { correctedMap, modifiedIndices } = calculateCorrections(mapToProcess, logData, numericTargetLambda, aggressiveness);
                 
                 const newProcessedMap = { ...mapToProcess, calculatedMap: correctedMap };
                 
@@ -989,7 +997,7 @@ export default function EcuTuningAssistant() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                  <Popover>
+                  <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
@@ -1014,7 +1022,16 @@ export default function EcuTuningAssistant() {
                                     <CommandItem
                                         key={def.uniqueId}
                                         value={def.name}
-                                        onSelect={() => handleMapSelectionChange(def.uniqueId)}
+                                        onSelect={(e) => {
+                                            e.preventDefault();
+                                            handleMapSelectionChange(def.uniqueId);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                handleMapSelectionChange(def.uniqueId);
+                                            }
+                                        }}
                                     >
                                         <div className={cn(
                                             "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
@@ -1525,10 +1542,8 @@ export default function EcuTuningAssistant() {
                                             step="0.01"
                                             value={targetLambda}
                                             onChange={(e) => {
-                                                const value = parseFloat(e.target.value);
-                                                if (!isNaN(value)) {
-                                                    setTargetLambda(value);
-                                                }
+                                                const value = e.target.value;
+                                                setTargetLambda(value === '' ? '' : parseFloat(value));
                                             }}
                                         />
                                     </div>
@@ -1588,4 +1603,6 @@ export default function EcuTuningAssistant() {
 }
 
     
+    
+
     
