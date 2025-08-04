@@ -1148,27 +1148,27 @@ export default function EcuTuningAssistant() {
                            </div>
                       </TabsContent>
                       <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
-                            {processedMap?.axes && processedMap?.calculatedMap ? (
-                              <div className="h-full w-full">
-                                  <SurfacePlot3D
-                                    mapData={processedMap.calculatedMap}
-                                    xAxis={processedMap.axes.x.calculated}
-                                    yAxis={processedMap.axes.y.calculated}
-                                    xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
-                                    yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
-                                    zAxisLabel={
-                                      selectedMapDefinition?.name || 'Mapa Principal'
-                                    }
-                                  />
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-center h-full text-muted-foreground">
-                                <p>
-                                  A aguardar dados completos do mapa para o gráfico
-                                  3D.
-                                </p>
-                              </div>
-                            )}
+                            <div className="h-full w-full">
+                                {processedMap?.axes && processedMap?.calculatedMap ? (
+                                    <SurfacePlot3D
+                                        mapData={processedMap.calculatedMap}
+                                        xAxis={processedMap.axes.x.calculated}
+                                        yAxis={processedMap.axes.y.calculated}
+                                        xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
+                                        yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
+                                        zAxisLabel={
+                                        selectedMapDefinition?.name || 'Mapa Principal'
+                                        }
+                                    />
+                                ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    <p>
+                                    A aguardar dados completos do mapa para o gráfico
+                                    3D.
+                                    </p>
+                                </div>
+                                )}
+                           </div>
                       </TabsContent>
                       <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
                          <div className="h-full w-full">
@@ -1276,8 +1276,11 @@ export default function EcuTuningAssistant() {
                                             id="target-lambda" 
                                             type="number" 
                                             step="0.01"
-                                            value={targetLambda}
-                                            onChange={(e) => setTargetLambda(parseFloat(e.target.value))}
+                                            value={targetLambda || ''}
+                                            onChange={(e) => {
+                                                const value = parseFloat(e.target.value);
+                                                setTargetLambda(isNaN(value) ? 0 : value);
+                                            }}
                                         />
                                     </div>
                                     <Button className="w-full" disabled>
