@@ -1023,8 +1023,7 @@ export default function EcuTuningAssistant() {
                                         key={def.uniqueId}
                                         value={def.name}
                                         keepOpenOnSelect
-                                        onSelect={(e) => {
-                                            e.preventDefault();
+                                        onSelect={() => {
                                             handleMapSelectionChange(def.uniqueId);
                                         }}
                                     >
