@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -117,11 +116,6 @@ const CommandItem = React.forwardRef<
     keepOpenOnSelect?: boolean
   }
 >(({ className, keepOpenOnSelect, onSelect, ...props }, ref) => {
-  const handleSelect = (value: string) => {
-    if (onSelect) {
-      onSelect(value);
-    }
-  };
 
   return (
     <CommandPrimitive.Item
@@ -133,15 +127,14 @@ const CommandItem = React.forwardRef<
         onSelect={(value) => {
           if (keepOpenOnSelect) {
             // This is the important part to prevent the popover from closing
-          } else {
-             handleSelect(value)
-          }
-        }}
-        onClick={(e) => {
-             const value = e.currentTarget.getAttribute('data-value');
-             if(keepOpenOnSelect && value) {
-                handleSelect(value);
+             const a = document.querySelector(`[cmdk-item][data-value="${value}"]`);
+             if (a) {
+                (a as HTMLElement).click();
              }
+          }
+          if (onSelect) {
+            onSelect(value)
+          }
         }}
         {...props}
     />

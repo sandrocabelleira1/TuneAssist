@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -334,7 +335,7 @@ type StructureTemplate = {
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
-    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFDefinition[], allTables: Map<string, Element> } | null>(null);
+    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFdefinition[], allTables: Map<string, Element> } | null>(null);
     const [logFile, setLogFile] = useState<{ name: string; content: string } | null>(null);
     const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
@@ -754,7 +755,7 @@ export default function EcuTuningAssistant() {
                             const yRatio = (maxY - minY === 0) ? 0 : (y - minY) / (maxY - minY);
 
                             const topInterpolation = topLeft + (topRight - topLeft) * xRatio;
-                            const bottomInterpolation = bottomLeft + (bottomRight - bottomLeft) * yRatio;
+                            const bottomInterpolation = bottomLeft + (bottomRight - topInterpolation) * yRatio;
 
                             newValue = topInterpolation + (bottomInterpolation - topInterpolation) * yRatio;
                             break;
@@ -931,26 +932,15 @@ export default function EcuTuningAssistant() {
     const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
 
     const handleMapSelectionChange = (id: string) => {
-        const isSelected = selectedMapIds.includes(id);
-        let newSelection;
-
-        if (isSelected) {
-            newSelection = selectedMapIds.filter((mapId) => mapId !== id);
-        } else {
-            newSelection = [...selectedMapIds, id];
-        }
-        
-        setSelectedMapIds(newSelection);
-
-        // If the one we are unselecting is the active one, pick a new active one
-        if (isSelected && id === activeMapId) {
-            setActiveMap(newSelection[0] || null);
-        } 
-        // If we are selecting a new map, make it active
-        else if (!isSelected) {
-             setActiveMap(id);
-        }
-        // Otherwise, keep the current active map
+        setSelectedMapIds((prevSelected) => {
+            const isSelected = prevSelected.includes(id);
+            if (isSelected) {
+                return prevSelected.filter((mapId) => mapId !== id);
+            } else {
+                return [...prevSelected, id];
+            }
+        });
+        setActiveMap(id);
     };
 
 
@@ -1038,7 +1028,9 @@ export default function EcuTuningAssistant() {
                                     <CommandItem
                                         key={def.uniqueId}
                                         value={def.uniqueId}
-                                        onSelect={() => handleMapSelectionChange(def.uniqueId)}
+                                        onSelect={(currentValue) => {
+                                            handleMapSelectionChange(currentValue);
+                                        }}
                                         keepOpenOnSelect
                                     >
                                         <div className={cn(
