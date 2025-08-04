@@ -582,8 +582,10 @@ export default function EcuTuningAssistant() {
     const setActiveMap = useCallback((mapId: string) => {
         if (!xdfFile || !binFile) return;
 
-        if (isModified && activeMapId && processedMap) {
-            addLog(`Salvando alterações para "${selectedMapDefinition?.name}" na cache antes de trocar.`, 'info');
+        // Save current map to cache before switching if it's modified
+        const currentActiveMapDef = xdfFile.definitions.find(d => d.uniqueId === activeMapId);
+        if (isModified && activeMapId && processedMap && currentActiveMapDef) {
+            addLog(`Salvando alterações para "${currentActiveMapDef.name}" na cache antes de trocar.`, 'info');
             setProcessedMapCache(prev => ({ ...prev, [activeMapId]: processedMap }));
             setModifiedStatusCache(prev => ({ ...prev, [activeMapId]: true }));
         }
@@ -594,29 +596,29 @@ export default function EcuTuningAssistant() {
         setAiModifiedCells(new Set());
         
         // Try to load from cache first
-        if (processedMapCache[mapId]) {
-            addLog(`A carregar o mapa "${xdfFile.definitions.find(d=>d.uniqueId === mapId)?.name}" da cache.`, 'info');
+        const newActiveMapDef = xdfFile.definitions.find(d => d.uniqueId === mapId);
+        if (processedMapCache[mapId] && newActiveMapDef) {
+            addLog(`A carregar o mapa "${newActiveMapDef.name}" da cache.`, 'info');
             setProcessedMap(processedMapCache[mapId]);
             setIsModified(modifiedStatusCache[mapId] ?? false);
             return;
         }
 
         // If not in cache, process it
-        const def = xdfFile.definitions.find(d => d.uniqueId === mapId);
-        if (!def) return;
+        if (!newActiveMapDef) return;
 
-        const mapStructureKey = `${def.rows}x${def.cols}`;
+        const mapStructureKey = `${newActiveMapDef.rows}x${newActiveMapDef.cols}`;
         
         let configToApply = initialManualConfig;
         
-        if (def.xAxisDef && def.yAxisDef) {
+        if (newActiveMapDef.xAxisDef && newActiveMapDef.yAxisDef) {
             configToApply = {
-                x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
-                y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
-                z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: def.rowStride },
-                isBigEndian: def.isBigEndian,
-                sortX: def.xAxisDef.requiresSort,
-                sortY: def.yAxisDef.requiresSort,
+                x: { equation: newActiveMapDef.xAxisDef.equation || 'x', stride: newActiveMapDef.xAxisDef.dataSize },
+                y: { equation: newActiveMapDef.yAxisDef.equation || 'x', stride: newActiveMapDef.yAxisDef.dataSize },
+                z: { equation: newActiveMapDef.equation || 'x', stride: newActiveMapDef.dataSize, rowStride: newActiveMapDef.rowStride },
+                isBigEndian: newActiveMapDef.isBigEndian,
+                sortX: newActiveMapDef.xAxisDef.requiresSort,
+                sortY: newActiveMapDef.yAxisDef.requiresSort,
             };
         }
 
@@ -637,7 +639,7 @@ export default function EcuTuningAssistant() {
              }
         });
 
-    }, [xdfFile, binFile, isModified, activeMapId, processedMap, selectedMapDefinition, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap]);
+    }, [xdfFile, binFile, isModified, activeMapId, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap]);
 
 
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
@@ -781,7 +783,7 @@ export default function EcuTuningAssistant() {
                 const definition = xdfFile.definitions.find(def => def.uniqueId === mapId);
                 if (!definition) return null;
                 return { definition, processedMap: mapData };
-            }).filter(item => item !== null) as { definition: XDFinition; processedMap: ProcessedMap }[];
+            }).filter(item => item !== null) as { definition: XDFDefinition; processedMap: ProcessedMap }[];
             
         if (mapsToSave.length === 0) {
             const msg = "Nenhuma modificação para salvar.";
@@ -921,20 +923,20 @@ export default function EcuTuningAssistant() {
     const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
 
     const handleMapSelectionChange = (id: string) => {
-        const newSelection = selectedMapIds.includes(id) 
-            ? selectedMapIds.filter(mapId => mapId !== id)
-            : [...selectedMapIds, id];
+        setSelectedMapIds((prev) => {
+            const newSelection = prev.includes(id)
+                ? prev.filter((mapId) => mapId !== id)
+                : [...prev, id];
 
-        setSelectedMapIds(newSelection);
-
-        if (newSelection.length === 0) {
-            setActiveMapId(null);
-            setProcessedMap(null);
-        } else if (!activeMapId || !newSelection.includes(activeMapId)) {
-            // If the active map was removed, or there was no active map,
-            // set the first one in the new selection as active.
-            setActiveMap(newSelection[0]);
-        }
+            if (newSelection.length > 0 && (!activeMapId || !newSelection.includes(activeMapId))) {
+                 setActiveMap(newSelection[0]);
+            } else if (newSelection.length === 0) {
+                 setActiveMapId(null);
+                 setProcessedMap(null);
+            }
+            
+            return newSelection;
+        });
     };
 
 
@@ -1023,9 +1025,7 @@ export default function EcuTuningAssistant() {
                                         key={def.uniqueId}
                                         value={def.name}
                                         keepOpenOnSelect
-                                        onSelect={() => {
-                                            handleMapSelectionChange(def.uniqueId);
-                                        }}
+                                        onSelect={() => handleMapSelectionChange(def.uniqueId)}
                                     >
                                         <div className={cn(
                                             "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
@@ -1600,3 +1600,4 @@ export default function EcuTuningAssistant() {
     
 
     
+
