@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -1049,6 +1049,10 @@ export default function EcuTuningAssistant() {
                       <BarChart3 className="mr-2" />
                       Gráfico 2D
                     </TabsTrigger>
+                    <TabsTrigger value="analysis">
+                        <ClipboardList className="mr-2" />
+                        Análise de Ensaio
+                    </TabsTrigger>
                   </TabsList>
                   {isProcessing ? (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -1137,6 +1141,24 @@ export default function EcuTuningAssistant() {
                               />
                             </div>
                          </div>
+                      </TabsContent>
+                      <TabsContent value="analysis" className="flex-1 mt-4 min-h-0">
+                        <Card className="h-full w-full">
+                            <CardHeader>
+                                <CardTitle>Análise de Dados de Ensaio</CardTitle>
+                                <CardDescription>Carregue um ficheiro de log (.csv) do seu dinamómetro para analisar e obter sugestões de ajuste.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-col gap-4">
+                                <div className="flex items-center gap-4">
+                                    <Button variant="outline">
+                                        <UploadCloud className="mr-2" /> Carregar Log de Ensaio (.csv)
+                                    </Button>
+                                </div>
+                                <div className="flex-1 border rounded-lg p-4 flex items-center justify-center text-muted-foreground">
+                                    <p>Aguardando dados do ensaio...</p>
+                                </div>
+                            </CardContent>
+                        </Card>
                       </TabsContent>
                     </>
                   )}
