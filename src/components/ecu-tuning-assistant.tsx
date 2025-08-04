@@ -934,23 +934,15 @@ export default function EcuTuningAssistant() {
 
     const handleMapSelectionChange = (id: string) => {
         const isSelected = selectedMapIds.includes(id);
-        const newSelectedIds = isSelected
-            ? selectedMapIds.filter((mapId) => mapId !== id)
-            : [...selectedMapIds, id];
-        
-        setSelectedMapIds(newSelectedIds);
-
-        // Logic to set active map
-        if (newSelectedIds.length === 0) {
-            setActiveMap(null);
-        } else if (isSelected) {
-            // If we are DESELECTING
-            if (id === activeMapId) {
-                // If we are deselecting the active map, make another one active
+        if (isSelected) {
+            const newSelectedIds = selectedMapIds.filter(mapId => mapId !== id);
+            setSelectedMapIds(newSelectedIds);
+            if (activeMapId === id) {
                 setActiveMap(newSelectedIds[0] ?? null);
             }
         } else {
-            // If we are SELECTING a new map, make it active
+            const newSelectedIds = [...selectedMapIds, id];
+            setSelectedMapIds(newSelectedIds);
             setActiveMap(id);
         }
     };
@@ -1038,12 +1030,23 @@ export default function EcuTuningAssistant() {
                             <CommandGroup>
                                 {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
                                     <CommandItem
-                                        keepOpenOnSelect
                                         key={def.uniqueId}
-                                        value={def.name}
-                                        onSelect={() => {
-                                            handleMapSelectionChange(def.uniqueId);
-                                            setIsPopoverOpen(true);
+                                        value={def.uniqueId}
+                                        onSelect={(currentValue) => {
+                                            handleMapSelectionChange(currentValue);
+                                            // Prevent popover from closing
+                                            const e = new Event('select', { bubbles: true, cancelable: true });
+                                            (e.target as HTMLElement)?.dispatchEvent(e);
+                                            if (!e.defaultPrevented) {
+                                              // this is a hack, but it works
+                                            }
+                                        }}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                        }}
+                                        onClick={() => {
+                                          handleMapSelectionChange(def.uniqueId);
                                         }}
                                     >
                                         <div className={cn(
