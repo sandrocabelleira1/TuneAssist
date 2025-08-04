@@ -780,7 +780,7 @@ export default function EcuTuningAssistant() {
                 const definition = xdfFile.definitions.find(def => def.uniqueId === mapId);
                 if (!definition) return null;
                 return { definition, processedMap: mapData };
-            }).filter(item => item !== null) as { definition: XDFDefinition; processedMap: ProcessedMap }[];
+            }).filter(item => item !== null) as { definition: XDFinition; processedMap: ProcessedMap }[];
             
         if (mapsToSave.length === 0) {
             const msg = "Nenhuma modificação para salvar.";
@@ -1526,7 +1526,9 @@ export default function EcuTuningAssistant() {
                                             value={targetLambda}
                                             onChange={(e) => {
                                                 const value = parseFloat(e.target.value);
-                                                setTargetLambda(isNaN(value) ? 0 : value);
+                                                if (!isNaN(value)) {
+                                                    setTargetLambda(value);
+                                                }
                                             }}
                                         />
                                     </div>
