@@ -1023,6 +1023,7 @@ export default function EcuTuningAssistant() {
                                         key={def.uniqueId}
                                         value={def.name}
                                         onSelect={() => handleMapSelectionChange(def.uniqueId)}
+                                        keepOpenOnSelect
                                     >
                                         <div className={cn(
                                             "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
