@@ -931,6 +931,7 @@ export default function EcuTuningAssistant() {
             } else if (newSelection.length === 0) {
                  setActiveMapId(null);
                  setProcessedMap(null);
+                 setIsModified(false);
             }
             
             return newSelection;

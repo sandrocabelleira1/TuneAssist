@@ -124,7 +124,7 @@ const CommandItem = React.forwardRef<
     )}
     onSelect={(value) => {
         if (keepOpenOnSelect) {
-            // Prevent the command menu from closing
+            (document.querySelector(`[cmdk-item][data-value="${value}"]`) as HTMLElement)?.focus();
         }
         onSelect?.(value);
     }}
