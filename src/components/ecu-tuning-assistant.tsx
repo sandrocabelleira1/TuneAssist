@@ -49,13 +49,13 @@ type MassEditPayload = {
 };
 
 const logEntrySchema = z.object({
-    rpm: z.preprocess(
+    yAxis: z.preprocess(
       (a) => (a === '' ? undefined : a),
-      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("RPM deve ser positivo")
+      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("Valor do Eixo Y deve ser positivo")
     ),
-    load: z.preprocess(
+    xAxis: z.preprocess(
       (a) => (a === '' ? undefined : a),
-      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("Carga deve ser positiva")
+      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("Valor do Eixo X deve ser positivo")
     ),
     lambda: z.preprocess(
       (a) => (a === '' ? undefined : a),
@@ -363,8 +363,8 @@ export default function EcuTuningAssistant() {
     const logEntryForm = useForm<LogEntryForm>({
         resolver: zodResolver(logEntrySchema),
         defaultValues: {
-            rpm: '',
-            load: '',
+            yAxis: '',
+            xAxis: '',
             lambda: '',
         },
     });
@@ -405,7 +405,6 @@ export default function EcuTuningAssistant() {
         setAggressiveness(100);
         logEntryForm.reset();
         
-        // Reset file input values
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
         if (logInputRef.current) logInputRef.current.value = '';
@@ -479,7 +478,6 @@ export default function EcuTuningAssistant() {
             reader.readAsArrayBuffer(file);
         }
         
-        // Do not clear the file input value here, otherwise onChange won't fire for the same file
     };
 
     const handleLogFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -507,13 +505,25 @@ export default function EcuTuningAssistant() {
             }
         });
 
-        e.target.value = '';
+        if (logInputRef.current) logInputRef.current.value = '';
     };
 
     const handleAddManualLogEntry = (data: LogEntryForm) => {
-        const newEntry = { RPM: data.rpm, Load: data.load, Lambda: data.lambda };
+        if (!processedMap?.axes) {
+            toast({title: "Mapa não carregado", description: "Carregue e selecione um mapa para adicionar dados de ensaio.", variant: "destructive"});
+            return;
+        }
+
+        const yAxisLabel = processedMap.axes.y.label || 'Eixo Y';
+        const xAxisLabel = processedMap.axes.x.label || 'Eixo X';
+
+        const newEntry = {
+            [yAxisLabel]: data.yAxis,
+            [xAxisLabel]: data.xAxis,
+            'Lambda': data.lambda,
+        };
         setLogData(prev => [...prev, newEntry]);
-        addLog(`Ponto de ensaio manual adicionado: RPM=${data.rpm}, Carga=${data.load}, Lambda=${data.lambda}`, 'success');
+        addLog(`Ponto de ensaio manual adicionado: ${yAxisLabel}=${data.yAxis}, ${xAxisLabel}=${data.xAxis}, Lambda=${data.lambda}`, 'success');
         logEntryForm.reset();
     };
 
@@ -814,6 +824,10 @@ export default function EcuTuningAssistant() {
         setPlotOrientation(prev => prev === 'y-vs-x' ? 'x-vs-y' : 'y-vs-x');
         setSelectedLine(0);
     };
+    
+    const yAxisLabelForForm = processedMap?.axes.y.label || 'Eixo Y';
+    const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
+
 
     return (
       <div className="h-full w-full bg-background">
@@ -1291,12 +1305,12 @@ export default function EcuTuningAssistant() {
                                         <form onSubmit={logEntryForm.handleSubmit(handleAddManualLogEntry)} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-start">
                                             <FormField
                                                 control={logEntryForm.control}
-                                                name="rpm"
+                                                name="yAxis"
                                                 render={({ field }) => (
                                                     <FormItem>
-                                                        <FormLabel>RPM</FormLabel>
+                                                        <FormLabel>{yAxisLabelForForm}</FormLabel>
                                                         <FormControl>
-                                                            <Input type="number" placeholder="3000" {...field} />
+                                                            <Input type="number" placeholder="Ex: 3000" {...field} />
                                                         </FormControl>
                                                         <FormMessage />
                                                     </FormItem>
@@ -1304,12 +1318,12 @@ export default function EcuTuningAssistant() {
                                             />
                                             <FormField
                                                 control={logEntryForm.control}
-                                                name="load"
+                                                name="xAxis"
                                                 render={({ field }) => (
                                                     <FormItem>
-                                                        <FormLabel>Carga</FormLabel>
+                                                        <FormLabel>{xAxisLabelForForm}</FormLabel>
                                                         <FormControl>
-                                                            <Input type="number" placeholder="80" {...field} />
+                                                            <Input type="number" placeholder="Ex: 80" {...field} />
                                                         </FormControl>
                                                         <FormMessage />
                                                     </FormItem>
@@ -1322,14 +1336,14 @@ export default function EcuTuningAssistant() {
                                                     <FormItem>
                                                         <FormLabel>Lambda (Sonda)</FormLabel>
                                                         <FormControl>
-                                                            <Input type="number" step="0.01" placeholder="0.85" {...field} />
+                                                            <Input type="number" step="0.01" placeholder="Ex: 0.85" {...field} />
                                                         </FormControl>
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}
                                             />
                                             <div className="pt-8">
-                                              <Button type="submit" className="w-full">
+                                              <Button type="submit" className="w-full" disabled={!processedMap}>
                                                 <PlusCircle className="mr-2" /> Adicionar Ponto
                                               </Button>
                                             </div>
