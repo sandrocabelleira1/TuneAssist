@@ -565,6 +565,59 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
 
     return newBuffer;
 }
+
+export function writeMultipleMapsToBin(
+    originalBinBuffer: ArrayBuffer,
+    mapsToSave: { definition: XDFinition; processedMap: ProcessedMap }[]
+): ArrayBuffer {
+    const newBuffer = originalBinBuffer.slice(0); // Create a mutable copy
+    const view = new DataView(newBuffer);
+
+    for (const { definition: def, processedMap } of mapsToSave) {
+        if (!processedMap || !processedMap.calculatedMap || !processedMap.addresses) {
+            console.warn(`A saltar o mapa "${def.name}" devido a dados inválidos.`);
+            continue;
+        }
+
+        const { calculatedMap, addresses } = processedMap;
+        const useLittleEndian = !def.isBigEndian;
+
+        for (let r = 0; r < calculatedMap.length; r++) {
+            for (let c = 0; c < calculatedMap[r].length; c++) {
+                const calculatedValue = calculatedMap[r][c];
+                const address = addresses[r]?.[c];
+
+                if (calculatedValue === null || calculatedValue === undefined || address === null || address === undefined) {
+                    continue;
+                }
+
+                const rawValue = invertEquation(def.equation, calculatedValue);
+                if (isNaN(rawValue)) {
+                    console.warn(`Aviso: O valor invertido para ${calculatedValue} no mapa "${def.name}" [${r},${c}] é NaN. A saltar.`);
+                    continue;
+                }
+
+                let maxVal;
+                if (def.dataSize === 1) maxVal = 0xFF;
+                else if (def.dataSize === 2) maxVal = 0xFFFF;
+                else if (def.dataSize === 4) maxVal = 0xFFFFFFFF;
+                else maxVal = Infinity;
+                const clampedValue = Math.max(0, Math.min(Math.round(rawValue), maxVal));
+
+                if (address + def.dataSize > view.byteLength) {
+                    console.error(`Erro: Endereço de escrita 0x${address.toString(16)} para o mapa "${def.name}" está fora dos limites.`);
+                    continue;
+                }
+
+                if (def.dataSize === 1) view.setUint8(address, clampedValue);
+                else if (def.dataSize === 2) view.setUint16(address, clampedValue, useLittleEndian);
+                else if (def.dataSize === 4) view.setUint32(address, clampedValue, useLittleEndian);
+            }
+        }
+    }
+
+    return newBuffer;
+}
 // #endregion
 
 
@@ -629,17 +682,17 @@ export function calculateCorrections(
     const header = Object.keys(logData[0] || {});
     const xAxisKey = findKeyInHeader(header, xAxis.label);
     const yAxisKey = findKeyInHeader(header, yAxis.label);
-    const lambdaKey = findKeyInHeader(header, 'lambda') || 'Lambda';
+    const lambdaKey = findKeyInHeader(header, 'lambda') || findKeyInHeader(header, 'Lambda') || 'Lambda';
 
 
     if (!xAxisKey) {
-        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo X do mapa ("${xAxis.label}").`);
+        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo X do mapa ("${xAxis.label}"). Certifique-se de que os nomes correspondem.`);
     }
     if (!yAxisKey) {
-        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo Y do mapa ("${yAxis.label}").`);
+        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo Y do mapa ("${yAxis.label}"). Certifique-se de que os nomes correspondem.`);
     }
      if (!header.some(h => h.trim().toLowerCase() === lambdaKey.trim().toLowerCase())) {
-        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio para Lambda.`);
+        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio para Lambda. Verifique o cabeçalho do seu CSV.`);
     }
 
     logData.forEach(logEntry => {

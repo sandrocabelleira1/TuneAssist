@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Papa from 'papaparse';
 import { useForm } from 'react-hook-form';
@@ -12,9 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin, calculateCorrections } from '@/lib/ecu';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown } from 'lucide-react';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin, calculateCorrections, writeMultipleMapsToBin } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -30,6 +29,9 @@ import LogDataTable from '@/components/log-data-table';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Badge } from '@/components/ui/badge';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -337,7 +339,9 @@ export default function EcuTuningAssistant() {
     const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
     
-    const [selectedMapId, setSelectedMapId] = useState<string>('');
+    const [selectedMapIds, setSelectedMapIds] = useState<string[]>([]);
+    const [activeMapId, setActiveMapId] = useState<string | null>(null);
+
     const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
     const [isModified, setIsModified] = useState(false);
     const [aiModifiedCells, setAiModifiedCells] = useState<Set<string>>(new Set());
@@ -374,10 +378,19 @@ export default function EcuTuningAssistant() {
         setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev].slice(0, 100));
     }, []);
 
-    const selectedMapDefinition = xdfFile?.definitions.find(def => def.uniqueId === selectedMapId);
+    const selectedMapDefinition = useMemo(() => {
+        if (!activeMapId || !xdfFile) return undefined;
+        return xdfFile.definitions.find(def => def.uniqueId === activeMapId);
+    }, [activeMapId, xdfFile]);
+
+    const anyMapModified = useMemo(() => {
+        return Object.values(modifiedStatusCache).some(status => status);
+    }, [modifiedStatusCache]);
+
     
     const clearMapState = useCallback(() => {
-        setSelectedMapId('');
+        setSelectedMapIds([]);
+        setActiveMapId(null);
         setProcessedMap(null);
         setIsModified(false);
         setAiModifiedCells(new Set());
@@ -401,7 +414,8 @@ export default function EcuTuningAssistant() {
         setLogFile(null);
         setLogData([]);
         setLogs([]);
-        setSelectedMapId('');
+        setSelectedMapIds([]);
+        setActiveMapId(null);
         setProcessedMap(null);
         setIsModified(false);
         setAiModifiedCells(new Set());
@@ -443,8 +457,7 @@ export default function EcuTuningAssistant() {
                 clearMapState();
                 if (type === 'bin') {
                     addLog(`Ficheiro BIN "${binFile?.name ?? 'anterior'}" substituído. A limpar dados de ensaio...`, "info");
-                    setLogFile(null);
-                    setLogData([]);
+                    handleClearLogData();
                     if(xdfFile) addLog(`Ficheiro XDF "${xdfFile.name}" mantido.`, "info");
                 }
                 if (type === 'xdf' && binFile) addLog(`Ficheiro BIN "${binFile.name}" mantido.`, "info");
@@ -535,83 +548,62 @@ export default function EcuTuningAssistant() {
         logEntryForm.reset();
     };
 
-    const processMap = useCallback(async (mapId: string, configToProcess: ManualAxisConfig) => {
+    const processAndCacheMap = useCallback(async (mapId: string, configToProcess: ManualAxisConfig) => {
         if (!mapId || !binFile || !xdfFile) return;
 
         const def = xdfFile.definitions.find(d => d.uniqueId === mapId);
         if (!def) {
             addLog(`Definição de mapa com ID "${mapId}" não encontrada.`, 'error');
-            return;
+            return null;
         }
         
         setIsProcessing(true);
-        setProcessedMap(null); 
         addLog(`A processar o mapa: ${def.name}...`, 'info');
         
         try {
             await new Promise(resolve => setTimeout(resolve, 0));
-
             addLog("A processar com as definições atuais (XDF/Manual)...", 'info');
             const result = readAndCalculateMapFromBinManual(binFile.buffer, def, configToProcess);
             
-            setProcessedMap(result);
             setProcessedMapCache(prev => ({...prev, [mapId]: result}));
-            setModifiedStatusCache(prev => ({...prev, [mapId]: false}));
-            setIsModified(false);
-            setAiModifiedCells(new Set());
-
-            setSelectedLine(0);
-            setPlotOrientation('y-vs-x');
-            addLog(`Mapa "${def.name}" processado com sucesso.`, 'success');
+            addLog(`Mapa "${def.name}" processado com sucesso e colocado na cache.`, 'success');
+            return result;
         } catch (error) {
             const errorMessage = `ERRO ao processar o mapa "${def.name}": ${(error as Error).message}`;
             addLog(errorMessage, 'error');
             toast({ title: 'Erro ao Processar Mapa', description: (error as Error).message, variant: 'destructive' });
-            setProcessedMap(null);
+            return null;
         } finally {
             setIsProcessing(false);
         }
     }, [binFile, xdfFile, addLog, toast]);
-    
 
-    const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
-        setManualConfig(prev => {
-            let newConfig;
-            if (subfield && (axis === 'x' || axis === 'y' || axis === 'z')) {
-                 const numValue = ((subfield === 'stride' || subfield === 'rowStride') && value === '') ? undefined : value;
-                 newConfig = { ...prev, [axis]: { ...prev[axis], [subfield]: numValue }};
-            } else {
-                 newConfig = { ...prev, [axis]: value };
-            }
-            return newConfig;
-        });
-        setAiModifiedCells(new Set());
-    };
-    
-    const handleMapSelect = (id: string) => {
-        if (!xdfFile || !binFile || !id) return;
-        
-        if (isModified && selectedMapId && processedMap) {
+    const setActiveMap = useCallback((mapId: string) => {
+        if (!xdfFile || !binFile) return;
+
+        if (isModified && activeMapId && processedMap) {
             addLog(`Salvando alterações para "${selectedMapDefinition?.name}" na cache antes de trocar.`, 'info');
-            setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: processedMap }));
-            setModifiedStatusCache(prev => ({ ...prev, [selectedMapId]: true }));
+            setProcessedMapCache(prev => ({ ...prev, [activeMapId]: processedMap }));
+            setModifiedStatusCache(prev => ({ ...prev, [activeMapId]: true }));
         }
-        
-        setSelectedMapId(id);
+
+        setActiveMapId(mapId);
         setSelectedLine(0);
         setPlotOrientation('y-vs-x');
         setAiModifiedCells(new Set());
-
-        if (processedMapCache[id]) {
-            addLog(`A carregar o mapa "${xdfFile.definitions.find(d=>d.uniqueId === id)?.name}" da cache.`, 'info');
-            setProcessedMap(processedMapCache[id]);
-            setIsModified(modifiedStatusCache[id] ?? false);
+        
+        // Try to load from cache first
+        if (processedMapCache[mapId]) {
+            addLog(`A carregar o mapa "${xdfFile.definitions.find(d=>d.uniqueId === mapId)?.name}" da cache.`, 'info');
+            setProcessedMap(processedMapCache[mapId]);
+            setIsModified(modifiedStatusCache[mapId] ?? false);
             return;
         }
-        
-        const def = xdfFile.definitions.find(d => d.uniqueId === id);
+
+        // If not in cache, process it
+        const def = xdfFile.definitions.find(d => d.uniqueId === mapId);
         if (!def) return;
-        
+
         const mapStructureKey = `${def.rows}x${def.cols}`;
         
         let configToApply = initialManualConfig;
@@ -633,11 +625,47 @@ export default function EcuTuningAssistant() {
         }
         
         setManualConfig(configToApply);
-        processMap(id, configToApply);
+
+        processAndCacheMap(mapId, configToApply).then(result => {
+             if(result) {
+                 setProcessedMap(result);
+                 setModifiedStatusCache(prev => ({...prev, [mapId]: false}));
+                 setIsModified(false);
+             } else {
+                 setProcessedMap(null);
+             }
+        });
+
+    }, [xdfFile, binFile, isModified, activeMapId, processedMap, selectedMapDefinition, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap]);
+
+
+    const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
+        setManualConfig(prev => {
+            let newConfig;
+            if (subfield && (axis === 'x' || axis === 'y' || axis === 'z')) {
+                 const numValue = ((subfield === 'stride' || subfield === 'rowStride') && value === '') ? undefined : value;
+                 newConfig = { ...prev, [axis]: { ...prev[axis], [subfield]: numValue }};
+            } else {
+                 newConfig = { ...prev, [axis]: value };
+            }
+            return newConfig;
+        });
+        setAiModifiedCells(new Set());
+    };
+
+    const handleApplyAndRecalculate = () => {
+        if (!activeMapId) return;
+        processAndCacheMap(activeMapId, manualConfig).then(result => {
+             if(result) {
+                 setProcessedMap(result);
+                 setModifiedStatusCache(prev => ({...prev, [activeMapId]: false}));
+                 setIsModified(false);
+             }
+        });
     };
 
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
-        if (!processedMap || !processedMap.calculatedMap || !selectedMapId) return;
+        if (!processedMap || !processedMap.calculatedMap || !activeMapId) return;
 
         addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)}`, 'info');
         const newMap = processedMap.calculatedMap.map(row => [...row]);
@@ -648,12 +676,12 @@ export default function EcuTuningAssistant() {
         
         setIsModified(true);
         setAiModifiedCells(new Set());
-        setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
+        setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
+        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
     };
 
     const handlePointChange = (rowIndex: number, colIndex: number, newValue: number) => {
-        if (!processedMap || !processedMap.calculatedMap || !selectedMapId) return;
+        if (!processedMap || !processedMap.calculatedMap || !activeMapId) return;
     
         const { originalIndices: xOriginalIndices } = processedMap.axes.x;
         const { originalIndices: yOriginalIndices } = processedMap.axes.y;
@@ -671,8 +699,8 @@ export default function EcuTuningAssistant() {
         
         setIsModified(true);
         setAiModifiedCells(new Set());
-        setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({ ...prev, [selectedMapId]: true }));
+        setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
+        setModifiedStatusCache(prev => ({ ...prev, [activeMapId as string]: true }));
     };
 
 
@@ -681,7 +709,7 @@ export default function EcuTuningAssistant() {
         operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate',
         value: number
     ) => {
-        if (!processedMap || !processedMap.calculatedMap || !selection.start || !selection.end) return;
+        if (!processedMap || !processedMap.calculatedMap || !selection.start || !selection.end || !activeMapId) return;
 
         const newMap = processedMap.calculatedMap.map(row => [...row]);
         const { start, end } = selection;
@@ -731,14 +759,14 @@ export default function EcuTuningAssistant() {
         
         setIsModified(true);
         setAiModifiedCells(new Set());
-        setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
+        setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
+        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
         addLog(`Operação em massa "${operation}" com valor ${value} aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
     };
     
     const handleSave = () => {
-        if (!binFile || !processedMap || !selectedMapDefinition) {
-            const msg = "Faltam dados para salvar. Carregue os ficheiros e processe um mapa primeiro.";
+        if (!binFile || !xdfFile || Object.keys(processedMapCache).length === 0) {
+            const msg = "Faltam dados para salvar. Carregue os ficheiros e modifique um mapa primeiro.";
             addLog(msg, 'error');
             toast({ title: 'Erro ao Salvar', description: msg, variant: 'destructive' });
             return;
@@ -746,28 +774,43 @@ export default function EcuTuningAssistant() {
         
         addLog("A preparar para salvar o ficheiro BIN...", 'info');
         
-        const updatedCache = { ...processedMapCache, [selectedMapId]: processedMap };
+        const mapsToSave = Object.entries(processedMapCache)
+            .filter(([mapId, _]) => modifiedStatusCache[mapId])
+            .map(([mapId, mapData]) => {
+                const definition = xdfFile.definitions.find(def => def.uniqueId === mapId);
+                if (!definition) return null;
+                return { definition, processedMap: mapData };
+            }).filter(item => item !== null) as { definition: XDFDefinition; processedMap: ProcessedMap }[];
+            
+        if (mapsToSave.length === 0) {
+            const msg = "Nenhuma modificação para salvar.";
+            addLog(msg, 'info');
+            toast({ title: 'Nada para Salvar', description: msg });
+            return;
+        }
 
         try {
-            const newBinBuffer = writeMapToBin(binFile.buffer, selectedMapDefinition, processedMap);
+            const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave);
             
             const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             const originalName = binFile.name.replace(/\.[^/.]+$/, "");
-            a.download = `${originalName}_mod.bin`;
+            a.download = `${originalName}_mod_${mapsToSave.length}map.bin`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            const successMsg = `Ficheiro ${a.download} salvo com sucesso.`;
+            const successMsg = `Ficheiro ${a.download} salvo com ${mapsToSave.length} mapas modificados.`;
             addLog(successMsg, 'success');
             toast({ title: 'Salvo com Sucesso', description: successMsg });
             
-            setIsModified(false);
-            setModifiedStatusCache(prev => ({...prev, [selectedMapId]: false}));
+            mapsToSave.forEach(map => {
+                setModifiedStatusCache(prev => ({...prev, [map.definition.uniqueId]: false}));
+            });
+            setIsModified(false); // Only for the active map
             setBinFile(prev => prev ? { ...prev, buffer: newBinBuffer } : null);
 
         } catch (error) {
@@ -793,39 +836,72 @@ export default function EcuTuningAssistant() {
         toast({ title: "Padrão Salvo", description: successMsg });
     };
 
-    const handleAiTune = () => {
-        if (!processedMap || logData.length === 0 || !targetLambda) {
-            const msg = "Dados insuficientes para o ajuste. Carregue um mapa, adicione dados de ensaio e defina um Lambda alvo.";
+    const handleAiTune = async () => {
+        if (selectedMapIds.length === 0 || logData.length === 0 || !targetLambda || !xdfFile || !binFile) {
+            const msg = "Dados insuficientes. Selecione mapas, adicione dados de ensaio e defina um Lambda alvo.";
             addLog(msg, 'error');
-            toast({ title: 'Ajuste Automático Falhou', description: msg, variant: 'destructive' });
+            toast({ title: 'Ajuste Falhou', description: msg, variant: 'destructive' });
             return;
         }
 
-        try {
-            addLog(`A iniciar ajuste automático com Lambda Alvo ${targetLambda.toFixed(2)} e agressividade de ${aggressiveness}%...`, 'info');
-            const { correctedMap, modifiedIndices } = calculateCorrections(processedMap, logData, targetLambda, aggressiveness);
-            
-            const newProcessedMap = { ...processedMap, calculatedMap: correctedMap };
-            setProcessedMap(newProcessedMap);
-            
-            const newModifiedCells = new Set<string>();
-            modifiedIndices.forEach(cell => newModifiedCells.add(`${cell.y}-${cell.x}`));
-            setAiModifiedCells(newModifiedCells);
-            addLog(`${newModifiedCells.size} células foram modificadas.`, 'info');
-            
-            setIsModified(true);
-            setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
-            setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
-            
-            const successMsg = "Ajuste automático aplicado com sucesso ao mapa atual.";
-            addLog(successMsg, 'success');
-            toast({ title: 'Ajuste Aplicado', description: successMsg });
+        setIsProcessing(true);
+        addLog(`A iniciar ajuste automático em ${selectedMapIds.length} mapas com Lambda Alvo ${targetLambda.toFixed(2)} e agressividade de ${aggressiveness}%...`, 'info');
+        
+        let totalModifiedCells = 0;
+        
+        for (const mapId of selectedMapIds) {
+            const def = xdfFile.definitions.find(d => d.uniqueId === mapId);
+            if (!def) continue;
 
-        } catch (error) {
-            const errorMsg = `Falha no ajuste automático: ${(error as Error).message}`;
-            addLog(errorMsg, 'error');
-            toast({ title: 'Erro no Ajuste', description: errorMsg, variant: 'destructive' });
+            addLog(`Ajustando o mapa: ${def.name}...`, 'info');
+            
+            // Get map from cache or process it
+            let mapToProcess = processedMapCache[mapId];
+            if (!mapToProcess) {
+                 const config = {
+                    x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
+                    y: { equation: def.yAxisDef.equation || 'x', stride: def.yAxisDef.dataSize },
+                    z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: def.rowStride },
+                    isBigEndian: def.isBigEndian, sortX: def.xAxisDef.requiresSort, sortY: def.yAxisDef.requiresSort,
+                };
+                mapToProcess = await processAndCacheMap(mapId, config);
+            }
+
+            if (!mapToProcess) {
+                addLog(`Falha ao processar ${def.name} para o ajuste. A saltar.`, 'error');
+                continue;
+            }
+
+            try {
+                const { correctedMap, modifiedIndices } = calculateCorrections(mapToProcess, logData, targetLambda, aggressiveness);
+                
+                const newProcessedMap = { ...mapToProcess, calculatedMap: correctedMap };
+                
+                // Update cache and modified status
+                setProcessedMapCache(prev => ({ ...prev, [mapId]: newProcessedMap }));
+                setModifiedStatusCache(prev => ({...prev, [mapId]: true}));
+                
+                if (mapId === activeMapId) {
+                    setProcessedMap(newProcessedMap);
+                    const newModifiedCells = new Set<string>();
+                    modifiedIndices.forEach(cell => newModifiedCells.add(`${cell.y}-${cell.x}`));
+                    setAiModifiedCells(newModifiedCells);
+                    addLog(`${newModifiedCells.size} células foram modificadas em ${def.name}.`, 'info');
+                    totalModifiedCells += newModifiedCells.size;
+                    setIsModified(true);
+                } else {
+                     addLog(`${modifiedIndices.length} células foram modificadas em ${def.name} (em segundo plano).`, 'info');
+                     totalModifiedCells += modifiedIndices.length;
+                }
+            } catch (error) {
+                 const errorMsg = `Falha no ajuste automático para ${def.name}: ${(error as Error).message}`;
+                 addLog(errorMsg, 'error');
+            }
         }
+        setIsProcessing(false);
+        const successMsg = `Ajuste automático aplicado a ${selectedMapIds.length} mapas. Total de ${totalModifiedCells} células modificadas.`;
+        addLog(successMsg, 'success');
+        toast({ title: 'Ajuste em Massa Aplicado', description: successMsg });
     };
 
     const togglePlotOrientation = () => {
@@ -835,6 +911,23 @@ export default function EcuTuningAssistant() {
     
     const yAxisLabelForForm = processedMap?.axes.y.label || 'Eixo Y';
     const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
+
+    const handleMapSelectionChange = (id: string) => {
+        const newSelection = selectedMapIds.includes(id) 
+            ? selectedMapIds.filter(mapId => mapId !== id)
+            : [...selectedMapIds, id];
+
+        setSelectedMapIds(newSelection);
+
+        if (newSelection.length === 0) {
+            setActiveMapId(null);
+            setProcessedMap(null);
+        } else if (!activeMapId || !newSelection.includes(activeMapId)) {
+            // If the active map was removed, or there was no active map,
+            // set the first one in the new selection as active.
+            setActiveMap(newSelection[0]);
+        }
+    };
 
 
     return (
@@ -896,30 +989,67 @@ export default function EcuTuningAssistant() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                  <Select
-                    onValueChange={handleMapSelect}
-                    value={selectedMapId}
-                    disabled={!binFile || !xdfFile}
-                  >
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={
-                          !binFile || !xdfFile
-                            ? 'Carregue os ficheiros'
-                            : 'Selecione um mapa'
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {xdfFile?.definitions
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((def) => (
-                          <SelectItem key={def.uniqueId} value={def.uniqueId}>
-                            {def.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between"
+                        disabled={!binFile || !xdfFile}
+                      >
+                        <span className="truncate">
+                            {selectedMapIds.length === 0 && "Selecione mapas"}
+                            {selectedMapIds.length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds[0])?.name}
+                            {selectedMapIds.length > 1 && `${selectedMapIds.length} mapas selecionados`}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                      <Command>
+                        <CommandInput placeholder="Procurar mapa..." />
+                        <CommandList>
+                            <CommandEmpty>Nenhum mapa encontrado.</CommandEmpty>
+                            <CommandGroup>
+                                {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
+                                    <CommandItem
+                                        key={def.uniqueId}
+                                        value={def.uniqueId}
+                                        onSelect={() => handleMapSelectionChange(def.uniqueId)}
+                                    >
+                                        <div className={cn(
+                                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                            selectedMapIds.includes(def.uniqueId)
+                                                ? "bg-primary text-primary-foreground"
+                                                : "opacity-50 [&_svg]:invisible"
+                                        )}>
+                                            <Wand2 className="h-4 w-4" /> {/* Check Icon */}
+                                        </div>
+                                        <span>{def.name}</span>
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {selectedMapIds.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                        {selectedMapIds.map(id => {
+                            const def = xdfFile?.definitions.find(d => d.uniqueId === id);
+                            if (!def) return null;
+                            return (
+                                <Badge 
+                                    key={id} 
+                                    variant={id === activeMapId ? "default" : "secondary"}
+                                    className="cursor-pointer"
+                                    onClick={() => setActiveMap(id)}
+                                >
+                                    {def.name}
+                                </Badge>
+                            )
+                        })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1116,8 +1246,8 @@ export default function EcuTuningAssistant() {
                   <div className="flex flex-col gap-2">
                     <Button
                       size="sm"
-                      onClick={() => processMap(selectedMapId, manualConfig)}
-                      disabled={!selectedMapId || isProcessing}
+                      onClick={handleApplyAndRecalculate}
+                      disabled={!activeMapId || isProcessing}
                     >
                       {isProcessing ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1128,7 +1258,7 @@ export default function EcuTuningAssistant() {
                         size="sm"
                         variant="secondary"
                         onClick={handleSetTemplate}
-                        disabled={!selectedMapId}
+                        disabled={!activeMapId}
                     >
                         <Star className="mr-2 h-4 w-4" />
                         Usar como Padrão
@@ -1147,7 +1277,7 @@ export default function EcuTuningAssistant() {
                   <Button
                     variant="default"
                     size="sm"
-                    disabled={!isModified || !processedMap}
+                    disabled={!anyMapModified || isProcessing}
                     onClick={handleSave}
                   >
                     <Save className="mr-2 h-4 w-4" /> Salvar .BIN Modificado
@@ -1240,7 +1370,7 @@ export default function EcuTuningAssistant() {
                         Análise de Ensaio
                     </TabsTrigger>
                   </TabsList>
-                  {isProcessing ? (
+                  {isProcessing && !processedMap ? (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">
                       <Loader2 className="mr-2 h-8 w-8 animate-spin" />
                       <p>A processar o mapa...</p>
@@ -1250,7 +1380,7 @@ export default function EcuTuningAssistant() {
                       <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
                            <div className="h-full w-full">
                                 <DataTable
-                                key={selectedMapId + JSON.stringify(processedMap?.addresses)}
+                                key={activeMapId}
                                 mapData={processedMap?.calculatedMap ?? null}
                                 addresses={processedMap?.addresses ?? null}
                                 axes={processedMap?.axes ?? null}
@@ -1342,7 +1472,7 @@ export default function EcuTuningAssistant() {
                                                     <FormItem>
                                                         <FormLabel>{yAxisLabelForForm}</FormLabel>
                                                         <FormControl>
-                                                            <Input type="number" placeholder="Ex: 3000" {...field} />
+                                                            <Input type="number" placeholder="Ex: 3000" {...field} value={field.value ?? ''} />
                                                         </FormControl>
                                                         <FormMessage />
                                                     </FormItem>
@@ -1355,7 +1485,7 @@ export default function EcuTuningAssistant() {
                                                     <FormItem>
                                                         <FormLabel>{xAxisLabelForForm}</FormLabel>
                                                         <FormControl>
-                                                            <Input type="number" placeholder="Ex: 80" {...field} />
+                                                            <Input type="number" placeholder="Ex: 80" {...field} value={field.value ?? ''} />
                                                         </FormControl>
                                                         <FormMessage />
                                                     </FormItem>
@@ -1368,7 +1498,7 @@ export default function EcuTuningAssistant() {
                                                     <FormItem>
                                                         <FormLabel>Lambda (Sonda)</FormLabel>
                                                         <FormControl>
-                                                            <Input type="number" step="0.01" placeholder="Ex: 0.85" {...field} />
+                                                            <Input type="number" step="0.01" placeholder="Ex: 0.85" {...field} value={field.value ?? ''} />
                                                         </FormControl>
                                                         <FormMessage />
                                                     </FormItem>
@@ -1393,7 +1523,7 @@ export default function EcuTuningAssistant() {
                                             id="target-lambda" 
                                             type="number" 
                                             step="0.01"
-                                            value={targetLambda || ''}
+                                            value={targetLambda}
                                             onChange={(e) => {
                                                 const value = parseFloat(e.target.value);
                                                 setTargetLambda(isNaN(value) ? 0 : value);
@@ -1411,8 +1541,8 @@ export default function EcuTuningAssistant() {
                                             onValueChange={(value) => setAggressiveness(value[0])}
                                         />
                                     </div>
-                                    <Button className="w-full" onClick={handleAiTune} disabled={!processedMap || logData.length === 0}>
-                                        <Wand2 className="mr-2" /> Ajustar com IA
+                                    <Button className="w-full" onClick={handleAiTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing}>
+                                        <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -1430,7 +1560,7 @@ export default function EcuTuningAssistant() {
                     </>
                   )}
 
-                  {!isProcessing && !processedMap && (
+                  {!isProcessing && !processedMap && activeMapId === null && (
                      <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
                         <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
                           <div>
