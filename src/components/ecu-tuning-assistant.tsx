@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -577,7 +578,14 @@ export default function EcuTuningAssistant() {
         }
     }, [binFile, xdfFile, addLog, toast]);
 
-    const setActiveMap = useCallback((mapId: string) => {
+    const setActiveMap = useCallback((mapId: string | null) => {
+        if (!mapId) {
+            setActiveMapId(null);
+            setProcessedMap(null);
+            setIsModified(false);
+            return;
+        }
+
         if (!xdfFile || !binFile) return;
 
         // Save current map to cache before switching if it's modified
@@ -593,9 +601,13 @@ export default function EcuTuningAssistant() {
         setPlotOrientation('y-vs-x');
         setAiModifiedCells(new Set());
         
-        // Try to load from cache first
         const newActiveMapDef = xdfFile.definitions.find(d => d.uniqueId === mapId);
-        if (processedMapCache[mapId] && newActiveMapDef) {
+        if (!newActiveMapDef) return;
+        
+        addLog(`Tornando o mapa "${newActiveMapDef.name}" ativo.`, 'info');
+
+        // Try to load from cache first
+        if (processedMapCache[mapId]) {
             addLog(`A carregar o mapa "${newActiveMapDef.name}" da cache.`, 'info');
             setProcessedMap(processedMapCache[mapId]);
             setIsModified(modifiedStatusCache[mapId] ?? false);
@@ -603,8 +615,6 @@ export default function EcuTuningAssistant() {
         }
 
         // If not in cache, process it
-        if (!newActiveMapDef) return;
-
         const mapStructureKey = `${newActiveMapDef.rows}x${newActiveMapDef.cols}`;
         
         let configToApply = initialManualConfig;
@@ -921,21 +931,25 @@ export default function EcuTuningAssistant() {
     const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
 
     const handleMapSelectionChange = (id: string) => {
-        setSelectedMapIds((prev) => {
-            const newSelection = prev.includes(id)
-                ? prev.filter((mapId) => mapId !== id)
-                : [...prev, id];
+        const isSelected = selectedMapIds.includes(id);
+        const newSelection = isSelected
+            ? selectedMapIds.filter((mapId) => mapId !== id)
+            : [...selectedMapIds, id];
 
-            if (newSelection.length > 0 && (!activeMapId || !newSelection.includes(activeMapId))) {
-                 setActiveMap(newSelection[0]);
-            } else if (newSelection.length === 0) {
-                 setActiveMapId(null);
-                 setProcessedMap(null);
-                 setIsModified(false);
-            }
-            
-            return newSelection;
-        });
+        setSelectedMapIds(newSelection);
+
+        // Logic to decide the active map
+        if (newSelection.length === 0) {
+            // If all are deselected, there is no active map
+            setActiveMap(null);
+        } else if (isSelected && id === activeMapId) {
+            // If the active map was just deselected, make the first of the remaining selected maps active
+            setActiveMap(newSelection[0]);
+        } else if (!isSelected) {
+            // If a new map is selected, make it active
+             setActiveMap(id);
+        }
+        // Otherwise, keep the current active map
     };
 
 
@@ -1051,7 +1065,7 @@ export default function EcuTuningAssistant() {
                                 <Badge 
                                     key={id} 
                                     variant={id === activeMapId ? "default" : "secondary"}
-                                    className="cursor-pointer"
+                                    className="cursor-pointer hover:ring-2 hover:ring-ring"
                                     onClick={() => setActiveMap(id)}
                                 >
                                     {def.name}
@@ -1594,3 +1608,5 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
