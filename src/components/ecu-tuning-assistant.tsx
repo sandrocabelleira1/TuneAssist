@@ -358,7 +358,6 @@ export default function EcuTuningAssistant() {
 
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
-    const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -997,7 +996,7 @@ export default function EcuTuningAssistant() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                  <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                  <Popover>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
@@ -1022,15 +1021,8 @@ export default function EcuTuningAssistant() {
                                     <CommandItem
                                         key={def.uniqueId}
                                         value={def.name}
-                                        onSelect={(e) => {
-                                            e.preventDefault();
+                                        onSelect={() => {
                                             handleMapSelectionChange(def.uniqueId);
-                                        }}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' || e.key === ' ') {
-                                                e.preventDefault();
-                                                handleMapSelectionChange(def.uniqueId);
-                                            }
                                         }}
                                     >
                                         <div className={cn(
