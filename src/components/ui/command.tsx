@@ -117,20 +117,9 @@ const CommandItem = React.forwardRef<
     keepOpenOnSelect?: boolean
   }
 >(({ className, keepOpenOnSelect, onSelect, ...props }, ref) => {
-  const handleSelect = (event: React.MouseEvent) => {
-    if (keepOpenOnSelect) {
-      event.preventDefault();
-    }
+  const handleSelect = (value: string) => {
     if (onSelect) {
-        // We need to find the value from the DOM element, since onSelect in cmdk is different
-        let el = event.currentTarget as HTMLElement | null;
-        while(el && !el.getAttribute('data-value')) {
-            el = el.parentElement;
-        }
-        const value = el?.getAttribute('data-value');
-        if (value) {
-            onSelect(value);
-        }
+      onSelect(value);
     }
   };
 
@@ -141,7 +130,19 @@ const CommandItem = React.forwardRef<
         "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className
         )}
-        onMouseDown={handleSelect} // Using onMouseDown to capture the event before the popover closes
+        onSelect={(value) => {
+          if (keepOpenOnSelect) {
+            // This is the important part to prevent the popover from closing
+          } else {
+             handleSelect(value)
+          }
+        }}
+        onClick={(e) => {
+             const value = e.currentTarget.getAttribute('data-value');
+             if(keepOpenOnSelect && value) {
+                handleSelect(value);
+             }
+        }}
         {...props}
     />
   );
@@ -176,5 +177,3 @@ export {
   CommandShortcut,
   CommandSeparator,
 }
-
-    

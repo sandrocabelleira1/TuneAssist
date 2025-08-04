@@ -939,20 +939,18 @@ export default function EcuTuningAssistant() {
         } else {
             newSelection = [...selectedMapIds, id];
         }
-
+        
         setSelectedMapIds(newSelection);
 
-        // Logic to decide the active map
-        if (newSelection.length === 0) {
-            setActiveMap(null);
-        } else if (isSelected && id === activeMapId) {
-            // If the active map was just deselected, make the first of the remaining selected maps active
+        // If the one we are unselecting is the active one, pick a new active one
+        if (isSelected && id === activeMapId) {
             setActiveMap(newSelection[0] || null);
-        } else if (!isSelected) {
-            // If a new map is selected, make it active
+        } 
+        // If we are selecting a new map, make it active
+        else if (!isSelected) {
              setActiveMap(id);
         }
-        // Otherwise (deselected a non-active map), keep the current active map
+        // Otherwise, keep the current active map
     };
 
 
@@ -1039,7 +1037,7 @@ export default function EcuTuningAssistant() {
                                 {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
                                     <CommandItem
                                         key={def.uniqueId}
-                                        value={def.name}
+                                        value={def.uniqueId}
                                         onSelect={() => handleMapSelectionChange(def.uniqueId)}
                                         keepOpenOnSelect
                                     >
@@ -1611,7 +1609,3 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
-
-    
-
-    
