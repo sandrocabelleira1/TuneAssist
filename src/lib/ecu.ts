@@ -1,4 +1,5 @@
 
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig } from './types';
 
 // #region Utility Functions
@@ -564,4 +565,92 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
 
     return newBuffer;
 }
+// #endregion
+
+
+// #region AI Tuning Logic
+
+function findClosestIndex(arr: (number | string)[], target: number): number {
+    let closestIndex = -1;
+    let minDiff = Infinity;
+
+    for (let i = 0; i < arr.length; i++) {
+        const val = Number(arr[i]);
+        if (isNaN(val)) continue;
+
+        const diff = Math.abs(val - target);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closestIndex = i;
+        }
+    }
+    return closestIndex;
+}
+
+export function calculateCorrections(
+    processedMap: ProcessedMap,
+    logData: any[],
+    targetLambda: number,
+    aggressiveness: number // 0-100
+): MapData {
+    if (!processedMap || !processedMap.calculatedMap || !processedMap.axes) {
+        throw new Error("Mapa processado inválido fornecido para correção.");
+    }
+
+    const { calculatedMap, axes } = processedMap;
+    const { x: xAxis, y: yAxis } = axes;
+
+    const newMap = calculatedMap.map(row => [...row]); // Create a mutable copy
+
+    // Identify the correct keys for RPM, Load, and Lambda from the log data
+    const header = Object.keys(logData[0] || {});
+    const rpmKey = header.find(k => k.toLowerCase().includes('rpm')) || 'RPM';
+    const loadKey = header.find(k => k.toLowerCase().includes('load')) || 'Load';
+    const lambdaKey = header.find(k => k.toLowerCase().includes('lambda')) || 'Lambda';
+
+
+    logData.forEach(logEntry => {
+        const rpm = logEntry[rpmKey];
+        const load = logEntry[loadKey];
+        const measuredLambda = logEntry[lambdaKey];
+
+        if (rpm === undefined || load === undefined || measuredLambda === undefined) {
+            console.warn("Entrada de log ignorada devido a dados em falta:", logEntry);
+            return;
+        }
+
+        const yIndex = findClosestIndex(yAxis.calculated, load);
+        const xIndex = findClosestIndex(xAxis.calculated, rpm);
+
+        if (xIndex === -1 || yIndex === -1) {
+            console.warn(`Nenhuma célula correspondente encontrada para o ponto do log: RPM=${rpm}, Carga=${load}`);
+            return;
+        }
+        
+        const currentValue = newMap[yIndex]?.[xIndex];
+        if (currentValue === null || currentValue === undefined) {
+            console.warn(`Célula do mapa em [${yIndex}, ${xIndex}] está vazia, a ignorar.`);
+            return;
+        }
+
+        const error = measuredLambda - targetLambda;
+        const correctionFactor = measuredLambda / targetLambda;
+        
+        // We only want to add fuel if lean, or pull fuel if rich
+        // correctionFactor > 1 means lean, needs more fuel (increase value)
+        // correctionFactor < 1 means rich, needs less fuel (decrease value)
+        
+        let correctedValue = currentValue * correctionFactor;
+        
+        // Apply aggressiveness
+        const diff = correctedValue - currentValue;
+        correctedValue = currentValue + (diff * (aggressiveness / 100));
+
+        newMap[yIndex][xIndex] = correctedValue;
+    });
+
+    return newMap;
+}
+
+
 // #endregion

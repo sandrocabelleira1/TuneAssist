@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2 } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -29,6 +29,8 @@ import { cn } from '@/lib/utils';
 import LogDataTable from '@/components/log-data-table';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Separator } from '@/components/ui/separator';
+import { Slider } from '@/components/ui/slider';
+
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
     ssr: false,
@@ -342,6 +344,7 @@ export default function EcuTuningAssistant() {
     
     const [templateConfig, setTemplateConfig] = useState<StructureTemplate | null>(null);
     const [targetLambda, setTargetLambda] = useState<number>(1.0);
+    const [aggressiveness, setAggressiveness] = useState<number>(100);
 
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
@@ -354,9 +357,9 @@ export default function EcuTuningAssistant() {
     const logEntryForm = useForm<LogEntryForm>({
         resolver: zodResolver(logEntrySchema),
         defaultValues: {
-            rpm: '',
-            load: '',
-            lambda: '',
+            rpm: '' as any,
+            load: '' as any,
+            lambda: '' as any,
         },
     });
 
@@ -724,6 +727,35 @@ export default function EcuTuningAssistant() {
         const successMsg = `Padrão salvo para mapas ${structureKey}. Será aplicado automaticamente.`;
         addLog(successMsg, "success");
         toast({ title: "Padrão Salvo", description: successMsg });
+    };
+
+    const handleAiTune = () => {
+        if (!processedMap || logData.length === 0 || !targetLambda) {
+            const msg = "Dados insuficientes para o ajuste. Carregue um mapa, adicione dados de ensaio e defina um Lambda alvo.";
+            addLog(msg, 'error');
+            toast({ title: 'Ajuste Automático Falhou', description: msg, variant: 'destructive' });
+            return;
+        }
+
+        try {
+            addLog(`A iniciar ajuste automático com Lambda Alvo ${targetLambda.toFixed(2)} e agressividade de ${aggressiveness}%...`, 'info');
+            const correctedMap = calculateCorrections(processedMap, logData, targetLambda, aggressiveness);
+            
+            const newProcessedMap = { ...processedMap, calculatedMap: correctedMap };
+            setProcessedMap(newProcessedMap);
+            setIsModified(true);
+            setProcessedMapCache(prev => ({ ...prev, [selectedMapId]: newProcessedMap }));
+            setModifiedStatusCache(prev => ({...prev, [selectedMapId]: true}));
+            
+            const successMsg = "Ajuste automático aplicado com sucesso ao mapa atual.";
+            addLog(successMsg, 'success');
+            toast({ title: 'Ajuste Aplicado', description: successMsg });
+
+        } catch (error) {
+            const errorMsg = `Falha no ajuste automático: ${(error as Error).message}`;
+            addLog(errorMsg, 'error');
+            toast({ title: 'Erro no Ajuste', description: errorMsg, variant: 'destructive' });
+        }
     };
 
     const togglePlotOrientation = () => {
@@ -1283,7 +1315,18 @@ export default function EcuTuningAssistant() {
                                             }}
                                         />
                                     </div>
-                                    <Button className="w-full" disabled>
+                                    <div>
+                                        <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
+                                        <Slider
+                                            id="aggressiveness"
+                                            min={0}
+                                            max={100}
+                                            step={1}
+                                            value={[aggressiveness]}
+                                            onValueChange={(value) => setAggressiveness(value[0])}
+                                        />
+                                    </div>
+                                    <Button className="w-full" onClick={handleAiTune} disabled={!processedMap || logData.length === 0}>
                                         <Wand2 className="mr-2" /> Ajustar com IA
                                     </Button>
                                 </CardContent>
