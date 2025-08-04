@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -359,6 +357,7 @@ export default function EcuTuningAssistant() {
 
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
+    const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -947,9 +946,9 @@ export default function EcuTuningAssistant() {
                 setActiveMap(null);
             } else if (id === activeMapId && isSelected) {
                 // If we are deselecting the active map, make another one active
-                setActiveMap(newSelectedIds[0]);
-            } else if (!activeMapId || !isSelected) {
-                // If no map is active, or we are selecting a new one, make it active
+                setActiveMap(newSelectedIds[0] ?? null);
+            } else if (!activeMapId || !newSelectedIds.includes(activeMapId!)) {
+                 // If no map is active, or we are selecting a new one, make it active
                 setActiveMap(id);
             }
             
@@ -1017,7 +1016,7 @@ export default function EcuTuningAssistant() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                  <Popover>
+                  <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
@@ -1044,8 +1043,8 @@ export default function EcuTuningAssistant() {
                                         value={def.uniqueId}
                                         onSelect={(currentValue) => {
                                             handleMapSelectionChange(currentValue);
+                                            setIsPopoverOpen(true); // Keep it open
                                         }}
-                                        keepOpenOnSelect={true}
                                     >
                                         <div className={cn(
                                             "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
