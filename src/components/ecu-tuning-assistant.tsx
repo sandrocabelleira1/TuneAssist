@@ -1014,7 +1014,7 @@ export default function EcuTuningAssistant() {
           </Sidebar>
           <SidebarInset>
             <Header />
-            <main className="flex flex-col min-h-0 h-[calc(100%-3.5rem)]">
+            <main className="flex flex-col h-[calc(100%-3.5rem)]">
               <div className="flex items-center p-2 border-b">
                 <SidebarTrigger />
                 <div className="flex items-center ml-2">
