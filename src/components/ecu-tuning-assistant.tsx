@@ -1307,6 +1307,7 @@ export default function EcuTuningAssistant() {
                                 <CardHeader>
                                     <CardTitle>Dados de Ensaio</CardTitle>
                                     <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente.</CardDescription>
+
                                 </CardHeader>
                                 <CardContent className="flex flex-col gap-4">
                                     <div className="flex items-center gap-4">
@@ -1453,3 +1454,5 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
+    
