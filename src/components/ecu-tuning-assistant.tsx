@@ -1070,19 +1070,21 @@ export default function EcuTuningAssistant() {
                     </div>
                   ) : (
                     <>
-                      <TabsContent value="view-table" className="flex-1 min-h-0 mt-4 flex flex-col">
-                         <DataTable
-                            key={selectedMapId + JSON.stringify(processedMap?.addresses)}
-                            mapData={processedMap?.calculatedMap ?? null}
-                            addresses={processedMap?.addresses ?? null}
-                            axes={processedMap?.axes ?? null}
-                            selectedMapDefinition={selectedMapDefinition}
-                            onCellChange={handleCellChange}
-                            onMassUpdate={handleMassUpdate}
-                         />
+                      <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
+                         <div className="h-full w-full">
+                           <DataTable
+                              key={selectedMapId + JSON.stringify(processedMap?.addresses)}
+                              mapData={processedMap?.calculatedMap ?? null}
+                              addresses={processedMap?.addresses ?? null}
+                              axes={processedMap?.axes ?? null}
+                              selectedMapDefinition={selectedMapDefinition}
+                              onCellChange={handleCellChange}
+                              onMassUpdate={handleMassUpdate}
+                           />
+                         </div>
                       </TabsContent>
-                      <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4 flex flex-col">
-                         <div className="relative flex-1 w-full h-full">
+                      <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
+                         <div className="h-full w-full">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                               <SurfacePlot3D
                                 mapData={processedMap.calculatedMap}
@@ -1104,35 +1106,37 @@ export default function EcuTuningAssistant() {
                             )}
                          </div>
                       </TabsContent>
-                      <TabsContent value="view-2d" className="flex-1 min-h-0 mt-4 flex flex-col gap-2">
-                         <div className="flex items-center gap-2 self-start">
-                           <TooltipProvider>
-                             <Tooltip>
-                               <TooltipTrigger asChild>
-                                  <Button variant="outline" size="icon" onClick={togglePlotOrientation}>
-                                    <ArrowRightLeft className="h-4 w-4" />
-                                  </Button>
-                               </TooltipTrigger>
-                               <TooltipContent>
-                                 <p>Inverter Eixos do Gráfico</p>
-                               </TooltipContent>
-                             </Tooltip>
-                           </TooltipProvider>
-                          </div>
-                          <div className="relative flex-1 w-full h-full">
-                            <LinePlot2D
-                              mapData={processedMap?.calculatedMap ?? null}
-                              xAxis={processedMap?.axes?.x ?? null}
-                              yAxis={processedMap?.axes?.y ?? null}
-                              mapName={
-                                selectedMapDefinition?.name || 'Mapa Principal'
-                              }
-                              selectedLineIndex={selectedLine}
-                              onLineSelect={setSelectedLine}
-                              onPointChange={handlePointChange}
-                              orientation={plotOrientation}
-                            />
-                          </div>
+                      <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
+                         <div className="flex flex-col gap-2 h-full w-full">
+                           <div className="flex items-center gap-2 self-start">
+                             <TooltipProvider>
+                               <Tooltip>
+                                 <TooltipTrigger asChild>
+                                    <Button variant="outline" size="icon" onClick={togglePlotOrientation}>
+                                      <ArrowRightLeft className="h-4 w-4" />
+                                    </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent>
+                                   <p>Inverter Eixos do Gráfico</p>
+                                 </TooltipContent>
+                               </Tooltip>
+                             </TooltipProvider>
+                            </div>
+                            <div className="flex-1 relative w-full h-full">
+                              <LinePlot2D
+                                mapData={processedMap?.calculatedMap ?? null}
+                                xAxis={processedMap?.axes?.x ?? null}
+                                yAxis={processedMap?.axes?.y ?? null}
+                                mapName={
+                                  selectedMapDefinition?.name || 'Mapa Principal'
+                                }
+                                selectedLineIndex={selectedLine}
+                                onLineSelect={setSelectedLine}
+                                onPointChange={handlePointChange}
+                                orientation={plotOrientation}
+                              />
+                            </div>
+                         </div>
                       </TabsContent>
                     </>
                   )}
