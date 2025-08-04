@@ -587,6 +587,14 @@ function findClosestIndex(arr: (number | string)[], target: number): number {
     return closestIndex;
 }
 
+// Find a key in the log data headers that matches a target label (case-insensitive)
+function findKeyInHeader(header: string[], targetLabel: string): string | undefined {
+    if (!targetLabel) return undefined;
+    const lowerCaseTarget = targetLabel.toLowerCase();
+    return header.find(k => k.toLowerCase().includes(lowerCaseTarget));
+}
+
+
 export function calculateCorrections(
     processedMap: ProcessedMap,
     logData: any[],
@@ -596,35 +604,46 @@ export function calculateCorrections(
     if (!processedMap || !processedMap.calculatedMap || !processedMap.axes) {
         throw new Error("Mapa processado inválido fornecido para correção.");
     }
+     if (!logData || logData.length === 0) {
+        throw new Error("Dados de ensaio estão vazios ou são inválidos.");
+    }
 
     const { calculatedMap, axes } = processedMap;
     const { x: xAxis, y: yAxis } = axes;
-
     const newMap = calculatedMap.map(row => [...row]); // Create a mutable copy
     const modifiedIndices: ModifiedCell[] = [];
 
-    // Identify the correct keys for RPM, Load, and Lambda from the log data
+    // Dynamically find the keys for X, Y, and Lambda from the log data headers
     const header = Object.keys(logData[0] || {});
-    const rpmKey = header.find(k => k.toLowerCase().includes('rpm')) || 'RPM';
-    const loadKey = header.find(k => k.toLowerCase().includes('load')) || 'Load';
+    const xAxisKey = findKeyInHeader(header, xAxis.label);
+    const yAxisKey = findKeyInHeader(header, yAxis.label);
     const lambdaKey = header.find(k => k.toLowerCase().includes('lambda')) || 'Lambda';
 
+    if (!xAxisKey) {
+        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo X do mapa ("${xAxis.label}").`);
+    }
+    if (!yAxisKey) {
+        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo Y do mapa ("${yAxis.label}").`);
+    }
+     if (!header.includes(lambdaKey)) {
+        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio para Lambda.`);
+    }
 
     logData.forEach(logEntry => {
-        const rpm = logEntry[rpmKey];
-        const load = logEntry[loadKey];
+        const xValue = logEntry[xAxisKey];
+        const yValue = logEntry[yAxisKey];
         const measuredLambda = logEntry[lambdaKey];
 
-        if (rpm === undefined || load === undefined || measuredLambda === undefined) {
+        if (xValue === undefined || yValue === undefined || measuredLambda === undefined) {
             console.warn("Entrada de log ignorada devido a dados em falta:", logEntry);
             return;
         }
 
-        const yIndex = findClosestIndex(yAxis.calculated, load);
-        const xIndex = findClosestIndex(xAxis.calculated, rpm);
+        const yIndex = findClosestIndex(yAxis.calculated, yValue);
+        const xIndex = findClosestIndex(xAxis.calculated, xValue);
 
         if (xIndex === -1 || yIndex === -1) {
-            console.warn(`Nenhuma célula correspondente encontrada para o ponto do log: RPM=${rpm}, Carga=${load}`);
+            console.warn(`Nenhuma célula correspondente encontrada para o ponto do log: ${yAxis.label}=${yValue}, ${xAxis.label}=${xValue}`);
             return;
         }
         
