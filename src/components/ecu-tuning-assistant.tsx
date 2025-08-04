@@ -1071,17 +1071,15 @@ export default function EcuTuningAssistant() {
                   ) : (
                     <>
                       <TabsContent value="view-table" className="flex-1 min-h-0 mt-4 flex flex-col">
-                         <div className="relative flex-1 w-full h-full">
-                           <DataTable
-                              key={selectedMapId + JSON.stringify(processedMap?.addresses)}
-                              mapData={processedMap?.calculatedMap ?? null}
-                              addresses={processedMap?.addresses ?? null}
-                              axes={processedMap?.axes ?? null}
-                              selectedMapDefinition={selectedMapDefinition}
-                              onCellChange={handleCellChange}
-                              onMassUpdate={handleMassUpdate}
-                           />
-                         </div>
+                         <DataTable
+                            key={selectedMapId + JSON.stringify(processedMap?.addresses)}
+                            mapData={processedMap?.calculatedMap ?? null}
+                            addresses={processedMap?.addresses ?? null}
+                            axes={processedMap?.axes ?? null}
+                            selectedMapDefinition={selectedMapDefinition}
+                            onCellChange={handleCellChange}
+                            onMassUpdate={handleMassUpdate}
+                         />
                       </TabsContent>
                       <TabsContent value="view-3d" className="flex-1 min-h-0 mt-4 flex flex-col">
                          <div className="relative flex-1 w-full h-full">
