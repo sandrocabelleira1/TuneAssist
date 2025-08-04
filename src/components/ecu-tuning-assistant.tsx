@@ -354,9 +354,9 @@ export default function EcuTuningAssistant() {
     const logEntryForm = useForm<LogEntryForm>({
         resolver: zodResolver(logEntrySchema),
         defaultValues: {
-            rpm: '',
-            load: '',
-            lambda: '',
+            rpm: '' as any,
+            load: '' as any,
+            lambda: '' as any,
         },
     });
 
@@ -649,7 +649,7 @@ export default function EcuTuningAssistant() {
                             const yRatio = (maxY - minY === 0) ? 0 : (y - minY) / (maxY - minY);
 
                             const topInterpolation = topLeft + (topRight - topLeft) * xRatio;
-                            const bottomInterpolation = bottomLeft + (bottomRight - bottomLeft) * xRatio;
+                            const bottomInterpolation = bottomLeft + (bottomRight - bottomLeft) * yRatio;
 
                             newValue = topInterpolation + (bottomInterpolation - topInterpolation) * yRatio;
                             break;
