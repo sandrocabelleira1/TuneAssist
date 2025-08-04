@@ -47,9 +47,18 @@ type MassEditPayload = {
 };
 
 const logEntrySchema = z.object({
-    rpm: z.coerce.number().positive("RPM deve ser positivo"),
-    load: z.coerce.number().positive("Carga deve ser positiva"),
-    lambda: z.coerce.number().positive("Lambda deve ser positivo"),
+    rpm: z.preprocess(
+      (a) => (a === '' ? undefined : a),
+      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("RPM deve ser positivo")
+    ),
+    load: z.preprocess(
+      (a) => (a === '' ? undefined : a),
+      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("Carga deve ser positiva")
+    ),
+    lambda: z.preprocess(
+      (a) => (a === '' ? undefined : a),
+      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("Lambda deve ser positivo")
+    ),
 });
 
 type LogEntryForm = z.infer<typeof logEntrySchema>;
@@ -345,9 +354,9 @@ export default function EcuTuningAssistant() {
     const logEntryForm = useForm<LogEntryForm>({
         resolver: zodResolver(logEntrySchema),
         defaultValues: {
-            rpm: undefined,
-            load: undefined,
-            lambda: undefined,
+            rpm: '',
+            load: '',
+            lambda: '',
         },
     });
 
@@ -1136,7 +1145,7 @@ export default function EcuTuningAssistant() {
                               onMassUpdate={handleMassUpdate}
                            />
                       </TabsContent>
-                      <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
+                      <TabsContent value="view-3d" className="flex-1 flex flex-col mt-4 min-h-0">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                               <div className="h-full w-full">
                                   <SurfacePlot3D
@@ -1159,7 +1168,7 @@ export default function EcuTuningAssistant() {
                               </div>
                             )}
                       </TabsContent>
-                      <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0 flex flex-col">
+                      <TabsContent value="view-2d" className="flex-1 flex flex-col mt-4 min-h-0">
                          <div className="flex flex-col gap-2 h-full w-full">
                            <div className="flex items-center gap-2 self-start">
                              <TooltipProvider>
@@ -1191,7 +1200,7 @@ export default function EcuTuningAssistant() {
                             </div>
                          </div>
                       </TabsContent>
-                      <TabsContent value="analysis" className="flex-1 mt-4 min-h-0 flex flex-col gap-4">
+                      <TabsContent value="analysis" className="flex-1 flex flex-col mt-4 min-h-0 gap-4">
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             <Card className="lg:col-span-2">
                                 <CardHeader>
