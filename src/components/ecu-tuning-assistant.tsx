@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2 } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2 } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -363,9 +363,9 @@ export default function EcuTuningAssistant() {
     const logEntryForm = useForm<LogEntryForm>({
         resolver: zodResolver(logEntrySchema),
         defaultValues: {
-            rpm: '' as any,
-            load: '' as any,
-            lambda: '' as any,
+            rpm: '',
+            load: '',
+            lambda: '',
         },
     });
 
@@ -387,6 +387,34 @@ export default function EcuTuningAssistant() {
         addLog('Seleção de mapa e cache limpos.', 'info');
     }, [addLog]);
 
+    const handleResetAll = useCallback(() => {
+        setBinFile(null);
+        setXdfFile(null);
+        setLogFile(null);
+        setLogData([]);
+        setLogs([]);
+        setSelectedMapId('');
+        setProcessedMap(null);
+        setIsModified(false);
+        setAiModifiedCells(new Set());
+        setProcessedMapCache({});
+        setModifiedStatusCache({});
+        setManualConfig(initialManualConfig);
+        setTemplateConfig(null);
+        setTargetLambda(1.0);
+        setAggressiveness(100);
+        logEntryForm.reset();
+        
+        // Reset file input values
+        if (binInputRef.current) binInputRef.current.value = '';
+        if (xdfInputRef.current) xdfInputRef.current.value = '';
+        if (logInputRef.current) logInputRef.current.value = '';
+
+        const successMsg = 'Aplicação reiniciada para o estado inicial.';
+        addLog(successMsg, 'success');
+        toast({ title: 'Tudo Limpo', description: successMsg });
+    }, [addLog, toast, logEntryForm]);
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -406,8 +434,13 @@ export default function EcuTuningAssistant() {
             
             if ((type === 'bin' && binFile?.name !== file.name) || (type === 'xdf' && xdfFile?.name !== file.name)) {
                 clearMapState();
+                if (type === 'bin') {
+                    addLog(`Ficheiro BIN "${binFile?.name ?? 'anterior'}" substituído. A limpar dados de ensaio...`, "info");
+                    setLogFile(null);
+                    setLogData([]);
+                    if(xdfFile) addLog(`Ficheiro XDF "${xdfFile.name}" mantido.`, "info");
+                }
                 if (type === 'xdf' && binFile) addLog(`Ficheiro BIN "${binFile.name}" mantido.`, "info");
-                if (type === 'bin' && xdfFile) addLog(`Ficheiro XDF "${xdfFile.name}" mantido.`, "info");
             }
 
             if (type === 'bin' && buffer instanceof ArrayBuffer) {
@@ -446,7 +479,7 @@ export default function EcuTuningAssistant() {
             reader.readAsArrayBuffer(file);
         }
         
-        e.target.value = '';
+        // Do not clear the file input value here, otherwise onChange won't fire for the same file
     };
 
     const handleLogFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1096,6 +1129,13 @@ export default function EcuTuningAssistant() {
                     onClick={handleSave}
                   >
                     <Save className="mr-2 h-4 w-4" /> Salvar .BIN Modificado
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleResetAll}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Resetar Tudo
                   </Button>
                 </CardContent>
               </Card>
