@@ -354,9 +354,9 @@ export default function EcuTuningAssistant() {
     const logEntryForm = useForm<LogEntryForm>({
         resolver: zodResolver(logEntrySchema),
         defaultValues: {
-            rpm: '' as any,
-            load: '' as any,
-            lambda: '' as any,
+            rpm: '',
+            load: '',
+            lambda: '',
         },
     });
 
@@ -1135,17 +1135,19 @@ export default function EcuTuningAssistant() {
                   ) : (
                     <>
                       <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
-                           <DataTable
-                              key={selectedMapId + JSON.stringify(processedMap?.addresses)}
-                              mapData={processedMap?.calculatedMap ?? null}
-                              addresses={processedMap?.addresses ?? null}
-                              axes={processedMap?.axes ?? null}
-                              selectedMapDefinition={selectedMapDefinition}
-                              onCellChange={handleCellChange}
-                              onMassUpdate={handleMassUpdate}
-                           />
+                           <div className="h-full w-full">
+                                <DataTable
+                                key={selectedMapId + JSON.stringify(processedMap?.addresses)}
+                                mapData={processedMap?.calculatedMap ?? null}
+                                addresses={processedMap?.addresses ?? null}
+                                axes={processedMap?.axes ?? null}
+                                selectedMapDefinition={selectedMapDefinition}
+                                onCellChange={handleCellChange}
+                                onMassUpdate={handleMassUpdate}
+                                />
+                           </div>
                       </TabsContent>
-                      <TabsContent value="view-3d" className="flex-1 flex flex-col mt-4 min-h-0">
+                      <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                               <div className="h-full w-full">
                                   <SurfacePlot3D
@@ -1168,23 +1170,8 @@ export default function EcuTuningAssistant() {
                               </div>
                             )}
                       </TabsContent>
-                      <TabsContent value="view-2d" className="flex-1 flex flex-col mt-4 min-h-0">
-                         <div className="flex flex-col gap-2 h-full w-full">
-                           <div className="flex items-center gap-2 self-start">
-                             <TooltipProvider>
-                               <Tooltip>
-                                 <TooltipTrigger asChild>
-                                    <Button variant="outline" size="icon" onClick={togglePlotOrientation}>
-                                      <ArrowRightLeft className="h-4 w-4" />
-                                    </Button>
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p>Inverter Eixos do Gráfico</p>
-                                 </TooltipContent>
-                               </Tooltip>
-                             </TooltipProvider>
-                            </div>
-                            <div className="flex-1 relative w-full h-full min-h-0">
+                      <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
+                         <div className="h-full w-full">
                               <LinePlot2D
                                 mapData={processedMap?.calculatedMap ?? null}
                                 xAxis={processedMap?.axes?.x ?? null}
@@ -1196,8 +1183,8 @@ export default function EcuTuningAssistant() {
                                 onLineSelect={setSelectedLine}
                                 onPointChange={handlePointChange}
                                 orientation={plotOrientation}
+                                togglePlotOrientation={togglePlotOrientation}
                               />
-                            </div>
                          </div>
                       </TabsContent>
                       <TabsContent value="analysis" className="flex-1 flex flex-col mt-4 min-h-0 gap-4">
@@ -1299,11 +1286,13 @@ export default function EcuTuningAssistant() {
                                 </CardContent>
                             </Card>
                         </div>
-                        <div className="flex-1 border rounded-lg flex items-center justify-center text-muted-foreground min-h-0">
+                        <div className="flex-1 border rounded-lg min-h-0">
                             {logData.length > 0 ? (
                                 <LogDataTable data={logData} />
                             ) : (
-                                <p>Aguardando dados do ensaio...</p>
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    <p>Aguardando dados do ensaio...</p>
+                                </div>
                             )}
                         </div>
                       </TabsContent>

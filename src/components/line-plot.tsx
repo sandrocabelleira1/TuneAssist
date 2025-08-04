@@ -20,11 +20,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { MapData, AxisData, PlotOrientation } from '@/lib/types';
-import { AlertCircle, Plus, Minus } from 'lucide-react';
+import { AlertCircle, Plus, Minus, ArrowRightLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -36,6 +37,7 @@ interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   onLineSelect: (index: number) => void;
   onPointChange: (rowIndex: number, colIndex: number, newValue: number) => void;
   orientation: PlotOrientation;
+  togglePlotOrientation: () => void;
 }
 
 // State for the editing modal
@@ -89,6 +91,7 @@ export default function LinePlot2D({
   onLineSelect,
   onPointChange,
   orientation,
+  togglePlotOrientation,
   ...props
 }: LinePlot2DProps) {
 
@@ -231,64 +234,80 @@ export default function LinePlot2D({
   const selectorAxis = orientation === 'y-vs-x' ? yAxis : xAxis;
 
   return (
-    <div className={cn('h-full w-full bg-card rounded-lg border p-4 flex', className)} {...props}>
-        <AxisSelector axis={selectorAxis} selectedLineIndex={selectedLineIndex} onLineSelect={onLineSelect} />
-        <div className="flex-1 min-w-0">
-            {selectedLineIndex === null ? (
-                <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
-                    <div>
-                        <AlertCircle className="mx-auto h-12 w-12" />
-                        <p className="mt-4 font-semibold">Nenhuma Linha Selecionada</p>
-                        <p className="text-sm">Clique num valor de {selectorAxis.label} à esquerda para visualizar os seus dados.</p>
+    <div className={cn('h-full w-full bg-card rounded-lg border p-4 flex flex-col', className)} {...props}>
+        <div className="flex items-center gap-2 self-start mb-2">
+            <TooltipProvider>
+                <UiTooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="outline" size="icon" onClick={togglePlotOrientation}>
+                            <ArrowRightLeft className="h-4 w-4" />
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Inverter Eixos do Gráfico</p>
+                    </TooltipContent>
+                </UiTooltip>
+            </TooltipProvider>
+        </div>
+        <div className="flex flex-1 min-h-0">
+            <AxisSelector axis={selectorAxis} selectedLineIndex={selectedLineIndex} onLineSelect={onLineSelect} />
+            <div className="flex-1 min-w-0">
+                {selectedLineIndex === null ? (
+                    <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
+                        <div>
+                            <AlertCircle className="mx-auto h-12 w-12" />
+                            <p className="mt-4 font-semibold">Nenhuma Linha Selecionada</p>
+                            <p className="text-sm">Clique num valor de {selectorAxis.label} à esquerda para visualizar os seus dados.</p>
+                        </div>
                     </div>
-                </div>
-            ) : error || !currentChartData || !lineDataKey ? (
-                <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
-                    <div>
-                        <AlertCircle className="mx-auto h-12 w-12" />
-                        <p className="mt-4 font-semibold">Não é Possível Apresentar o Gráfico</p>
-                        <p className="text-sm">{error || 'Ocorreu um erro inesperado.'}</p>
+                ) : error || !currentChartData || !lineDataKey ? (
+                    <div className="flex h-full w-full items-center justify-center text-center text-muted-foreground">
+                        <div>
+                            <AlertCircle className="mx-auto h-12 w-12" />
+                            <p className="mt-4 font-semibold">Não é Possível Apresentar o Gráfico</p>
+                            <p className="text-sm">{error || 'Ocorreu um erro inesperado.'}</p>
+                        </div>
                     </div>
-                </div>
-            ) : (
-                <ChartContainer config={{}} className="h-full w-full">
-                    <ResponsiveContainer>
-                      <LineChart 
-                          data={currentChartData} 
-                          margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                      >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                          type="number"
-                          dataKey="x"
-                          domain={['dataMin', 'dataMax']}
-                          tickFormatter={tickFormatter}
-                          label={{ value: chartXAxisLabel, position: 'insideBottom', offset: -15 }}
-                          allowDuplicatedCategory={false}
-                      />
-                      <YAxis
-                          type="number"
-                          domain={['auto', 'auto']}
-                          tickFormatter={tickFormatter}
-                          label={{ value: mapName, angle: -90, position: 'insideLeft' }}
-                      />
-                      <Tooltip content={<ChartTooltipContent indicator="dot" />} />
-                      <Legend verticalAlign="top" />
-                      <Line
-                          dataKey="y"
-                          name={lineDataKey}
-                          type="monotone"
-                          stroke="hsl(var(--primary))"
-                          strokeWidth={2}
-                          dot={<CustomDot />}
-                          activeDot={false}
-                          isAnimationActive={true}
-                          connectNulls
-                      />
-                      </LineChart>
-                    </ResponsiveContainer>
-                </ChartContainer>
-            )}
+                ) : (
+                    <ChartContainer config={{}} className="h-full w-full">
+                        <ResponsiveContainer>
+                          <LineChart 
+                              data={currentChartData} 
+                              margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                          >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis
+                              type="number"
+                              dataKey="x"
+                              domain={['dataMin', 'dataMax']}
+                              tickFormatter={tickFormatter}
+                              label={{ value: chartXAxisLabel, position: 'insideBottom', offset: -15 }}
+                              allowDuplicatedCategory={false}
+                          />
+                          <YAxis
+                              type="number"
+                              domain={['auto', 'auto']}
+                              tickFormatter={tickFormatter}
+                              label={{ value: mapName, angle: -90, position: 'insideLeft' }}
+                          />
+                          <Tooltip content={<ChartTooltipContent indicator="dot" />} />
+                          <Legend verticalAlign="top" />
+                          <Line
+                              dataKey="y"
+                              name={lineDataKey}
+                              type="monotone"
+                              stroke="hsl(var(--primary))"
+                              strokeWidth={2}
+                              dot={<CustomDot />}
+                              activeDot={false}
+                              isAnimationActive={true}
+                              connectNulls
+                          />
+                          </LineChart>
+                        </ResponsiveContainer>
+                    </ChartContainer>
+                )}
+            </div>
         </div>
         {editingPoint && (
             <EditPointModal 
