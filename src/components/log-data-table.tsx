@@ -43,7 +43,7 @@ export default function LogDataTable({ data, className }: LogDataTableProps) {
                         const cellValue = row[header];
                         return (
                         <TableCell key={`${rowIndex}-${cellIndex}`} className="whitespace-nowrap">
-                            {typeof cellValue === 'number' ? cellValue.toFixed(2) : String(cellValue)}
+                            {typeof cellValue === 'number' ? cellValue.toFixed(2) : String(cellValue ?? '')}
                         </TableCell>
                         );
                     })}

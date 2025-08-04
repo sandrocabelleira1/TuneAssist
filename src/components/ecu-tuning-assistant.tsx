@@ -1138,16 +1138,18 @@ export default function EcuTuningAssistant() {
                       </TabsContent>
                       <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
-                              <SurfacePlot3D
-                                mapData={processedMap.calculatedMap}
-                                xAxis={processedMap.axes.x.calculated}
-                                yAxis={processedMap.axes.y.calculated}
-                                xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
-                                yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
-                                zAxisLabel={
-                                  selectedMapDefinition?.name || 'Mapa Principal'
-                                }
-                              />
+                              <div className="h-full w-full">
+                                  <SurfacePlot3D
+                                    mapData={processedMap.calculatedMap}
+                                    xAxis={processedMap.axes.x.calculated}
+                                    yAxis={processedMap.axes.y.calculated}
+                                    xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
+                                    yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
+                                    zAxisLabel={
+                                      selectedMapDefinition?.name || 'Mapa Principal'
+                                    }
+                                  />
+                              </div>
                             ) : (
                               <div className="flex items-center justify-center h-full text-muted-foreground">
                                 <p>
@@ -1173,7 +1175,7 @@ export default function EcuTuningAssistant() {
                                </Tooltip>
                              </TooltipProvider>
                             </div>
-                            <div className="flex-1 relative w-full h-full">
+                            <div className="flex-1 relative w-full h-full min-h-0">
                               <LinePlot2D
                                 mapData={processedMap?.calculatedMap ?? null}
                                 xAxis={processedMap?.axes?.x ?? null}
@@ -1288,7 +1290,7 @@ export default function EcuTuningAssistant() {
                                 </CardContent>
                             </Card>
                         </div>
-                        <div className="flex-1 border rounded-lg p-2 flex items-center justify-center text-muted-foreground min-h-0">
+                        <div className="flex-1 border rounded-lg flex items-center justify-center text-muted-foreground min-h-0">
                             {logData.length > 0 ? (
                                 <LogDataTable data={logData} />
                             ) : (
