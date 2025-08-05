@@ -76,6 +76,7 @@ export type IgnitionTimingPoint = {
     rpm: number | '';
     time: number | '';
     torque: number | '';
+    advance: number | '';
 };
 
 export type IgnitionTimingRun = {
