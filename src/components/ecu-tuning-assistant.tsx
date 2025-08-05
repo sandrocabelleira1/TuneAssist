@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMapToBin, calculateCorrections, writeMultipleMapsToBin } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -933,18 +933,22 @@ export default function EcuTuningAssistant() {
     const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
 
     const handleMapSelectionChange = (id: string) => {
-        const isSelected = selectedMapIds.includes(id);
-        if (isSelected) {
-            const newSelectedIds = selectedMapIds.filter(mapId => mapId !== id);
-            setSelectedMapIds(newSelectedIds);
-            if (activeMapId === id) {
-                setActiveMap(newSelectedIds[0] ?? null);
+        setSelectedMapIds(prev => {
+            const isSelected = prev.includes(id);
+            if (isSelected) {
+                const newSelected = prev.filter(mapId => mapId !== id);
+                // If the deselected map was the active one, pick a new active map
+                if (activeMapId === id) {
+                    setActiveMap(newSelected[0] ?? null);
+                }
+                return newSelected;
+            } else {
+                const newSelected = [...prev, id];
+                // If a new map is selected, make it the active one
+                setActiveMap(id);
+                return newSelected;
             }
-        } else {
-            const newSelectedIds = [...selectedMapIds, id];
-            setSelectedMapIds(newSelectedIds);
-            setActiveMap(id);
-        }
+        });
     };
 
 
@@ -1031,22 +1035,13 @@ export default function EcuTuningAssistant() {
                                 {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
                                     <CommandItem
                                         key={def.uniqueId}
-                                        value={def.uniqueId}
-                                        onSelect={(currentValue) => {
-                                            handleMapSelectionChange(currentValue);
-                                            // Prevent popover from closing
-                                            const e = new Event('select', { bubbles: true, cancelable: true });
-                                            (e.target as HTMLElement)?.dispatchEvent(e);
-                                            if (!e.defaultPrevented) {
-                                              // this is a hack, but it works
-                                            }
+                                        value={def.name}
+                                        onSelect={() => {
+                                            handleMapSelectionChange(def.uniqueId)
                                         }}
                                         onMouseDown={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                        }}
-                                        onClick={() => {
-                                          handleMapSelectionChange(def.uniqueId);
+                                            e.preventDefault();
+                                            e.stopPropagation();
                                         }}
                                     >
                                         <div className={cn(
