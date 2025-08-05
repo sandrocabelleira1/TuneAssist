@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -935,19 +933,19 @@ export default function EcuTuningAssistant() {
     const handleMapSelectionChange = (id: string) => {
         setSelectedMapIds(prev => {
             const isSelected = prev.includes(id);
-            if (isSelected) {
-                const newSelected = prev.filter(mapId => mapId !== id);
-                // If the deselected map was the active one, pick a new active map
-                if (activeMapId === id) {
-                    setActiveMap(newSelected[0] ?? null);
-                }
-                return newSelected;
-            } else {
-                const newSelected = [...prev, id];
-                // If a new map is selected, make it the active one
+            const newSelectedIds = isSelected
+                ? prev.filter(mapId => mapId !== id)
+                : [...prev, id];
+
+            // If the deselected map was the active one, or if there's no active map
+            if (activeMapId === id || !activeMapId) {
+                // Set the new active map to the first one in the new list, or null if empty
+                setActiveMap(newSelectedIds[0] ?? null);
+            } else if (!isSelected) {
+                // If a new map is selected, make it active
                 setActiveMap(id);
-                return newSelected;
             }
+            return newSelectedIds;
         });
     };
 
@@ -1036,12 +1034,12 @@ export default function EcuTuningAssistant() {
                                     <CommandItem
                                         key={def.uniqueId}
                                         value={def.name}
-                                        onSelect={() => {
-                                            handleMapSelectionChange(def.uniqueId)
-                                        }}
                                         onMouseDown={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
+                                        }}
+                                        onSelect={() => {
+                                            handleMapSelectionChange(def.uniqueId)
                                         }}
                                     >
                                         <div className={cn(
