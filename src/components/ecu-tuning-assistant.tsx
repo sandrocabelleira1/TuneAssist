@@ -1519,11 +1519,6 @@ export default function EcuTuningAssistant() {
                                 onPointChange={handlePointChange}
                                 orientation={plotOrientation}
                                 togglePlotOrientation={togglePlotOrientation}
-                                onAnalyzeIgnition={() => {
-                                    if(activeMapId && selectedLine !== null) {
-                                        handlePreloadIgnitionAnalysis(activeMapId, selectedLine)
-                                    }
-                                }}
                               />
                          </div>
                       </TabsContent>
@@ -1658,7 +1653,6 @@ export default function EcuTuningAssistant() {
                             runs={ignitionRuns} 
                             onRunsChange={setIgnitionRuns}
                             activeMap={processedMap}
-                            onPreload={handlePreloadIgnitionAnalysis}
                            />
                       </TabsContent>
                     </>

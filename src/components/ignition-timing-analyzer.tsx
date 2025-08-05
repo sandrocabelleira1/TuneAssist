@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import type { IgnitionTimingRun, IgnitionTimingPoint, ProcessedMap, AxisData } from '@/lib/types';
 import IgnitionTimingPlot from '@/components/ignition-timing-plot';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 
 type RunType = 'base' | 'modified';
 
@@ -18,7 +19,6 @@ interface IgnitionTimingAnalyzerProps {
     runs: IgnitionTimingRun;
     onRunsChange: (runs: IgnitionTimingRun) => void;
     activeMap: ProcessedMap;
-    onPreload: (mapId: string, lineIndex: number) => void;
 }
 
 interface TimingSegment {
@@ -94,7 +94,7 @@ const AnalysisResultsTable = ({ results, analysisMode }: { results: TimingSegmen
                                     'text-destructive font-semibold': res.gainPercent && res.gainPercent < 0,
                                 })}>
                                     {res.gainPercent ? `${res.gainPercent > 0 ? '+' : ''}${res.gainPercent.toFixed(2)}%` : '-'}
-                                </TableCell>
+                                 </TableCell>
                                  <TableCell className={cn('text-sm', {
                                      'text-green-500': res.suggestion.includes('Avançar'),
                                      'text-destructive': res.suggestion.includes('Atrasar'),
@@ -115,9 +115,15 @@ const AnalysisResultsTable = ({ results, analysisMode }: { results: TimingSegmen
 };
 
 
-export default function IgnitionTimingAnalyzer({ runs, onRunsChange, activeMap, onPreload }: IgnitionTimingAnalyzerProps) {
+export default function IgnitionTimingAnalyzer({ runs, onRunsChange, activeMap }: IgnitionTimingAnalyzerProps) {
 
     const [selectedLoadIndex, setSelectedLoadIndex] = useState<string>('');
+    const { toast } = useToast();
+
+    // Reset selected index if activeMap changes
+    useEffect(() => {
+        setSelectedLoadIndex('');
+    }, [activeMap]);
 
     const { analysisResults, analysisMode } = useMemo(() => {
         const results: TimingSegment[] = [];
@@ -240,21 +246,74 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, activeMap, 
             [runType]: []
         });
     }, [runs, onRunsChange]);
-    
-    const handlePreload = () => {
-        if(activeMap?.axes && selectedLoadIndex !== '') {
-            onPreload(activeMap.axes.y.label, parseInt(selectedLoadIndex, 10));
+
+    const handlePreload = useCallback(() => {
+        if (!activeMap || !activeMap.axes || !activeMap.calculatedMap || selectedLoadIndex === '') {
+            toast({ title: "Dados Insuficientes", description: "Mapa de ignição ativo ou linha de carga não selecionada.", variant: "destructive" });
+            return;
         }
-    };
+
+        const loadIndex = parseInt(selectedLoadIndex, 10);
+        if (isNaN(loadIndex)) return;
+        
+        // Let's determine which axis is RPM and which is Load
+        const rpmRegex = /rpm/i;
+        const isXrpm = rpmRegex.test(activeMap.axes.x.label);
+        const isYrpm = rpmRegex.test(activeMap.axes.y.label);
+
+        let rpmAxis: AxisData, loadAxis: AxisData, isLoadAxisY: boolean;
+
+        if (isXrpm) {
+            rpmAxis = activeMap.axes.x;
+            loadAxis = activeMap.axes.y;
+            isLoadAxisY = true;
+        } else if (isYrpm) {
+            rpmAxis = activeMap.axes.y;
+            loadAxis = activeMap.axes.x;
+            isLoadAxisY = false;
+        } else {
+            // Default assumption if no axis is labeled 'rpm'
+            rpmAxis = activeMap.axes.x;
+            loadAxis = activeMap.axes.y;
+            isLoadAxisY = true;
+        }
+
+        if (loadIndex >= loadAxis.calculated.length) {
+            toast({ title: "Índice Inválido", description: "O índice de carga selecionado está fora dos limites.", variant: "destructive" });
+            return;
+        }
+
+        const baseRunPoints: IgnitionTimingPoint[] = rpmAxis.calculated.map((rpmValue, rpmIndex) => {
+            const advanceValue = isLoadAxisY
+                ? activeMap.calculatedMap?.[loadIndex]?.[rpmIndex]
+                : activeMap.calculatedMap?.[rpmIndex]?.[loadIndex];
+
+            return {
+                id: `base_${rpmValue}`,
+                rpm: String(rpmValue),
+                advance: advanceValue !== null && advanceValue !== undefined ? String(advanceValue) : '',
+                time: '',
+                torque: ''
+            }
+        }).filter(p => {
+            const rpm = parseFloat(p.rpm);
+            return isFinite(rpm) && rpm > 0;
+        });
+
+        onRunsChange({ base: baseRunPoints, modified: [] });
+        toast({ title: "Dados de Base Carregados", description: `Carregados ${baseRunPoints.length} pontos de avanço do mapa.`, variant: "default"});
+
+    }, [activeMap, selectedLoadIndex, onRunsChange, toast]);
+
     
     const loadAxis = useMemo<AxisData | null>(() => {
         if (!activeMap || !activeMap.axes) return null;
         const { x, y } = activeMap.axes;
-        // Assume Load axis is the one that is not RPM
         const rpmRegex = /rpm/i;
         if (rpmRegex.test(x.label)) return y;
         if (rpmRegex.test(y.label)) return x;
-        return y; // Default to Y axis if no RPM found
+        // Default to Y if no specific RPM label is found, assuming a common RPM vs Load setup
+        return y;
     }, [activeMap]);
     
 
@@ -262,7 +321,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, activeMap, 
         <div className="space-y-4">
             <p className="text-sm text-muted-foreground p-4 border rounded-lg bg-background">
                 <strong className="text-foreground">Como usar:</strong> <br/>
-                1. Selecione um mapa de ignição e a linha de carga (TPS) para pré-carregar os dados de avanço para o ensaio de base.<br />
+                1. Selecione um mapa de ignição e a linha de carga (TPS/MAP) abaixo para pré-carregar os dados de avanço para o ensaio de base.<br />
                 2. Faça um ensaio com o mapa atual, registando RPM e tempo/torque. Clique nos pontos do gráfico para inserir os dados. <br/>
                 3. Modifique o seu mapa de ignição (ex: avance 1 grau na zona do ensaio). <br/>
                 4. Repita exatamente o mesmo ensaio com o mapa modificado, inserindo os dados no gráfico de ensaio modificado. <br/>
@@ -290,7 +349,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, activeMap, 
                             <SelectContent>
                                 {loadAxis?.calculated.map((val, index) => (
                                     <SelectItem key={index} value={String(index)}>
-                                        {val}
+                                        {typeof val === 'number' ? val.toFixed(2) : val}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

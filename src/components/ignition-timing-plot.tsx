@@ -119,8 +119,8 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
         runs.modified.forEach(p => allRpms.add(parseFloat(p.rpm)));
 
         if (allRpms.size === 0) {
-            // Add default axis if no data exists
-             for (let i = 1; i <= 8; i++) allRpms.add(i * 1000);
+            // Add default axis if no data exists, for manual entry
+            for (let i = 1; i <= 8; i++) allRpms.add(i * 1000);
         }
 
         const sortedRpmTicks = Array.from(allRpms).filter(r => !isNaN(r)).sort((a, b) => a - b);
@@ -149,6 +149,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
     }, [runs]);
 
     const handlePointClick = (dotProps: any, runType: RunType) => {
+        if (!dotProps.payload) return;
         const rpm = dotProps.payload.rpm.toString();
         const existingPoint = runs[runType].find(p => p.rpm === rpm) || createNewPoint(rpm);
         setEditingPoint({ runType, point: existingPoint });
@@ -179,7 +180,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                 <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="rpm" type="number" ticks={rpmTicks} domain={['dataMin', 'dataMax']} />
-                    <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} domain={['auto', 'auto']} />
+                    <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} domain={['auto', 'auto']} allowDecimals={false} />
                     <Tooltip content={<ChartTooltipContent indicator="dot" />} />
                     <Legend />
                     <Line

@@ -38,7 +38,6 @@ interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   onPointChange: (rowIndex: number, colIndex: number, newValue: number) => void;
   orientation: PlotOrientation;
   togglePlotOrientation: () => void;
-  onAnalyzeIgnition: () => void;
 }
 
 // State for the editing modal
@@ -93,7 +92,6 @@ export default function LinePlot2D({
   onPointChange,
   orientation,
   togglePlotOrientation,
-  onAnalyzeIgnition,
   ...props
 }: LinePlot2DProps) {
 
@@ -251,15 +249,6 @@ export default function LinePlot2D({
                         </TooltipContent>
                     </UiTooltip>
                 </TooltipProvider>
-                 <Button 
-                    variant="outline" 
-                    size="sm"
-                    disabled={selectedLineIndex === null}
-                    onClick={onAnalyzeIgnition}
-                >
-                    <Flame className="mr-2 h-4 w-4" />
-                    Analisar Ignição nesta Linha
-                </Button>
             </div>
         </div>
         <div className="flex flex-1 min-h-0">
