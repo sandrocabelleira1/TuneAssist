@@ -70,3 +70,14 @@ export type ModifiedCell = {
   y: number;
   x: number;
 };
+
+export type IgnitionTimingPoint = {
+    id: string;
+    rpm: number | '';
+    time: number | '';
+};
+
+export type IgnitionTimingRun = {
+    base: IgnitionTimingPoint[];
+    modified: IgnitionTimingPoint[];
+}

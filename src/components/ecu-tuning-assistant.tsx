@@ -13,9 +13,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell } from '@/lib/types';
+import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, IgnitionTimingPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -33,6 +33,7 @@ import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import IgnitionTimingAnalyzer from '@/components/ignition-timing-analyzer';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -357,6 +358,7 @@ export default function EcuTuningAssistant() {
     const [templateConfig, setTemplateConfig] = useState<StructureTemplate | null>(null);
     const [targetLambda, setTargetLambda] = useState<number | ''>(1.0);
     const [aggressiveness, setAggressiveness] = useState<number>(100);
+    const [ignitionRuns, setIgnitionRuns] = useState<IgnitionTimingRun>({ base: [], modified: [] });
 
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
@@ -432,6 +434,7 @@ export default function EcuTuningAssistant() {
         setTemplateConfig(null);
         setTargetLambda(1.0);
         setAggressiveness(100);
+        setIgnitionRuns({ base: [], modified: [] });
         logEntryForm.reset();
         
         if (binInputRef.current) binInputRef.current.value = '';
@@ -961,10 +964,6 @@ export default function EcuTuningAssistant() {
             setActiveMap(null);
         } else if (!activeMapId || !newSelectedIds.includes(activeMapId)) {
             setActiveMap(newSelectedIds[newSelectedIds.length - 1]);
-        } else if (!selectedMapIds.includes(id)) { // This case is for when the active map is deselected
-            // Do nothing, keep the current active map until the user clicks another one
-        } else { // This case is for re-selecting the active map (no state change) or selecting a new one
-             setActiveMap(id);
         }
     };
 
@@ -1028,12 +1027,12 @@ export default function EcuTuningAssistant() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                    <div className="space-y-2">
+                  <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                    <PopoverTrigger asChild>
                         <Button
                             variant="outline"
                             className="w-full justify-between"
                             disabled={!binFile || !xdfFile}
-                            onClick={() => setIsPopoverOpen(!isPopoverOpen)}
                         >
                             <span className="truncate">
                                 {selectedMapIds.length === 0 && "Selecione mapas"}
@@ -1042,8 +1041,10 @@ export default function EcuTuningAssistant() {
                             </span>
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
-                        {isPopoverOpen && binFile && xdfFile && (
-                            <ScrollArea className="h-72 border rounded-md">
+                    </PopoverTrigger>
+                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                        {binFile && xdfFile && (
+                            <ScrollArea className="h-72">
                                <div className="p-4 space-y-2">
                                    {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
                                       <div key={def.uniqueId} className="flex items-center space-x-2">
@@ -1054,7 +1055,8 @@ export default function EcuTuningAssistant() {
                                         />
                                         <label
                                           htmlFor={def.uniqueId}
-                                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
+                                          onClick={() => handleMapSelectionChange(def.uniqueId)}
                                         >
                                           {def.name}
                                         </label>
@@ -1063,7 +1065,9 @@ export default function EcuTuningAssistant() {
                                </div>
                             </ScrollArea>
                         )}
-                    </div>
+                     </PopoverContent>
+                  </Popover>
+
                   {selectedMapIds.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                         {selectedMapIds.map(id => {
@@ -1404,9 +1408,13 @@ export default function EcuTuningAssistant() {
                       <BarChart3 className="mr-2" />
                       Gráfico 2D
                     </TabsTrigger>
-                    <TabsTrigger value="analysis">
+                    <TabsTrigger value="fuel-analysis">
                         <ClipboardList className="mr-2" />
-                        Análise de Ensaio
+                        Análise de Combustível
+                    </TabsTrigger>
+                     <TabsTrigger value="ignition-analysis">
+                        <Flame className="mr-2" />
+                        Análise de Ignição
                     </TabsTrigger>
                   </TabsList>
                   {isProcessing && !processedMap ? (
@@ -1470,11 +1478,11 @@ export default function EcuTuningAssistant() {
                               />
                          </div>
                       </TabsContent>
-                      <TabsContent value="analysis" className="flex-1 flex flex-col mt-4 min-h-0 gap-4">
+                      <TabsContent value="fuel-analysis" className="flex-1 flex flex-col mt-4 min-h-0 gap-4">
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                             <Card className="lg:col-span-2">
                                 <CardHeader>
-                                    <CardTitle>Dados de Ensaio</CardTitle>
+                                    <CardTitle>Dados de Ensaio (Lambda)</CardTitle>
                                     <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente.</CardDescription>
 
                                 </CardHeader>
@@ -1595,6 +1603,9 @@ export default function EcuTuningAssistant() {
                                 </div>
                             )}
                         </div>
+                      </TabsContent>
+                      <TabsContent value="ignition-analysis" className="flex-1 mt-4 min-h-0">
+                          <IgnitionTimingAnalyzer runs={ignitionRuns} onRunsChange={setIgnitionRuns} />
                       </TabsContent>
                     </>
                   )}
