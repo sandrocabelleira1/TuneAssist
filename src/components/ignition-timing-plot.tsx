@@ -112,11 +112,18 @@ interface IgnitionTimingPlotProps {
 
 export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, analysisMode }: IgnitionTimingPlotProps) {
     const [editingPoint, setEditingPoint] = useState<{ runType: RunType; point: IgnitionTimingPoint } | null>(null);
+    const [activeTab, setActiveTab] = useState("advance");
 
     const { chartData, rpmTicks } = useMemo(() => {
         const allRpms = new Set<number>();
-        runs.base.forEach(p => allRpms.add(parseFloat(p.rpm)));
-        runs.modified.forEach(p => allRpms.add(parseFloat(p.rpm)));
+        runs.base.forEach(p => {
+             const rpm = parseFloat(p.rpm);
+             if(!isNaN(rpm)) allRpms.add(rpm);
+        });
+        runs.modified.forEach(p => {
+            const rpm = parseFloat(p.rpm);
+            if(!isNaN(rpm)) allRpms.add(rpm);
+        });
 
         if (allRpms.size === 0) {
             // Add default axis if no data exists, for manual entry
@@ -208,37 +215,40 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
 
     return (
         <Card>
-            <CardHeader>
-                <CardTitle>Gráfico de Análise de Ignição</CardTitle>
-                <CardDescription>
-                    Clique nos pontos do gráfico para adicionar ou editar os dados de cada ensaio.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Tabs defaultValue="advance">
-                    <div className="flex justify-between items-center mb-4">
+            <CardHeader className="space-y-4">
+                <div>
+                    <CardTitle>Gráfico de Análise de Ignição</CardTitle>
+                    <CardDescription>
+                        Clique nos pontos do gráfico para adicionar ou editar os dados de cada ensaio.
+                    </CardDescription>
+                </div>
+                 <div className="flex justify-between items-center">
+                    <Tabs value={activeTab} onValueChange={setActiveTab}>
                         <TabsList>
                             <TabsTrigger value="advance">Avanço</TabsTrigger>
                             <TabsTrigger value="time">Tempo</TabsTrigger>
                             <TabsTrigger value="torque">Torque</TabsTrigger>
                         </TabsList>
-                         <div className="flex gap-2">
-                             <Button variant="outline" size="sm" onClick={() => onClearRun('base')}>
-                                <Eraser className="mr-2 h-4 w-4" /> Limpar Base
-                             </Button>
-                             <Button variant="outline" size="sm" onClick={() => onClearRun('modified')}>
-                                <Eraser className="mr-2 h-4 w-4" /> Limpar Modificado
-                             </Button>
-                         </div>
-                    </div>
-                    
-                    <TabsContent value="advance">
+                    </Tabs>
+                     <div className="flex gap-2">
+                         <Button variant="outline" size="sm" onClick={() => onClearRun('base')}>
+                            <Eraser className="mr-2 h-4 w-4" /> Limpar Base
+                         </Button>
+                         <Button variant="outline" size="sm" onClick={() => onClearRun('modified')}>
+                            <Eraser className="mr-2 h-4 w-4" /> Limpar Modificado
+                         </Button>
+                     </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                    <TabsContent value="advance" className="mt-0">
                         {renderChart('Avanço Ignição', 'advance', 'Avanço (°)')}
                     </TabsContent>
-                    <TabsContent value='time'>
+                    <TabsContent value='time' className="mt-0">
                         {renderChart('Tempo Acumulado', 'time', 'Tempo (s)')}
                     </TabsContent>
-                    <TabsContent value='torque'>
+                    <TabsContent value='torque' className="mt-0">
                         {renderChart('Torque', 'torque', 'Torque (Nm)')}
                     </TabsContent>
                 </Tabs>
