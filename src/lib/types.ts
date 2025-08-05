@@ -73,7 +73,7 @@ export type ModifiedCell = {
 
 export type IgnitionTimingPoint = {
     id: string;
-    rpm: string;
+    rpm: number; // Changed to number
     time: string;
     torque: string;
     advance: string;

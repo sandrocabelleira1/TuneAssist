@@ -1,126 +1,20 @@
 
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Trash2, Wand2 } from 'lucide-react';
+import { Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { IgnitionTimingRun, IgnitionTimingPoint } from '@/lib/types';
-
+import IgnitionTimingPlot from '@/components/ignition-timing-plot';
 
 type RunType = 'base' | 'modified';
 
 interface IgnitionTimingAnalyzerProps {
     runs: IgnitionTimingRun;
     onRunsChange: (runs: IgnitionTimingRun) => void;
-}
-
-const createNewPoint = (): IgnitionTimingPoint => ({
-    id: `point_${Date.now()}_${Math.random()}`,
-    rpm: '',
-    time: '',
-    torque: '',
-    advance: '',
-});
-
-const RunInputTable = ({ title, description, points, setPoints }: {
-    title: string;
-    description: string;
-    points: IgnitionTimingPoint[];
-    setPoints: (points: IgnitionTimingPoint[]) => void;
-}) => {
-
-    const handlePointChange = (id: string, field: 'rpm' | 'time' | 'torque' | 'advance', value: string) => {
-        const newPoints = points.map(p => {
-            if (p.id === id) {
-                return { ...p, [field]: value };
-            }
-            return p;
-        });
-        setPoints(newPoints);
-    };
-
-    const addPoint = () => {
-        setPoints([...points, createNewPoint()]);
-    };
-
-    const removePoint = (id: string) => {
-        setPoints(points.filter(p => p.id !== id));
-    };
-
-    return (
-         <Card>
-            <CardHeader>
-                <CardTitle>{title}</CardTitle>
-                <CardDescription>{description}</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[120px]">RPM</TableHead>
-                            <TableHead className="w-[120px]">Avanço Ignição (°)</TableHead>
-                            <TableHead className="w-[120px]">Tempo (s)</TableHead>
-                            <TableHead className="w-[150px]">Torque (Opcional)</TableHead>
-                            <TableHead className="w-[50px]"></TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {points.map(point => (
-                            <TableRow key={point.id}>
-                                <TableCell>
-                                    <Input
-                                        type="number"
-                                        placeholder="Ex: 3000"
-                                        value={point.rpm}
-                                        onChange={(e) => handlePointChange(point.id, 'rpm', e.target.value)}
-                                    />
-                                </TableCell>
-                                 <TableCell>
-                                    <Input
-                                        type="number"
-                                        step="0.1"
-                                        placeholder="Ex: 25.5"
-                                        value={point.advance}
-                                        onChange={(e) => handlePointChange(point.id, 'advance', e.target.value)}
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                     <Input
-                                        type="number"
-                                        step="0.001"
-                                        placeholder="Ex: 1.589"
-                                        value={point.time}
-                                        onChange={(e) => handlePointChange(point.id, 'time', e.target.value)}
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                     <Input
-                                        type="number"
-                                        step="0.1"
-                                        placeholder="Ex: 250.5"
-                                        value={point.torque}
-                                        onChange={(e) => handlePointChange(point.id, 'torque', e.target.value)}
-                                    />
-                                </TableCell>
-                                <TableCell>
-                                    <Button variant="ghost" size="icon" onClick={() => removePoint(point.id)}>
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-                <Button variant="outline" size="sm" className="mt-4" onClick={addPoint}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Adicionar Ponto
-                </Button>
-            </CardContent>
-        </Card>
-    );
 }
 
 interface TimingSegment {
@@ -219,14 +113,6 @@ const AnalysisResultsTable = ({ results, analysisMode }: { results: TimingSegmen
 
 export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionTimingAnalyzerProps) {
 
-    const setRunPoints = (runType: RunType, points: IgnitionTimingPoint[]) => {
-        const sortedPoints = [...points].sort((a,b) => (parseFloat(a.rpm) || 0) - (parseFloat(b.rpm) || 0));
-        onRunsChange({
-            ...runs,
-            [runType]: sortedPoints
-        });
-    };
-
     const { analysisResults, analysisMode } = useMemo(() => {
         const results: TimingSegment[] = [];
         
@@ -239,12 +125,13 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
         const processRun = (points: IgnitionTimingPoint[]): ValidPoint[] => {
             return points
                 .map(p => ({
-                    rpm: parseFloat(p.rpm),
+                    rpm: p.rpm,
                     time: parseFloat(p.time),
                     torque: parseFloat(p.torque),
                     advance: parseFloat(p.advance)
                 }))
-                .filter(p => !isNaN(p.rpm) && p.rpm > 0 && !isNaN(p.advance) && (mode === 'time' ? !isNaN(p.time) && p.time >= 0 : !isNaN(p.torque) && p.torque > 0));
+                .filter(p => !isNaN(p.rpm) && p.rpm > 0 && !isNaN(p.advance) && (mode === 'time' ? !isNaN(p.time) && p.time >= 0 : !isNaN(p.torque) && p.torque > 0))
+                .sort((a,b) => a.rpm - b.rpm);
         };
 
         const basePoints = processRun(runs.base);
@@ -330,6 +217,23 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
         return { analysisResults: results, analysisMode: mode };
 
     }, [runs]);
+    
+    const handlePointUpdate = useCallback((runType: RunType, point: IgnitionTimingPoint) => {
+         onRunsChange({
+            ...runs,
+            [runType]: [
+                ...runs[runType].filter(p => p.rpm !== point.rpm),
+                point
+            ].sort((a, b) => a.rpm - b.rpm)
+         });
+    }, [runs, onRunsChange]);
+    
+    const handleClearRun = useCallback((runType: RunType) => {
+        onRunsChange({
+            ...runs,
+            [runType]: []
+        });
+    }, [runs, onRunsChange]);
 
     return (
         <div className="space-y-4">
@@ -338,23 +242,17 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
                 1. Faça um ensaio com o mapa de ignição atual (base), registando o avanço, RPM e tempo/torque.<br/>
                 2. Modifique o seu mapa de ignição (ex: avance 1 grau na zona do ensaio). <br/>
                 3. Repita exatamente o mesmo ensaio com o mapa modificado. <br/>
-                4. A tabela de resultados irá comparar a performance e sugerir os próximos passos. Um <span className="text-green-500 font-semibold">ganho positivo</span> indica uma melhoria. <br/>
+                4. Clique nos pontos do gráfico para adicionar os dados de cada ensaio. A tabela de resultados irá comparar a performance e sugerir os próximos passos. Um <span className="text-green-500 font-semibold">ganho positivo</span> indica uma melhoria. <br/>
                 <strong className="text-destructive">Aviso:</strong> Esta ferramenta ajuda a encontrar o binário máximo (MBT), mas não deteta detonação (knock). Afine com cuidado, use combustível de alta octanagem e ouça o motor.
             </p>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <RunInputTable 
-                    title="Ensaio de Base"
-                    description="Insira os dados (RPM vs. Avanço vs. Tempo/Torque) do seu mapa de ignição atual."
-                    points={runs.base}
-                    setPoints={(points) => setRunPoints('base', points)}
-                />
-                 <RunInputTable 
-                    title="Ensaio Modificado"
-                    description="Insira os dados do seu mapa de ignição modificado."
-                    points={runs.modified}
-                    setPoints={(points) => setRunPoints('modified', points)}
-                />
-            </div>
+
+            <IgnitionTimingPlot 
+                runs={runs} 
+                onPointUpdate={handlePointUpdate} 
+                onClearRun={handleClearRun}
+                analysisMode={analysisMode}
+            />
+
              {analysisResults.length > 0 && (
                 <AnalysisResultsTable results={analysisResults} analysisMode={analysisMode} />
              )}
