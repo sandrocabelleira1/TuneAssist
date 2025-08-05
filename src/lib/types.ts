@@ -1,5 +1,6 @@
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -71,9 +72,15 @@ export type ModifiedCell = {
   x: number;
 };
 
+export type ChartPoint = {
+    x: number;
+    y: number | null;
+    originalIndex: number;
+};
+
 export type IgnitionTimingPoint = {
     id: string;
-    rpm: number; // Changed to number
+    rpm: number;
     time: string;
     torque: string;
     advance: string;

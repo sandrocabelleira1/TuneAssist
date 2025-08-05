@@ -19,8 +19,8 @@ import {
 } from '@/components/ui/chart';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { MapData, AxisData, PlotOrientation } from '@/lib/types';
-import { AlertCircle, Plus, Minus, ArrowRightLeft } from 'lucide-react';
+import type { MapData, AxisData, PlotOrientation, ChartPoint } from '@/lib/types';
+import { AlertCircle, Plus, Minus, ArrowRightLeft, Flame } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -38,6 +38,7 @@ interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   onPointChange: (rowIndex: number, colIndex: number, newValue: number) => void;
   orientation: PlotOrientation;
   togglePlotOrientation: () => void;
+  onAnalyzeIgnition: (data: ChartPoint[]) => void;
 }
 
 // State for the editing modal
@@ -92,10 +93,11 @@ export default function LinePlot2D({
   onPointChange,
   orientation,
   togglePlotOrientation,
+  onAnalyzeIgnition,
   ...props
 }: LinePlot2DProps) {
 
-  const [currentChartData, setCurrentChartData] = useState<any[] | null>(null);
+  const [currentChartData, setCurrentChartData] = useState<ChartPoint[] | null>(null);
   const [editingPoint, setEditingPoint] = useState<EditingPoint | null>(null);
 
   const { chartData, lineDataKey, error, chartXAxis, chartXAxisLabel } = useMemo(() => {
@@ -123,7 +125,7 @@ export default function LinePlot2D({
       return { chartData: null, lineDataKey: null, error: 'Linha de dados selecionada é inválida.', chartXAxis: null, chartXAxisLabel: '' };
     }
 
-    const preparedData = graphAxis.calculated
+    const preparedData: ChartPoint[] = graphAxis.calculated
         .map((xVal, i) => {
             const yVal = lineData[i];
             const numX = Number(xVal);
@@ -133,7 +135,7 @@ export default function LinePlot2D({
             }
             return { x: numX, y: null, originalIndex: i };
         })
-        .filter(d => d && isFinite(d.x)) as { x: number; y: number | null, originalIndex: number }[];
+        .filter(d => d && isFinite(d.x)) as ChartPoint[];
 
 
     if (preparedData.length === 0) {
@@ -235,19 +237,30 @@ export default function LinePlot2D({
 
   return (
     <div className={cn('h-full w-full bg-card rounded-lg border p-4 flex flex-col', className)} {...props}>
-        <div className="flex items-center gap-2 self-start mb-2">
-            <TooltipProvider>
-                <UiTooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="outline" size="icon" onClick={togglePlotOrientation}>
-                            <ArrowRightLeft className="h-4 w-4" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                        <p>Inverter Eixos do Gráfico</p>
-                    </TooltipContent>
-                </UiTooltip>
-            </TooltipProvider>
+        <div className="flex items-center justify-between self-start mb-2 w-full">
+            <div className="flex items-center gap-2">
+                <TooltipProvider>
+                    <UiTooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="outline" size="icon" onClick={togglePlotOrientation}>
+                                <ArrowRightLeft className="h-4 w-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Inverter Eixos do Gráfico</p>
+                        </TooltipContent>
+                    </UiTooltip>
+                </TooltipProvider>
+                 <Button 
+                    variant="outline" 
+                    size="sm"
+                    disabled={!currentChartData || selectedLineIndex === null}
+                    onClick={() => onAnalyzeIgnition(currentChartData ?? [])}
+                >
+                    <Flame className="mr-2 h-4 w-4" />
+                    Analisar Ignição nesta Linha
+                </Button>
+            </div>
         </div>
         <div className="flex flex-1 min-h-0">
             <AxisSelector axis={selectorAxis} selectedLineIndex={selectedLineIndex} onLineSelect={onLineSelect} />

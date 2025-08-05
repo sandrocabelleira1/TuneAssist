@@ -343,6 +343,7 @@ export default function EcuTuningAssistant() {
     
     const [selectedMapIds, setSelectedMapIds] = useState<string[]>([]);
     const [activeMapId, setActiveMapId] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState('view-table');
 
     const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
     const [isModified, setIsModified] = useState(false);
@@ -393,8 +394,12 @@ export default function EcuTuningAssistant() {
     }, [modifiedStatusCache]);
 
     const clearAiModifications = () => {
+        const newCache = { ...aiModifiedCellsCache };
+        if (activeMapId && newCache[activeMapId]) {
+            delete newCache[activeMapId];
+        }
+        setAiModifiedCellsCache(newCache);
         setAiModifiedCells(new Set());
-        setAiModifiedCellsCache({});
     };
     
     const clearMapState = useCallback(() => {
@@ -402,7 +407,8 @@ export default function EcuTuningAssistant() {
         setActiveMapId(null);
         setProcessedMap(null);
         setIsModified(false);
-        clearAiModifications();
+        setAiModifiedCells(new Set());
+        setAiModifiedCellsCache({});
         setProcessedMapCache({});
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
@@ -427,7 +433,8 @@ export default function EcuTuningAssistant() {
         setActiveMapId(null);
         setProcessedMap(null);
         setIsModified(false);
-        clearAiModifications();
+        setAiModifiedCells(new Set());
+        setAiModifiedCellsCache({});
         setProcessedMapCache({});
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
@@ -843,7 +850,9 @@ export default function EcuTuningAssistant() {
                  setIsModified(false);
             }
             
-            clearAiModifications();
+            setAiModifiedCells(new Set());
+            setAiModifiedCellsCache({});
+
 
         } catch (error) {
             const errorMsg = `Falha ao salvar o ficheiro BIN: ${(error as Error).message}`;
@@ -966,6 +975,25 @@ export default function EcuTuningAssistant() {
             setActiveMap(newSelectedIds[newSelectedIds.length - 1]);
         }
     };
+    
+    const handlePreloadIgnitionAnalysis = useCallback((chartData: {x: number, y: number | null}[]) => {
+        if (!chartData) return;
+
+        const baseRunPoints: IgnitionTimingPoint[] = chartData
+            .filter(d => d.y !== null && isFinite(d.x) && isFinite(d.y as number))
+            .map(d => ({
+                id: `base_${d.x}`,
+                rpm: d.x,
+                advance: (d.y as number).toString(),
+                time: '',
+                torque: ''
+            }));
+
+        setIgnitionRuns(prev => ({ ...prev, base: baseRunPoints }));
+        setActiveTab("ignition-analysis");
+        addLog(`Análise de ignição pré-carregada com ${baseRunPoints.length} pontos do mapa.`, "success");
+        toast({ title: "Dados Carregados", description: "Preencha os dados de Tempo ou Torque para o ensaio de base." });
+    }, [addLog, toast]);
 
 
     return (
@@ -1392,7 +1420,8 @@ export default function EcuTuningAssistant() {
               </div>
               <div className="flex-1 flex flex-col p-4 min-h-0">
                 <Tabs
-                  defaultValue="view-table"
+                  value={activeTab}
+                  onValueChange={setActiveTab}
                   className="flex-1 flex flex-col w-full min-h-0"
                 >
                   <TabsList className="shrink-0">
@@ -1475,6 +1504,7 @@ export default function EcuTuningAssistant() {
                                 onPointChange={handlePointChange}
                                 orientation={plotOrientation}
                                 togglePlotOrientation={togglePlotOrientation}
+                                onAnalyzeIgnition={handlePreloadIgnitionAnalysis}
                               />
                          </div>
                       </TabsContent>
