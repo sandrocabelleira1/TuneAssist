@@ -127,20 +127,19 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
         const dataMap = new Map<number, any>();
         sortedRpmTicks.forEach(rpm => dataMap.set(rpm, { rpm }));
 
-        runs.base.forEach(p => {
-            if(dataMap.has(p.rpm)) {
-                dataMap.get(p.rpm).base_advance = p.advance !== '' ? parseFloat(p.advance) : null;
-                dataMap.get(p.rpm).base_torque = p.torque !== '' ? parseFloat(p.torque) : null;
-                dataMap.get(p.rpm).base_time = p.time !== '' ? parseFloat(p.time) : null;
-            }
-        });
-        runs.modified.forEach(p => {
-            if(dataMap.has(p.rpm)) {
-                dataMap.get(p.rpm).modified_advance = p.advance !== '' ? parseFloat(p.advance) : null;
-                dataMap.get(p.rpm).modified_torque = p.torque !== '' ? parseFloat(p.torque) : null;
-                dataMap.get(p.rpm).modified_time = p.time !== '' ? parseFloat(p.time) : null;
-            }
-        });
+        const addRunDataToMap = (run: IgnitionTimingPoint[], prefix: string) => {
+            run.forEach(p => {
+                const pointData = dataMap.get(p.rpm);
+                if (pointData) {
+                    pointData[`${prefix}_advance`] = p.advance !== '' ? parseFloat(p.advance) : null;
+                    pointData[`${prefix}_torque`] = p.torque !== '' ? parseFloat(p.torque) : null;
+                    pointData[`${prefix}_time`] = p.time !== '' ? parseFloat(p.time) : null;
+                }
+            });
+        };
+        
+        addRunDataToMap(runs.base, 'base');
+        addRunDataToMap(runs.modified, 'modified');
 
         return { chartData: Array.from(dataMap.values()), rpmTicks: sortedRpmTicks };
     }, [runs]);
