@@ -579,6 +579,8 @@ export default function EcuTuningAssistant() {
     }, [binFile, xdfFile, addLog, toast]);
 
     const setActiveMap = useCallback((mapId: string | null) => {
+        if (activeMapId === mapId) return;
+
         if (!mapId) {
             setActiveMapId(null);
             setProcessedMap(null);
@@ -589,11 +591,13 @@ export default function EcuTuningAssistant() {
         if (!xdfFile || !binFile) return;
 
         // Save current map to cache before switching if it's modified
-        const currentActiveMapDef = xdfFile.definitions.find(d => d.uniqueId === activeMapId);
-        if (isModified && activeMapId && processedMap && currentActiveMapDef) {
-            addLog(`Salvando alterações para "${currentActiveMapDef.name}" na cache antes de trocar.`, 'info');
-            setProcessedMapCache(prev => ({ ...prev, [activeMapId]: processedMap }));
-            setModifiedStatusCache(prev => ({ ...prev, [activeMapId]: true }));
+        if (isModified && activeMapId && processedMap) {
+            const currentActiveMapDef = xdfFile.definitions.find(d => d.uniqueId === activeMapId);
+            if (currentActiveMapDef) {
+                 addLog(`Salvando alterações para "${currentActiveMapDef.name}" na cache antes de trocar.`, 'info');
+                 setProcessedMapCache(prev => ({ ...prev, [activeMapId]: processedMap }));
+                 setModifiedStatusCache(prev => ({ ...prev, [activeMapId]: true }));
+            }
         }
 
         setActiveMapId(mapId);
@@ -647,7 +651,7 @@ export default function EcuTuningAssistant() {
              }
         });
 
-    }, [xdfFile, binFile, isModified, activeMapId, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap]);
+    }, [activeMapId, xdfFile, binFile, isModified, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap]);
 
 
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
@@ -818,11 +822,17 @@ export default function EcuTuningAssistant() {
             addLog(successMsg, 'success');
             toast({ title: 'Salvo com Sucesso', description: successMsg });
             
+            // Update the internal state to reflect the saved changes
+            setBinFile({ name: binFile.name, buffer: newBinBuffer });
+            
+            // Mark all saved maps as no longer modified
             mapsToSave.forEach(map => {
                 setModifiedStatusCache(prev => ({...prev, [map.definition.uniqueId]: false}));
             });
-            setIsModified(false); // Only for the active map
-            setBinFile(prev => prev ? { ...prev, buffer: newBinBuffer } : null);
+            // Update the current view if the active map was saved
+            if (activeMapId && modifiedStatusCache[activeMapId]) {
+                 setIsModified(false);
+            }
 
         } catch (error) {
             const errorMsg = `Falha ao salvar o ficheiro BIN: ${(error as Error).message}`;
@@ -901,12 +911,12 @@ export default function EcuTuningAssistant() {
                 
                 if (mapId === activeMapId) {
                     setProcessedMap(newProcessedMap);
-                    const newModifiedCells = new Set<string>();
-                    modifiedIndices.forEach(cell => newModifiedCells.add(`${cell.y}-${cell.x}`));
-                    setAiModifiedCells(newModifiedCells);
-                    addLog(`${newModifiedCells.size} células foram modificadas em ${def.name}.`, 'info');
-                    totalModifiedCells += newModifiedCells.size;
                     setIsModified(true);
+                    const newAiModifiedCells = new Set<string>();
+                    modifiedIndices.forEach(cell => newAiModifiedCells.add(`${cell.y}-${cell.x}`));
+                    setAiModifiedCells(newAiModifiedCells);
+                    addLog(`${newAiModifiedCells.size} células foram modificadas em ${def.name}.`, 'info');
+                    totalModifiedCells += newAiModifiedCells.size;
                 } else {
                      addLog(`${modifiedIndices.length} células foram modificadas em ${def.name} (em segundo plano).`, 'info');
                      totalModifiedCells += modifiedIndices.length;
@@ -931,22 +941,23 @@ export default function EcuTuningAssistant() {
     const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
 
     const handleMapSelectionChange = (id: string) => {
-        setSelectedMapIds(prev => {
-            const isSelected = prev.includes(id);
-            const newSelectedIds = isSelected
-                ? prev.filter(mapId => mapId !== id)
-                : [...prev, id];
+        const newSelectedIds = selectedMapIds.includes(id)
+            ? selectedMapIds.filter(mapId => mapId !== id)
+            : [...selectedMapIds, id];
 
-            // If the deselected map was the active one, or if there's no active map
-            if (activeMapId === id || !activeMapId) {
-                // Set the new active map to the first one in the new list, or null if empty
-                setActiveMap(newSelectedIds[0] ?? null);
-            } else if (!isSelected) {
-                // If a new map is selected, make it active
-                setActiveMap(id);
-            }
-            return newSelectedIds;
-        });
+        setSelectedMapIds(newSelectedIds);
+
+        // Logic to decide the next active map
+        if (id === activeMapId && !newSelectedIds.includes(id)) {
+            // If the deselected map was the active one, pick the next available one or null
+            setActiveMap(newSelectedIds[0] ?? null);
+        } else if (!activeMapId && newSelectedIds.length > 0) {
+            // If there was no active map, make the new selection the active one
+            setActiveMap(newSelectedIds[0]);
+        } else if (newSelectedIds.length > 0 && !newSelectedIds.includes(activeMapId!)) {
+            // If the active map was removed as part of some other logic, default to first
+            setActiveMap(newSelectedIds[0]);
+        }
     };
 
 
@@ -1036,7 +1047,6 @@ export default function EcuTuningAssistant() {
                                         value={def.name}
                                         onMouseDown={(e) => {
                                             e.preventDefault();
-                                            e.stopPropagation();
                                         }}
                                         onSelect={() => {
                                             handleMapSelectionChange(def.uniqueId)
@@ -1071,6 +1081,13 @@ export default function EcuTuningAssistant() {
                                     onClick={() => setActiveMap(id)}
                                 >
                                     {def.name}
+                                    <X 
+                                      className="ml-1 h-3 w-3 rounded-full hover:bg-muted/50"
+                                      onClick={(e) => {
+                                        e.stopPropagation(); // prevent setActiveMap from firing
+                                        handleMapSelectionChange(id);
+                                      }}
+                                    />
                                 </Badge>
                             )
                         })}
