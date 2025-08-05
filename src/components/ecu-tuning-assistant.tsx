@@ -976,41 +976,6 @@ export default function EcuTuningAssistant() {
         }
     };
     
-    const handlePreloadIgnitionAnalysis = useCallback((mapId: string, lineIndex: number) => {
-       const map = processedMapCache[mapId];
-       if (!map || !map.calculatedMap) {
-            toast({ title: "Mapa não encontrado", description: "Não foi possível carregar os dados do mapa para análise.", variant: "destructive" });
-            return;
-       }
-       
-       const orientationIsYvsX = plotOrientation === 'y-vs-x';
-       const lineAxis = orientationIsYvsX ? map.axes.y : map.axes.x;
-       const valueAxis = orientationIsYvsX ? map.axes.x : map.axes.y;
-
-       if (lineIndex >= lineAxis.calculated.length) return;
-
-       const baseRunPoints: IgnitionTimingPoint[] = valueAxis.calculated.map((rpm, i) => {
-            const advanceValue = orientationIsYvsX
-                ? map.calculatedMap?.[lineIndex]?.[i]
-                : map.calculatedMap?.[i]?.[lineIndex];
-
-            return {
-                id: `base_${rpm}`,
-                rpm: String(rpm),
-                advance: advanceValue !== null && advanceValue !== undefined ? String(advanceValue) : '',
-                time: '',
-                torque: ''
-            }
-       }).filter(p => isFinite(parseFloat(p.rpm)) && parseFloat(p.rpm) > 0);
-
-
-        setIgnitionRuns({ base: baseRunPoints, modified: [] });
-        setActiveTab("ignition-analysis");
-        addLog(`Análise de ignição pré-carregada com ${baseRunPoints.length} pontos do mapa.`, "success");
-        toast({ title: "Dados Carregados", description: "Preencha os dados de Tempo ou Torque para o ensaio de base." });
-    }, [processedMapCache, plotOrientation, addLog, toast]);
-
-
     return (
       <div className="h-full w-full bg-background">
         <SidebarProvider>

@@ -96,7 +96,7 @@ const AnalysisResultsTable = ({ results, analysisMode }: { results: TimingSegmen
                                     {res.gainPercent ? `${res.gainPercent > 0 ? '+' : ''}${res.gainPercent.toFixed(2)}%` : '-'}
                                  </TableCell>
                                  <TableCell className={cn('text-sm', {
-                                     'text-green-500': res.suggestion.includes('Avançar'),
+                                     'text-green-500': res.suggestion.includes('Continuar a avançar'),
                                      'text-destructive': res.suggestion.includes('Atrasar'),
                                      'text-blue-500': res.suggestion.includes('Manter'),
                                  })}>
@@ -206,7 +206,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, activeMap }
                      if (typeof baseAdvance === 'number' && typeof modifiedAdvance === 'number' && modifiedAdvance > baseAdvance) {
                          suggestion = "Continuar a avançar";
                      } else {
-                         suggestion = "Ganho positivo";
+                         suggestion = "Ganho positivo, manter";
                      }
                 } else { // gainPercent < 0
                     suggestion = "Atrasar (passou do MBT)";
