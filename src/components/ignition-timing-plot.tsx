@@ -167,24 +167,26 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
     };
 
     const renderChart = (title: string, dataKey: string, yAxisLabel: string, runType: RunType) => (
-        <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="rpm" />
-                <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} domain={['auto', 'auto']} />
-                <Tooltip content={<ChartTooltipContent indicator="dot" />} />
-                <Legend />
-                <Line
-                    type="monotone"
-                    dataKey={`${runType}_${dataKey}`}
-                    name={runType === 'base' ? 'Base' : 'Modificado'}
-                    stroke={runType === 'base' ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'}
-                    strokeWidth={2}
-                    dot={<CustomDot runType={runType} />}
-                    connectNulls
-                />
-            </LineChart>
-        </ResponsiveContainer>
+        <ChartContainer config={{}} className="min-h-[250px] w-full">
+            <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="rpm" />
+                    <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} domain={['auto', 'auto']} />
+                    <Tooltip content={<ChartTooltipContent indicator="dot" />} />
+                    <Legend />
+                    <Line
+                        type="monotone"
+                        dataKey={`${runType}_${dataKey}`}
+                        name={runType === 'base' ? 'Base' : 'Modificado'}
+                        stroke={runType === 'base' ? 'hsl(var(--primary))' : 'hsl(var(--destructive))'}
+                        strokeWidth={2}
+                        dot={<CustomDot runType={runType} dataKey={`${runType}_${dataKey}`} />}
+                        connectNulls
+                    />
+                </LineChart>
+            </ResponsiveContainer>
+        </ChartContainer>
     );
 
     return (
