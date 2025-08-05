@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -26,7 +27,7 @@ type RunType = 'base' | 'modified';
 type AnalysisMode = 'time' | 'torque';
 
 
-const createNewPoint = (rpm: number): IgnitionTimingPoint => ({
+const createNewPoint = (rpm: string): IgnitionTimingPoint => ({
     id: `point_${rpm}_${Date.now()}`,
     rpm,
     time: '',
@@ -114,22 +115,25 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
 
     const { chartData, rpmTicks } = useMemo(() => {
         const allRpms = new Set<number>();
-        runs.base.forEach(p => allRpms.add(p.rpm));
-        runs.modified.forEach(p => allRpms.add(p.rpm));
+        runs.base.forEach(p => allRpms.add(parseFloat(p.rpm)));
+        runs.modified.forEach(p => allRpms.add(parseFloat(p.rpm)));
 
         if (allRpms.size === 0) {
-            // Add default axis if no data exists, so user has something to click
-            for (let i = 1; i <= 8; i++) allRpms.add(i * 1000);
+            // Add default axis if no data exists
+             for (let i = 1; i <= 8; i++) allRpms.add(i * 1000);
         }
 
-        const sortedRpmTicks = Array.from(allRpms).sort((a, b) => a - b);
+        const sortedRpmTicks = Array.from(allRpms).filter(r => !isNaN(r)).sort((a, b) => a - b);
         
         const dataMap = new Map<number, any>();
         sortedRpmTicks.forEach(rpm => dataMap.set(rpm, { rpm }));
 
         const addRunDataToMap = (run: IgnitionTimingPoint[], prefix: string) => {
             run.forEach(p => {
-                const pointData = dataMap.get(p.rpm);
+                const rpmValue = parseFloat(p.rpm);
+                if(isNaN(rpmValue)) return;
+                
+                const pointData = dataMap.get(rpmValue);
                 if (pointData) {
                     pointData[`${prefix}_advance`] = p.advance !== '' ? parseFloat(p.advance) : null;
                     pointData[`${prefix}_torque`] = p.torque !== '' ? parseFloat(p.torque) : null;
@@ -145,7 +149,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
     }, [runs]);
 
     const handlePointClick = (dotProps: any, runType: RunType) => {
-        const rpm = dotProps.payload.rpm;
+        const rpm = dotProps.payload.rpm.toString();
         const existingPoint = runs[runType].find(p => p.rpm === rpm) || createNewPoint(rpm);
         setEditingPoint({ runType, point: existingPoint });
     };

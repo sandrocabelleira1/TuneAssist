@@ -38,7 +38,7 @@ interface LinePlot2DProps extends React.HTMLAttributes<HTMLDivElement> {
   onPointChange: (rowIndex: number, colIndex: number, newValue: number) => void;
   orientation: PlotOrientation;
   togglePlotOrientation: () => void;
-  onAnalyzeIgnition: (data: ChartPoint[]) => void;
+  onAnalyzeIgnition: () => void;
 }
 
 // State for the editing modal
@@ -254,8 +254,8 @@ export default function LinePlot2D({
                  <Button 
                     variant="outline" 
                     size="sm"
-                    disabled={!currentChartData || selectedLineIndex === null}
-                    onClick={() => onAnalyzeIgnition(currentChartData ?? [])}
+                    disabled={selectedLineIndex === null}
+                    onClick={onAnalyzeIgnition}
                 >
                     <Flame className="mr-2 h-4 w-4" />
                     Analisar Ignição nesta Linha

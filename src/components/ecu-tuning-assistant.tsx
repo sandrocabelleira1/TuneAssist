@@ -976,24 +976,39 @@ export default function EcuTuningAssistant() {
         }
     };
     
-    const handlePreloadIgnitionAnalysis = useCallback((chartData: {x: number, y: number | null}[]) => {
-        if (!chartData) return;
+    const handlePreloadIgnitionAnalysis = useCallback((mapId: string, lineIndex: number) => {
+       const map = processedMapCache[mapId];
+       if (!map || !map.calculatedMap) {
+            toast({ title: "Mapa não encontrado", description: "Não foi possível carregar os dados do mapa para análise.", variant: "destructive" });
+            return;
+       }
+       
+       const orientationIsYvsX = plotOrientation === 'y-vs-x';
+       const lineAxis = orientationIsYvsX ? map.axes.y : map.axes.x;
+       const valueAxis = orientationIsYvsX ? map.axes.x : map.axes.y;
 
-        const baseRunPoints: IgnitionTimingPoint[] = chartData
-            .filter(d => d.y !== null && isFinite(d.x) && isFinite(d.y as number))
-            .map(d => ({
-                id: `base_${d.x}`,
-                rpm: d.x,
-                advance: (d.y as number).toString(),
+       if (lineIndex >= lineAxis.calculated.length) return;
+
+       const baseRunPoints: IgnitionTimingPoint[] = valueAxis.calculated.map((rpm, i) => {
+            const advanceValue = orientationIsYvsX
+                ? map.calculatedMap?.[lineIndex]?.[i]
+                : map.calculatedMap?.[i]?.[lineIndex];
+
+            return {
+                id: `base_${rpm}`,
+                rpm: String(rpm),
+                advance: advanceValue !== null && advanceValue !== undefined ? String(advanceValue) : '',
                 time: '',
                 torque: ''
-            }));
+            }
+       }).filter(p => isFinite(parseFloat(p.rpm)) && parseFloat(p.rpm) > 0);
 
-        setIgnitionRuns(prev => ({ ...prev, base: baseRunPoints }));
+
+        setIgnitionRuns({ base: baseRunPoints, modified: [] });
         setActiveTab("ignition-analysis");
         addLog(`Análise de ignição pré-carregada com ${baseRunPoints.length} pontos do mapa.`, "success");
         toast({ title: "Dados Carregados", description: "Preencha os dados de Tempo ou Torque para o ensaio de base." });
-    }, [addLog, toast]);
+    }, [processedMapCache, plotOrientation, addLog, toast]);
 
 
     return (
@@ -1504,7 +1519,11 @@ export default function EcuTuningAssistant() {
                                 onPointChange={handlePointChange}
                                 orientation={plotOrientation}
                                 togglePlotOrientation={togglePlotOrientation}
-                                onAnalyzeIgnition={handlePreloadIgnitionAnalysis}
+                                onAnalyzeIgnition={() => {
+                                    if(activeMapId && selectedLine !== null) {
+                                        handlePreloadIgnitionAnalysis(activeMapId, selectedLine)
+                                    }
+                                }}
                               />
                          </div>
                       </TabsContent>
@@ -1635,7 +1654,12 @@ export default function EcuTuningAssistant() {
                         </div>
                       </TabsContent>
                       <TabsContent value="ignition-analysis" className="flex-1 mt-4 min-h-0">
-                          <IgnitionTimingAnalyzer runs={ignitionRuns} onRunsChange={setIgnitionRuns} />
+                          <IgnitionTimingAnalyzer 
+                            runs={ignitionRuns} 
+                            onRunsChange={setIgnitionRuns}
+                            activeMap={processedMap}
+                            onPreload={handlePreloadIgnitionAnalysis}
+                           />
                       </TabsContent>
                     </>
                   )}

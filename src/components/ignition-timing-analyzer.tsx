@@ -1,20 +1,24 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Wand2 } from 'lucide-react';
+import { Wand2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { IgnitionTimingRun, IgnitionTimingPoint } from '@/lib/types';
+import type { IgnitionTimingRun, IgnitionTimingPoint, ProcessedMap, AxisData } from '@/lib/types';
 import IgnitionTimingPlot from '@/components/ignition-timing-plot';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type RunType = 'base' | 'modified';
 
 interface IgnitionTimingAnalyzerProps {
     runs: IgnitionTimingRun;
     onRunsChange: (runs: IgnitionTimingRun) => void;
+    activeMap: ProcessedMap;
+    onPreload: (mapId: string, lineIndex: number) => void;
 }
 
 interface TimingSegment {
@@ -111,7 +115,9 @@ const AnalysisResultsTable = ({ results, analysisMode }: { results: TimingSegmen
 };
 
 
-export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionTimingAnalyzerProps) {
+export default function IgnitionTimingAnalyzer({ runs, onRunsChange, activeMap, onPreload }: IgnitionTimingAnalyzerProps) {
+
+    const [selectedLoadIndex, setSelectedLoadIndex] = useState<string>('');
 
     const { analysisResults, analysisMode } = useMemo(() => {
         const results: TimingSegment[] = [];
@@ -125,7 +131,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
         const processRun = (points: IgnitionTimingPoint[]): ValidPoint[] => {
             return points
                 .map(p => ({
-                    rpm: p.rpm,
+                    rpm: parseFloat(p.rpm),
                     time: parseFloat(p.time),
                     torque: parseFloat(p.torque),
                     advance: parseFloat(p.advance)
@@ -224,7 +230,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
             [runType]: [
                 ...runs[runType].filter(p => p.rpm !== point.rpm),
                 point
-            ].sort((a, b) => a.rpm - b.rpm)
+            ].sort((a, b) => parseFloat(a.rpm) - parseFloat(b.rpm))
          });
     }, [runs, onRunsChange]);
     
@@ -234,17 +240,68 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
             [runType]: []
         });
     }, [runs, onRunsChange]);
+    
+    const handlePreload = () => {
+        if(activeMap?.axes && selectedLoadIndex !== '') {
+            onPreload(activeMap.axes.y.label, parseInt(selectedLoadIndex, 10));
+        }
+    };
+    
+    const loadAxis = useMemo<AxisData | null>(() => {
+        if (!activeMap || !activeMap.axes) return null;
+        const { x, y } = activeMap.axes;
+        // Assume Load axis is the one that is not RPM
+        const rpmRegex = /rpm/i;
+        if (rpmRegex.test(x.label)) return y;
+        if (rpmRegex.test(y.label)) return x;
+        return y; // Default to Y axis if no RPM found
+    }, [activeMap]);
+    
 
     return (
         <div className="space-y-4">
             <p className="text-sm text-muted-foreground p-4 border rounded-lg bg-background">
                 <strong className="text-foreground">Como usar:</strong> <br/>
-                1. Faça um ensaio com o mapa de ignição atual (base), registando o avanço, RPM e tempo/torque.<br/>
-                2. Modifique o seu mapa de ignição (ex: avance 1 grau na zona do ensaio). <br/>
-                3. Repita exatamente o mesmo ensaio com o mapa modificado. <br/>
-                4. Clique nos pontos do gráfico para adicionar os dados de cada ensaio. A tabela de resultados irá comparar a performance e sugerir os próximos passos. Um <span className="text-green-500 font-semibold">ganho positivo</span> indica uma melhoria. <br/>
+                1. Selecione um mapa de ignição e a linha de carga (TPS) para pré-carregar os dados de avanço para o ensaio de base.<br />
+                2. Faça um ensaio com o mapa atual, registando RPM e tempo/torque. Clique nos pontos do gráfico para inserir os dados. <br/>
+                3. Modifique o seu mapa de ignição (ex: avance 1 grau na zona do ensaio). <br/>
+                4. Repita exatamente o mesmo ensaio com o mapa modificado, inserindo os dados no gráfico de ensaio modificado. <br/>
+                5. A tabela de resultados irá comparar a performance e sugerir os próximos passos. Um <span className="text-green-500 font-semibold">ganho positivo</span> indica uma melhoria. <br/>
                 <strong className="text-destructive">Aviso:</strong> Esta ferramenta ajuda a encontrar o binário máximo (MBT), mas não deteta detonação (knock). Afine com cuidado, use combustível de alta octanagem e ouça o motor.
             </p>
+            
+             <Card>
+                <CardHeader>
+                    <CardTitle>Pré-carregar Dados do Mapa</CardTitle>
+                    <CardDescription>
+                        Selecione a linha de carga (TPS/MAP) do mapa de ignição ativo para preencher os dados do ensaio de base.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center gap-4">
+                    <div className="flex-1">
+                         <Select
+                            value={selectedLoadIndex}
+                            onValueChange={setSelectedLoadIndex}
+                            disabled={!loadAxis}
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder={loadAxis ? `Selecione ${loadAxis.label}...` : "Nenhum mapa de ignição ativo"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {loadAxis?.calculated.map((val, index) => (
+                                    <SelectItem key={index} value={String(index)}>
+                                        {val}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <Button onClick={handlePreload} disabled={selectedLoadIndex === ''}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Carregar Dados
+                    </Button>
+                </CardContent>
+            </Card>
 
             <IgnitionTimingPlot 
                 runs={runs} 
