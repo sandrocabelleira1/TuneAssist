@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -29,8 +30,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Separator } from '@/components/ui/separator';
 import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -333,7 +334,7 @@ type StructureTemplate = {
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
-    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFdefinition[], allTables: Map<string, Element> } | null>(null);
+    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFDefinition[], allTables: Map<string, Element> } | null>(null);
     const [logFile, setLogFile] = useState<{ name: string; content: string } | null>(null);
     const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
@@ -795,7 +796,7 @@ export default function EcuTuningAssistant() {
                 const definition = xdfFile.definitions.find(def => def.uniqueId === mapId);
                 if (!definition) return null;
                 return { definition, processedMap: mapData };
-            }).filter(item => item !== null) as { definition: XDFinition; processedMap: ProcessedMap }[];
+            }).filter(item => item !== null) as { definition: XDFDefinition; processedMap: ProcessedMap }[];
             
         if (mapsToSave.length === 0) {
             const msg = "Nenhuma modificação para salvar.";
@@ -822,15 +823,13 @@ export default function EcuTuningAssistant() {
             addLog(successMsg, 'success');
             toast({ title: 'Salvo com Sucesso', description: successMsg });
             
-            // Update the internal state to reflect the saved changes
             setBinFile({ name: binFile.name, buffer: newBinBuffer });
             
-            // Mark all saved maps as no longer modified
             mapsToSave.forEach(map => {
                 setModifiedStatusCache(prev => ({...prev, [map.definition.uniqueId]: false}));
             });
-            // Update the current view if the active map was saved
-            if (activeMapId && modifiedStatusCache[activeMapId]) {
+
+            if (activeMapId && modifiedStatusCache[activeMapId] === false) {
                  setIsModified(false);
             }
 
@@ -876,6 +875,7 @@ export default function EcuTuningAssistant() {
         addLog(`A iniciar ajuste automático em ${selectedMapIds.length} mapas com Lambda Alvo ${numericTargetLambda.toFixed(2)} e agressividade de ${aggressiveness}%...`, 'info');
         
         let totalModifiedCells = 0;
+        const newAiModifiedCells = new Set<string>();
         
         for (const mapId of selectedMapIds) {
             const def = xdfFile.definitions.find(d => d.uniqueId === mapId);
@@ -883,7 +883,6 @@ export default function EcuTuningAssistant() {
 
             addLog(`Ajustando o mapa: ${def.name}...`, 'info');
             
-            // Get map from cache or process it
             let mapToProcess = processedMapCache[mapId];
             if (!mapToProcess) {
                  const config = {
@@ -905,27 +904,25 @@ export default function EcuTuningAssistant() {
                 
                 const newProcessedMap = { ...mapToProcess, calculatedMap: correctedMap };
                 
-                // Update cache and modified status
                 setProcessedMapCache(prev => ({ ...prev, [mapId]: newProcessedMap }));
                 setModifiedStatusCache(prev => ({...prev, [mapId]: true}));
-                
+
                 if (mapId === activeMapId) {
                     setProcessedMap(newProcessedMap);
                     setIsModified(true);
-                    const newAiModifiedCells = new Set<string>();
                     modifiedIndices.forEach(cell => newAiModifiedCells.add(`${cell.y}-${cell.x}`));
-                    setAiModifiedCells(newAiModifiedCells);
-                    addLog(`${newAiModifiedCells.size} células foram modificadas em ${def.name}.`, 'info');
-                    totalModifiedCells += newAiModifiedCells.size;
-                } else {
-                     addLog(`${modifiedIndices.length} células foram modificadas em ${def.name} (em segundo plano).`, 'info');
-                     totalModifiedCells += modifiedIndices.length;
                 }
+
+                addLog(`${modifiedIndices.length} células foram modificadas em ${def.name}.`, 'info');
+                totalModifiedCells += modifiedIndices.length;
+
             } catch (error) {
                  const errorMsg = `Falha no ajuste automático para ${def.name}: ${(error as Error).message}`;
                  addLog(errorMsg, 'error');
             }
         }
+        
+        setAiModifiedCells(newAiModifiedCells);
         setIsProcessing(false);
         const successMsg = `Ajuste automático aplicado a ${selectedMapIds.length} mapas. Total de ${totalModifiedCells} células modificadas.`;
         addLog(successMsg, 'success');
@@ -947,16 +944,12 @@ export default function EcuTuningAssistant() {
 
         setSelectedMapIds(newSelectedIds);
 
-        // Logic to decide the next active map
-        if (id === activeMapId && !newSelectedIds.includes(id)) {
-            // If the deselected map was the active one, pick the next available one or null
-            setActiveMap(newSelectedIds[0] ?? null);
-        } else if (!activeMapId && newSelectedIds.length > 0) {
-            // If there was no active map, make the new selection the active one
-            setActiveMap(newSelectedIds[0]);
-        } else if (newSelectedIds.length > 0 && !newSelectedIds.includes(activeMapId!)) {
-            // If the active map was removed as part of some other logic, default to first
-            setActiveMap(newSelectedIds[0]);
+        if (newSelectedIds.length === 0) {
+            setActiveMap(null);
+        } else if (!activeMapId || !newSelectedIds.includes(activeMapId)) {
+            setActiveMap(newSelectedIds[newSelectedIds.length - 1]);
+        } else if (!selectedMapIds.includes(id)) {
+            setActiveMap(id);
         }
     };
 
@@ -1036,36 +1029,25 @@ export default function EcuTuningAssistant() {
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                      <Command>
-                        <CommandInput placeholder="Procurar mapa..." />
-                        <CommandList>
-                            <CommandEmpty>Nenhum mapa encontrado.</CommandEmpty>
-                            <CommandGroup>
-                                {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
-                                    <CommandItem
-                                        key={def.uniqueId}
-                                        value={def.name}
-                                        onMouseDown={(e) => {
-                                            e.preventDefault();
-                                        }}
-                                        onSelect={() => {
-                                            handleMapSelectionChange(def.uniqueId)
-                                        }}
-                                    >
-                                        <div className={cn(
-                                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                                            selectedMapIds.includes(def.uniqueId)
-                                                ? "bg-primary text-primary-foreground"
-                                                : "opacity-50 [&_svg]:invisible"
-                                        )}>
-                                            <Check className="h-4 w-4" />
-                                        </div>
-                                        <span>{def.name}</span>
-                                    </CommandItem>
-                                ))}
-                            </CommandGroup>
-                        </CommandList>
-                      </Command>
+                      <ScrollArea className="h-72">
+                         <div className="p-4 space-y-2">
+                             {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
+                                <div key={def.uniqueId} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={def.uniqueId}
+                                    checked={selectedMapIds.includes(def.uniqueId)}
+                                    onCheckedChange={() => handleMapSelectionChange(def.uniqueId)}
+                                  />
+                                  <label
+                                    htmlFor={def.uniqueId}
+                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                  >
+                                    {def.name}
+                                  </label>
+                                </div>
+                             ))}
+                         </div>
+                      </ScrollArea>
                     </PopoverContent>
                   </Popover>
                   {selectedMapIds.length > 0 && (
@@ -1084,7 +1066,7 @@ export default function EcuTuningAssistant() {
                                     <X 
                                       className="ml-1 h-3 w-3 rounded-full hover:bg-muted/50"
                                       onClick={(e) => {
-                                        e.stopPropagation(); // prevent setActiveMap from firing
+                                        e.stopPropagation();
                                         handleMapSelectionChange(id);
                                       }}
                                     />
