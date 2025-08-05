@@ -26,7 +26,7 @@ import type { IgnitionTimingPoint, IgnitionTimingRun } from '@/lib/types';
 type RunType = 'base' | 'modified';
 type AnalysisMode = 'time' | 'torque';
 
-const RPM_AXIS = Array.from({ length: 15 }, (_, i) => (i + 2) * 500); // 1000 to 8000 in 500rpm steps
+const RPM_AXIS = Array.from({ length: 16 }, (_, i) => (i + 1) * 1000); // 1000 to 16000 in 1000rpm steps
 
 const createNewPoint = (rpm: number): IgnitionTimingPoint => ({
     id: `point_${rpm}_${Date.now()}`,
@@ -40,10 +40,9 @@ interface EditPointDialogProps {
     point: IgnitionTimingPoint;
     onSave: (point: IgnitionTimingPoint) => void;
     onClose: () => void;
-    analysisMode: AnalysisMode;
 }
 
-function EditPointDialog({ point, onSave, onClose, analysisMode }: EditPointDialogProps) {
+function EditPointDialog({ point, onSave, onClose }: EditPointDialogProps) {
     const [currentPoint, setCurrentPoint] = useState(point);
 
     const handleSave = () => {
@@ -61,7 +60,7 @@ function EditPointDialog({ point, onSave, onClose, analysisMode }: EditPointDial
                 <DialogHeader>
                     <DialogTitle>Editar Ponto de Ensaio</DialogTitle>
                     <DialogDescription>
-                        Insira os dados recolhidos para {point.rpm} RPM.
+                        Insira os dados recolhidos para {point.rpm} RPM. Deixe em branco os campos não utilizados.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -76,29 +75,28 @@ function EditPointDialog({ point, onSave, onClose, analysisMode }: EditPointDial
                             autoFocus
                         />
                     </div>
-                    {analysisMode === 'time' ? (
-                        <div className="space-y-2">
-                            <Label htmlFor="time">Tempo Acumulado (s)</Label>
-                            <Input
-                                id="time"
-                                type="number"
-                                step="0.001"
-                                value={currentPoint.time}
-                                onChange={(e) => handleChange('time', e.target.value)}
-                            />
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            <Label htmlFor="torque">Torque (Nm)</Label>
-                            <Input
-                                id="torque"
-                                type="number"
-                                step="0.1"
-                                value={currentPoint.torque}
-                                onChange={(e) => handleChange('torque', e.target.value)}
-                            />
-                        </div>
-                    )}
+                    <div className="space-y-2">
+                        <Label htmlFor="time">Tempo Acumulado (s)</Label>
+                        <Input
+                            id="time"
+                            type="number"
+                            step="0.001"
+                            placeholder="Usado se não houver torque"
+                            value={currentPoint.time}
+                            onChange={(e) => handleChange('time', e.target.value)}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="torque">Torque (Nm)</Label>
+                        <Input
+                            id="torque"
+                            type="number"
+                            step="0.1"
+                            placeholder="Prioritário se preenchido"
+                            value={currentPoint.torque}
+                            onChange={(e) => handleChange('torque', e.target.value)}
+                        />
+                    </div>
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose}>Cancelar</Button>
@@ -202,9 +200,8 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                     <div className="flex justify-between items-center mb-4">
                         <TabsList>
                             <TabsTrigger value="advance">Avanço</TabsTrigger>
-                            <TabsTrigger value={analysisMode === 'time' ? 'time' : 'torque'}>
-                                {analysisMode === 'time' ? 'Tempo' : 'Torque'}
-                            </TabsTrigger>
+                            <TabsTrigger value="time">Tempo</TabsTrigger>
+                            <TabsTrigger value="torque">Torque</TabsTrigger>
                         </TabsList>
                          <div className="flex gap-2">
                              <Button variant="outline" size="sm" onClick={() => onClearRun('base')}>
@@ -220,18 +217,17 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                         {renderChart('Avanço Ignição Base', 'advance', 'Avanço (°)', 'base')}
                         {renderChart('Avanço Ignição Modificado', 'advance', 'Avanço (°)', 'modified')}
                     </TabsContent>
-                    <TabsContent value={analysisMode === 'time' ? 'time' : 'torque'}>
-                        {analysisMode === 'time' ? (
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                {renderChart('Tempo Acumulado Base', 'time', 'Tempo (s)', 'base')}
-                                {renderChart('Tempo Acumulado Modificado', 'time', 'Tempo (s)', 'modified')}
-                            </div>
-                        ) : (
-                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                {renderChart('Torque Base', 'torque', 'Torque (Nm)', 'base')}
-                                {renderChart('Torque Modificado', 'torque', 'Torque (Nm)', 'modified')}
-                            </div>
-                        )}
+                    <TabsContent value='time'>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {renderChart('Tempo Acumulado Base', 'time', 'Tempo (s)', 'base')}
+                            {renderChart('Tempo Acumulado Modificado', 'time', 'Tempo (s)', 'modified')}
+                        </div>
+                    </TabsContent>
+                    <TabsContent value='torque'>
+                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {renderChart('Torque Base', 'torque', 'Torque (Nm)', 'base')}
+                            {renderChart('Torque Modificado', 'torque', 'Torque (Nm)', 'modified')}
+                        </div>
                     </TabsContent>
                 </Tabs>
                 {editingPoint && (
@@ -239,7 +235,6 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                         point={editingPoint.point}
                         onSave={handleSavePoint}
                         onClose={() => setEditingPoint(null)}
-                        analysisMode={analysisMode}
                     />
                 )}
             </CardContent>
