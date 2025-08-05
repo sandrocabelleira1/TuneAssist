@@ -36,8 +36,7 @@ const RunInputTable = ({ title, description, points, setPoints }: {
     const handlePointChange = (id: string, field: 'rpm' | 'time' | 'torque' | 'advance', value: string) => {
         const newPoints = points.map(p => {
             if (p.id === id) {
-                const numValue = value === '' ? '' : parseFloat(value);
-                return { ...p, [field]: numValue };
+                return { ...p, [field]: value };
             }
             return p;
         });
@@ -221,7 +220,7 @@ const AnalysisResultsTable = ({ results, analysisMode }: { results: TimingSegmen
 export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionTimingAnalyzerProps) {
 
     const setRunPoints = (runType: RunType, points: IgnitionTimingPoint[]) => {
-        const sortedPoints = [...points].sort((a,b) => (a.rpm || 0) - (b.rpm || 0));
+        const sortedPoints = [...points].sort((a,b) => (parseFloat(a.rpm) || 0) - (parseFloat(b.rpm) || 0));
         onRunsChange({
             ...runs,
             [runType]: sortedPoints
@@ -231,16 +230,21 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
     const { analysisResults, analysisMode } = useMemo(() => {
         const results: TimingSegment[] = [];
         
-        const hasTorqueData = runs.base.some(p => typeof p.torque === 'number' && p.torque > 0) || 
-                              runs.modified.some(p => typeof p.torque === 'number' && p.torque > 0);
+        const hasTorqueData = runs.base.some(p => p.torque !== '') || runs.modified.some(p => p.torque !== '');
         
         const mode: 'time' | 'torque' = hasTorqueData ? 'torque' : 'time';
 
-        const processRun = (points: IgnitionTimingPoint[]) => {
-            if (mode === 'time') {
-                 return points.filter(p => typeof p.rpm === 'number' && typeof p.time === 'number' && typeof p.advance === 'number' && p.rpm > 0 && p.time >= 0);
-            }
-            return points.filter(p => typeof p.rpm === 'number' && typeof p.torque === 'number' && typeof p.advance === 'number' && p.rpm > 0 && p.torque > 0);
+        type ValidPoint = { rpm: number, time: number, torque: number, advance: number };
+
+        const processRun = (points: IgnitionTimingPoint[]): ValidPoint[] => {
+            return points
+                .map(p => ({
+                    rpm: parseFloat(p.rpm),
+                    time: parseFloat(p.time),
+                    torque: parseFloat(p.torque),
+                    advance: parseFloat(p.advance)
+                }))
+                .filter(p => !isNaN(p.rpm) && p.rpm > 0 && !isNaN(p.advance) && (mode === 'time' ? !isNaN(p.time) && p.time >= 0 : !isNaN(p.torque) && p.torque > 0));
         };
 
         const basePoints = processRun(runs.base);
@@ -250,7 +254,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
              return { analysisResults: [], analysisMode: mode };
         }
 
-        const allRpms = new Set([...basePoints.map(p => p.rpm as number), ...modifiedPoints.map(p => p.rpm as number)]);
+        const allRpms = new Set([...basePoints.map(p => p.rpm), ...modifiedPoints.map(p => p.rpm)]);
         const sortedRpms = Array.from(allRpms).sort((a,b) => a - b);
         
         for (let i = 0; i < sortedRpms.length - 1; i++) {
@@ -265,7 +269,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
             let gainPercent: number | null = null;
             let suggestion: string = '-';
 
-            const findPoint = (points: IgnitionTimingPoint[], rpm: number) => points.find(p => p.rpm === rpm);
+            const findPoint = (points: ValidPoint[], rpm: number) => points.find(p => p.rpm === rpm);
             
             const baseStartPoint = findPoint(basePoints, startRpm);
             const baseEndPoint = findPoint(basePoints, endRpm);
@@ -273,17 +277,17 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange }: IgnitionT
             const modifiedEndPoint = findPoint(modifiedPoints, endRpm);
 
             if (mode === 'time') {
-                baseTime = (baseStartPoint?.time !== undefined && baseEndPoint?.time !== undefined) ? (baseEndPoint.time as number) - (baseStartPoint.time as number) : null;
-                modifiedTime = (modifiedStartPoint?.time !== undefined && modifiedEndPoint?.time !== undefined) ? (modifiedEndPoint.time as number) - (modifiedStartPoint.time as number) : null;
+                baseTime = (baseStartPoint && baseEndPoint) ? baseEndPoint.time - baseStartPoint.time : null;
+                modifiedTime = (modifiedStartPoint && modifiedEndPoint) ? modifiedEndPoint.time - modifiedStartPoint.time : null;
                 
                 delta = (baseTime !== null && modifiedTime !== null) ? modifiedTime - baseTime : null;
                 gainPercent = (baseTime !== null && delta !== null && baseTime > 0) ? (-delta / baseTime) * 100 : null;
 
             } else { // Torque mode
-                const findAvgTorque = (points: IgnitionTimingPoint[], start: number, end: number) => {
+                const findAvgTorque = (points: ValidPoint[], start: number, end: number) => {
                     const relevantPoints = points.filter(p => p.rpm >= start && p.rpm <= end);
                     if (relevantPoints.length === 0) return null;
-                    const sum = relevantPoints.reduce((acc, p) => acc + (p.torque as number), 0);
+                    const sum = relevantPoints.reduce((acc, p) => acc + p.torque, 0);
                     return sum / relevantPoints.length;
                 };
 
