@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -345,6 +346,7 @@ export default function EcuTuningAssistant() {
     const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
     const [isModified, setIsModified] = useState(false);
     const [aiModifiedCells, setAiModifiedCells] = useState<Set<string>>(new Set());
+    const [aiModifiedCellsCache, setAiModifiedCellsCache] = useState<Record<string, Set<string>>>({});
     
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
     const [plotOrientation, setPlotOrientation] = useState<PlotOrientation>('y-vs-x');
@@ -388,13 +390,17 @@ export default function EcuTuningAssistant() {
         return Object.values(modifiedStatusCache).some(status => status);
     }, [modifiedStatusCache]);
 
+    const clearAiModifications = () => {
+        setAiModifiedCells(new Set());
+        setAiModifiedCellsCache({});
+    };
     
     const clearMapState = useCallback(() => {
         setSelectedMapIds([]);
         setActiveMapId(null);
         setProcessedMap(null);
         setIsModified(false);
-        setAiModifiedCells(new Set());
+        clearAiModifications();
         setProcessedMapCache({});
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
@@ -419,7 +425,7 @@ export default function EcuTuningAssistant() {
         setActiveMapId(null);
         setProcessedMap(null);
         setIsModified(false);
-        setAiModifiedCells(new Set());
+        clearAiModifications();
         setProcessedMapCache({});
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
@@ -604,7 +610,7 @@ export default function EcuTuningAssistant() {
         setActiveMapId(mapId);
         setSelectedLine(0);
         setPlotOrientation('y-vs-x');
-        setAiModifiedCells(new Set());
+        setAiModifiedCells(aiModifiedCellsCache[mapId] || new Set());
         
         const newActiveMapDef = xdfFile.definitions.find(d => d.uniqueId === mapId);
         if (!newActiveMapDef) return;
@@ -652,7 +658,7 @@ export default function EcuTuningAssistant() {
              }
         });
 
-    }, [activeMapId, xdfFile, binFile, isModified, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap]);
+    }, [activeMapId, xdfFile, binFile, isModified, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap, aiModifiedCellsCache]);
 
 
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
@@ -666,7 +672,7 @@ export default function EcuTuningAssistant() {
             }
             return newConfig;
         });
-        setAiModifiedCells(new Set());
+        clearAiModifications();
     };
 
     const handleApplyAndRecalculate = () => {
@@ -676,6 +682,7 @@ export default function EcuTuningAssistant() {
                  setProcessedMap(result);
                  setModifiedStatusCache(prev => ({...prev, [activeMapId]: false}));
                  setIsModified(false);
+                 clearAiModifications();
              }
         });
     };
@@ -691,7 +698,7 @@ export default function EcuTuningAssistant() {
         setProcessedMap(newProcessedMap);
         
         setIsModified(true);
-        setAiModifiedCells(new Set());
+        clearAiModifications();
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
     };
@@ -714,7 +721,7 @@ export default function EcuTuningAssistant() {
         setProcessedMap(newProcessedMap);
         
         setIsModified(true);
-        setAiModifiedCells(new Set());
+        clearAiModifications();
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
     };
@@ -774,7 +781,7 @@ export default function EcuTuningAssistant() {
         setProcessedMap(newProcessedMap);
         
         setIsModified(true);
-        setAiModifiedCells(new Set());
+        clearAiModifications();
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
         addLog(`Operação em massa "${operation}" com valor ${value} aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
@@ -796,7 +803,7 @@ export default function EcuTuningAssistant() {
                 const definition = xdfFile.definitions.find(def => def.uniqueId === mapId);
                 if (!definition) return null;
                 return { definition, processedMap: mapData };
-            }).filter(item => item !== null) as { definition: XDFDefinition; processedMap: ProcessedMap }[];
+            }).filter(item => item !== null) as { definition: XDFinition; processedMap: ProcessedMap }[];
             
         if (mapsToSave.length === 0) {
             const msg = "Nenhuma modificação para salvar.";
@@ -823,7 +830,7 @@ export default function EcuTuningAssistant() {
             addLog(successMsg, 'success');
             toast({ title: 'Salvo com Sucesso', description: successMsg });
             
-            setBinFile({ name: binFile.name, buffer: newBinBuffer });
+            setBinFile({ name: a.download, buffer: newBinBuffer });
             
             mapsToSave.forEach(map => {
                 setModifiedStatusCache(prev => ({...prev, [map.definition.uniqueId]: false}));
@@ -832,6 +839,8 @@ export default function EcuTuningAssistant() {
             if (activeMapId && modifiedStatusCache[activeMapId] === false) {
                  setIsModified(false);
             }
+            
+            clearAiModifications();
 
         } catch (error) {
             const errorMsg = `Falha ao salvar o ficheiro BIN: ${(error as Error).message}`;
@@ -875,7 +884,7 @@ export default function EcuTuningAssistant() {
         addLog(`A iniciar ajuste automático em ${selectedMapIds.length} mapas com Lambda Alvo ${numericTargetLambda.toFixed(2)} e agressividade de ${aggressiveness}%...`, 'info');
         
         let totalModifiedCells = 0;
-        const newAiModifiedCells = new Set<string>();
+        const newAiModifiedCellsByMap: Record<string, Set<string>> = {};
         
         for (const mapId of selectedMapIds) {
             const def = xdfFile.definitions.find(d => d.uniqueId === mapId);
@@ -907,10 +916,14 @@ export default function EcuTuningAssistant() {
                 setProcessedMapCache(prev => ({ ...prev, [mapId]: newProcessedMap }));
                 setModifiedStatusCache(prev => ({...prev, [mapId]: true}));
 
+                const modifiedSet = new Set<string>();
+                modifiedIndices.forEach(cell => modifiedSet.add(`${cell.y}-${cell.x}`));
+                newAiModifiedCellsByMap[mapId] = modifiedSet;
+
                 if (mapId === activeMapId) {
                     setProcessedMap(newProcessedMap);
                     setIsModified(true);
-                    modifiedIndices.forEach(cell => newAiModifiedCells.add(`${cell.y}-${cell.x}`));
+                    setAiModifiedCells(modifiedSet);
                 }
 
                 addLog(`${modifiedIndices.length} células foram modificadas em ${def.name}.`, 'info');
@@ -922,7 +935,7 @@ export default function EcuTuningAssistant() {
             }
         }
         
-        setAiModifiedCells(newAiModifiedCells);
+        setAiModifiedCellsCache(prev => ({ ...prev, ...newAiModifiedCellsByMap }));
         setIsProcessing(false);
         const successMsg = `Ajuste automático aplicado a ${selectedMapIds.length} mapas. Total de ${totalModifiedCells} células modificadas.`;
         addLog(successMsg, 'success');
@@ -948,8 +961,10 @@ export default function EcuTuningAssistant() {
             setActiveMap(null);
         } else if (!activeMapId || !newSelectedIds.includes(activeMapId)) {
             setActiveMap(newSelectedIds[newSelectedIds.length - 1]);
-        } else if (!selectedMapIds.includes(id)) {
-            setActiveMap(id);
+        } else if (!selectedMapIds.includes(id)) { // This case is for when the active map is deselected
+            // Do nothing, keep the current active map until the user clicks another one
+        } else { // This case is for re-selecting the active map (no state change) or selecting a new one
+             setActiveMap(id);
         }
     };
 
@@ -1013,43 +1028,42 @@ export default function EcuTuningAssistant() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">
-                  <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-between"
-                        disabled={!binFile || !xdfFile}
-                      >
-                        <span className="truncate">
-                            {selectedMapIds.length === 0 && "Selecione mapas"}
-                            {selectedMapIds.length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds[0])?.name}
-                            {selectedMapIds.length > 1 && `${selectedMapIds.length} mapas selecionados`}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                      <ScrollArea className="h-72">
-                         <div className="p-4 space-y-2">
-                             {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
-                                <div key={def.uniqueId} className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={def.uniqueId}
-                                    checked={selectedMapIds.includes(def.uniqueId)}
-                                    onCheckedChange={() => handleMapSelectionChange(def.uniqueId)}
-                                  />
-                                  <label
-                                    htmlFor={def.uniqueId}
-                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                                  >
-                                    {def.name}
-                                  </label>
-                                </div>
-                             ))}
-                         </div>
-                      </ScrollArea>
-                    </PopoverContent>
-                  </Popover>
+                    <div className="space-y-2">
+                        <Button
+                            variant="outline"
+                            className="w-full justify-between"
+                            disabled={!binFile || !xdfFile}
+                            onClick={() => setIsPopoverOpen(!isPopoverOpen)}
+                        >
+                            <span className="truncate">
+                                {selectedMapIds.length === 0 && "Selecione mapas"}
+                                {selectedMapIds.length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds[0])?.name}
+                                {selectedMapIds.length > 1 && `${selectedMapIds.length} mapas selecionados`}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                        {isPopoverOpen && binFile && xdfFile && (
+                            <ScrollArea className="h-72 border rounded-md">
+                               <div className="p-4 space-y-2">
+                                   {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
+                                      <div key={def.uniqueId} className="flex items-center space-x-2">
+                                        <Checkbox
+                                          id={def.uniqueId}
+                                          checked={selectedMapIds.includes(def.uniqueId)}
+                                          onCheckedChange={() => handleMapSelectionChange(def.uniqueId)}
+                                        />
+                                        <label
+                                          htmlFor={def.uniqueId}
+                                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                        >
+                                          {def.name}
+                                        </label>
+                                      </div>
+                                   ))}
+                               </div>
+                            </ScrollArea>
+                        )}
+                    </div>
                   {selectedMapIds.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
                         {selectedMapIds.map(id => {
