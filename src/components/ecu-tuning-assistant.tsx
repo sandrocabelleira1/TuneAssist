@@ -1617,7 +1617,9 @@ export default function EcuTuningAssistant() {
                           <IgnitionTimingAnalyzer 
                             runs={ignitionRuns} 
                             onRunsChange={setIgnitionRuns}
-                            activeMap={processedMap}
+                            binFile={binFile}
+                            xdfDefinitions={xdfFile?.definitions ?? []}
+                            processAndCacheMap={processAndCacheMap}
                            />
                       </TabsContent>
                     </>
