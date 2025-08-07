@@ -595,79 +595,67 @@ export default function EcuTuningAssistant() {
         }
     }, [binFile, xdfFile, addLog, toast]);
 
-    const setActiveMap = useCallback((mapId: string | null) => {
+    const setActiveMap = useCallback(async (mapId: string | null) => {
         if (activeMapId === mapId) return;
-
+    
         if (!mapId) {
             setActiveMapId(null);
             setProcessedMap(null);
             setIsModified(false);
             return;
         }
-
+    
         if (!xdfFile || !binFile) return;
-
-        // Save current map to cache before switching if it's modified
+    
         if (isModified && activeMapId && processedMap) {
-            const currentActiveMapDef = xdfFile.definitions.find(d => d.uniqueId === activeMapId);
-            if (currentActiveMapDef) {
-                 addLog(`Salvando alterações para "${currentActiveMapDef.name}" na cache antes de trocar.`, 'info');
-                 setProcessedMapCache(prev => ({ ...prev, [activeMapId]: processedMap }));
-                 setModifiedStatusCache(prev => ({ ...prev, [activeMapId]: true }));
+            const currentDef = xdfFile.definitions.find(d => d.uniqueId === activeMapId);
+            if (currentDef) {
+                addLog(`A salvar alterações para "${currentDef.name}" na cache antes de trocar.`, 'info');
+                setProcessedMapCache(prev => ({ ...prev, [activeMapId]: processedMap }));
+                setModifiedStatusCache(prev => ({ ...prev, [activeMapId]: true }));
             }
         }
-
+    
         setActiveMapId(mapId);
         setSelectedLine(0);
         setPlotOrientation('y-vs-x');
         setAiModifiedCells(aiModifiedCellsCache[mapId] || new Set());
-        
+    
         const newActiveMapDef = xdfFile.definitions.find(d => d.uniqueId === mapId);
         if (!newActiveMapDef) return;
-        
+    
         addLog(`Tornando o mapa "${newActiveMapDef.name}" ativo.`, 'info');
-
-        // Try to load from cache first
-        if (processedMapCache[mapId]) {
-            addLog(`A carregar o mapa "${newActiveMapDef.name}" da cache.`, 'info');
-            setProcessedMap(processedMapCache[mapId]);
-            setIsModified(modifiedStatusCache[mapId] ?? false);
-            return;
-        }
-
-        // If not in cache, process it
+    
         const mapStructureKey = `${newActiveMapDef.rows}x${newActiveMapDef.cols}`;
         
-        let configToApply = initialManualConfig;
-        
-        if (newActiveMapDef.xAxisDef && newActiveMapDef.yAxisDef) {
-            configToApply = {
-                x: { equation: newActiveMapDef.xAxisDef.equation || 'x', stride: newActiveMapDef.xAxisDef.dataSize },
-                y: { equation: newActiveMapDef.yAxisDef.equation || 'x', stride: newActiveMapDef.yAxisDef.dataSize },
-                z: { equation: newActiveMapDef.equation || 'x', stride: newActiveMapDef.dataSize, rowStride: newActiveMapDef.rowStride },
-                isBigEndian: newActiveMapDef.isBigEndian,
-                sortX: newActiveMapDef.xAxisDef.requiresSort,
-                sortY: newActiveMapDef.yAxisDef.requiresSort,
-            };
-        }
-
+        let configToApply = {
+            ...initialManualConfig,
+            x: { equation: newActiveMapDef.xAxisDef?.equation || 'x', stride: newActiveMapDef.xAxisDef?.dataSize },
+            y: { equation: newActiveMapDef.yAxisDef?.equation || 'x', stride: newActiveMapDef.yAxisDef?.dataSize },
+            z: { equation: newActiveMapDef.equation || 'x', stride: newActiveMapDef.dataSize, rowStride: newActiveMapDef.rowStride },
+            isBigEndian: newActiveMapDef.isBigEndian,
+            sortX: newActiveMapDef.xAxisDef?.requiresSort,
+            sortY: newActiveMapDef.yAxisDef?.requiresSort,
+        };
+    
         if (templateConfig && templateConfig.structureKey === mapStructureKey) {
             addLog(`Padrão encontrado para estrutura ${mapStructureKey}. A aplicar substituições.`, 'info');
             configToApply = { ...configToApply, ...templateConfig.config };
         }
         
         setManualConfig(configToApply);
-
-        processAndCacheMap(mapId, configToApply).then(result => {
-             if(result) {
-                 setProcessedMap(result);
-                 setModifiedStatusCache(prev => ({...prev, [mapId]: false}));
-                 setIsModified(false);
-             } else {
-                 setProcessedMap(null);
-             }
-        });
-
+    
+        const result = await processAndCacheMap(mapId, configToApply);
+        
+        if (result) {
+            setProcessedMap(result);
+            // Check cache for modified status, otherwise it's false
+            setIsModified(modifiedStatusCache[mapId] ?? false);
+        } else {
+            setProcessedMap(null);
+            setIsModified(false);
+        }
+    
     }, [activeMapId, xdfFile, binFile, isModified, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap, aiModifiedCellsCache]);
 
 
@@ -1619,7 +1607,8 @@ export default function EcuTuningAssistant() {
                             onRunsChange={setIgnitionRuns}
                             binFile={binFile}
                             xdfDefinitions={xdfFile?.definitions ?? []}
-                            processAndCacheMap={processAndCacheMap}
+                            processedMap={processedMap}
+                            selectedMapDefinition={selectedMapDefinition}
                            />
                       </TabsContent>
                     </>

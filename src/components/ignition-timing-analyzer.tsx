@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -18,7 +19,8 @@ interface IgnitionTimingAnalyzerProps {
     onRunsChange: (runs: IgnitionTimingRun) => void;
     binFile: { name: string; buffer: ArrayBuffer } | null;
     xdfDefinitions: XDFinition[];
-    processAndCacheMap: (mapId: string, config: ManualAxisConfig) => Promise<ProcessedMap | null>;
+    processedMap: ProcessedMap | null;
+    selectedMapDefinition: XDFDefinition | undefined;
 }
 
 interface TimingSegment {
@@ -115,42 +117,22 @@ const AnalysisResultsTable = ({ results, analysisMode }: { results: TimingSegmen
 };
 
 
-export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, xdfDefinitions, processAndCacheMap }: IgnitionTimingAnalyzerProps) {
+export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, processedMap, selectedMapDefinition }: IgnitionTimingAnalyzerProps) {
 
     const { toast } = useToast();
-    const [selectedMapId, setSelectedMapId] = useState<string>('');
     const [selectedLoadIndex, setSelectedLoadIndex] = useState<string>('');
-    const [analyzedMap, setAnalyzedMap] = useState<ProcessedMap | null>(null);
 
-    const ignitionMaps = useMemo(() => {
+    const isCurrentMapIgnition = useMemo(() => {
+        if (!selectedMapDefinition) return false;
         const keywords = ['ignition', 'spark', 'advance', 'timing', 'ignição', 'avanço', 'ign'];
-        return xdfDefinitions.filter(def => 
-            keywords.some(kw => def.name.toLowerCase().includes(kw))
-        );
-    }, [xdfDefinitions]);
+        return keywords.some(kw => selectedMapDefinition.name.toLowerCase().includes(kw));
+    }, [selectedMapDefinition]);
 
-    // Reset subordinate selections if the map changes
     useEffect(() => {
-        setSelectedLoadIndex('');
-        setAnalyzedMap(null);
-        if (selectedMapId) {
-            const def = xdfDefinitions.find(d => d.uniqueId === selectedMapId);
-            if (!def || !binFile) return;
-
-            const config: ManualAxisConfig = {
-                x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef?.dataSize },
-                y: { equation: def.yAxisDef?.equation || 'x', stride: def.yAxisDef?.dataSize },
-                z: { equation: def.equation || 'x', stride: def.dataSize, rowStride: def.rowStride },
-                isBigEndian: def.isBigEndian,
-                sortX: def.xAxisDef?.requiresSort,
-                sortY: def.yAxisDef?.requiresSort,
-            };
-
-            processAndCacheMap(selectedMapId, config).then(map => {
-                setAnalyzedMap(map);
-            });
+        if (!isCurrentMapIgnition) {
+            setSelectedLoadIndex('');
         }
-    }, [selectedMapId, xdfDefinitions, binFile, processAndCacheMap]);
+    }, [isCurrentMapIgnition, selectedMapDefinition]);
 
 
     const { analysisResults, analysisMode } = useMemo(() => {
@@ -276,7 +258,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, xd
     }, [runs, onRunsChange]);
 
     const handlePreload = useCallback(() => {
-        if (!analyzedMap || !analyzedMap.axes || !analyzedMap.calculatedMap || selectedLoadIndex === '') {
+        if (!processedMap || !processedMap.axes || !processedMap.calculatedMap || selectedLoadIndex === '') {
             toast({ title: "Dados Insuficientes", description: "Mapa de ignição ou linha de carga não selecionada.", variant: "destructive" });
             return;
         }
@@ -284,37 +266,31 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, xd
         const loadIndex = parseInt(selectedLoadIndex, 10);
         if (isNaN(loadIndex)) return;
         
-        // Let's determine which axis is RPM and which is Load
         const rpmRegex = /rpm/i;
-        const isXrpm = rpmRegex.test(analyzedMap.axes.x.label);
-        const isYrpm = rpmRegex.test(analyzedMap.axes.y.label);
+        const isXrpm = processedMap.axes.x.label ? rpmRegex.test(processedMap.axes.x.label) : false;
+        const isYrpm = processedMap.axes.y.label ? rpmRegex.test(processedMap.axes.y.label) : true; // Default to Y is more common
 
-        let rpmAxis: AxisData, loadAxis: AxisData, isLoadAxisY: boolean;
+        let rpmAxis: AxisData, isLoadAxisY: boolean;
 
         if (isXrpm) {
-            rpmAxis = analyzedMap.axes.x;
-            loadAxis = analyzedMap.axes.y;
+            rpmAxis = processedMap.axes.x;
             isLoadAxisY = true;
-        } else if (isYrpm) {
-            rpmAxis = analyzedMap.axes.y;
-            loadAxis = analyzedMap.axes.x;
-            isLoadAxisY = false;
-        } else {
-            // Default assumption if no axis is labeled 'rpm'
-            rpmAxis = analyzedMap.axes.x;
-            loadAxis = analyzedMap.axes.y;
-            isLoadAxisY = true;
+        } else { // Default to Y axis as load if X is not RPM
+            rpmAxis = isYrpm ? processedMap.axes.y : processedMap.axes.x; // RPM could be X or Y
+            isLoadAxisY = !isYrpm; // If RPM is Y, load is X
         }
+        
+        const loadAxis = isLoadAxisY ? processedMap.axes.y : processedMap.axes.x;
 
         if (loadIndex >= loadAxis.calculated.length) {
             toast({ title: "Índice Inválido", description: "O índice de carga selecionado está fora dos limites.", variant: "destructive" });
             return;
         }
-
+        
         const baseRunPoints: IgnitionTimingPoint[] = rpmAxis.calculated.map((rpmValue, rpmIndex) => {
             const advanceValue = isLoadAxisY
-                ? analyzedMap.calculatedMap?.[loadIndex]?.[rpmIndex]
-                : analyzedMap.calculatedMap?.[rpmIndex]?.[loadIndex];
+                ? processedMap.calculatedMap?.[loadIndex]?.[rpmIndex] // Load is Y axis
+                : processedMap.calculatedMap?.[rpmIndex]?.[loadIndex]; // Load is X axis
 
             return {
                 id: `base_${rpmValue}`,
@@ -332,21 +308,21 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, xd
         onRunsChange({ base: baseRunPoints, modified: [] });
         toast({ title: "Dados de Base Carregados", description: `Carregados ${baseRunPoints.length} pontos de avanço do mapa.`, variant: "default"});
 
-    }, [analyzedMap, selectedLoadIndex, onRunsChange, toast]);
-
+    }, [processedMap, selectedLoadIndex, onRunsChange, toast]);
     
     const loadAxis = useMemo<AxisData | null>(() => {
-        if (!analyzedMap || !analyzedMap.axes) return null;
-        const { x, y } = analyzedMap.axes;
+        if (!processedMap || !processedMap.axes) return null;
+        const { x, y } = processedMap.axes;
         const rpmRegex = /rpm/i;
-        if (rpmRegex.test(x.label)) return y;
-        if (rpmRegex.test(y.label)) return x;
-        // Default to Y if no specific RPM label is found, assuming a common RPM vs Load setup
+        if(x.label && rpmRegex.test(x.label)) return y;
+        if(y.label && rpmRegex.test(y.label)) return x;
+        // Default assumption: if one axis is not explicitly RPM, it's the load axis.
+        // Assume Y is load if no RPM is found.
         return y;
-    }, [analyzedMap]);
+    }, [processedMap]);
     
 
-    if (!binFile || !xdfDefinitions.length) {
+    if (!binFile) {
          return (
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
                 <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
@@ -356,12 +332,21 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, xd
         );
     }
     
+    if (!isCurrentMapIgnition) {
+         return (
+            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
+                <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
+                <h3 className="text-lg font-semibold">Mapa de Ignição Necessário</h3>
+                <p className="max-w-md">Esta funcionalidade requer que um mapa de ignição esteja selecionado. Por favor, selecione um mapa contendo 'ignição', 'avanço', 'spark' ou 'timing' no nome.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-4">
             <p className="text-sm text-muted-foreground p-4 border rounded-lg bg-background">
                 <strong className="text-foreground">Como usar:</strong> <br/>
-                1. Selecione um mapa de ignição e a linha de carga (TPS/MAP) abaixo para pré-carregar os dados de avanço para o ensaio de base.<br />
+                1. Selecione a linha de carga (TPS/MAP) abaixo para pré-carregar os dados de avanço para o ensaio de base.<br />
                 2. Faça um ensaio com o mapa atual, registando RPM e tempo/torque. Clique nos pontos do gráfico para inserir os dados. <br/>
                 3. Modifique o seu mapa de ignição (ex: avance 1 grau na zona do ensaio). <br/>
                 4. Repita exatamente o mesmo ensaio com o mapa modificado, inserindo os dados no gráfico de ensaio modificado. <br/>
@@ -373,34 +358,17 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, xd
                 <CardHeader>
                     <CardTitle>Pré-carregar Dados do Mapa</CardTitle>
                     <CardDescription>
-                        Selecione o mapa e a linha de carga (TPS/MAP) para preencher os dados do ensaio de base.
+                       O mapa ativo é <span className="font-semibold text-primary">{selectedMapDefinition?.name}</span>. Selecione a linha de carga (TPS/MAP) para preencher os dados do ensaio de base.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col sm:flex-row items-center gap-4">
-                     <Select
-                        value={selectedMapId}
-                        onValueChange={setSelectedMapId}
-                    >
-                        <SelectTrigger className="sm:w-[250px]">
-                            <SelectValue placeholder="Selecione um mapa de ignição..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {ignitionMaps.length > 0 ? ignitionMaps.map(def => (
-                                <SelectItem key={def.uniqueId} value={def.uniqueId}>
-                                    {def.name}
-                                </SelectItem>
-                            )) : (
-                                <div className="p-4 text-sm text-muted-foreground">Nenhum mapa de ignição encontrado.</div>
-                            )}
-                        </SelectContent>
-                    </Select>
                      <Select
                         value={selectedLoadIndex}
                         onValueChange={setSelectedLoadIndex}
                         disabled={!loadAxis}
                     >
                         <SelectTrigger className="flex-1">
-                            <SelectValue placeholder={loadAxis ? `Selecione ${loadAxis.label}...` : "Escolha um mapa primeiro"} />
+                            <SelectValue placeholder={loadAxis ? `Selecione ${loadAxis.label}...` : "Eixo de carga não encontrado"} />
                         </SelectTrigger>
                         <SelectContent>
                             {loadAxis?.calculated.map((val, index) => (
@@ -410,7 +378,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, xd
                             ))}
                         </SelectContent>
                     </Select>
-                    <Button onClick={handlePreload} disabled={selectedLoadIndex === '' || !analyzedMap} className="w-full sm:w-auto">
+                    <Button onClick={handlePreload} disabled={selectedLoadIndex === '' || !processedMap} className="w-full sm:w-auto">
                         <Download className="mr-2 h-4 w-4" />
                         Carregar Dados
                     </Button>
