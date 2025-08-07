@@ -19,7 +19,7 @@ interface IgnitionTimingAnalyzerProps {
     runs: IgnitionTimingRun;
     onRunsChange: (runs: IgnitionTimingRun) => void;
     binFile: { name: string; buffer: ArrayBuffer } | null;
-    xdfDefinitions: XDFDefinition[];
+    xdfDefinitions: XDFinition[];
     processAndCacheMap: (mapId: string, config: ManualAxisConfig) => Promise<ProcessedMap | null>;
 }
 
@@ -125,7 +125,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, xd
     const [analyzedMap, setAnalyzedMap] = useState<ProcessedMap | null>(null);
 
     const ignitionMaps = useMemo(() => {
-        const keywords = ['ignition', 'spark', 'advance', 'timing', 'ignição', 'avanço'];
+        const keywords = ['ignition', 'spark', 'advance', 'timing', 'ignição', 'avanço', 'ign'];
         return xdfDefinitions.filter(def => 
             keywords.some(kw => def.name.toLowerCase().includes(kw))
         );
