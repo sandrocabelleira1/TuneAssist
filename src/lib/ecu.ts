@@ -298,6 +298,24 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, stride?: number): AxisData {
     if (!axisDef) throw new Error("Definição de eixo fornecida é inválida.");
     
+    // For virtual axes (like from potential maps) that don't have a real address
+    if (axisDef.address === undefined || axisDef.address === null || isNaN(axisDef.address)) {
+        if (axisDef.count > 0) {
+            const calculated = Array.from({ length: axisDef.count }, (_, i) => i);
+            return {
+                label: axisDef.label,
+                raw: calculated, // Raw is same as calculated here
+                calculated,
+                address: null,
+                originalIndices: calculated.map((_, i) => i)
+            };
+        } else if (axisDef.values) {
+            const indices = axisDef.values.map((_, i) => i);
+            return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null, originalIndices: indices };
+        }
+        throw new Error(`Endereço do eixo "${axisDef.label}" é inválido e não há valores ou contagem para gerar um eixo virtual.`);
+    }
+
     if (axisDef.values) {
         const indices = axisDef.values.map((_, i) => i);
         return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null, originalIndices: indices };
@@ -305,10 +323,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
 
     const { address, count, dataSize = 1, equation = 'x', isBigEndian = false } = axisDef;
     const effectiveStride = stride ?? dataSize;
-
-    if (address === undefined || address === null || isNaN(address)) {
-        throw new Error(`Endereço do eixo "${axisDef.label}" é inválido.`);
-    }
+    
     if (!count || count <= 0) {
         throw new Error(`Contagem do eixo "${axisDef.label}" deve ser maior que zero.`);
     }
@@ -744,6 +759,27 @@ export function calculateCorrections(
 
 
 // #region Heuristic Map Scanner
+function readDataFromAddress(view: DataView, address: number, rows: number, cols: number, dataSize: number, littleEndian: boolean): number[][] | null {
+    const data: number[][] = [];
+    let rowStride = cols * dataSize; // Simple assumption
+
+    for (let r = 0; r < rows; r++) {
+        const rowData: number[] = [];
+        for (let c = 0; c < cols; c++) {
+            const offset = address + (r * rowStride) + (c * dataSize);
+            if (offset + dataSize > view.byteLength) {
+                return null; // Out of bounds
+            }
+            if (dataSize === 1) {
+                rowData.push(view.getUint8(offset));
+            } else if (dataSize === 2) {
+                rowData.push(view.getUint16(offset, littleEndian));
+            }
+        }
+        data.push(rowData);
+    }
+    return data;
+}
 
 export function scanForPotentialMaps(
   binBuffer: ArrayBuffer,
@@ -756,44 +792,42 @@ export function scanForPotentialMaps(
   } = {}
 ): PotentialMap[] {
     const {
-        minSize = 8,
-        maxSize = 32,
-        searchIncrement = 4, // Check every 4 bytes
-        dataSize = 1, // 1 for 8-bit, 2 for 16-bit
-        isBigEndian = false,
+        dataSize = 1,
     } = options;
 
     const results: PotentialMap[] = [];
     const view = new DataView(binBuffer);
-    const littleEndian = !isBigEndian;
+    const littleEndian = !options.isBigEndian;
 
     // This is a placeholder for a more complex heuristic engine.
     // A real implementation would be significantly more complex, involving
     // entropy analysis, sequence detection, etc.
     // For now, we'll just return a dummy result to build the UI.
 
-    if (binBuffer.byteLength > 0x4000) {
-        results.push({
-            address: 0x3d1a,
-            rows: 16,
-            cols: 16,
-            dataSize: 1,
-            isBigEndian: false,
-            confidence: 0.85,
-            reason: "Padrão de dados 16x16 comum encontrado."
-        });
-        results.push({
-            address: 0x4e7c,
-            rows: 8,
-            cols: 12,
-            dataSize: 1,
-            isBigEndian: false,
-            confidence: 0.70,
-            reason: "Sequência de eixo provável nas proximidades."
-        });
-    }
+    const potentialAddresses = [0x3d1a, 0x4e7c, 0x5a00, 0x8b44];
+    const potentialSizes = [
+        {rows: 16, cols: 16, reason: "Padrão de dados 16x16 comum encontrado.", confidence: 0.85},
+        {rows: 8, cols: 12, reason: "Sequência de eixo provável nas proximidades.", confidence: 0.70},
+        {rows: 20, cols: 10, reason: "Bloco de dados com baixa entropia.", confidence: 0.65},
+        {rows: 16, cols: 8, reason: "Padrão de dados 16x8 comum.", confidence: 0.75}
+    ];
 
-    return results;
+    potentialAddresses.forEach((address, index) => {
+        if (binBuffer.byteLength > address) {
+             const size = potentialSizes[index % potentialSizes.length];
+             const previewData = readDataFromAddress(view, address, Math.min(size.rows, 5), size.cols, dataSize, littleEndian);
+
+             results.push({
+                address,
+                ...size,
+                dataSize: dataSize,
+                isBigEndian: !!options.isBigEndian,
+                previewData: previewData ?? undefined
+            });
+        }
+    });
+
+    return results.sort((a,b) => b.confidence - a.confidence);
 }
 
 // #endregion

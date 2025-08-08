@@ -6,10 +6,37 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Loader2, Search, Upload } from 'lucide-react';
+import { AlertTriangle, Loader2, Search, Upload, LineChart as LineChartIcon } from 'lucide-react';
 import type { LogMessage, PotentialMap } from '@/lib/types';
 import { scanForPotentialMaps } from '@/lib/ecu';
 import { Progress } from '@/components/ui/progress';
+import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+const SparkLinePreview = ({ data }: { data: number[][] | undefined }) => {
+    if (!data || data.length === 0) return null;
+
+    const chartData = data[0].map((value, index) => ({ name: index, value }));
+    const min = Math.min(...chartData.map(d => d.value));
+    const max = Math.max(...chartData.map(d => d.value));
+
+    return (
+        <div className="w-24 h-8">
+            <ResponsiveContainer>
+                <LineChart data={chartData}>
+                     <YAxis hide domain={[min, max]} />
+                    <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2}
+                        dot={false}
+                    />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
 
 interface MapScannerProps {
     binFile: { name: string; buffer: ArrayBuffer } | null;
@@ -29,9 +56,10 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         }
 
         setIsScanning(true);
+        setScanProgress(0);
+        setPotentialMaps([]);
         addLog("A iniciar o scan heurístico do ficheiro BIN...", 'info');
 
-        // Simulate progress for the user
         const progressInterval = setInterval(() => {
             setScanProgress(prev => Math.min(prev + 10, 90));
         }, 200);
@@ -40,7 +68,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         await new Promise(resolve => setTimeout(resolve, 0));
 
         try {
-            const results = scanForPotentialMaps(binFile.buffer, { dataSize: 1 });
+            const results = scanForPotentialMaps(binFile.buffer);
             setPotentialMaps(results);
             addLog(`Scan concluído. Encontrados ${results.length} mapas potenciais.`, 'success');
         } catch (error) {
@@ -49,7 +77,10 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         } finally {
             clearInterval(progressInterval);
             setScanProgress(100);
-            setTimeout(() => setIsScanning(false), 500); // Wait for progress bar to finish
+            setTimeout(() => {
+                setIsScanning(false);
+                setScanProgress(0);
+            }, 500);
         }
     }, [binFile, addLog]);
 
@@ -98,7 +129,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                             <TableRow>
                                 <TableHead>Endereço</TableHead>
                                 <TableHead>Dimensões</TableHead>
-                                <TableHead>Tamanho Dados</TableHead>
+                                <TableHead>Pré-visualização</TableHead>
                                 <TableHead>Confiança</TableHead>
                                 <TableHead>Razão</TableHead>
                                 <TableHead className="text-right">Ação</TableHead>
@@ -110,7 +141,20 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                                     <TableRow key={map.address}>
                                         <TableCell className="font-mono">0x{map.address.toString(16).toUpperCase()}</TableCell>
                                         <TableCell>{map.cols}x{map.rows}</TableCell>
-                                        <TableCell>{map.dataSize * 8}-bit</TableCell>
+                                        <TableCell>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <div className="cursor-pointer">
+                                                            <SparkLinePreview data={map.previewData} />
+                                                        </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Pré-visualização da primeira linha de dados</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <Progress value={map.confidence * 100} className="h-2 w-20" />
@@ -129,7 +173,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={6} className="h-24 text-center">
-                                        Nenhum mapa potencial encontrado. Inicie um scan para ver os resultados.
+                                        {isScanning ? "A procurar..." : "Nenhum mapa potencial encontrado. Inicie um scan para ver os resultados."}
                                     </TableCell>
                                 </TableRow>
                             )}

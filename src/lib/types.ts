@@ -4,6 +4,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -102,4 +103,5 @@ export type PotentialMap = {
     isBigEndian: boolean;
     confidence: number; // A score from 0 to 1
     reason: string;
+    previewData?: number[][];
 }
