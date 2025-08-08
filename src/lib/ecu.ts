@@ -759,6 +759,7 @@ export function calculateCorrections(
 
 
 // #region Heuristic Map Scanner
+
 function readDataFromAddress(view: DataView, address: number, rows: number, cols: number, dataSize: number, littleEndian: boolean): number[][] | null {
     const data: number[][] = [];
     let rowStride = cols * dataSize; // Simple assumption
@@ -781,6 +782,30 @@ function readDataFromAddress(view: DataView, address: number, rows: number, cols
     return data;
 }
 
+function calculateSequenceSmoothness(seq: number[]): number {
+    if (seq.length < 2) return 0;
+    let largeJumps = 0;
+    let nonMonotonic = 0;
+    const range = Math.max(...seq) - Math.min(...seq);
+    if (range === 0) return 0.1; // Flat is not ideal but better than random
+
+    for (let i = 1; i < seq.length; i++) {
+        const diff = seq[i] - seq[i - 1];
+        if (Math.abs(diff) > range * 0.3) { // Large jump relative to range
+            largeJumps++;
+        }
+        if (i > 1) {
+            const prevDiff = seq[i-1] - seq[i-2];
+            if (Math.sign(diff) !== Math.sign(prevDiff) && prevDiff !== 0) {
+                 nonMonotonic++;
+            }
+        }
+    }
+    const penalty = (largeJumps * 0.5) + (nonMonotonic * 0.2);
+    return Math.max(0, 1 - penalty);
+}
+
+
 export function scanForPotentialMaps(
   binBuffer: ArrayBuffer,
   options: {
@@ -792,42 +817,71 @@ export function scanForPotentialMaps(
   } = {}
 ): PotentialMap[] {
     const {
+        minSize = 8,
+        maxSize = 32,
+        searchIncrement = 4,
         dataSize = 1,
+        isBigEndian = false,
     } = options;
 
     const results: PotentialMap[] = [];
     const view = new DataView(binBuffer);
-    const littleEndian = !options.isBigEndian;
+    const littleEndian = !isBigEndian;
+    const foundAddresses = new Set<number>();
 
-    // This is a placeholder for a more complex heuristic engine.
-    // A real implementation would be significantly more complex, involving
-    // entropy analysis, sequence detection, etc.
-    // For now, we'll just return a dummy result to build the UI.
+    for (let address = 0; address < binBuffer.byteLength - (minSize * minSize * dataSize); address += searchIncrement) {
+         if (foundAddresses.has(address)) continue;
 
-    const potentialAddresses = [0x3d1a, 0x4e7c, 0x5a00, 0x8b44];
-    const potentialSizes = [
-        {rows: 16, cols: 16, reason: "Padrão de dados 16x16 comum encontrado.", confidence: 0.85},
-        {rows: 8, cols: 12, reason: "Sequência de eixo provável nas proximidades.", confidence: 0.70},
-        {rows: 20, cols: 10, reason: "Bloco de dados com baixa entropia.", confidence: 0.65},
-        {rows: 16, cols: 8, reason: "Padrão de dados 16x8 comum.", confidence: 0.75}
-    ];
+         for (let cols = minSize; cols <= maxSize; cols += 2) {
+             for (let rows = minSize; rows <= maxSize; rows += 2) {
+                const mapByteSize = rows * cols * dataSize;
+                if (address + mapByteSize > binBuffer.byteLength) continue;
 
-    potentialAddresses.forEach((address, index) => {
-        if (binBuffer.byteLength > address) {
-             const size = potentialSizes[index % potentialSizes.length];
-             const previewData = readDataFromAddress(view, address, Math.min(size.rows, 5), size.cols, dataSize, littleEndian);
+                const mapData = readDataFromAddress(view, address, rows, cols, dataSize, littleEndian);
+                if (!mapData) continue;
+                
+                let totalSmoothness = 0;
+                let validRows = 0;
 
-             results.push({
-                address,
-                ...size,
-                dataSize: dataSize,
-                isBigEndian: !!options.isBigEndian,
-                previewData: previewData ?? undefined
-            });
-        }
-    });
+                for(let r = 0; r < mapData.length; r++) {
+                    const rowSmoothness = calculateSequenceSmoothness(mapData[r]);
+                    if (rowSmoothness > 0) { // Only consider rows with some smoothness
+                        totalSmoothness += rowSmoothness;
+                        validRows++;
+                    }
+                }
 
-    return results.sort((a,b) => b.confidence - a.confidence);
+                if (validRows === 0) continue;
+                const avgSmoothness = totalSmoothness / validRows;
+
+                if (avgSmoothness > 0.65 && validRows / rows > 0.6) { // Heuristic thresholds
+                    const confidence = Math.min(0.95, avgSmoothness * (validRows / rows));
+                    const previewData = readDataFromAddress(view, address, Math.min(rows, 5), cols, dataSize, littleEndian);
+
+                    results.push({
+                        address,
+                        rows,
+                        cols,
+                        confidence,
+                        reason: `Suavidade média de ${avgSmoothness.toFixed(2)} em ${validRows}/${rows} linhas.`,
+                        dataSize: dataSize,
+                        isBigEndian: isBigEndian,
+                        previewData: previewData ?? undefined
+                    });
+                    
+                    // Mark this region as found to avoid duplicates
+                    for (let i = 0; i < mapByteSize; i++) {
+                         foundAddresses.add(address + i);
+                    }
+                    
+                    // Break inner loops once a good candidate is found for this address
+                    goto_next_address: break; 
+                }
+             }
+         }
+    }
+
+    return results.sort((a,b) => b.confidence - a.confidence).slice(0, 100); // Limit to top 100 results
 }
 
 // #endregion
