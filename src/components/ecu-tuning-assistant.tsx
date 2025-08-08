@@ -13,9 +13,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, IgnitionTimingPoint } from '@/lib/types';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search } from 'lucide-react';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections, scanForPotentialMaps } from '@/lib/ecu';
+import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, IgnitionTimingPoint, PotentialMap } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -34,6 +34,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import IgnitionTimingAnalyzer from '@/components/ignition-timing-analyzer';
+import MapScanner from '@/components/map-scanner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -645,7 +646,7 @@ export default function EcuTuningAssistant() {
         
         setManualConfig(configToApply);
     
-        const result = await processAndCacheMap(mapId, configToApply);
+        const result = processedMapCache[mapId] ? processedMapCache[mapId] : await processAndCacheMap(mapId, configToApply);
         
         if (result) {
             setProcessedMap(result);
@@ -962,6 +963,64 @@ export default function EcuTuningAssistant() {
         } else if (!activeMapId || !newSelectedIds.includes(activeMapId)) {
             setActiveMap(newSelectedIds[newSelectedIds.length - 1]);
         }
+    };
+
+    const handleLoadPotentialMap = (map: PotentialMap) => {
+        addLog(`A carregar mapa potencial em 0x${map.address.toString(16).toUpperCase()}.`, 'info');
+        
+        // Create a temporary, minimal XDF definition
+        const tempId = `potential_${map.address}`;
+        const tempDef: XDFDefinition = {
+            uniqueId: tempId,
+            name: `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
+            address: map.address,
+            rows: map.rows,
+            cols: map.cols,
+            dataSize: map.dataSize,
+            isBigEndian: map.isBigEndian,
+            isRowMajor: true, // Assumption
+            equation: 'x',
+            decimalpl: 2,
+            xAxisDef: { label: 'Eixo X', count: map.cols, requiresSort: false },
+            yAxisDef: { label: 'Eixo Y', count: map.rows, requiresSort: false }
+        };
+
+        // Create a new manual config for this map
+        const newManualConfig: ManualAxisConfig = {
+            x: { equation: 'x', stride: map.dataSize },
+            y: { equation: 'x', stride: map.dataSize },
+            z: { equation: 'x', stride: map.dataSize, rowStride: map.cols * map.dataSize },
+            isBigEndian: map.isBigEndian,
+            sortX: false,
+            sortY: false,
+        };
+
+        setManualConfig(newManualConfig);
+
+        // This is a bit of a hack: we temporarily add the definition to the list
+        // so that setActiveMap and other functions can find it.
+        if (xdfFile) {
+            const newDefs = [...xdfFile.definitions.filter(d => !d.uniqueId.startsWith('potential_')), tempDef];
+            setXdfFile(prev => ({...prev!, definitions: newDefs}));
+        } else {
+             // If there's no XDF, create a dummy one
+             setXdfFile({
+                name: "Manualmente Criado",
+                content: "",
+                definitions: [tempDef],
+                allTables: new Map()
+             });
+        }
+        
+        // Update selection and activate the new temporary map
+        const newSelectedIds = [...selectedMapIds.filter(id => !id.startsWith('potential_')), tempId];
+        setSelectedMapIds(newSelectedIds);
+        setActiveMap(tempId);
+        
+        // Switch to the table view to see the result
+        setActiveTab('view-table');
+        
+        toast({ title: "Mapa Potencial Carregado", description: "Dados preenchidos no painel de substituição. Ajuste e recalcule." });
     };
     
     return (
@@ -1413,6 +1472,10 @@ export default function EcuTuningAssistant() {
                         <Flame className="mr-2" />
                         Análise de Ignição
                     </TabsTrigger>
+                    <TabsTrigger value="map-scanner">
+                        <Search className="mr-2" />
+                        Scanner de Mapas
+                    </TabsTrigger>
                   </TabsList>
                   {isProcessing && !processedMap ? (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -1606,10 +1669,16 @@ export default function EcuTuningAssistant() {
                             runs={ignitionRuns} 
                             onRunsChange={setIgnitionRuns}
                             binFile={binFile}
-                            xdfDefinitions={xdfFile?.definitions ?? []}
                             processedMap={processedMap}
                             selectedMapDefinition={selectedMapDefinition}
                            />
+                      </TabsContent>
+                       <TabsContent value="map-scanner" className="flex-1 mt-4 min-h-0">
+                          <MapScanner
+                            binFile={binFile}
+                            onLoadMap={handleLoadPotentialMap}
+                            addLog={addLog}
+                          />
                       </TabsContent>
                     </>
                   )}

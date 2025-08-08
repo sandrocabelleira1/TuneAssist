@@ -3,6 +3,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -91,4 +92,14 @@ export type IgnitionTimingPoint = {
 export type IgnitionTimingRun = {
     base: IgnitionTimingPoint[];
     modified: IgnitionTimingPoint[];
+}
+
+export type PotentialMap = {
+    address: number;
+    rows: number;
+    cols: number;
+    dataSize: number;
+    isBigEndian: boolean;
+    confidence: number; // A score from 0 to 1
+    reason: string;
 }

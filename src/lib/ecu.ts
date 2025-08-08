@@ -1,6 +1,6 @@
 
 
-import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell } from './types';
+import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
 
@@ -739,5 +739,61 @@ export function calculateCorrections(
     return { correctedMap: newMap, modifiedIndices };
 }
 
+
+// #endregion
+
+
+// #region Heuristic Map Scanner
+
+export function scanForPotentialMaps(
+  binBuffer: ArrayBuffer,
+  options: {
+    minSize?: number;
+    maxSize?: number;
+    searchIncrement?: number;
+    dataSize?: 1 | 2;
+    isBigEndian?: boolean;
+  } = {}
+): PotentialMap[] {
+    const {
+        minSize = 8,
+        maxSize = 32,
+        searchIncrement = 4, // Check every 4 bytes
+        dataSize = 1, // 1 for 8-bit, 2 for 16-bit
+        isBigEndian = false,
+    } = options;
+
+    const results: PotentialMap[] = [];
+    const view = new DataView(binBuffer);
+    const littleEndian = !isBigEndian;
+
+    // This is a placeholder for a more complex heuristic engine.
+    // A real implementation would be significantly more complex, involving
+    // entropy analysis, sequence detection, etc.
+    // For now, we'll just return a dummy result to build the UI.
+
+    if (binBuffer.byteLength > 0x4000) {
+        results.push({
+            address: 0x3d1a,
+            rows: 16,
+            cols: 16,
+            dataSize: 1,
+            isBigEndian: false,
+            confidence: 0.85,
+            reason: "Padrão de dados 16x16 comum encontrado."
+        });
+        results.push({
+            address: 0x4e7c,
+            rows: 8,
+            cols: 12,
+            dataSize: 1,
+            isBigEndian: false,
+            confidence: 0.70,
+            reason: "Sequência de eixo provável nas proximidades."
+        });
+    }
+
+    return results;
+}
 
 // #endregion

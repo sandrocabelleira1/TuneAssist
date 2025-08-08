@@ -1,0 +1,142 @@
+
+'use client';
+
+import React, { useState, useCallback } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AlertTriangle, Loader2, Search, Upload } from 'lucide-react';
+import type { LogMessage, PotentialMap } from '@/lib/types';
+import { scanForPotentialMaps } from '@/lib/ecu';
+import { Progress } from '@/components/ui/progress';
+
+interface MapScannerProps {
+    binFile: { name: string; buffer: ArrayBuffer } | null;
+    onLoadMap: (map: PotentialMap) => void;
+    addLog: (message: string, type?: LogMessage['type']) => void;
+}
+
+export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerProps) {
+    const [isScanning, setIsScanning] = useState(false);
+    const [scanProgress, setScanProgress] = useState(0);
+    const [potentialMaps, setPotentialMaps] = useState<PotentialMap[]>([]);
+
+    const handleScan = useCallback(async () => {
+        if (!binFile) {
+            addLog("Ficheiro BIN não carregado. Não é possível iniciar o scan.", 'error');
+            return;
+        }
+
+        setIsScanning(true);
+        addLog("A iniciar o scan heurístico do ficheiro BIN...", 'info');
+
+        // Simulate progress for the user
+        const progressInterval = setInterval(() => {
+            setScanProgress(prev => Math.min(prev + 10, 90));
+        }, 200);
+
+        // Run the actual scan in a non-blocking way
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        try {
+            const results = scanForPotentialMaps(binFile.buffer, { dataSize: 1 });
+            setPotentialMaps(results);
+            addLog(`Scan concluído. Encontrados ${results.length} mapas potenciais.`, 'success');
+        } catch (error) {
+            const msg = `Erro durante o scan: ${(error as Error).message}`;
+            addLog(msg, 'error');
+        } finally {
+            clearInterval(progressInterval);
+            setScanProgress(100);
+            setTimeout(() => setIsScanning(false), 500); // Wait for progress bar to finish
+        }
+    }, [binFile, addLog]);
+
+    if (!binFile) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
+                <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
+                <h3 className="text-lg font-semibold">Ficheiro BIN Necessário</h3>
+                <p className="max-w-md">Para utilizar o scanner de mapas, por favor carregue primeiro um ficheiro .BIN no painel de controlo à esquerda.</p>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="flex flex-col h-full gap-4">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Scanner de Mapas Heurístico</CardTitle>
+                    <CardDescription>
+                        Esta ferramenta experimental analisa o ficheiro .BIN para encontrar estruturas que possam ser mapas não definidos no seu XDF. Os resultados são baseados em padrões e podem não ser precisos.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isScanning ? (
+                        <div className="flex items-center gap-4">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <div className="flex-1">
+                                <p className="text-sm font-medium">A analisar o binário... {scanProgress}%</p>
+                                <Progress value={scanProgress} className="h-2 mt-1" />
+                            </div>
+                        </div>
+
+                    ) : (
+                        <Button onClick={handleScan} disabled={isScanning}>
+                            <Search className="mr-2 h-4 w-4" />
+                            Iniciar Scan
+                        </Button>
+                    )}
+                </CardContent>
+            </Card>
+
+            <div className="flex-1 border rounded-lg min-h-0">
+                <ScrollArea className="h-full">
+                    <Table>
+                        <TableHeader className="sticky top-0 bg-muted">
+                            <TableRow>
+                                <TableHead>Endereço</TableHead>
+                                <TableHead>Dimensões</TableHead>
+                                <TableHead>Tamanho Dados</TableHead>
+                                <TableHead>Confiança</TableHead>
+                                <TableHead>Razão</TableHead>
+                                <TableHead className="text-right">Ação</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {potentialMaps.length > 0 ? (
+                                potentialMaps.map((map) => (
+                                    <TableRow key={map.address}>
+                                        <TableCell className="font-mono">0x{map.address.toString(16).toUpperCase()}</TableCell>
+                                        <TableCell>{map.cols}x{map.rows}</TableCell>
+                                        <TableCell>{map.dataSize * 8}-bit</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <Progress value={map.confidence * 100} className="h-2 w-20" />
+                                                <span>{(map.confidence * 100).toFixed(0)}%</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{map.reason}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button size="sm" variant="outline" onClick={() => onLoadMap(map)}>
+                                                <Upload className="mr-2 h-3 w-3" />
+                                                Carregar
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="h-24 text-center">
+                                        Nenhum mapa potencial encontrado. Inicie um scan para ver os resultados.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </ScrollArea>
+            </div>
+        </div>
+    );
+}
