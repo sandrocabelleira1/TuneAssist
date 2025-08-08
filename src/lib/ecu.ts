@@ -1,3 +1,4 @@
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
@@ -874,10 +875,11 @@ export function scanForPotentialMaps(
     const foundAddresses = new Set<number>();
 
     for (let address = 0; address < binBuffer.byteLength - (minSize * minSize * dataSize); address += searchIncrement) {
-         if (foundAddresses.has(address)) continue;
+        if (foundAddresses.has(address)) continue;
 
-         for (let cols = minSize; cols <= maxSize; cols += 2) {
-             for (let rows = minSize; rows <= maxSize; rows += 2) {
+        let foundMapInAddress = false;
+        for (let cols = minSize; cols <= maxSize; cols += 2) {
+            for (let rows = minSize; rows <= maxSize; rows += 2) {
                 const mapByteSize = rows * cols * dataSize;
                 if (address + mapByteSize > binBuffer.byteLength) continue;
 
@@ -886,13 +888,10 @@ export function scanForPotentialMaps(
                 
                 const rowSmoothness = calculateSequenceSmoothness(mapData[0]);
                 const colSmoothness = calculateSequenceSmoothness(mapData.map(r => r[0]));
-
                 const structureConfidence = (rowSmoothness + colSmoothness) / 2;
                 
-                if (structureConfidence > 0.55) { // Heuristic threshold for a "map-like" structure
-                    
-                    let bestGuess = { suggestion: 'Genérico', reason: 'Estrutura detetada', confidence: structureConfidence * 0.4 };
-
+                if (structureConfidence > 0.55) { // Heuristic threshold
+                    let bestGuess = { suggestion: 'Genérico', reason: 'Estrutura detectada', confidence: structureConfidence * 0.4 };
                     for(const eq of COMMON_EQUATIONS) {
                         const analysis = analyzeMapCharacteristics(mapData, eq.equation);
                         if(analysis.confidence > bestGuess.confidence) {
@@ -914,26 +913,23 @@ export function scanForPotentialMaps(
                         previewData: previewData ?? undefined
                     });
                     
-                    // Mark this region as found to avoid duplicates
                     for (let i = 0; i < mapByteSize; i++) {
-                         foundAddresses.add(address + i);
+                        foundAddresses.add(address + i);
                     }
                     
-                    // Break inner loops once a good candidate is found for this address
-                    address += mapByteSize - searchIncrement; // Jump ahead
-                    goto_next_address: break;
+                    address += mapByteSize - searchIncrement;
+                    foundMapInAddress = true;
+                    break; 
                 }
-             }
-              // @ts-ignore
-             if (foundAddresses.has(address)) break;
-         }
-         // @ts-ignore
-         next_address:;
+            }
+            if (foundMapInAddress) break;
+        }
     }
 
-    return results.sort((a,b) => b.confidence - a.confidence).slice(0, 100); // Limit to top 100 results
+    return results.sort((a,b) => b.confidence - a.confidence).slice(0, 100);
 }
 
 
 // #endregion
+
 
