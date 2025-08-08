@@ -1,5 +1,3 @@
-
-
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
@@ -805,37 +803,52 @@ function calculateSequenceSmoothness(seq: number[]): number {
     return Math.max(0, 1 - penalty);
 }
 
-function analyzeMapCharacteristics(mapData: number[][]): { suggestion: string, reason: string } {
-    if (!mapData || mapData.length === 0 || mapData[0].length === 0) {
-        return { suggestion: 'Desconhecido', reason: 'Dados insuficientes' };
-    }
 
-    const flatData = mapData.flat().filter(v => v !== null && !isNaN(v));
-    if (flatData.length < 10) { // Need a reasonable amount of data
-        return { suggestion: 'Desconhecido', reason: 'Dados insuficientes' };
+const COMMON_EQUATIONS: { name: string; equation: string; type: 'Ignition' | 'Fuel' | 'Lambda' | 'Temp' }[] = [
+    { name: 'Ignition ° (0.25)', equation: 'x*0.25', type: 'Ignition' },
+    { name: 'Ignition ° (0.5)', equation: 'x*0.5', type: 'Ignition' },
+    { name: 'Ignition ° (-10)', equation: 'x-10', type: 'Ignition' },
+    { name: 'Fuel VE', equation: 'x', type: 'Fuel' },
+    { name: 'Fuel VE (Bosch)', equation: 'x*0.01', type: 'Fuel' },
+    { name: 'Lambda (x*0.01)', equation: 'x*0.01', type: 'Lambda' },
+    { name: 'Lambda (x*0.001)', equation: 'x*0.001', type: 'Lambda' },
+    { name: 'Temp °C (Bosch)', equation: 'x*0.75-48', type: 'Temp' },
+];
+
+function analyzeMapCharacteristics(mapData: number[][], equation: string): { suggestion: string; reason: string; confidence: number } {
+    if (!mapData || mapData.length === 0 || mapData[0].length === 0) {
+        return { suggestion: 'Desconhecido', reason: 'Dados insuficientes', confidence: 0 };
+    }
+    
+    const calculatedData = mapData.map(row => row.map(cell => evaluateEquation(equation, cell)));
+    const flatData = calculatedData.flat().filter(v => v !== null && !isNaN(v));
+
+    if (flatData.length < 10) {
+        return { suggestion: 'Desconhecido', reason: 'Dados insuficientes', confidence: 0 };
     }
 
     const min = Math.min(...flatData);
     const max = Math.max(...flatData);
-    const avg = flatData.reduce((a, b) => a + b, 0) / flatData.length;
-
-    // Heuristics for map type
+    
     // Ignition Map
-    if (max > 10 && max < 70 && min >= -20) {
-        return { suggestion: 'Ignição', reason: `Valores [${min}, ${max}] típicos de avanço` };
+    if (max > 0 && max < 70 && min >= -20) {
+        return { suggestion: 'Ignição', reason: `Valores [${min.toFixed(1)}, ${max.toFixed(1)}] com eq: ${equation}`, confidence: 0.7 };
     }
     // VE / Fuel Map
-    if (max > 50 && max < 150 && min > 10) {
-         return { suggestion: 'Combustível (VE)', reason: `Valores [${min}, ${max}] típicos de VE` };
+    if (max > 30 && max < 200 && min >= 0) {
+         return { suggestion: 'Combustível (VE)', reason: `Valores [${min.toFixed(1)}, ${max.toFixed(1)}] com eq: ${equation}`, confidence: 0.6 };
     }
      // Target Lambda Map
-    if (max < 2 && min > 0.5) {
-         return { suggestion: 'Lambda Alvo', reason: `Valores [${min.toFixed(2)}, ${max.toFixed(2)}] típicos de Lambda` };
+    if (max < 2 && max > 0.5 && min > 0.5) {
+         return { suggestion: 'Lambda Alvo', reason: `Valores [${min.toFixed(2)}, ${max.toFixed(2)}] com eq: ${equation}`, confidence: 0.8 };
+    }
+    // Temp Map
+    if (max > -20 && max < 140 && min < 0) {
+         return { suggestion: 'Temperatura', reason: `Valores [${min.toFixed(1)}, ${max.toFixed(1)}] com eq: ${equation}`, confidence: 0.75 };
     }
 
-    return { suggestion: 'Genérico', reason: `Valores [${min}, ${max}]` };
+    return { suggestion: 'Genérico', reason: `Valores [${min.toFixed(1)}, ${max.toFixed(1)}] com eq: ${equation}`, confidence: 0.2 };
 }
-
 
 export function scanForPotentialMaps(
   binBuffer: ArrayBuffer,
@@ -849,7 +862,7 @@ export function scanForPotentialMaps(
 ): PotentialMap[] {
     const {
         minSize = 8,
-        maxSize = 32,
+        maxSize = 24,
         searchIncrement = 4,
         dataSize = 1,
         isBigEndian = false,
@@ -871,34 +884,31 @@ export function scanForPotentialMaps(
                 const mapData = readDataFromAddress(view, address, rows, cols, dataSize, littleEndian);
                 if (!mapData) continue;
                 
-                let totalSmoothness = 0;
-                let validRows = 0;
+                const rowSmoothness = calculateSequenceSmoothness(mapData[0]);
+                const colSmoothness = calculateSequenceSmoothness(mapData.map(r => r[0]));
 
-                for(let r = 0; r < mapData.length; r++) {
-                    const rowSmoothness = calculateSequenceSmoothness(mapData[r]);
-                    if (rowSmoothness > 0.3) { // Only consider rows with some smoothness
-                        totalSmoothness += rowSmoothness;
-                        validRows++;
+                const structureConfidence = (rowSmoothness + colSmoothness) / 2;
+                
+                if (structureConfidence > 0.55) { // Heuristic threshold for a "map-like" structure
+                    
+                    let bestGuess = { suggestion: 'Genérico', reason: 'Estrutura detetada', confidence: structureConfidence * 0.4 };
+
+                    for(const eq of COMMON_EQUATIONS) {
+                        const analysis = analyzeMapCharacteristics(mapData, eq.equation);
+                        if(analysis.confidence > bestGuess.confidence) {
+                            bestGuess = analysis;
+                        }
                     }
-                }
 
-                if (validRows === 0) continue;
-                const avgSmoothness = totalSmoothness / validRows;
-                const coverage = validRows / rows;
-
-                if (avgSmoothness > 0.60 && coverage > 0.5) { // Heuristic thresholds
-                    const confidence = Math.min(0.95, avgSmoothness * coverage);
                     const previewData = readDataFromAddress(view, address, Math.min(rows, 5), cols, dataSize, littleEndian);
-                    const { suggestion, reason } = analyzeMapCharacteristics(mapData);
-
-
+                    
                     results.push({
                         address,
                         rows,
                         cols,
-                        confidence,
-                        suggestion,
-                        reason,
+                        confidence: bestGuess.confidence,
+                        suggestion: bestGuess.suggestion,
+                        reason: bestGuess.reason,
                         dataSize: dataSize,
                         isBigEndian: isBigEndian,
                         previewData: previewData ?? undefined
@@ -910,11 +920,11 @@ export function scanForPotentialMaps(
                     }
                     
                     // Break inner loops once a good candidate is found for this address
-                    // Using a label to break out of nested loops
-                    goto_next_address: break; 
+                    address += mapByteSize - searchIncrement; // Jump ahead
+                    goto_next_address: break;
                 }
              }
-             // Label for the goto statement
+              // @ts-ignore
              if (foundAddresses.has(address)) break;
          }
          // @ts-ignore
@@ -924,4 +934,6 @@ export function scanForPotentialMaps(
     return results.sort((a,b) => b.confidence - a.confidence).slice(0, 100); // Limit to top 100 results
 }
 
+
 // #endregion
+
