@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Loader2, Search, Upload, LineChart as LineChartIcon, Flame, Fuel } from 'lucide-react';
+import { AlertTriangle, Loader2, Search, Upload, Flame, Fuel } from 'lucide-react';
 import type { LogMessage, PotentialMap } from '@/lib/types';
 import { scanForPotentialMaps } from '@/lib/ecu';
 import { Progress } from '@/components/ui/progress';
@@ -62,12 +62,13 @@ interface MapScannerProps {
     binFile: { name: string; buffer: ArrayBuffer } | null;
     onLoadMap: (map: PotentialMap) => void;
     addLog: (message: string, type?: LogMessage['type']) => void;
+    potentialMaps: PotentialMap[];
+    setPotentialMaps: (maps: PotentialMap[]) => void;
 }
 
-export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerProps) {
+export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, setPotentialMaps }: MapScannerProps) {
     const [isScanning, setIsScanning] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
-    const [potentialMaps, setPotentialMaps] = useState<PotentialMap[]>([]);
 
     const handleScan = useCallback(async () => {
         if (!binFile) {
@@ -79,30 +80,27 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         setScanProgress(0);
         setPotentialMaps([]);
         addLog("A iniciar o scan heurístico do ficheiro BIN...", 'info');
+        
+        const updateProgress = (progress: number) => {
+            setScanProgress(progress);
+        };
 
-        const progressInterval = setInterval(() => {
-            setScanProgress(prev => Math.min(prev + 10, 90));
-        }, 200);
-
-        // Run the actual scan in a non-blocking way
         await new Promise(resolve => setTimeout(resolve, 0));
 
         try {
-            const results = scanForPotentialMaps(binFile.buffer);
+            const results = await scanForPotentialMaps(binFile.buffer, {
+                onProgress: updateProgress,
+            });
             setPotentialMaps(results);
             addLog(`Scan concluído. Encontrados ${results.length} mapas potenciais.`, 'success');
         } catch (error) {
             const msg = `Erro durante o scan: ${(error as Error).message}`;
             addLog(msg, 'error');
         } finally {
-            clearInterval(progressInterval);
-            setScanProgress(100);
-            setTimeout(() => {
-                setIsScanning(false);
-                setScanProgress(0);
-            }, 500);
+            setIsScanning(false);
+            setScanProgress(0);
         }
-    }, [binFile, addLog]);
+    }, [binFile, addLog, setPotentialMaps]);
 
     if (!binFile) {
         return (
@@ -116,7 +114,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
     
     return (
         <div className="flex flex-col h-full gap-4">
-            <Card>
+            <Card className="shrink-0">
                 <CardHeader>
                     <CardTitle>Scanner de Mapas Heurístico</CardTitle>
                     <CardDescription>
@@ -128,7 +126,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                         <div className="flex items-center gap-4">
                             <Loader2 className="h-5 w-5 animate-spin" />
                             <div className="flex-1">
-                                <p className="text-sm font-medium">A analisar o binário... {scanProgress}%</p>
+                                <p className="text-sm font-medium">A analisar o binário... {scanProgress.toFixed(0)}%</p>
                                 <Progress value={scanProgress} className="h-2 mt-1" />
                             </div>
                         </div>
@@ -149,6 +147,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                             <TableRow>
                                 <TableHead>Endereço</TableHead>
                                 <TableHead>Dimensões</TableHead>
+                                <TableHead>Tipo</TableHead>
                                 <TableHead>Pré-visualização</TableHead>
                                 <TableHead>Confiança</TableHead>
                                 <TableHead>Sugestão</TableHead>
@@ -158,9 +157,10 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                         <TableBody>
                             {potentialMaps.length > 0 ? (
                                 potentialMaps.map((map) => (
-                                    <TableRow key={map.address}>
+                                    <TableRow key={`${map.address}-${map.rows}x${map.cols}-${map.dataSize}`}>
                                         <TableCell className="font-mono">0x{map.address.toString(16).toUpperCase()}</TableCell>
                                         <TableCell>{map.cols}x{map.rows}</TableCell>
+                                        <TableCell className="text-muted-foreground text-xs">{map.dataType}</TableCell>
                                         <TableCell>
                                             <TooltipProvider>
                                                 <Tooltip>
@@ -197,7 +197,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center">
+                                    <TableCell colSpan={7} className="h-24 text-center">
                                         {isScanning ? "A procurar..." : "Nenhum mapa potencial encontrado. Inicie um scan para ver os resultados."}
                                     </TableCell>
                                 </TableRow>

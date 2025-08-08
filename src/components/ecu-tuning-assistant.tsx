@@ -365,6 +365,7 @@ export default function EcuTuningAssistant() {
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+    const [potentialMaps, setPotentialMaps] = useState<PotentialMap[]>([]);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -443,6 +444,7 @@ export default function EcuTuningAssistant() {
         setTargetLambda(1.0);
         setAggressiveness(100);
         setIgnitionRuns({ base: [], modified: [] });
+        setPotentialMaps([]);
         logEntryForm.reset();
         
         if (binInputRef.current) binInputRef.current.value = '';
@@ -952,12 +954,15 @@ export default function EcuTuningAssistant() {
     const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
 
     const handleMapSelectionChange = (id: string) => {
+        const isPotential = id.startsWith('potential_');
+        if (isPotential) return; // Don't allow unselecting potential maps this way
+    
         const newSelectedIds = selectedMapIds.includes(id)
             ? selectedMapIds.filter(mapId => mapId !== id)
-            : [...selectedMapIds, id];
-
+            : [...selectedMapIds.filter(id => !id.startsWith('potential_')), id];
+    
         setSelectedMapIds(newSelectedIds);
-
+    
         if (newSelectedIds.length === 0) {
             setActiveMap(null);
         } else if (!activeMapId || !newSelectedIds.includes(activeMapId)) {
@@ -969,7 +974,7 @@ export default function EcuTuningAssistant() {
         addLog(`A carregar mapa potencial em 0x${map.address.toString(16).toUpperCase()}.`, 'info');
         
         // Create a temporary, minimal XDF definition
-        const tempId = `potential_${map.address}`;
+        const tempId = `potential_${map.address}_${map.rows}x${map.cols}`;
         const tempDef: XDFDefinition = {
             uniqueId: tempId,
             name: `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
@@ -979,47 +984,28 @@ export default function EcuTuningAssistant() {
             dataSize: map.dataSize,
             isBigEndian: map.isBigEndian,
             isRowMajor: true, // Assumption
-            equation: 'x',
+            equation: 'x', // Start with raw data
             decimalpl: 2,
-            xAxisDef: { label: 'Eixo X', count: map.cols, requiresSort: false },
-            yAxisDef: { label: 'Eixo Y', count: map.rows, requiresSort: false }
+            xAxisDef: { label: 'Eixo X (Índice)', count: map.cols, requiresSort: false },
+            yAxisDef: { label: 'Eixo Y (Índice)', count: map.rows, requiresSort: false }
         };
 
-        // Create a new manual config for this map
-        const newManualConfig: ManualAxisConfig = {
-            x: { equation: 'x', stride: map.dataSize },
-            y: { equation: 'x', stride: map.dataSize },
-            z: { equation: 'x', stride: map.dataSize, rowStride: map.cols * map.dataSize },
-            isBigEndian: map.isBigEndian,
-            sortX: false,
-            sortY: false,
-        };
+        const currentXdfDefs = xdfFile ? xdfFile.definitions.filter(d => !d.uniqueId.startsWith('potential_')) : [];
+        const newDefs = [...currentXdfDefs, tempDef];
 
-        setManualConfig(newManualConfig);
+        setXdfFile(prev => ({
+            name: prev?.name || "Manualmente Criado",
+            content: prev?.content || "",
+            definitions: newDefs,
+            allTables: prev?.allTables || new Map()
+        }));
 
-        // This is a bit of a hack: we temporarily add the definition to the list
-        // so that setActiveMap and other functions can find it.
-        if (xdfFile) {
-            const newDefs = [...xdfFile.definitions.filter(d => !d.uniqueId.startsWith('potential_')), tempDef];
-            setXdfFile(prev => ({...prev!, definitions: newDefs}));
-        } else {
-             // If there's no XDF, create a dummy one
-             setXdfFile({
-                name: "Manualmente Criado",
-                content: "",
-                definitions: [tempDef],
-                allTables: new Map()
-             });
-        }
-        
-        // Update selection and activate the new temporary map
-        const newSelectedIds = [...selectedMapIds.filter(id => !id.startsWith('potential_')), tempId];
+        const currentSelectedIds = selectedMapIds.filter(id => !id.startsWith('potential_'));
+        const newSelectedIds = [...currentSelectedIds, tempId];
         setSelectedMapIds(newSelectedIds);
         setActiveMap(tempId);
         
-        // Switch to the table view to see the result
         setActiveTab('view-table');
-        
         toast({ title: "Mapa Potencial Carregado", description: "Dados preenchidos no painel de substituição. Ajuste e recalcule." });
     };
     
@@ -1091,8 +1077,9 @@ export default function EcuTuningAssistant() {
                         >
                             <span className="truncate">
                                 {selectedMapIds.length === 0 && "Selecione mapas"}
-                                {selectedMapIds.length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds[0])?.name}
-                                {selectedMapIds.length > 1 && `${selectedMapIds.length} mapas selecionados`}
+                                {selectedMapIds.length > 0 && selectedMapIds.filter(id => !id.startsWith('potential_')).length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds.find(id => !id.startsWith('potential_'))!)?.name}
+                                {selectedMapIds.filter(id => !id.startsWith('potential_')).length > 1 && `${selectedMapIds.filter(id => !id.startsWith('potential_')).length} mapas selecionados`}
+                                {selectedMapIds.some(id => id.startsWith('potential_')) && ` (+${selectedMapIds.filter(id => id.startsWith('potential_')).length} potencial)`}
                             </span>
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
@@ -1101,7 +1088,7 @@ export default function EcuTuningAssistant() {
                         {binFile && xdfFile && (
                             <ScrollArea className="h-72">
                                <div className="p-4 space-y-2">
-                                   {xdfFile?.definitions.sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
+                                   {xdfFile?.definitions.filter(d => !d.uniqueId.startsWith('potential_')).sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
                                       <div key={def.uniqueId} className="flex items-center space-x-2">
                                         <Checkbox
                                           id={def.uniqueId}
@@ -1128,10 +1115,11 @@ export default function EcuTuningAssistant() {
                         {selectedMapIds.map(id => {
                             const def = xdfFile?.definitions.find(d => d.uniqueId === id);
                             if (!def) return null;
+                            const isPotential = id.startsWith('potential_');
                             return (
                                 <Badge 
                                     key={id} 
-                                    variant={id === activeMapId ? "default" : "secondary"}
+                                    variant={id === activeMapId ? "default" : (isPotential ? "destructive" : "secondary")}
                                     className="cursor-pointer hover:ring-2 hover:ring-ring"
                                     onClick={() => setActiveMap(id)}
                                 >
@@ -1678,6 +1666,8 @@ export default function EcuTuningAssistant() {
                             binFile={binFile}
                             onLoadMap={handleLoadPotentialMap}
                             addLog={addLog}
+                            potentialMaps={potentialMaps}
+                            setPotentialMaps={setPotentialMaps}
                           />
                       </TabsContent>
                     </>

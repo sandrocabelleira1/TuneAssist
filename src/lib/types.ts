@@ -6,6 +6,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -105,5 +106,7 @@ export type PotentialMap = {
     confidence: number; // A score from 0 to 1
     suggestion: string;
     reason: string;
+    dataType: string;
+    equation: string;
     previewData?: number[][];
 }
