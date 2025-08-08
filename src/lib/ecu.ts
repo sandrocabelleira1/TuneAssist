@@ -805,6 +805,37 @@ function calculateSequenceSmoothness(seq: number[]): number {
     return Math.max(0, 1 - penalty);
 }
 
+function analyzeMapCharacteristics(mapData: number[][]): { suggestion: string, reason: string } {
+    if (!mapData || mapData.length === 0 || mapData[0].length === 0) {
+        return { suggestion: 'Desconhecido', reason: 'Dados insuficientes' };
+    }
+
+    const flatData = mapData.flat().filter(v => v !== null && !isNaN(v));
+    if (flatData.length < 10) { // Need a reasonable amount of data
+        return { suggestion: 'Desconhecido', reason: 'Dados insuficientes' };
+    }
+
+    const min = Math.min(...flatData);
+    const max = Math.max(...flatData);
+    const avg = flatData.reduce((a, b) => a + b, 0) / flatData.length;
+
+    // Heuristics for map type
+    // Ignition Map
+    if (max > 10 && max < 70 && min >= -20) {
+        return { suggestion: 'Ignição', reason: `Valores [${min}, ${max}] típicos de avanço` };
+    }
+    // VE / Fuel Map
+    if (max > 50 && max < 150 && min > 10) {
+         return { suggestion: 'Combustível (VE)', reason: `Valores [${min}, ${max}] típicos de VE` };
+    }
+     // Target Lambda Map
+    if (max < 2 && min > 0.5) {
+         return { suggestion: 'Lambda Alvo', reason: `Valores [${min.toFixed(2)}, ${max.toFixed(2)}] típicos de Lambda` };
+    }
+
+    return { suggestion: 'Genérico', reason: `Valores [${min}, ${max}]` };
+}
+
 
 export function scanForPotentialMaps(
   binBuffer: ArrayBuffer,
@@ -845,7 +876,7 @@ export function scanForPotentialMaps(
 
                 for(let r = 0; r < mapData.length; r++) {
                     const rowSmoothness = calculateSequenceSmoothness(mapData[r]);
-                    if (rowSmoothness > 0) { // Only consider rows with some smoothness
+                    if (rowSmoothness > 0.3) { // Only consider rows with some smoothness
                         totalSmoothness += rowSmoothness;
                         validRows++;
                     }
@@ -853,17 +884,21 @@ export function scanForPotentialMaps(
 
                 if (validRows === 0) continue;
                 const avgSmoothness = totalSmoothness / validRows;
+                const coverage = validRows / rows;
 
-                if (avgSmoothness > 0.65 && validRows / rows > 0.6) { // Heuristic thresholds
-                    const confidence = Math.min(0.95, avgSmoothness * (validRows / rows));
+                if (avgSmoothness > 0.60 && coverage > 0.5) { // Heuristic thresholds
+                    const confidence = Math.min(0.95, avgSmoothness * coverage);
                     const previewData = readDataFromAddress(view, address, Math.min(rows, 5), cols, dataSize, littleEndian);
+                    const { suggestion, reason } = analyzeMapCharacteristics(mapData);
+
 
                     results.push({
                         address,
                         rows,
                         cols,
                         confidence,
-                        reason: `Suavidade média de ${avgSmoothness.toFixed(2)} em ${validRows}/${rows} linhas.`,
+                        suggestion,
+                        reason,
                         dataSize: dataSize,
                         isBigEndian: isBigEndian,
                         previewData: previewData ?? undefined
@@ -875,10 +910,15 @@ export function scanForPotentialMaps(
                     }
                     
                     // Break inner loops once a good candidate is found for this address
+                    // Using a label to break out of nested loops
                     goto_next_address: break; 
                 }
              }
+             // Label for the goto statement
+             if (foundAddresses.has(address)) break;
          }
+         // @ts-ignore
+         next_address:;
     }
 
     return results.sort((a,b) => b.confidence - a.confidence).slice(0, 100); // Limit to top 100 results

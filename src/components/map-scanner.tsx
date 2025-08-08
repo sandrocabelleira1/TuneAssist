@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Loader2, Search, Upload, LineChart as LineChartIcon } from 'lucide-react';
+import { AlertTriangle, Loader2, Search, Upload, LineChart as LineChartIcon, Flame, Fuel } from 'lucide-react';
 import type { LogMessage, PotentialMap } from '@/lib/types';
 import { scanForPotentialMaps } from '@/lib/ecu';
 import { Progress } from '@/components/ui/progress';
@@ -37,6 +37,26 @@ const SparkLinePreview = ({ data }: { data: number[][] | undefined }) => {
         </div>
     );
 };
+
+const SuggestionIcon = ({ suggestion }: { suggestion: string }) => {
+    if (suggestion.toLowerCase().includes('ignição')) {
+        return <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger><Flame className="h-5 w-5 text-amber-500" /></TooltipTrigger>
+                <TooltipContent><p>Possível Mapa de Ignição</p></TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    }
+    if (suggestion.toLowerCase().includes('combustível')) {
+        return <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger><Fuel className="h-5 w-5 text-green-500" /></TooltipTrigger>
+                <TooltipContent><p>Possível Mapa de Combustível</p></TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    }
+    return null;
+}
 
 interface MapScannerProps {
     binFile: { name: string; buffer: ArrayBuffer } | null;
@@ -131,7 +151,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                                 <TableHead>Dimensões</TableHead>
                                 <TableHead>Pré-visualização</TableHead>
                                 <TableHead>Confiança</TableHead>
-                                <TableHead>Razão</TableHead>
+                                <TableHead>Sugestão</TableHead>
                                 <TableHead className="text-right">Ação</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -161,7 +181,12 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                                                 <span>{(map.confidence * 100).toFixed(0)}%</span>
                                             </div>
                                         </TableCell>
-                                        <TableCell>{map.reason}</TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                <SuggestionIcon suggestion={map.suggestion} />
+                                                <span className="text-muted-foreground">{map.reason}</span>
+                                            </div>
+                                        </TableCell>
                                         <TableCell className="text-right">
                                             <Button size="sm" variant="outline" onClick={() => onLoadMap(map)}>
                                                 <Upload className="mr-2 h-3 w-3" />
