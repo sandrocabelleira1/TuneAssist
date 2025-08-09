@@ -759,29 +759,25 @@ export function calculateCorrections(
 
 // #region Heuristic Map Scanner
 
-function readDataFromAddress(view: DataView, address: number, rows: number, cols: number, dataSize: number, signed: boolean, littleEndian: boolean): number[][] | null {
-    const data: number[][] = [];
-    const rowStride = cols * dataSize;
+function readDataFromAddress(view: DataView, address: number, size: number, dataType: {size: number, signed: boolean, littleEndian: boolean}): number[] | null {
+    const data: number[] = [];
+    const byteSize = size * dataType.size;
 
-    if (address + (rows * rowStride) > view.byteLength) {
+    if (address + byteSize > view.byteLength) {
         return null;
     }
 
-    for (let r = 0; r < rows; r++) {
-        const rowData: number[] = [];
-        for (let c = 0; c < cols; c++) {
-            const offset = address + (r * rowStride) + (c * dataSize);
-            try {
-                if (dataSize === 1) {
-                    rowData.push(signed ? view.getInt8(offset) : view.getUint8(offset));
-                } else if (dataSize === 2) {
-                    rowData.push(signed ? view.getInt16(offset, littleEndian) : view.getUint16(offset, littleEndian));
-                }
-            } catch {
-                return null;
+    for (let i = 0; i < size; i++) {
+        const offset = address + (i * dataType.size);
+        try {
+            if (dataType.size === 1) {
+                data.push(dataType.signed ? view.getInt8(offset) : view.getUint8(offset));
+            } else if (dataType.size === 2) {
+                data.push(dataType.signed ? view.getInt16(offset, dataType.littleEndian) : view.getUint16(offset, dataType.littleEndian));
             }
+        } catch {
+            return null;
         }
-        data.push(rowData);
     }
     return data;
 }
@@ -877,14 +873,14 @@ export async function scanForPotentialMaps(
 
         if (foundAddresses.has(address)) continue;
         
-        for (const dataType of [{size: 1, signed: false, name: "8-bit"}, {size: 2, signed: false, name: "16-bit"}]) {
+        for (const dataType of [{size: 1, signed: false, littleEndian: false, name: "8-bit"}, {size: 2, signed: false, littleEndian: false, name: "16-bit"}]) {
              for (let cols = minSize; cols <= maxSize; cols += 2) {
                 for (let rows = minSize; rows <= maxSize; rows += 2) {
                     if (cols === rows) continue; 
                     const mapByteSize = rows * cols * dataType.size;
                     if (address + mapByteSize >= binBuffer.byteLength) continue;
 
-                    const mapData = readDataFromAddress(view, address, rows, cols, dataType.size, dataType.signed, false); // Assume BE for now
+                    const mapData = readDataFromAddress(view, address, rows, {size: cols, ...dataType});
                     if (!mapData) continue;
                     
                     const rowSmoothness = calculateSequenceSmoothness(mapData[0]);
@@ -902,6 +898,23 @@ export async function scanForPotentialMaps(
                             }
                         }
 
+                        // Try to find axes before the map data
+                        let xAxisAddress, yAxisAddress;
+                        // Search backwards from the map address for potential axes
+                        const searchRadius = 512;
+                        const startSearch = Math.max(0, address - searchRadius);
+                        for (let axisAddr = startSearch; axisAddr < address - dataType.size; axisAddr += dataType.size) {
+                            const xAxisData = readDataFromAddress(view, axisAddr, cols, dataType);
+                            if (xAxisData && calculateSequenceSmoothness(xAxisData) > 0.8) {
+                                xAxisAddress = axisAddr;
+                            }
+                            const yAxisData = readDataFromAddress(view, axisAddr, rows, dataType);
+                            if(yAxisData && calculateSequenceSmoothness(yAxisData) > 0.8) {
+                                yAxisAddress = axisAddr;
+                            }
+                        }
+
+
                         results.push({
                             address,
                             rows,
@@ -913,13 +926,14 @@ export async function scanForPotentialMaps(
                             isBigEndian: false, // Default assumption
                             dataType: dataType.name,
                             equation: bestGuess.equation || 'x',
-                            previewData: readDataFromAddress(view, address, Math.min(rows, 5), cols, dataType.size, dataType.signed, false) ?? undefined
+                            previewData: readDataFromAddress(view, address, Math.min(rows, 5), {size: cols, ...dataType}) ?? undefined,
+                            xAxisAddress,
+                            yAxisAddress,
                         });
                         
                         for (let i = 0; i < mapByteSize; i++) {
                             foundAddresses.add(address + i);
                         }
-                        address += mapByteSize - searchIncrement; 
                         
                         // Using continue with a label to break out of the inner loops and go to the next address
                         goto_nextAddressInScan_label: continue;
@@ -938,10 +952,3 @@ export async function scanForPotentialMaps(
 }
 
 // #endregion
-
-
-
-
-
-    
-

@@ -976,14 +976,6 @@ export default function EcuTuningAssistant() {
         
         const tempId = `potential_${map.address}_${map.rows}x${map.cols}`;
         
-        // Don't add if it's already there
-        if (xdfFile?.definitions.some(d => d.uniqueId === tempId)) {
-            setActiveMap(tempId);
-            setActiveTab('view-table');
-            toast({ title: "Mapa Potencial Já Carregado", description: "A alternar para o mapa existente." });
-            return;
-        }
-        
         const tempDef: XDFDefinition = {
             uniqueId: tempId,
             name: `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
@@ -993,13 +985,27 @@ export default function EcuTuningAssistant() {
             dataSize: map.dataSize,
             isBigEndian: map.isBigEndian,
             isRowMajor: true, 
-            equation: map.equation, // Use the suggested equation
+            equation: map.equation || 'x',
             decimalpl: 2,
-            xAxisDef: { label: 'Eixo X (Índice)', count: map.cols, requiresSort: false },
-            yAxisDef: { label: 'Eixo Y (Índice)', count: map.rows, requiresSort: false }
+            xAxisDef: {
+                label: 'Eixo X (scan)',
+                count: map.cols,
+                requiresSort: false,
+                address: map.xAxisAddress,
+                dataSize: map.dataSize,
+                isBigEndian: map.isBigEndian,
+            },
+            yAxisDef: {
+                label: 'Eixo Y (scan)',
+                count: map.rows,
+                requiresSort: false,
+                address: map.yAxisAddress,
+                dataSize: map.dataSize,
+                isBigEndian: map.isBigEndian,
+            }
         };
 
-        const currentXdfDefs = xdfFile ? xdfFile.definitions : [];
+        const currentXdfDefs = xdfFile ? xdfFile.definitions.filter(d => d.uniqueId !== tempId) : [];
         const newDefs = [...currentXdfDefs, tempDef];
 
         setXdfFile(prev => ({
@@ -1009,12 +1015,12 @@ export default function EcuTuningAssistant() {
             allTables: prev?.allTables || new Map()
         }));
 
-        const newSelectedIds = [...selectedMapIds, tempId];
+        const newSelectedIds = [...new Set([...selectedMapIds, tempId])];
         setSelectedMapIds(newSelectedIds);
         setActiveMap(tempId);
         
         setActiveTab('view-table');
-        toast({ title: "Mapa Potencial Carregado", description: "Dados preenchidos no painel de substituição. Ajuste e recalcule." });
+        toast({ title: "Mapa Potencial Carregado", description: "Dados preenchidos no painel de substituição. Ajuste e recalcule se necessário." });
     };
     
     return (
