@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Loader2, Search, Upload, Flame, Fuel } from 'lucide-react';
+import { AlertTriangle, Loader2, Search, Upload, Flame, Fuel, HelpCircle } from 'lucide-react';
 import type { LogMessage, PotentialMap } from '@/lib/types';
 import { scanForPotentialMaps } from '@/lib/ecu';
 import { Progress } from '@/components/ui/progress';
@@ -57,6 +57,27 @@ const SuggestionIcon = ({ suggestion }: { suggestion: string }) => {
     }
     return null;
 }
+
+const TableHeaderWithTooltip = ({ children, tooltipText }: { children: React.ReactNode, tooltipText: string }) => {
+    return (
+        <TableHead>
+            <div className="flex items-center gap-1">
+                {children}
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p className="max-w-xs">{tooltipText}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+            </div>
+        </TableHead>
+    )
+}
+
 
 interface MapScannerProps {
     binFile: { name: string; buffer: ArrayBuffer } | null;
@@ -118,7 +139,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                 <CardHeader>
                     <CardTitle>Scanner de Mapas Heurístico</CardTitle>
                     <CardDescription>
-                        Esta ferramenta experimental analisa o ficheiro .BIN para encontrar estruturas que possam ser mapas não definidos no seu XDF. Os resultados são baseados em padrões e podem não ser precisos.
+                        Esta ferramenta experimental analisa o ficheiro .BIN para encontrar estruturas que possam ser mapas não definidos no seu XDF. A análise baseia-se em padrões (smoothness dos dados) e pode não ser 100% precisa. Use os resultados como um ponto de partida para a sua investigação.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -145,12 +166,24 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                     <Table>
                         <TableHeader className="sticky top-0 bg-muted">
                             <TableRow>
-                                <TableHead>Endereço</TableHead>
-                                <TableHead>Dimensões</TableHead>
-                                <TableHead>Tipo</TableHead>
-                                <TableHead>Pré-visualização</TableHead>
-                                <TableHead>Confiança</TableHead>
-                                <TableHead>Sugestão</TableHead>
+                                <TableHeaderWithTooltip tooltipText="O endereço de memória (offset) onde a estrutura do mapa começa no ficheiro BIN.">
+                                    Endereço
+                                </TableHeaderWithTooltip>
+                                 <TableHeaderWithTooltip tooltipText="As dimensões (Colunas x Linhas) que o scanner adivinhou para este mapa.">
+                                    Dimensões
+                                </TableHeaderWithTooltip>
+                                 <TableHeaderWithTooltip tooltipText="O tipo de dados que o scanner acredita que o mapa usa (ex: 8-bit ou 16-bit).">
+                                    Tipo de Dados
+                                </TableHeaderWithTooltip>
+                                <TableHeaderWithTooltip tooltipText="Um pequeno gráfico de linhas mostrando a 'forma' da primeira linha do mapa. Útil para identificar padrões visuais.">
+                                    Pré-visualização
+                                </TableHeaderWithTooltip>
+                                <TableHeaderWithTooltip tooltipText="A pontuação de confiança do scanner (0-100%). Uma pontuação mais alta indica uma maior probabilidade de ser um mapa válido, com base na suavidade dos dados e reconhecimento de padrões.">
+                                    Confiança
+                                </TableHeaderWithTooltip>
+                                <TableHeaderWithTooltip tooltipText="Sugestão automática do tipo de mapa, baseada nos valores encontrados após aplicar equações comuns.">
+                                    Sugestão
+                                </TableHeaderWithTooltip>
                                 <TableHead className="text-right">Ação</TableHead>
                             </TableRow>
                         </TableHeader>
