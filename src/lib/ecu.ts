@@ -759,31 +759,63 @@ export function calculateCorrections(
 
 // #region Heuristic Map Scanner
 
-function readDataFromAddress(view: DataView, address: number, size: number, dataType: {size: number, signed: boolean, littleEndian: boolean}): number[] | null {
+function readDataFromAddress(view: DataView, address: number, count: number, itemSize: number, isBigEndian: boolean): number[] | null {
     const data: number[] = [];
-    const byteSize = size * dataType.size;
+    const byteSize = count * itemSize;
+    const littleEndian = !isBigEndian;
 
     if (address + byteSize > view.byteLength) {
         return null;
     }
 
-    for (let i = 0; i < size; i++) {
-        const offset = address + (i * dataType.size);
+    for (let i = 0; i < count; i++) {
+        const offset = address + (i * itemSize);
         try {
-            if (dataType.size === 1) {
-                data.push(dataType.signed ? view.getInt8(offset) : view.getUint8(offset));
-            } else if (dataType.size === 2) {
-                data.push(dataType.signed ? view.getInt16(offset, dataType.littleEndian) : view.getUint16(offset, dataType.littleEndian));
+            if (itemSize === 1) {
+                data.push(view.getUint8(offset));
+            } else if (itemSize === 2) {
+                data.push(view.getUint16(offset, littleEndian));
+            } else {
+                return null; // Unsupported item size
             }
         } catch {
-            return null;
+            return null; // Error reading data, likely out of bounds
         }
     }
     return data;
 }
 
-function calculateSequenceSmoothness(seq: number[]): number {
-    if (seq.length < 5) return 0;
+function readMapDataFromAddress(view: DataView, address: number, rows: number, cols: number, itemSize: number, isBigEndian: boolean, rowStride: number): number[][] | null {
+    const mapData: number[][] = [];
+    const littleEndian = !isBigEndian;
+
+    for(let r = 0; r < rows; r++) {
+        const row: number[] = [];
+        for(let c = 0; c < cols; c++) {
+            const offset = address + (r * rowStride) + (c * itemSize);
+            if (offset + itemSize > view.byteLength) {
+                return null;
+            }
+            try {
+                 if (itemSize === 1) {
+                    row.push(view.getUint8(offset));
+                } else if (itemSize === 2) {
+                    row.push(view.getUint16(offset, littleEndian));
+                } else {
+                    return null;
+                }
+            } catch {
+                return null;
+            }
+        }
+        mapData.push(row);
+    }
+    return mapData;
+}
+
+
+function calculateSequenceSmoothness(seq: number[] | null): number {
+    if (!seq || seq.length < 5) return 0;
     let nonMonotonicChanges = 0;
     const range = Math.max(...seq) - Math.min(...seq);
     if (range === 0) return 0.2; 
@@ -864,6 +896,11 @@ export async function scanForPotentialMaps(
     const totalSteps = binBuffer.byteLength / searchIncrement;
     let currentStep = 0;
 
+    const dataTypes = [
+        {size: 1, name: "8-bit", isBigEndian: false},
+        {size: 2, name: "16-bit", isBigEndian: false} // Assuming little-endian for now
+    ];
+
     for (let address = 0; address < binBuffer.byteLength - (minSize * minSize); address += searchIncrement) {
         currentStep++;
         if (currentStep % 1000 === 0) {
@@ -873,14 +910,16 @@ export async function scanForPotentialMaps(
 
         if (foundAddresses.has(address)) continue;
         
-        for (const dataType of [{size: 1, signed: false, littleEndian: false, name: "8-bit"}, {size: 2, signed: false, littleEndian: false, name: "16-bit"}]) {
+        for (const dataType of dataTypes) {
              for (let cols = minSize; cols <= maxSize; cols += 2) {
                 for (let rows = minSize; rows <= maxSize; rows += 2) {
                     if (cols === rows) continue; 
-                    const mapByteSize = rows * cols * dataType.size;
+                    
+                    const rowStride = cols * dataType.size;
+                    const mapByteSize = rows * rowStride;
                     if (address + mapByteSize >= binBuffer.byteLength) continue;
 
-                    const mapData = readDataFromAddress(view, address, rows, {size: cols, ...dataType});
+                    const mapData = readMapDataFromAddress(view, address, rows, cols, dataType.size, dataType.isBigEndian, rowStride);
                     if (!mapData) continue;
                     
                     const rowSmoothness = calculateSequenceSmoothness(mapData[0]);
@@ -898,23 +937,24 @@ export async function scanForPotentialMaps(
                             }
                         }
 
-                        // Try to find axes before the map data
                         let xAxisAddress, yAxisAddress;
-                        // Search backwards from the map address for potential axes
-                        const searchRadius = 512;
-                        const startSearch = Math.max(0, address - searchRadius);
-                        for (let axisAddr = startSearch; axisAddr < address - dataType.size; axisAddr += dataType.size) {
-                            const xAxisData = readDataFromAddress(view, axisAddr, cols, dataType);
-                            if (xAxisData && calculateSequenceSmoothness(xAxisData) > 0.8) {
-                                xAxisAddress = axisAddr;
-                            }
-                            const yAxisData = readDataFromAddress(view, axisAddr, rows, dataType);
-                            if(yAxisData && calculateSequenceSmoothness(yAxisData) > 0.8) {
-                                yAxisAddress = axisAddr;
-                            }
+                        const axisSearchRadius = 512;
+                        const axisSearchStart = Math.max(0, address - axisSearchRadius);
+                        
+                        for (let axisAddr = axisSearchStart; axisAddr < address - dataType.size; axisAddr += dataType.size) {
+                             if(foundAddresses.has(axisAddr)) continue;
+
+                             const xAxisCandidate = readDataFromAddress(view, axisAddr, cols, dataType.size, dataType.isBigEndian);
+                             if (xAxisCandidate && calculateSequenceSmoothness(xAxisCandidate) > 0.8) {
+                                 xAxisAddress = axisAddr;
+                             }
+                             
+                             const yAxisCandidate = readDataFromAddress(view, axisAddr, rows, dataType.size, dataType.isBigEndian);
+                             if(yAxisCandidate && calculateSequenceSmoothness(yAxisCandidate) > 0.8) {
+                                 yAxisAddress = axisAddr;
+                             }
                         }
-
-
+                        
                         results.push({
                             address,
                             rows,
@@ -923,10 +963,10 @@ export async function scanForPotentialMaps(
                             suggestion: bestGuess.suggestion,
                             reason: bestGuess.reason,
                             dataSize: dataType.size,
-                            isBigEndian: false, // Default assumption
+                            isBigEndian: dataType.isBigEndian, 
                             dataType: dataType.name,
                             equation: bestGuess.equation || 'x',
-                            previewData: readDataFromAddress(view, address, Math.min(rows, 5), {size: cols, ...dataType}) ?? undefined,
+                            previewData: mapData.slice(0, 5),
                             xAxisAddress,
                             yAxisAddress,
                         });
@@ -935,15 +975,11 @@ export async function scanForPotentialMaps(
                             foundAddresses.add(address + i);
                         }
                         
-                        // Using continue with a label to break out of the inner loops and go to the next address
                         goto_nextAddressInScan_label: continue;
                     }
                 }
             }
         }
-        // This label is the target for the 'continue' statement.
-        // It allows breaking out of nested loops to proceed with the main address scanning loop.
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
         function goto_nextAddressInScan_label() {}
     }
     
