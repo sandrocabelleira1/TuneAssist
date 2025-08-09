@@ -1,5 +1,3 @@
-
-
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
@@ -765,13 +763,14 @@ function readDataFromAddress(view: DataView, address: number, rows: number, cols
     const data: number[][] = [];
     const rowStride = cols * dataSize;
 
+    if (address + (rows * rowStride) > view.byteLength) {
+        return null;
+    }
+
     for (let r = 0; r < rows; r++) {
         const rowData: number[] = [];
         for (let c = 0; c < cols; c++) {
             const offset = address + (r * rowStride) + (c * dataSize);
-            if (offset + dataSize > view.byteLength) {
-                return null;
-            }
             try {
                 if (dataSize === 1) {
                     rowData.push(signed ? view.getInt8(offset) : view.getUint8(offset));
@@ -922,14 +921,16 @@ export async function scanForPotentialMaps(
                         }
                         address += mapByteSize - searchIncrement; 
                         
-                        // Jump out of the inner loops for this address
-                        goto_nextAddressInScan();
+                        // Using continue with a label to break out of the inner loops and go to the next address
+                        goto_nextAddressInScan_label: continue;
                     }
                 }
             }
         }
+        // This label is the target for the 'continue' statement.
+        // It allows breaking out of nested loops to proceed with the main address scanning loop.
         // eslint-disable-next-line @typescript-eslint/no-empty-function
-        function goto_nextAddressInScan() {}
+        function goto_nextAddressInScan_label() {}
     }
     
     if(onProgress) onProgress(100);
@@ -943,3 +944,4 @@ export async function scanForPotentialMaps(
 
 
     
+
