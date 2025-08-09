@@ -15,6 +15,7 @@ function evaluateEquation(equation: string, value: number): number {
              throw new Error(`Equação contém caracteres inválidos: "${equation}"`);
         }
 
+        // Use \b for word boundary to only replace standalone 'x'
         const expr = sanitizedEq.replace(/\bx\b/g, `(${value.toString()})`);
         // eslint-disable-next-line no-new-func
         const result = new Function('return ' + expr)();
@@ -935,3 +936,6 @@ export async function scanForPotentialMaps(
 
 
 
+
+
+    
