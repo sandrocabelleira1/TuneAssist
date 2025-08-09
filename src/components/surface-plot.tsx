@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo, useEffect, useRef } from 'react';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
 import type { MapData } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { getPlotlyHeatmapScale } from '@/lib/colors';
