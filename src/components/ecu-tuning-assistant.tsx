@@ -955,26 +955,35 @@ export default function EcuTuningAssistant() {
 
     const handleMapSelectionChange = (id: string) => {
         const isPotential = id.startsWith('potential_');
-        if (isPotential) return; // Don't allow unselecting potential maps this way
     
         const newSelectedIds = selectedMapIds.includes(id)
             ? selectedMapIds.filter(mapId => mapId !== id)
-            : [...selectedMapIds.filter(id => !id.startsWith('potential_')), id];
+            : [...selectedMapIds, id];
     
         setSelectedMapIds(newSelectedIds);
     
-        if (newSelectedIds.length === 0) {
+        // If unselecting the active map, or if there's no active map
+        if ((activeMapId === id && !newSelectedIds.includes(id)) || (!activeMapId && newSelectedIds.length > 0)) {
+            const nextActiveId = newSelectedIds.find(mapId => mapId !== id) || newSelectedIds[0] || null;
+            setActiveMap(nextActiveId);
+        } else if (newSelectedIds.length === 0) {
             setActiveMap(null);
-        } else if (!activeMapId || !newSelectedIds.includes(activeMapId)) {
-            setActiveMap(newSelectedIds[newSelectedIds.length - 1]);
         }
     };
 
     const handleLoadPotentialMap = (map: PotentialMap) => {
         addLog(`A carregar mapa potencial em 0x${map.address.toString(16).toUpperCase()}.`, 'info');
         
-        // Create a temporary, minimal XDF definition
         const tempId = `potential_${map.address}_${map.rows}x${map.cols}`;
+        
+        // Don't add if it's already there
+        if (xdfFile?.definitions.some(d => d.uniqueId === tempId)) {
+            setActiveMap(tempId);
+            setActiveTab('view-table');
+            toast({ title: "Mapa Potencial Já Carregado", description: "A alternar para o mapa existente." });
+            return;
+        }
+        
         const tempDef: XDFDefinition = {
             uniqueId: tempId,
             name: `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
@@ -983,14 +992,14 @@ export default function EcuTuningAssistant() {
             cols: map.cols,
             dataSize: map.dataSize,
             isBigEndian: map.isBigEndian,
-            isRowMajor: true, // Assumption
-            equation: 'x', // Start with raw data
+            isRowMajor: true, 
+            equation: map.equation, // Use the suggested equation
             decimalpl: 2,
             xAxisDef: { label: 'Eixo X (Índice)', count: map.cols, requiresSort: false },
             yAxisDef: { label: 'Eixo Y (Índice)', count: map.rows, requiresSort: false }
         };
 
-        const currentXdfDefs = xdfFile ? xdfFile.definitions.filter(d => !d.uniqueId.startsWith('potential_')) : [];
+        const currentXdfDefs = xdfFile ? xdfFile.definitions : [];
         const newDefs = [...currentXdfDefs, tempDef];
 
         setXdfFile(prev => ({
@@ -1000,8 +1009,7 @@ export default function EcuTuningAssistant() {
             allTables: prev?.allTables || new Map()
         }));
 
-        const currentSelectedIds = selectedMapIds.filter(id => !id.startsWith('potential_'));
-        const newSelectedIds = [...currentSelectedIds, tempId];
+        const newSelectedIds = [...selectedMapIds, tempId];
         setSelectedMapIds(newSelectedIds);
         setActiveMap(tempId);
         
@@ -1077,9 +1085,8 @@ export default function EcuTuningAssistant() {
                         >
                             <span className="truncate">
                                 {selectedMapIds.length === 0 && "Selecione mapas"}
-                                {selectedMapIds.length > 0 && selectedMapIds.filter(id => !id.startsWith('potential_')).length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds.find(id => !id.startsWith('potential_'))!)?.name}
-                                {selectedMapIds.filter(id => !id.startsWith('potential_')).length > 1 && `${selectedMapIds.filter(id => !id.startsWith('potential_')).length} mapas selecionados`}
-                                {selectedMapIds.some(id => id.startsWith('potential_')) && ` (+${selectedMapIds.filter(id => id.startsWith('potential_')).length} potencial)`}
+                                {selectedMapIds.length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds[0])?.name}
+                                {selectedMapIds.length > 1 && `${selectedMapIds.length} mapas selecionados`}
                             </span>
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>

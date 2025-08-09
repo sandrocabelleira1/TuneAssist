@@ -1,4 +1,5 @@
 
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
@@ -870,8 +871,8 @@ export async function scanForPotentialMaps(
 
     for (let address = 0; address < binBuffer.byteLength - (minSize * minSize); address += searchIncrement) {
         currentStep++;
-        if (currentStep % 1000 === 0 && onProgress) {
-             onProgress((currentStep / totalSteps) * 100);
+        if (currentStep % 1000 === 0) {
+             if (onProgress) onProgress((currentStep / totalSteps) * 100);
              await new Promise(resolve => setTimeout(resolve, 0)); // Unblock UI thread
         }
 
@@ -880,7 +881,7 @@ export async function scanForPotentialMaps(
         for (const dataType of [{size: 1, signed: false, name: "8-bit"}, {size: 2, signed: false, name: "16-bit"}]) {
              for (let cols = minSize; cols <= maxSize; cols += 2) {
                 for (let rows = minSize; rows <= maxSize; rows += 2) {
-                    if (cols === rows) continue; // Skip square maps for now
+                    if (cols === rows) continue; 
                     const mapByteSize = rows * cols * dataType.size;
                     if (address + mapByteSize >= binBuffer.byteLength) continue;
 
@@ -896,8 +897,9 @@ export async function scanForPotentialMaps(
                         
                         for(const eq of COMMON_EQUATIONS) {
                             const analysis = analyzeMapCharacteristics(mapData, eq.equation);
-                            if (analysis.confidence > bestGuess.confidence) {
-                                bestGuess = {...analysis, equation: eq.equation};
+                            const finalConfidence = analysis.confidence * structureConfidence;
+                            if (finalConfidence > bestGuess.confidence) {
+                                bestGuess = {...analysis, confidence: finalConfidence, equation: eq.equation};
                             }
                         }
 
@@ -911,7 +913,7 @@ export async function scanForPotentialMaps(
                             dataSize: dataType.size,
                             isBigEndian: false, // Default assumption
                             dataType: dataType.name,
-                            equation: bestGuess.equation,
+                            equation: bestGuess.equation || 'x',
                             previewData: readDataFromAddress(view, address, Math.min(rows, 5), cols, dataType.size, dataType.signed, false) ?? undefined
                         });
                         
@@ -920,12 +922,14 @@ export async function scanForPotentialMaps(
                         }
                         address += mapByteSize - searchIncrement; 
                         
-                        goto_nextAddressInScan(searchIncrement);
+                        // Jump out of the inner loops for this address
+                        goto_nextAddressInScan();
                     }
                 }
             }
         }
-        function goto_nextAddressInScan(increment: number) { /* This is a label for the loop jump */ }
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        function goto_nextAddressInScan() {}
     }
     
     if(onProgress) onProgress(100);
