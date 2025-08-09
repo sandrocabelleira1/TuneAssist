@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Wand2, Download, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { IgnitionTimingRun, IgnitionTimingPoint, ProcessedMap, AxisData, XDFDefinition, ManualAxisConfig } from '@/lib/types';
+import type { IgnitionTimingRun, IgnitionTimingPoint, ProcessedMap, AxisData, XDFDefinition } from '@/lib/types';
 import IgnitionTimingPlot from '@/components/ignition-timing-plot';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -18,7 +18,6 @@ interface IgnitionTimingAnalyzerProps {
     runs: IgnitionTimingRun;
     onRunsChange: (runs: IgnitionTimingRun) => void;
     binFile: { name: string; buffer: ArrayBuffer } | null;
-    xdfDefinitions: XDFinition[];
     processedMap: ProcessedMap | null;
     selectedMapDefinition: XDFDefinition | undefined;
 }
@@ -327,7 +326,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
                 <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
                 <h3 className="text-lg font-semibold">Ficheiros Necessários</h3>
-                <p className="max-w-md">Para utilizar a análise de ignição, por favor carregue primeiro um ficheiro .BIN e um ficheiro .XDF no painel de controlo à esquerda.</p>
+                <p className="max-w-md">Para utilizar a análise de ignição, por favor carregue primeiro um ficheiro .BIN e, se disponível, um ficheiro .XDF no painel de controlo.</p>
             </div>
         );
     }
