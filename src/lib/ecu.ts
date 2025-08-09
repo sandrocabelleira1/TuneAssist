@@ -1,3 +1,4 @@
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
@@ -898,7 +899,8 @@ export async function scanForPotentialMaps(
 
     const dataTypes = [
         {size: 1, name: "8-bit", isBigEndian: false},
-        {size: 2, name: "16-bit", isBigEndian: false} // Assuming little-endian for now
+        {size: 2, name: "16-bit LE", isBigEndian: false},
+        {size: 2, name: "16-bit BE", isBigEndian: true},
     ];
 
     for (let address = 0; address < binBuffer.byteLength - (minSize * minSize); address += searchIncrement) {
@@ -909,6 +911,8 @@ export async function scanForPotentialMaps(
         }
 
         if (foundAddresses.has(address)) continue;
+        
+        let bestGuessForAddress: PotentialMap | null = null;
         
         for (const dataType of dataTypes) {
              for (let cols = minSize; cols <= maxSize; cols += 2) {
@@ -927,13 +931,13 @@ export async function scanForPotentialMaps(
                     const structureConfidence = (rowSmoothness + colSmoothness) / 2;
                     
                     if (structureConfidence > 0.6) {
-                        let bestGuess = { suggestion: 'Genérico', reason: 'Estrutura detectada', confidence: structureConfidence * 0.4, equation: 'x' };
+                        let bestAnalysis = { suggestion: 'Genérico', reason: 'Estrutura detectada', confidence: structureConfidence * 0.4, equation: 'x' };
                         
                         for(const eq of COMMON_EQUATIONS) {
                             const analysis = analyzeMapCharacteristics(mapData, eq.equation);
                             const finalConfidence = analysis.confidence * structureConfidence;
-                            if (finalConfidence > bestGuess.confidence) {
-                                bestGuess = {...analysis, confidence: finalConfidence, equation: eq.equation};
+                            if (finalConfidence > bestAnalysis.confidence) {
+                                bestAnalysis = {...analysis, confidence: finalConfidence, equation: eq.equation};
                             }
                         }
 
@@ -955,32 +959,37 @@ export async function scanForPotentialMaps(
                              }
                         }
                         
-                        results.push({
+                        const currentGuess: PotentialMap = {
                             address,
                             rows,
                             cols,
-                            confidence: bestGuess.confidence,
-                            suggestion: bestGuess.suggestion,
-                            reason: bestGuess.reason,
+                            confidence: bestAnalysis.confidence,
+                            suggestion: bestAnalysis.suggestion,
+                            reason: bestAnalysis.reason,
                             dataSize: dataType.size,
                             isBigEndian: dataType.isBigEndian, 
                             dataType: dataType.name,
-                            equation: bestGuess.equation || 'x',
+                            equation: bestAnalysis.equation || 'x',
                             previewData: mapData.slice(0, 5),
                             xAxisAddress,
                             yAxisAddress,
-                        });
-                        
-                        for (let i = 0; i < mapByteSize; i++) {
-                            foundAddresses.add(address + i);
+                        };
+
+                        if (!bestGuessForAddress || currentGuess.confidence > bestGuessForAddress.confidence) {
+                            bestGuessForAddress = currentGuess;
                         }
-                        
-                        goto_nextAddressInScan_label: continue;
                     }
                 }
             }
         }
-        function goto_nextAddressInScan_label() {}
+
+        if (bestGuessForAddress) {
+            results.push(bestGuessForAddress);
+            const mapByteSize = bestGuessForAddress.rows * bestGuessForAddress.cols * bestGuessForAddress.dataSize;
+            for (let i = 0; i < mapByteSize; i++) {
+                foundAddresses.add(address + i);
+            }
+        }
     }
     
     if(onProgress) onProgress(100);
