@@ -988,7 +988,7 @@ export default function EcuTuningAssistant() {
             equation: map.equation || 'x',
             decimalpl: 2,
             xAxisDef: {
-                label: 'Eixo X (scan)',
+                label: map.xAxisType || 'Eixo X (scan)',
                 count: map.cols,
                 requiresSort: false,
                 address: map.xAxisAddress,
@@ -996,7 +996,7 @@ export default function EcuTuningAssistant() {
                 isBigEndian: map.isBigEndian,
             },
             yAxisDef: {
-                label: 'Eixo Y (scan)',
+                label: map.yAxisType || 'Eixo Y (scan)',
                 count: map.rows,
                 requiresSort: false,
                 address: map.yAxisAddress,

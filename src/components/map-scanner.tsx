@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Loader2, Search, Upload, Flame, Fuel, HelpCircle } from 'lucide-react';
+import { AlertTriangle, Loader2, Search, Upload, Flame, Fuel, HelpCircle, Rss, Gauge } from 'lucide-react';
 import type { LogMessage, PotentialMap } from '@/lib/types';
 import { scanForPotentialMaps } from '@/lib/ecu';
 import { Progress } from '@/components/ui/progress';
@@ -77,6 +77,20 @@ const TableHeaderWithTooltip = ({ children, tooltipText }: { children: React.Rea
         </TableHead>
     )
 }
+
+const AxisInfo = ({ map, axis }: { map: PotentialMap; axis: 'x' | 'y' }) => {
+    const type = axis === 'x' ? map.xAxisType : map.yAxisType;
+    const address = axis === 'x' ? map.xAxisAddress : map.yAxisAddress;
+    const isRpm = type === 'RPM';
+
+    return (
+        <div className="flex items-center gap-1 font-mono text-xs">
+            {isRpm ? <Rss className="h-4 w-4 text-blue-500" /> : <Gauge className="h-4 w-4 text-orange-500" />}
+            <span className="font-sans font-medium">{type}</span>
+            {address !== undefined ? `(@0x${address.toString(16).toUpperCase()})` : '(N/A)'}
+        </div>
+    );
+};
 
 
 interface MapScannerProps {
@@ -167,10 +181,10 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                         <TableHeader className="sticky top-0 bg-muted">
                             <TableRow>
                                 <TableHeaderWithTooltip tooltipText="O endereço de memória (offset) onde a estrutura do mapa começa no ficheiro BIN.">
-                                    Endereço
+                                    Endereço Mapa
                                 </TableHeaderWithTooltip>
-                                 <TableHeaderWithTooltip tooltipText="As dimensões (Colunas x Linhas) que o scanner adivinhou para este mapa.">
-                                    Dimensões
+                                 <TableHeaderWithTooltip tooltipText="Eixos encontrados e os seus respetivos endereços. RPM (Rotações por Minuto) e Carga (TPS/MAP).">
+                                    Eixos (X / Y)
                                 </TableHeaderWithTooltip>
                                  <TableHeaderWithTooltip tooltipText="O tipo de dados que o scanner acredita que o mapa usa (ex: 8-bit ou 16-bit).">
                                     Tipo de Dados
@@ -192,7 +206,12 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                 potentialMaps.map((map) => (
                                     <TableRow key={`${map.address}-${map.rows}x${map.cols}-${map.dataSize}`}>
                                         <TableCell className="font-mono">0x{map.address.toString(16).toUpperCase()}</TableCell>
-                                        <TableCell>{map.cols}x{map.rows}</TableCell>
+                                        <TableCell>
+                                           <div className="flex flex-col gap-1">
+                                                <AxisInfo map={map} axis="x" />
+                                                <AxisInfo map={map} axis="y" />
+                                           </div>
+                                        </TableCell>
                                         <TableCell className="text-muted-foreground text-xs">{map.dataType}</TableCell>
                                         <TableCell>
                                             <TooltipProvider>
@@ -217,7 +236,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <SuggestionIcon suggestion={map.suggestion} />
-                                                <span className="text-muted-foreground">{map.reason}</span>
+                                                <span className="text-muted-foreground text-xs">{map.reason}</span>
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-right">

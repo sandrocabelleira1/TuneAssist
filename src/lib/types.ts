@@ -8,6 +8,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -112,4 +113,7 @@ export type PotentialMap = {
     previewData?: number[][];
     xAxisAddress?: number;
     yAxisAddress?: number;
+    xAxisType?: 'RPM' | 'Carga' | 'Desconhecido';
+    yAxisType?: 'RPM' | 'Carga' | 'Desconhecido';
 }
+

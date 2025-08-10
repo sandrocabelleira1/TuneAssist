@@ -1,4 +1,5 @@
 
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
@@ -819,6 +820,8 @@ function readMapDataFromAddress(view: DataView, address: number, rows: number, c
 
 function calculateSequenceSmoothness(seq: number[] | null): number {
     if (!seq || seq.length < 5) return 0;
+    const isMonotonic = seq.every((val, i) => i === 0 || val >= seq[i-1]) || seq.every((val, i) => i === 0 || val <= seq[i-1]);
+    
     let nonMonotonicChanges = 0;
     const range = Math.max(...seq) - Math.min(...seq);
     if (range === 0) return 0.2; 
@@ -831,9 +834,10 @@ function calculateSequenceSmoothness(seq: number[] | null): number {
         }
     }
     const penalty = nonMonotonicChanges / seq.length;
-    return Math.max(0, 1 - penalty * 2);
+    let score = Math.max(0, 1 - penalty * 2);
+    if(isMonotonic) score = Math.min(1.0, score + 0.2); // Bonus for being fully monotonic
+    return score;
 }
-
 
 const COMMON_EQUATIONS: { name: string; equation: string; type: 'Ignition' | 'Fuel' | 'Lambda' | 'Temp' }[] = [
     { name: 'Bruto', equation: 'x', type: 'Fuel'},
@@ -901,6 +905,42 @@ function analyzeMapCharacteristics(mapData: number[][], equation: string): { sug
     }
 
     return { suggestion, reason, confidence };
+}
+
+
+function analyzeAxisCharacteristics(axisData: number[]): { type: 'RPM' | 'Carga' | 'Desconhecido', score: number } {
+    if (!axisData || axisData.length < 4) return { type: 'Desconhecido', score: 0 };
+    
+    const min = Math.min(...axisData);
+    const max = Math.max(...axisData);
+    
+    let rpmScore = 0;
+    let loadScore = 0;
+
+    // Is it monotonic? This is a strong indicator for any axis.
+    const isMonotonic = axisData.every((v, i) => i === 0 || v >= axisData[i-1]);
+    if (!isMonotonic) return { type: 'Desconhecido', score: 0 };
+
+    // RPM characteristics
+    if (max > 400) rpmScore += 0.4; // Typical RPM range
+    if (axisData.every(v => v % 50 === 0)) rpmScore += 0.3; // Numbers are 'round'
+    // Check for increasing step size
+    const steps = axisData.slice(1).map((v, i) => v - axisData[i]);
+    if (steps.every((s, i) => i === 0 || s >= steps[i-1])) rpmScore += 0.3;
+
+    // Load characteristics
+    if (max <= 105 && min >= 0) loadScore += 0.4; // Typical TPS/MAP range for NA
+    if (max > 105 && max <= 300) loadScore += 0.3; // Boosted MAP range
+    // Check for linear step size
+    if (steps.every(s => s === steps[0])) loadScore += 0.3;
+
+    if (rpmScore > loadScore) {
+        return { type: 'RPM', score: rpmScore };
+    } else if (loadScore > rpmScore) {
+        return { type: 'Carga', score: loadScore };
+    }
+
+    return { type: 'Desconhecido', score: 0 };
 }
 
 
@@ -973,20 +1013,30 @@ export async function scanForPotentialMaps(
                         }
 
                         let xAxisAddress, yAxisAddress;
+                        let xAxisType: 'RPM' | 'Carga' | 'Desconhecido' = 'Desconhecido';
+                        let yAxisType: 'RPM' | 'Carga' | 'Desconhecido' = 'Desconhecido';
                         const axisSearchRadius = 512;
                         const axisSearchStart = Math.max(0, address - axisSearchRadius);
                         
                         for (let axisAddr = axisSearchStart; axisAddr < address - dataType.size; axisAddr += dataType.size) {
                              if(foundAddresses.has(axisAddr)) continue;
 
-                             const xAxisCandidate = readDataFromAddress(view, axisAddr, cols, dataType.size, dataType.isBigEndian);
-                             if (!xAxisAddress && xAxisCandidate && calculateSequenceSmoothness(xAxisCandidate) > 0.8) {
-                                 xAxisAddress = axisAddr;
+                             const xAxisCandidateData = readDataFromAddress(view, axisAddr, cols, dataType.size, dataType.isBigEndian);
+                             if (xAxisCandidateData) {
+                                const analysis = analyzeAxisCharacteristics(xAxisCandidateData);
+                                if (analysis.score > 0.6) {
+                                    xAxisAddress = axisAddr;
+                                    xAxisType = analysis.type;
+                                }
                              }
                              
-                             const yAxisCandidate = readDataFromAddress(view, axisAddr, rows, dataType.size, dataType.isBigEndian);
-                             if(!yAxisAddress && yAxisCandidate && calculateSequenceSmoothness(yAxisCandidate) > 0.8) {
-                                 yAxisAddress = axisAddr;
+                             const yAxisCandidateData = readDataFromAddress(view, axisAddr, rows, dataType.size, dataType.isBigEndian);
+                             if (yAxisCandidateData) {
+                                const analysis = analyzeAxisCharacteristics(yAxisCandidateData);
+                                if (analysis.score > 0.6) {
+                                     yAxisAddress = axisAddr;
+                                     yAxisType = analysis.type;
+                                }
                              }
                         }
 
@@ -1002,6 +1052,8 @@ export async function scanForPotentialMaps(
                                 mapData,
                                 xAxisAddress,
                                 yAxisAddress,
+                                xAxisType,
+                                yAxisType
                             });
                         }
                     }
@@ -1024,6 +1076,8 @@ export async function scanForPotentialMaps(
                         previewData: bestDataType.mapData.slice(0, 5),
                         xAxisAddress: bestDataType.xAxisAddress,
                         yAxisAddress: bestDataType.yAxisAddress,
+                        xAxisType: bestDataType.xAxisType,
+                        yAxisType: bestDataType.yAxisType,
                     };
 
                     if (!bestGuessForAddress || currentGuess.confidence > bestGuessForAddress.confidence) {
@@ -1047,5 +1101,6 @@ export async function scanForPotentialMaps(
 }
 
 // #endregion
+
 
 
