@@ -886,7 +886,7 @@ export async function scanForPotentialMaps(
 ): Promise<PotentialMap[]> {
     const {
         minSize = 8,
-        maxSize = 20,
+        maxSize = 40,
         searchIncrement = 4,
         onProgress
     } = options;
@@ -915,8 +915,8 @@ export async function scanForPotentialMaps(
         let bestGuessForAddress: PotentialMap | null = null;
         
         for (const dataType of dataTypes) {
-             for (let cols = minSize; cols <= maxSize; cols += 2) {
-                for (let rows = minSize; rows <= maxSize; rows += 2) {
+             for (let cols = minSize; cols <= maxSize; cols += 1) {
+                for (let rows = minSize; rows <= maxSize; rows += 1) {
                     if (cols === rows) continue; 
                     
                     const rowStride = cols * dataType.size;
@@ -997,3 +997,4 @@ export async function scanForPotentialMaps(
 }
 
 // #endregion
+
