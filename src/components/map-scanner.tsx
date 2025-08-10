@@ -73,7 +73,8 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
         setPotentialMaps([]);
         addLog(`A iniciar análise com template: ${templateConfig.rows}x${templateConfig.cols} ${templateConfig.dataType}`, 'info');
         
-        await new Promise(resolve => setTimeout(resolve, 0));
+        // Give the UI a moment to update before starting the heavy task
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
             const config = {
@@ -97,7 +98,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
             addLog(msg, 'error');
         } finally {
             setIsScanning(false);
-            setScanProgress(0);
+            setScanProgress(100);
             setScanStatus("Concluído");
         }
     }, [binFile, addLog, setPotentialMaps, templateConfig]);
@@ -178,7 +179,16 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {potentialMaps.length > 0 ? (
+                            {isScanning ? (
+                                <TableRow>
+                                     <TableCell colSpan={6} className="h-24 text-center">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                            <span>A procurar...</span>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ) : potentialMaps.length > 0 ? (
                                 potentialMaps.map((map) => (
                                     <TableRow key={`${map.address}`}>
                                         <TableCell>
@@ -211,8 +221,8 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="h-24 text-center">
-                                        {isScanning ? "A procurar..." : "Defina um template e inicie a análise para encontrar mapas."}
+                                    <TableCell colSpan={6} className="h-24 text-center">
+                                        Defina um template e inicie a análise para encontrar mapas.
                                     </TableCell>
                                 </TableRow>
                             )}

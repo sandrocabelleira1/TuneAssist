@@ -1,4 +1,5 @@
 
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, TemplateAnalysisConfig } from './types';
 
 // #region Utility Functions
@@ -761,8 +762,8 @@ export function calculateCorrections(
 // #region Heuristic Map Scanner
 
 const COMMON_EQUATIONS: { name: string; equation: string; type: 'Ignition' | 'Fuel' | 'Lambda' | 'Temp' }[] = [
-    { name: 'Bruto', equation: 'x', type: 'Fuel'},
     { name: 'Ignição ° (Div/4)', equation: 'x/4', type: 'Ignition'},
+    { name: 'Bruto', equation: 'x', type: 'Fuel'},
     { name: 'Ignição ° (Bosch 0.75-48)', equation: 'x*0.75-48', type: 'Ignition'},
     { name: 'Ignição ° (VAG 0.25)', equation: 'x*0.25', type: 'Ignition' },
     { name: 'Ignição ° (Siemens 0.5)', equation: 'x*0.5', type: 'Ignition' },
@@ -884,85 +885,92 @@ export async function scanForMapsWithTemplate(
     confidenceThreshold?: number;
   }
 ): Promise<PotentialMap[]> {
-    const { onProgress, confidenceThreshold = 0.5 } = options;
-    const { rows, cols, dataSize, isBigEndian } = config;
-    const results: PotentialMap[] = [];
-    const view = new DataView(binBuffer);
-    const totalLength = binBuffer.byteLength;
-    const searchIncrement = 4; // Scan every 4 bytes
-    const mapByteSize = rows * cols * dataSize;
-    const dataType = `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
+  return new Promise(async (resolve, reject) => {
+    try {
+        const { onProgress, confidenceThreshold = 0.5 } = options;
+        const { rows, cols, dataSize, isBigEndian } = config;
+        const results: PotentialMap[] = [];
+        const view = new DataView(binBuffer);
+        const totalLength = binBuffer.byteLength;
+        const searchIncrement = 4; // Scan every 4 bytes
+        const mapByteSize = rows * cols * dataSize;
+        const dataType = `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
 
-    const CHUNK_SIZE = 50000; // Process 50k addresses at a time
-    let currentAddress = 0;
+        const CHUNK_SIZE = 50000; // Process 50k addresses at a time
+        let currentAddress = 0;
 
-    while (currentAddress < totalLength) {
-        const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
-        
-        if (onProgress) {
-            onProgress((currentAddress / totalLength) * 100, `Analisando 0x${currentAddress.toString(16)}...`);
-        }
+        while (currentAddress < totalLength) {
+            const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength);
+            
+            if (onProgress) {
+                onProgress((currentAddress / totalLength) * 100, `Analisando 0x${currentAddress.toString(16)}...`);
+            }
 
-        // Yield to the main thread to prevent UI freezing
-        await new Promise(resolve => setTimeout(resolve, 0));
+            // Yield to the main thread to prevent UI freezing
+            await new Promise(r => setTimeout(r, 0));
 
-        for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
-            const mapData = readDataFromAddress(view, address, rows * cols, dataSize, isBigEndian);
-            if (!mapData) continue;
+            for (let address = currentAddress; address < chunkEnd - mapByteSize; address += searchIncrement) {
+                const mapData = readDataFromAddress(view, address, rows * cols, dataSize, isBigEndian);
+                if (!mapData) continue;
 
-            const map2D = Array.from({ length: rows }, (_, r) => mapData.slice(r * cols, (r + 1) * cols));
-            const mapSmoothness = calculateMapSmoothness(map2D);
+                const map2D = Array.from({ length: rows }, (_, r) => mapData.slice(r * cols, (r + 1) * cols));
+                const mapSmoothness = calculateMapSmoothness(map2D);
 
-            if (mapSmoothness < 0.3) continue;
+                if (mapSmoothness < 0.3) continue;
 
-            let bestEq = { suggestion: 'Genérico', confidence: 0, equation: 'x' };
-            for (const eq of COMMON_EQUATIONS) {
-                const analysis = analyzeMapCharacteristics(map2D, eq.equation);
-                if (analysis.confidence > bestEq.confidence) {
-                    bestEq = { ...analysis, equation: eq.equation };
+                let bestEq = { suggestion: 'Genérico', confidence: 0, equation: 'x' };
+                for (const eq of COMMON_EQUATIONS) {
+                    const analysis = analyzeMapCharacteristics(map2D, eq.equation);
+                    if (analysis.confidence > bestEq.confidence) {
+                        bestEq = { ...analysis, equation: eq.equation };
+                    }
+                }
+
+                const totalConfidence = (bestEq.confidence * 0.7) + (mapSmoothness * 0.3);
+
+                if (totalConfidence >= confidenceThreshold) {
+                    results.push({
+                        address,
+                        rows,
+                        cols,
+                        dataSize,
+                        isBigEndian,
+                        dataType,
+                        confidence: totalConfidence,
+                        suggestion: bestEq.suggestion,
+                        equation: bestEq.equation,
+                        previewData: map2D,
+                        // Axis data is not determined in this simplified scan
+                        xAxisAddress: undefined,
+                        yAxisAddress: undefined,
+                        xAxisType: 'Desconhecido',
+                        yAxisType: 'Desconhecido'
+                    });
                 }
             }
+            currentAddress = chunkEnd;
+        }
 
-            const totalConfidence = (bestEq.confidence * 0.7) + (mapSmoothness * 0.3);
 
-            if (totalConfidence >= confidenceThreshold) {
-                results.push({
-                    address,
-                    rows,
-                    cols,
-                    dataSize,
-                    isBigEndian,
-                    dataType,
-                    confidence: totalConfidence,
-                    suggestion: bestEq.suggestion,
-                    equation: bestEq.equation,
-                    previewData: map2D,
-                    // Axis data is not determined in this simplified scan
-                    xAxisAddress: undefined,
-                    yAxisAddress: undefined,
-                    xAxisType: 'Desconhecido',
-                    yAxisType: 'Desconhecido'
-                });
+        if (onProgress) onProgress(100, "Finalizando...");
+        results.sort((a, b) => b.confidence - a.confidence);
+
+        const uniqueResults: PotentialMap[] = [];
+        const foundAddresses = new Set<number>();
+        for (const res of results) {
+            if (!foundAddresses.has(res.address)) {
+                uniqueResults.push(res);
+                foundAddresses.add(res.address);
             }
         }
-        currentAddress = chunkEnd;
+        
+        resolve(uniqueResults);
+    } catch(err) {
+        reject(err);
     }
-
-
-    if (onProgress) onProgress(100, "Finalizando...");
-    results.sort((a, b) => b.confidence - a.confidence);
-
-    const uniqueResults: PotentialMap[] = [];
-    const foundAddresses = new Set<number>();
-    for (const res of results) {
-        if (!foundAddresses.has(res.address)) {
-            uniqueResults.push(res);
-            foundAddresses.add(res.address);
-        }
-    }
-    
-    return uniqueResults;
+  });
 }
 
 
 // #endregion
+
