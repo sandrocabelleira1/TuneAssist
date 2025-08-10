@@ -2,7 +2,8 @@
 
 
 
-import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, TemplateAnalysisConfig } from './types';
+
+import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
 
@@ -1099,6 +1100,8 @@ export async function scanForPotentialMaps(
 }
 
 // #endregion
+
+
 
 
 

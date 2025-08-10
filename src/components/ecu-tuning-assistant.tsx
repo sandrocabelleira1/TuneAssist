@@ -14,14 +14,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections, scanForPotentialMaps } from '@/lib/ecu';
-import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, IgnitionTimingPoint, PotentialMap } from '@/lib/types';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
+import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getHeatmapColor, getTextColorForBackground, getPlotlyHeatmapScale } from '@/lib/colors';
+import { getHeatmapColor, getTextColorForBackground } from '@/lib/colors';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -994,6 +994,7 @@ export default function EcuTuningAssistant() {
                 address: map.xAxisAddress,
                 dataSize: map.dataSize,
                 isBigEndian: map.isBigEndian,
+                equation: 'x'
             },
             yAxisDef: {
                 label: map.yAxisType || 'Eixo Y (scan)',
@@ -1002,6 +1003,7 @@ export default function EcuTuningAssistant() {
                 address: map.yAxisAddress,
                 dataSize: map.dataSize,
                 isBigEndian: map.isBigEndian,
+                equation: 'x'
             }
         };
 
@@ -1710,3 +1712,4 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
+
