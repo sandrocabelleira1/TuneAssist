@@ -1,3 +1,4 @@
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, TemplateAnalysisConfig } from './types';
 
 // #region Utility Functions
@@ -794,81 +795,6 @@ function readDataFromAddress(view: DataView, address: number, count: number, ite
     return data;
 }
 
-function calculateSequenceSmoothness(data: number[] | null): { score: number, isMonotonic: boolean, avgStep: number } {
-    if (!data || data.length < 3) return { score: 0, isMonotonic: false, avgStep: 0 };
-
-    let diffs = 0;
-    let steps = 0;
-    let directionChanges = 0;
-    const initialDirection = data[1] - data[0];
-    let lastDirection = Math.sign(initialDirection);
-
-    for (let i = 0; i < data.length - 1; i++) {
-        const diff = data[i+1] - data[i];
-        const currentDirection = Math.sign(diff);
-        if(currentDirection !== 0 && lastDirection !== 0 && currentDirection !== lastDirection) {
-            directionChanges++;
-        }
-        if(currentDirection !== 0) {
-            lastDirection = currentDirection;
-        }
-        diffs += Math.abs(diff);
-        steps++;
-    }
-
-    const isMonotonic = directionChanges <= 1; // Allow one change for noise
-    const avgStep = steps > 0 ? diffs / steps : 0;
-    
-    // Score based on monotonicity and consistency of steps
-    let score = isMonotonic ? 0.7 : 0.1;
-    if (isMonotonic && avgStep > 0) {
-        const stepStdDev = Math.sqrt(data.slice(0, -1).reduce((sum, _, i) => sum + Math.pow((data[i+1] - data[i]) - avgStep, 2), 0) / steps);
-        score += Math.max(0, 0.3 * (1 - (stepStdDev / avgStep)));
-    }
-    
-    return { score, isMonotonic, avgStep };
-}
-
-function analyzeAxisCharacteristics(axisData: number[], dataSize: number): { type: 'RPM' | 'Carga' | 'Desconhecido', confidence: number } {
-    if (axisData.length < 3) return { type: 'Desconhecido', confidence: 0 };
-
-    const { score, isMonotonic, avgStep } = calculateSequenceSmoothness(axisData);
-    if (!isMonotonic || score < 0.6) return { type: 'Desconhecido', confidence: score * 0.5 };
-
-    const min = Math.min(...axisData);
-    const max = Math.max(...axisData);
-
-    // RPM check
-    let rpmConfidence = 0;
-    if (max > 500 && max <= 16000 && min >= 0) {
-        rpmConfidence = 0.6;
-        if (max > 4000) rpmConfidence += 0.1;
-        // Check if values are mostly round numbers (e.g., multiples of 50)
-        const roundCount = axisData.filter(v => v % 50 === 0).length;
-        if ((roundCount / axisData.length) > 0.7) rpmConfidence += 0.2;
-    }
-
-    // Load check
-    let loadConfidence = 0;
-    if (max <= 260 && min >= 0) { // Covers % (0-100) and pressure (e.g. 255 for MAP)
-        loadConfidence = 0.6;
-        if (max <= 105 && min >= 0) loadConfidence += 0.2; // Likely TPS %
-        if(avgStep > 5 && avgStep < 20) loadConfidence += 0.1; // Common step for load axes
-    }
-    
-    rpmConfidence *= score; // Factor in smoothness
-    loadConfidence *= score;
-    
-    if (rpmConfidence > loadConfidence && rpmConfidence > 0.5) {
-        return { type: 'RPM', confidence: rpmConfidence };
-    }
-    if (loadConfidence > rpmConfidence && loadConfidence > 0.5) {
-        return { type: 'Carga', confidence: loadConfidence };
-    }
-    
-    return { type: 'Desconhecido', confidence: Math.max(rpmConfidence, loadConfidence, score * 0.5) };
-}
-
 function calculateMapSmoothness(mapData: number[][]): number {
     if (!mapData || mapData.length < 2 || mapData[0].length < 2) return 0;
     
@@ -919,7 +845,7 @@ function analyzeMapCharacteristics(mapData: number[][], equation: string): { sug
 
     switch (mapType) {
         case 'Ignition':
-            if (max > 0 && max < 70 && min >= -20 && (max - min) > 10) {
+            if (max > -10 && max < 60 && min >= -20 && (max - min) > 10) {
                 confidence = 0.7;
                 if(max - min > 25) confidence += 0.15;
             }
@@ -945,151 +871,91 @@ function analyzeMapCharacteristics(mapData: number[][], equation: string): { sug
 }
 
 
-export async function scanForPotentialMaps(
+export async function scanForMapsWithTemplate(
   binBuffer: ArrayBuffer,
+  config: {
+    rows: number;
+    cols: number;
+    dataSize: number;
+    isBigEndian: boolean;
+  },
   options: {
     onProgress?: (progress: number, status: string) => void;
     confidenceThreshold?: number;
   }
 ): Promise<PotentialMap[]> {
-    const { onProgress, confidenceThreshold = 0.65 } = options;
+    const { onProgress, confidenceThreshold = 0.5 } = options;
+    const { rows, cols, dataSize, isBigEndian } = config;
     const results: PotentialMap[] = [];
     const view = new DataView(binBuffer);
     const totalLength = binBuffer.byteLength;
-    const searchIncrement = 4;
-    const searchSizes = { rows: [8, 10, 12, 16, 19, 20, 24, 32], cols: [8, 10, 12, 16, 19, 20, 24, 32] };
-    const dataTypes = [{size: 1, be: false, name: '8-bit'}, {size: 2, be: false, name: '16-bit LE'}, {size: 2, be: true, name: '16-bit BE'}];
-    
-    const CHUNK_SIZE = 50000;
+    const searchIncrement = 4; // Scan every 4 bytes
+    const mapByteSize = rows * cols * dataSize;
+    const dataType = `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
+
+    const CHUNK_SIZE = 50000; // Process 50k addresses at a time
     let currentAddress = 0;
 
     while (currentAddress < totalLength) {
-        const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength);
-
+        const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
+        
         if (onProgress) {
             onProgress((currentAddress / totalLength) * 100, `Analisando 0x${currentAddress.toString(16)}...`);
         }
-        
-        // This is the key part that prevents the UI from freezing.
-        // It yields control back to the browser's event loop.
+
+        // Yield to the main thread to prevent UI freezing
         await new Promise(resolve => setTimeout(resolve, 0));
 
         for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
-             // 1. Find potential axes first
-            for (const itemSize of [1, 2]) {
-                for (const isBe of [false, true]) {
-                    if (itemSize === 1 && isBe) continue; // 8-bit is not endian-dependent
+            const mapData = readDataFromAddress(view, address, rows * cols, dataSize, isBigEndian);
+            if (!mapData) continue;
 
-                    for (const axisLen of searchSizes.rows.concat(searchSizes.cols)) {
-                        const axisData = readDataFromAddress(view, address, axisLen, itemSize, isBe);
-                        if (!axisData) continue;
-                        
-                        const axisAnalysis = analyzeAxisCharacteristics(axisData, itemSize);
-                        if (axisAnalysis.confidence < 0.7) continue;
+            const map2D = Array.from({ length: rows }, (_, r) => mapData.slice(r * cols, (r + 1) * cols));
+            const mapSmoothness = calculateMapSmoothness(map2D);
 
-                        // Found a potential axis, now look for a map and the other axis nearby
-                        const mapRows = axisAnalysis.type === 'RPM' ? axisLen : 0;
-                        const mapCols = axisAnalysis.type === 'Carga' ? axisLen : 0;
+            if (mapSmoothness < 0.3) continue;
 
-                        // This part is complex: finding the corresponding map and other axis.
-                        // For now, let's simplify and just find maps near this axis.
-                        const searchRadius = 512;
-                        const start = Math.max(0, address - searchRadius);
-                        const end = Math.min(totalLength, address + axisLen * itemSize + searchRadius);
-                        
-                        // This nested loop makes it very slow. This needs optimization.
-                        // Let's defer full axis-map pairing and focus on finding individual components first.
-                        // Or, we find a map, then look for axes around it.
-                    }
+            let bestEq = { suggestion: 'Genérico', confidence: 0, equation: 'x' };
+            for (const eq of COMMON_EQUATIONS) {
+                const analysis = analyzeMapCharacteristics(map2D, eq.equation);
+                if (analysis.confidence > bestEq.confidence) {
+                    bestEq = { ...analysis, equation: eq.equation };
                 }
             }
-        }
 
+            const totalConfidence = (bestEq.confidence * 0.7) + (mapSmoothness * 0.3);
 
-        for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
-            for (const rows of searchSizes.rows) {
-                for (const cols of searchSizes.cols) {
-                    for (const dataType of dataTypes) {
-                        const mapData = readDataFromAddress(view, address, rows * cols, dataType.size, dataType.be);
-                        if (!mapData) continue;
-
-                        const map2D = Array.from({ length: rows }, (_, r) => mapData.slice(r * cols, (r + 1) * cols));
-                        const mapSmoothness = calculateMapSmoothness(map2D);
-                        if (mapSmoothness < 0.4) continue;
-
-                        let bestEq = { suggestion: 'Genérico', confidence: 0, equation: 'x' };
-                        for(const eq of COMMON_EQUATIONS) {
-                            const analysis = analyzeMapCharacteristics(map2D, eq.equation);
-                            if(analysis.confidence > bestEq.confidence) {
-                                bestEq = {...analysis, equation: eq.equation};
-                            }
-                        }
-
-                        let totalConfidence = (bestEq.confidence * 0.7) + (mapSmoothness * 0.3);
-
-                        // Look for axes nearby to boost confidence
-                        let yAxis: any = null, xAxis: any = null;
-                        const AXIS_SEARCH_RADIUS = 512;
-
-                        // Look before the map for axes
-                        const startSearch = Math.max(0, address - AXIS_SEARCH_RADIUS);
-                        for(let axisAddr = startSearch; axisAddr < address; axisAddr += 2) {
-                            // Y-Axis (Rows)
-                            const yData = readDataFromAddress(view, axisAddr, rows, dataType.size, dataType.be);
-                            if(yData) {
-                                const yAnalysis = analyzeAxisCharacteristics(yData, dataType.size);
-                                if (yAnalysis.confidence > 0.7 && (!yAxis || yAnalysis.confidence > yAxis.confidence)) {
-                                    yAxis = { ...yAnalysis, address: axisAddr };
-                                }
-                            }
-                            // X-Axis (Cols)
-                             const xData = readDataFromAddress(view, axisAddr, cols, dataType.size, dataType.be);
-                            if(xData) {
-                                const xAnalysis = analyzeAxisCharacteristics(xData, dataType.size);
-                                 if (xAnalysis.confidence > 0.7 && (!xAxis || xAnalysis.confidence > xAxis.confidence)) {
-                                    xAxis = { ...xAnalysis, address: axisAddr };
-                                }
-                            }
-                        }
-
-                        if(xAxis && yAxis && xAxis.type !== yAxis.type) {
-                            totalConfidence = Math.min(1, totalConfidence + 0.2 + (xAxis.confidence + yAxis.confidence) / 10);
-                        } else if (xAxis || yAxis) {
-                            totalConfidence = Math.min(1, totalConfidence + 0.1);
-                        }
-
-                        if (totalConfidence >= confidenceThreshold) {
-                            results.push({
-                                address,
-                                rows,
-                                cols,
-                                dataSize: dataType.size,
-                                isBigEndian: dataType.be,
-                                dataType: dataType.name,
-                                confidence: totalConfidence,
-                                suggestion: bestEq.suggestion,
-                                equation: bestEq.equation,
-                                xAxisAddress: xAxis?.address,
-                                yAxisAddress: yAxis?.address,
-                                xAxisType: xAxis?.type || 'Desconhecido',
-                                yAxisType: yAxis?.type || 'Desconhecido'
-                            });
-                        }
-                    }
-                }
+            if (totalConfidence >= confidenceThreshold) {
+                results.push({
+                    address,
+                    rows,
+                    cols,
+                    dataSize,
+                    isBigEndian,
+                    dataType,
+                    confidence: totalConfidence,
+                    suggestion: bestEq.suggestion,
+                    equation: bestEq.equation,
+                    previewData: map2D,
+                    // Axis data is not determined in this simplified scan
+                    xAxisAddress: undefined,
+                    yAxisAddress: undefined,
+                    xAxisType: 'Desconhecido',
+                    yAxisType: 'Desconhecido'
+                });
             }
         }
         currentAddress = chunkEnd;
     }
 
+
     if (onProgress) onProgress(100, "Finalizando...");
     results.sort((a, b) => b.confidence - a.confidence);
 
-    // Filter out duplicates (maps found with slightly different parameters but same address)
     const uniqueResults: PotentialMap[] = [];
     const foundAddresses = new Set<number>();
-    for(const res of results) {
-        if(!foundAddresses.has(res.address)) {
+    for (const res of results) {
+        if (!foundAddresses.has(res.address)) {
             uniqueResults.push(res);
             foundAddresses.add(res.address);
         }
@@ -1097,5 +963,6 @@ export async function scanForPotentialMaps(
     
     return uniqueResults;
 }
+
 
 // #endregion

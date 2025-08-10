@@ -12,6 +12,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -112,6 +113,7 @@ export type PotentialMap = {
     suggestion: string;
     dataType: string;
     equation: string;
+    previewData?: number[][]; // For sparkline
     xAxisAddress?: number;
     yAxisAddress?: number;
     xAxisType: 'RPM' | 'Carga' | 'Desconhecido';
@@ -125,4 +127,5 @@ export type TemplateAnalysisConfig = {
     dataType: 'uint8' | 'uint16le' | 'uint16be';
     equation: string;
 }
+
 
