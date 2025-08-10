@@ -9,9 +9,9 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import type { PlotlyHTMLElement, Config, Data, Layout } from 'plotly.js';
 
 interface SurfacePlot3DProps extends React.HTMLAttributes<HTMLDivElement> {
-  mapData: MapData; 
-  xAxis: (string | number)[]; 
-  yAxis: (string | number)[]; 
+  mapData: MapData | null; 
+  xAxis: (string | number)[] | null; 
+  yAxis: (string | number)[] | null; 
   xAxisLabel?: string; 
   yAxisLabel?: string;
   zAxisLabel?: string;
@@ -32,6 +32,10 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
   }, []);
 
   const { plotData, layout } = useMemo(() => {
+    if (!mapData || !xAxis || !yAxis) {
+         return { plotData: null, layout: null };
+    }
+
     const isXNumeric = xAxis.every(v => typeof v === 'number' && isFinite(v));
     const isYNumeric = yAxis.every(v => typeof v === 'number' && isFinite(v));
 

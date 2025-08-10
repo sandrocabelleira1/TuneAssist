@@ -9,6 +9,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -117,3 +118,15 @@ export type PotentialMap = {
     yAxisType?: 'RPM' | 'Carga' | 'Desconhecido';
 }
 
+export type TemplateAnalysisConfig = {
+    rows: number;
+    cols: number;
+    rpmMin: number;
+    rpmMax: number;
+    loadMin: number;
+    loadMax: number;
+    address: string | number; // hex string from input, number for processing
+    dataLength: number; // in bytes
+    dataType: 'uint8' | 'uint16le' | 'uint16be';
+    equation: string;
+}
