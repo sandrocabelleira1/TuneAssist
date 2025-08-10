@@ -763,11 +763,10 @@ export function calculateCorrections(
 function readDataFromAddress(view: DataView, address: number, count: number, itemSize: number, isBigEndian: boolean): number[] | null {
     const data: number[] = [];
     const byteSize = count * itemSize;
-    const littleEndian = !isBigEndian;
-
     if (address + byteSize > view.byteLength) {
         return null;
     }
+    const littleEndian = !isBigEndian;
 
     for (let i = 0; i < count; i++) {
         const offset = address + (i * itemSize);
@@ -788,6 +787,9 @@ function readDataFromAddress(view: DataView, address: number, count: number, ite
 
 function readMapDataFromAddress(view: DataView, address: number, rows: number, cols: number, itemSize: number, isBigEndian: boolean, rowStride: number): number[][] | null {
     const mapData: number[][] = [];
+    if (address + (rows * rowStride) > view.byteLength) {
+        return null;
+    }
     const littleEndian = !isBigEndian;
 
     for(let r = 0; r < rows; r++) {
@@ -849,7 +851,7 @@ function analyzeMapCharacteristics(mapData: number[][], equation: string): { sug
     }
     
     const calculatedData = mapData.map(row => row.map(cell => evaluateEquation(equation, cell)));
-    const flatData = calculatedData.flat().filter(v => v !== null && !isNaN(v));
+    const flatData = calculatedData.flat().filter(v => v !== null && !isNaN(v) && isFinite(v));
 
     if (flatData.length < 10) {
         return { suggestion: 'Desconhecido', reason: 'Dados insuficientes', confidence: 0 };
@@ -859,21 +861,48 @@ function analyzeMapCharacteristics(mapData: number[][], equation: string): { sug
     const max = Math.max(...flatData);
     const eqPart = equation === 'x' ? 'bruto' : `eq: ${equation}`;
     
+    let confidence = 0;
+    let suggestion = 'Genérico';
+    let reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
+
+    // Ignition check
     if (max > 5 && max < 70 && min >= -20) {
-        return { suggestion: 'Ignição', reason: `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`, confidence: 0.7 };
+        suggestion = 'Ignição';
+        reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
+        confidence = 0.7; // Base confidence
+        if(max - min > 20) confidence += 0.1; // Wider range is more likely
     }
-    if (max > 30 && max < 255 && min >= 0) {
-         return { suggestion: 'Combustível (VE)', reason: `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`, confidence: 0.6 };
+    // Fuel (VE) check
+    else if (max > 30 && max < 255 && min >= 0) {
+        suggestion = 'Combustível (VE)';
+        reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
+        confidence = 0.6;
     }
-    if (max < 2 && max > 0.5 && min > 0.5) {
-         return { suggestion: 'Lambda Alvo', reason: `Valores [${min.toFixed(2)}, ${max.toFixed(2)}] com ${eqPart}`, confidence: 0.8 };
+    // Lambda Target check
+    else if (max < 2 && max > 0.5 && min > 0.5) {
+        suggestion = 'Lambda Alvo';
+        reason = `Valores [${min.toFixed(2)}, ${max.toFixed(2)}] com ${eqPart}`;
+        confidence = 0.8;
     }
-    if (max > -20 && max < 140 && min <= 0) {
-         return { suggestion: 'Temperatura', reason: `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`, confidence: 0.75 };
+    // Temperature check
+    else if (max > -20 && max < 140 && min <= 0) {
+        suggestion = 'Temperatura';
+        reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
+        confidence = 0.75;
+    }
+    // Generic
+    else {
+        confidence = 0.2;
     }
 
-    return { suggestion: 'Genérico', reason: `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`, confidence: 0.2 };
+    // Penalize if all values are identical
+    if (max === min) {
+        confidence *= 0.1; // Greatly reduce confidence for flat maps
+    }
+
+    return { suggestion, reason, confidence };
 }
+
 
 export async function scanForPotentialMaps(
   binBuffer: ArrayBuffer,
@@ -914,11 +943,13 @@ export async function scanForPotentialMaps(
         
         let bestGuessForAddress: PotentialMap | null = null;
         
-        for (const dataType of dataTypes) {
-             for (let cols = minSize; cols <= maxSize; cols += 1) {
-                for (let rows = minSize; rows <= maxSize; rows += 1) {
-                    if (cols === rows) continue; 
-                    
+        for (let rows = minSize; rows <= maxSize; rows += 1) {
+            for (let cols = minSize; cols <= maxSize; cols += 1) {
+                if (cols === rows) continue; 
+                
+                const dataTypeScores = [];
+
+                for (const dataType of dataTypes) {
                     const rowStride = cols * dataType.size;
                     const mapByteSize = rows * rowStride;
                     if (address + mapByteSize >= binBuffer.byteLength) continue;
@@ -949,35 +980,54 @@ export async function scanForPotentialMaps(
                              if(foundAddresses.has(axisAddr)) continue;
 
                              const xAxisCandidate = readDataFromAddress(view, axisAddr, cols, dataType.size, dataType.isBigEndian);
-                             if (xAxisCandidate && calculateSequenceSmoothness(xAxisCandidate) > 0.8) {
+                             if (!xAxisAddress && xAxisCandidate && calculateSequenceSmoothness(xAxisCandidate) > 0.8) {
                                  xAxisAddress = axisAddr;
                              }
                              
                              const yAxisCandidate = readDataFromAddress(view, axisAddr, rows, dataType.size, dataType.isBigEndian);
-                             if(yAxisCandidate && calculateSequenceSmoothness(yAxisCandidate) > 0.8) {
+                             if(!yAxisAddress && yAxisCandidate && calculateSequenceSmoothness(yAxisCandidate) > 0.8) {
                                  yAxisAddress = axisAddr;
                              }
                         }
-                        
-                        const currentGuess: PotentialMap = {
-                            address,
-                            rows,
-                            cols,
-                            confidence: bestAnalysis.confidence,
-                            suggestion: bestAnalysis.suggestion,
-                            reason: bestAnalysis.reason,
-                            dataSize: dataType.size,
-                            isBigEndian: dataType.isBigEndian, 
-                            dataType: dataType.name,
-                            equation: bestAnalysis.equation || 'x',
-                            previewData: mapData.slice(0, 5),
-                            xAxisAddress,
-                            yAxisAddress,
-                        };
 
-                        if (!bestGuessForAddress || currentGuess.confidence > bestGuessForAddress.confidence) {
-                            bestGuessForAddress = currentGuess;
+                        if(bestAnalysis.confidence > 0.25) {
+                            dataTypeScores.push({
+                                confidence: bestAnalysis.confidence,
+                                dataType: dataType.name,
+                                dataSize: dataType.size,
+                                isBigEndian: dataType.isBigEndian,
+                                suggestion: bestAnalysis.suggestion,
+                                reason: bestAnalysis.reason,
+                                equation: bestAnalysis.equation,
+                                mapData,
+                                xAxisAddress,
+                                yAxisAddress,
+                            });
                         }
+                    }
+                }
+
+                if (dataTypeScores.length > 0) {
+                    const bestDataType = dataTypeScores.sort((a,b) => b.confidence - a.confidence)[0];
+
+                    const currentGuess: PotentialMap = {
+                        address,
+                        rows,
+                        cols,
+                        confidence: bestDataType.confidence,
+                        suggestion: bestDataType.suggestion,
+                        reason: bestDataType.reason,
+                        dataSize: bestDataType.dataSize,
+                        isBigEndian: bestDataType.isBigEndian, 
+                        dataType: bestDataType.dataType,
+                        equation: bestDataType.equation,
+                        previewData: bestDataType.mapData.slice(0, 5),
+                        xAxisAddress: bestDataType.xAxisAddress,
+                        yAxisAddress: bestDataType.yAxisAddress,
+                    };
+
+                    if (!bestGuessForAddress || currentGuess.confidence > bestGuessForAddress.confidence) {
+                        bestGuessForAddress = currentGuess;
                     }
                 }
             }
@@ -997,4 +1047,5 @@ export async function scanForPotentialMaps(
 }
 
 // #endregion
+
 
