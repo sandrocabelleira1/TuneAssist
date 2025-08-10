@@ -1,8 +1,3 @@
-
-
-
-
-
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
@@ -844,6 +839,7 @@ function calculateSequenceSmoothness(seq: number[] | null): number {
 
 export const COMMON_EQUATIONS: { name: string; equation: string; type: 'Ignition' | 'Fuel' | 'Lambda' | 'Temp' }[] = [
     { name: 'Bruto', equation: 'x', type: 'Fuel'},
+    { name: 'Ignição ° (Div/4)', equation: 'x/4', type: 'Ignition'},
     { name: 'Ignição ° (Bosch 0.75-48)', equation: 'x*0.75-48', type: 'Ignition'},
     { name: 'Ignição ° (VAG 0.25)', equation: 'x*0.25', type: 'Ignition' },
     { name: 'Ignição ° (Siemens 0.5)', equation: 'x*0.5', type: 'Ignition' },
@@ -872,12 +868,12 @@ function analyzeMapCharacteristics(mapData: number[][], equation: string): { sug
     let suggestion = 'Genérico';
     let reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
 
-    // Ignition check
+    // Ignition check - more weight for plausible ranges
     if (max > 5 && max < 70 && min >= -20 && (max - min) > 15) {
         suggestion = 'Ignição';
         reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
-        confidence = 0.7; // Base confidence
-        if(max - min > 20) confidence += 0.1; // Wider range is more likely
+        confidence = 0.7; // Base confidence for ignition-like range
+        if(max - min > 25) confidence += 0.15; // Wider range is more likely
     }
     // Fuel (VE) check
     else if (max > 30 && max < 255 && min >= 0) {
@@ -1100,10 +1096,3 @@ export async function scanForPotentialMaps(
 }
 
 // #endregion
-
-
-
-
-
-
-
