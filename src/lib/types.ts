@@ -11,6 +11,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -109,25 +110,19 @@ export type PotentialMap = {
     isBigEndian: boolean;
     confidence: number; // A score from 0 to 1
     suggestion: string;
-    reason: string;
     dataType: string;
     equation: string;
-    previewData?: number[][];
     xAxisAddress?: number;
     yAxisAddress?: number;
-    xAxisType?: 'RPM' | 'Carga' | 'Desconhecido';
-    yAxisType?: 'RPM' | 'Carga' | 'Desconhecido';
+    xAxisType: 'RPM' | 'Carga' | 'Desconhecido';
+    yAxisType: 'RPM' | 'Carga' | 'Desconhecido';
 }
 
 export type TemplateAnalysisConfig = {
+    address: number;
     rows: number;
     cols: number;
-    rpmMin: number;
-    rpmMax: number;
-    loadMin: number;
-    loadMax: number;
-    address: string | number; // hex string from input, number for processing
-    dataLength: number; // in bytes
     dataType: 'uint8' | 'uint16le' | 'uint16be';
     equation: string;
 }
+

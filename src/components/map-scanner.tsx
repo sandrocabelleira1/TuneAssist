@@ -7,9 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Loader2, Search, DownloadCloud, Microscope } from 'lucide-react';
+import { AlertTriangle, Loader2, Search, DownloadCloud, Microscope, Rss, Gauge } from 'lucide-react';
 import type { LogMessage, PotentialMap } from '@/lib/types';
-import { scanForMapsWithTemplate } from '@/lib/ecu';
+import { scanForPotentialMaps } from '@/lib/ecu';
 import { Progress } from '@/components/ui/progress';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 const SparkLinePreview = ({ data }: { data: number[][] | undefined }) => {
     if (!data || data.length === 0) return null;
@@ -54,9 +55,7 @@ interface MapScannerProps {
 export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, setPotentialMaps }: MapScannerProps) {
     const [isScanning, setIsScanning] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
-    const [rows, setRows] = useState('32');
-    const [cols, setCols] = useState('19');
-    const [dataType, setDataType] = useState<'uint8' | 'uint16le' | 'uint16be'>('uint8');
+    const [scanStatus, setScanStatus] = useState('Aguardando...');
 
     const handleScan = useCallback(async () => {
         if (!binFile) {
@@ -64,40 +63,33 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
             return;
         }
 
-        const numRows = parseInt(rows, 10);
-        const numCols = parseInt(cols, 10);
-
-        if (isNaN(numRows) || isNaN(numCols) || numRows <= 0 || numCols <= 0) {
-            addLog("Dimensões de linhas e colunas inválidas.", 'error');
-            return;
-        }
-
         setIsScanning(true);
         setScanProgress(0);
         setPotentialMaps([]);
-        addLog(`A iniciar o scan com template ${numRows}x${numCols} (${dataType})...`, 'info');
+        addLog(`A iniciar o scan heurístico do ficheiro BIN...`, 'info');
+        setScanStatus("A iniciar...");
         
-        const updateProgress = (progress: number) => {
-            setScanProgress(progress);
-        };
+        // Allow UI to update before blocking
+        await new Promise(resolve => setTimeout(resolve, 0));
 
         try {
-            const results = await scanForMapsWithTemplate(binFile.buffer, {
-                rows: numRows,
-                cols: numCols,
-                dataType: dataType,
-                onProgress: updateProgress,
+            const results = await scanForPotentialMaps(binFile.buffer, {
+                onProgress: (progress, status) => {
+                    setScanProgress(progress);
+                    setScanStatus(status);
+                },
             });
             setPotentialMaps(results);
-            addLog(`Scan concluído. Encontrados ${results.length} mapas potenciais com o template.`, 'success');
+            addLog(`Scan concluído. Encontrados ${results.length} mapas potenciais.`, 'success');
         } catch (error) {
             const msg = `Erro durante o scan: ${(error as Error).message}`;
             addLog(msg, 'error');
         } finally {
             setIsScanning(false);
             setScanProgress(0);
+            setScanStatus("Concluído");
         }
-    }, [binFile, addLog, setPotentialMaps, rows, cols, dataType]);
+    }, [binFile, addLog, setPotentialMaps]);
 
     if (!binFile) {
         return (
@@ -113,55 +105,26 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
         <div className="flex flex-col h-full gap-4">
             <Card className="shrink-0">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Microscope /> Análise com Template</CardTitle>
+                    <CardTitle className="flex items-center gap-2"><Microscope /> Scanner Heurístico Inteligente</CardTitle>
                     <CardDescription>
-                       Defina as dimensões da grelha (template) que pretende encontrar. O motor irá varrer o ficheiro BIN à procura de todos os blocos de dados que correspondam a este template e que se pareçam com mapas de motor funcionais.
+                       O motor irá varrer o ficheiro BIN à procura de eixos (RPM, Carga) e de mapas 2D que correspondam a padrões de funcionamento do motor.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                        <div className="space-y-1.5">
-                            <Label htmlFor="rows">Linhas (ex: RPM)</Label>
-                            <Input id="rows" type="number" value={rows} onChange={(e) => setRows(e.target.value)} placeholder="32" />
-                        </div>
-                         <div className="space-y-1.5">
-                            <Label htmlFor="cols">Colunas (ex: Carga)</Label>
-                            <Input id="cols" type="number" value={cols} onChange={(e) => setCols(e.target.value)} placeholder="19" />
-                        </div>
-                        <div className="space-y-1.5">
-                             <Label htmlFor="dataType">Tipo de Dados</Label>
-                            <Select value={dataType} onValueChange={(v: any) => setDataType(v)}>
-                                <SelectTrigger id="dataType">
-                                    <SelectValue placeholder="Selecione o tipo de dados" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="uint8">8-bit (Uint8)</SelectItem>
-                                    <SelectItem value="uint16le">16-bit Little Endian</SelectItem>
-                                    <SelectItem value="uint16be">16-bit Big Endian</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                     <div className="flex items-end gap-4">
+                        <div className="flex-1" />
                         {isScanning ? (
-                            <div className="flex items-center gap-4 md:col-span-1">
-                                <Loader2 className="h-5 w-5 animate-spin" />
-                                <div className="flex-1">
-                                    <p className="text-sm font-medium">A analisar...</p>
-                                </div>
+                             <div className="flex-1 flex flex-col gap-2">
+                                <Progress value={scanProgress} className="h-2" />
+                                <p className="text-xs text-muted-foreground text-center mt-1">{scanStatus} ({scanProgress.toFixed(0)}%)</p>
                             </div>
-
                         ) : (
-                            <Button onClick={handleScan} disabled={isScanning} className="w-full">
+                            <Button onClick={handleScan} disabled={isScanning} className="w-auto">
                                 <Search className="mr-2 h-4 w-4" />
-                                Iniciar Análise
+                                Iniciar Análise Completa
                             </Button>
                         )}
                     </div>
-                     {isScanning && (
-                        <div className="mt-4">
-                            <Progress value={scanProgress} className="h-2" />
-                            <p className="text-xs text-muted-foreground text-center mt-1">{scanProgress.toFixed(0)}%</p>
-                        </div>
-                     )}
                 </CardContent>
             </Card>
 
@@ -172,12 +135,11 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                     <Table>
                         <TableHeader className="sticky top-0 bg-muted">
                             <TableRow>
-                                <TableHead>Endereço</TableHead>
-                                <TableHead>Dimensões</TableHead>
-                                <TableHead>Tipo Dados</TableHead>
-                                <TableHead>Sugestão IA</TableHead>
+                                <TableHead>Mapa</TableHead>
+                                <TableHead>Eixo Y (Linhas)</TableHead>
+                                <TableHead>Eixo X (Colunas)</TableHead>
+                                <TableHead>Sugestão</TableHead>
                                 <TableHead>Confiança</TableHead>
-                                <TableHead>Pré-visualização</TableHead>
                                 <TableHead className="text-right">Ação</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -185,13 +147,31 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                             {potentialMaps.length > 0 ? (
                                 potentialMaps.map((map) => (
                                     <TableRow key={`${map.address}`}>
-                                        <TableCell className="font-mono">0x{map.address.toString(16).toUpperCase()}</TableCell>
-                                        <TableCell>{map.rows}x{map.cols}</TableCell>
-                                        <TableCell className="text-muted-foreground text-xs">{map.dataType}</TableCell>
+                                        <TableCell>
+                                            <div className='flex flex-col'>
+                                                <span className="font-mono text-sm">0x{map.address.toString(16).toUpperCase()}</span>
+                                                <span className="text-xs text-muted-foreground">{map.rows}x{map.cols} ({map.dataType})</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className='flex flex-col'>
+                                                <span className="font-mono text-sm">{map.yAxisAddress ? `0x${map.yAxisAddress.toString(16).toUpperCase()}`: 'N/A'}</span>
+                                                 <Badge variant={map.yAxisType === 'RPM' ? 'default' : 'secondary'} className="w-fit mt-1">
+                                                    <Rss className="mr-1 h-3 w-3" /> {map.yAxisType}
+                                                 </Badge>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className='flex flex-col'>
+                                                <span className="font-mono text-sm">{map.xAxisAddress ? `0x${map.xAxisAddress.toString(16).toUpperCase()}` : 'N/A'}</span>
+                                                 <Badge variant={map.xAxisType === 'Carga' ? 'default' : 'secondary'} className="w-fit mt-1">
+                                                    <Gauge className="mr-1 h-3 w-3" /> {map.xAxisType}
+                                                 </Badge>
+                                            </div>
+                                        </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
                                                 <span className="font-medium">{map.suggestion}</span>
-                                                <span className="text-muted-foreground text-xs">({map.reason})</span>
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -199,20 +179,6 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                                 <Progress value={map.confidence * 100} className="h-2 w-20" />
                                                 <span>{(map.confidence * 100).toFixed(0)}%</span>
                                             </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <div className="cursor-pointer">
-                                                            <SparkLinePreview data={map.previewData} />
-                                                        </div>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>Pré-visualização da primeira linha de dados</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button size="sm" variant="outline" onClick={() => onLoadMap(map)}>
@@ -225,7 +191,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                             ) : (
                                 <TableRow>
                                     <TableCell colSpan={7} className="h-24 text-center">
-                                        {isScanning ? "A procurar..." : "Defina um template e inicie a análise."}
+                                        {isScanning ? "A procurar..." : "Inicie a análise para encontrar mapas."}
                                     </TableCell>
                                 </TableRow>
                             )}

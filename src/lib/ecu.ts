@@ -757,73 +757,9 @@ export function calculateCorrections(
 // #endregion
 
 
-// #region Heuristic Map Scanner ("Sliding Template" approach)
+// #region Heuristic Map Scanner
 
-function readMapDataFromAddress(view: DataView, address: number, rows: number, cols: number, itemSize: number, isBigEndian: boolean): number[][] | null {
-    const mapData: number[][] = [];
-    const rowStride = cols * itemSize; // Assuming contiguous data for the template
-    if (address + (rows * rowStride) > view.byteLength) {
-        return null;
-    }
-    const littleEndian = !isBigEndian;
-
-    for(let r = 0; r < rows; r++) {
-        const row: number[] = [];
-        for(let c = 0; c < cols; c++) {
-            const offset = address + (r * rowStride) + (c * itemSize);
-            if (offset + itemSize > view.byteLength) {
-                return null; // Should be caught by the initial check, but good for safety
-            }
-            try {
-                 if (itemSize === 1) {
-                    row.push(view.getUint8(offset));
-                } else if (itemSize === 2) {
-                    row.push(view.getUint16(offset, littleEndian));
-                } else {
-                    return null; // Should not happen based on dataType selection
-                }
-            } catch {
-                return null;
-            }
-        }
-        mapData.push(row);
-    }
-    return mapData;
-}
-
-
-function calculateMapSmoothness(mapData: number[][]): number {
-    if (!mapData || mapData.length < 2 || mapData[0].length < 2) return 0;
-    
-    let diffSum = 0;
-    let pointCount = 0;
-    const maxPossibleValue = mapData.flat().reduce((max, v) => Math.max(max, v), 0);
-    if (maxPossibleValue === 0) return 0; // Avoid division by zero
-
-    for (let r = 0; r < mapData.length; r++) {
-        for (let c = 0; c < mapData[r].length; c++) {
-            const current = mapData[r][c];
-            // Compare with right neighbor
-            if (c < mapData[r].length - 1) {
-                diffSum += Math.abs(current - mapData[r][c+1]);
-                pointCount++;
-            }
-             // Compare with bottom neighbor
-            if (r < mapData.length - 1) {
-                diffSum += Math.abs(current - mapData[r+1][c]);
-                pointCount++;
-            }
-        }
-    }
-
-    const avgDiff = diffSum / pointCount;
-    // Normalize the score: lower average difference (smoother) -> higher score
-    const score = 1 - (avgDiff / maxPossibleValue);
-    return Math.max(0, Math.min(1, score)); // Clamp score between 0 and 1
-}
-
-
-export const COMMON_EQUATIONS: { name: string; equation: string; type: 'Ignition' | 'Fuel' | 'Lambda' | 'Temp' }[] = [
+const COMMON_EQUATIONS: { name: string; equation: string; type: 'Ignition' | 'Fuel' | 'Lambda' | 'Temp' }[] = [
     { name: 'Bruto', equation: 'x', type: 'Fuel'},
     { name: 'Ignição ° (Div/4)', equation: 'x/4', type: 'Ignition'},
     { name: 'Ignição ° (Bosch 0.75-48)', equation: 'x*0.75-48', type: 'Ignition'},
@@ -834,178 +770,332 @@ export const COMMON_EQUATIONS: { name: string; equation: string; type: 'Ignition
     { name: 'Temp °C (Bosch 0.75-48)', equation: 'x*0.75-48', type: 'Temp' },
 ];
 
-function analyzeMapCharacteristics(mapData: number[][], equation: string): { suggestion: string; reason: string; confidence: number } {
+function readDataFromAddress(view: DataView, address: number, count: number, itemSize: number, isBigEndian: boolean): number[] | null {
+    if (address + (count * itemSize) > view.byteLength) {
+        return null;
+    }
+    const data: number[] = [];
+    const littleEndian = !isBigEndian;
+
+    for (let i = 0; i < count; i++) {
+        const offset = address + (i * itemSize);
+        try {
+            if (itemSize === 1) {
+                data.push(view.getUint8(offset));
+            } else if (itemSize === 2) {
+                data.push(view.getUint16(offset, littleEndian));
+            } else {
+                return null;
+            }
+        } catch {
+            return null;
+        }
+    }
+    return data;
+}
+
+function calculateSequenceSmoothness(data: number[] | null): { score: number, isMonotonic: boolean, avgStep: number } {
+    if (!data || data.length < 3) return { score: 0, isMonotonic: false, avgStep: 0 };
+
+    let diffs = 0;
+    let steps = 0;
+    let directionChanges = 0;
+    const initialDirection = data[1] - data[0];
+    let lastDirection = Math.sign(initialDirection);
+
+    for (let i = 0; i < data.length - 1; i++) {
+        const diff = data[i+1] - data[i];
+        const currentDirection = Math.sign(diff);
+        if(currentDirection !== 0 && lastDirection !== 0 && currentDirection !== lastDirection) {
+            directionChanges++;
+        }
+        if(currentDirection !== 0) {
+            lastDirection = currentDirection;
+        }
+        diffs += Math.abs(diff);
+        steps++;
+    }
+
+    const isMonotonic = directionChanges <= 1; // Allow one change for noise
+    const avgStep = steps > 0 ? diffs / steps : 0;
+    
+    // Score based on monotonicity and consistency of steps
+    let score = isMonotonic ? 0.7 : 0.1;
+    if (isMonotonic && avgStep > 0) {
+        const stepStdDev = Math.sqrt(data.slice(0, -1).reduce((sum, _, i) => sum + Math.pow((data[i+1] - data[i]) - avgStep, 2), 0) / steps);
+        score += Math.max(0, 0.3 * (1 - (stepStdDev / avgStep)));
+    }
+    
+    return { score, isMonotonic, avgStep };
+}
+
+function analyzeAxisCharacteristics(axisData: number[], dataSize: number): { type: 'RPM' | 'Carga' | 'Desconhecido', confidence: number } {
+    if (axisData.length < 3) return { type: 'Desconhecido', confidence: 0 };
+
+    const { score, isMonotonic, avgStep } = calculateSequenceSmoothness(axisData);
+    if (!isMonotonic || score < 0.6) return { type: 'Desconhecido', confidence: score * 0.5 };
+
+    const min = Math.min(...axisData);
+    const max = Math.max(...axisData);
+
+    // RPM check
+    let rpmConfidence = 0;
+    if (max > 500 && max <= 16000 && min >= 0) {
+        rpmConfidence = 0.6;
+        if (max > 4000) rpmConfidence += 0.1;
+        // Check if values are mostly round numbers (e.g., multiples of 50)
+        const roundCount = axisData.filter(v => v % 50 === 0).length;
+        if ((roundCount / axisData.length) > 0.7) rpmConfidence += 0.2;
+    }
+
+    // Load check
+    let loadConfidence = 0;
+    if (max <= 260 && min >= 0) { // Covers % (0-100) and pressure (e.g. 255 for MAP)
+        loadConfidence = 0.6;
+        if (max <= 105 && min >= 0) loadConfidence += 0.2; // Likely TPS %
+        if(avgStep > 5 && avgStep < 20) loadConfidence += 0.1; // Common step for load axes
+    }
+    
+    rpmConfidence *= score; // Factor in smoothness
+    loadConfidence *= score;
+    
+    if (rpmConfidence > loadConfidence && rpmConfidence > 0.5) {
+        return { type: 'RPM', confidence: rpmConfidence };
+    }
+    if (loadConfidence > rpmConfidence && loadConfidence > 0.5) {
+        return { type: 'Carga', confidence: loadConfidence };
+    }
+    
+    return { type: 'Desconhecido', confidence: Math.max(rpmConfidence, loadConfidence, score * 0.5) };
+}
+
+function calculateMapSmoothness(mapData: number[][]): number {
+    if (!mapData || mapData.length < 2 || mapData[0].length < 2) return 0;
+    
+    let diffSum = 0;
+    let pointCount = 0;
+    const flatData = mapData.flat();
+    const maxPossibleValue = flatData.reduce((max, v) => Math.max(max, v), 0);
+    if (maxPossibleValue === 0) return 0;
+
+    for (let r = 0; r < mapData.length; r++) {
+        for (let c = 0; c < mapData[r].length; c++) {
+            const current = mapData[r][c];
+            if (c < mapData[r].length - 1) {
+                diffSum += Math.abs(current - mapData[r][c+1]);
+                pointCount++;
+            }
+            if (r < mapData.length - 1 && mapData[r+1] && c < mapData[r+1].length) {
+                diffSum += Math.abs(current - mapData[r+1][c]);
+                pointCount++;
+            }
+        }
+    }
+
+    if (pointCount === 0) return 0;
+    const avgDiff = diffSum / pointCount;
+    const score = 1 - (avgDiff / maxPossibleValue);
+    return Math.max(0, Math.min(1, score));
+}
+
+function analyzeMapCharacteristics(mapData: number[][], equation: string): { suggestion: string; confidence: number } {
     if (!mapData || mapData.length === 0 || mapData[0].length === 0) {
-        return { suggestion: 'Desconhecido', reason: 'Dados insuficientes', confidence: 0 };
+        return { suggestion: 'Desconhecido', confidence: 0 };
     }
     
     const calculatedData = mapData.map(row => row.map(cell => evaluateEquation(equation, cell)));
     const flatData = calculatedData.flat().filter(v => v !== null && !isNaN(v) && isFinite(v));
 
-    if (flatData.length < 10) {
-        return { suggestion: 'Desconhecido', reason: 'Dados insuficientes', confidence: 0 };
-    }
+    if (flatData.length < 10) return { suggestion: 'Desconhecido', confidence: 0 };
 
     const min = Math.min(...flatData);
     const max = Math.max(...flatData);
-    const eqPart = equation === 'x' ? 'bruto' : `eq: ${equation}`;
     
-    let confidence = 0.1; // Base confidence
+    let confidence = 0.1;
     let suggestion = 'Genérico';
-    let reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
 
-    // Ignition check - more weight for plausible ranges
-    if (max > 5 && max < 70 && min >= -20 && (max - min) > 15) {
-        suggestion = 'Ignição';
-        reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
-        confidence = 0.7; // Base confidence for ignition-like range
-        if(max - min > 25) confidence += 0.15; // Wider range is more likely
-    }
-    // Fuel (VE) check
-    else if (max > 30 && max < 255 && min >= 0) {
-        suggestion = 'Combustível (VE)';
-        reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
-        confidence = 0.6;
-    }
-    // Lambda Target check
-    else if (max < 2 && max > 0.5 && min > 0.5) {
-        suggestion = 'Lambda Alvo';
-        reason = `Valores [${min.toFixed(2)}, ${max.toFixed(2)}] com ${eqPart}`;
-        confidence = 0.8;
-    }
-    // Temperature check
-    else if (max > -20 && max < 140 && min <= 0) {
-        suggestion = 'Temperatura';
-        reason = `Valores [${min.toFixed(0)}, ${max.toFixed(0)}] com ${eqPart}`;
-        confidence = 0.75;
+    const eqInfo = COMMON_EQUATIONS.find(e => e.equation === equation);
+    const mapType = eqInfo?.type || 'Genérico';
+
+    switch (mapType) {
+        case 'Ignition':
+            if (max > 0 && max < 70 && min >= -20 && (max - min) > 10) {
+                confidence = 0.7;
+                if(max - min > 25) confidence += 0.15;
+            }
+            break;
+        case 'Fuel':
+            if (max > 10 && max < 255 && min >= 0) {
+                confidence = 0.6;
+                 if (equation === 'x' && max < 150) confidence += 0.1; // VE% likely < 150
+            }
+            break;
+        case 'Lambda':
+            if (max < 1.5 && max > 0.5 && min > 0.4) confidence = 0.8;
+            break;
+        case 'Temp':
+             if (max > -20 && max < 140 && min < 10) confidence = 0.75;
+            break;
     }
 
-    // Penalize if all values are identical
-    if (max === min) {
-        confidence *= 0.1; // Greatly reduce confidence for flat maps
-    }
-
-    return { suggestion, reason, confidence };
+    suggestion = mapType;
+    if (max === min) confidence *= 0.1;
+    
+    return { suggestion, confidence };
 }
 
 
-export function scanForMapsWithTemplate(
+export async function scanForPotentialMaps(
   binBuffer: ArrayBuffer,
   options: {
-    rows: number;
-    cols: number;
-    dataType: 'uint8' | 'uint16le' | 'uint16be';
-    searchIncrement?: number;
+    onProgress?: (progress: number, status: string) => void;
     confidenceThreshold?: number;
-    onProgress?: (progress: number) => void;
   }
 ): Promise<PotentialMap[]> {
-  return new Promise((resolvePromise) => {
-    const {
-      rows,
-      cols,
-      dataType,
-      searchIncrement = 4,
-      confidenceThreshold = 0.5, // 50%
-      onProgress,
-    } = options;
-
+    const { onProgress, confidenceThreshold = 0.65 } = options;
     const results: PotentialMap[] = [];
     const view = new DataView(binBuffer);
-
-    let itemSize: number;
-    let isBigEndian: boolean;
-    let dataTypeName: string;
-
-    switch (dataType) {
-      case 'uint16le':
-        itemSize = 2;
-        isBigEndian = false;
-        dataTypeName = '16-bit LE';
-        break;
-      case 'uint16be':
-        itemSize = 2;
-        isBigEndian = true;
-        dataTypeName = '16-bit BE';
-        break;
-      default: // uint8
-        itemSize = 1;
-        isBigEndian = false;
-        dataTypeName = '8-bit';
-        break;
-    }
-
-    const mapByteSize = rows * cols * itemSize;
-    if (mapByteSize === 0) {
-      resolvePromise([]);
-      return;
-    }
-
     const totalLength = binBuffer.byteLength;
-    if (totalLength < mapByteSize) {
-      resolvePromise([]);
-      return;
-    }
-
-    const endAddress = totalLength - mapByteSize;
+    const searchIncrement = 4;
+    const searchSizes = { rows: [8, 10, 12, 16, 19, 20, 24, 32], cols: [8, 10, 12, 16, 19, 20, 24, 32] };
+    const dataTypes = [{size: 1, be: false, name: '8-bit'}, {size: 2, be: false, name: '16-bit LE'}, {size: 2, be: true, name: '16-bit BE'}];
+    
+    const CHUNK_SIZE = 50000;
     let currentAddress = 0;
-    const chunkSize = 50000; // Process 50k addresses at a time
 
-    function processChunk() {
-      const chunkEnd = Math.min(currentAddress + chunkSize, endAddress);
-      
-      for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
-        const mapData = readMapDataFromAddress(view, address, rows, cols, itemSize, isBigEndian);
-        if (!mapData) continue;
+    while (currentAddress < totalLength) {
+        const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength);
 
-        const smoothness = calculateMapSmoothness(mapData);
-        if (smoothness < 0.5) continue;
+        if (onProgress) {
+            onProgress((currentAddress / totalLength) * 100, `Analisando 0x${currentAddress.toString(16)}...`);
+        }
+        
+        // This is the key part that prevents the UI from freezing.
+        // It yields control back to the browser's event loop.
+        await new Promise(resolve => setTimeout(resolve, 0));
 
-        let bestAnalysis = { suggestion: 'Genérico', reason: 'Estrutura detectada', confidence: 0, equation: 'x' };
+        for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
+             // 1. Find potential axes first
+            for (const itemSize of [1, 2]) {
+                for (const isBe of [false, true]) {
+                    if (itemSize === 1 && isBe) continue; // 8-bit is not endian-dependent
 
-        for (const eq of COMMON_EQUATIONS) {
-          const analysis = analyzeMapCharacteristics(mapData, eq.equation);
-          const finalConfidence = (analysis.confidence * 0.7) + (smoothness * 0.3);
+                    for (const axisLen of searchSizes.rows.concat(searchSizes.cols)) {
+                        const axisData = readDataFromAddress(view, address, axisLen, itemSize, isBe);
+                        if (!axisData) continue;
+                        
+                        const axisAnalysis = analyzeAxisCharacteristics(axisData, itemSize);
+                        if (axisAnalysis.confidence < 0.7) continue;
 
-          if (finalConfidence > bestAnalysis.confidence) {
-            bestAnalysis = { ...analysis, confidence: finalConfidence, equation: eq.equation };
-          }
+                        // Found a potential axis, now look for a map and the other axis nearby
+                        const mapRows = axisAnalysis.type === 'RPM' ? axisLen : 0;
+                        const mapCols = axisAnalysis.type === 'Carga' ? axisLen : 0;
+
+                        // This part is complex: finding the corresponding map and other axis.
+                        // For now, let's simplify and just find maps near this axis.
+                        const searchRadius = 512;
+                        const start = Math.max(0, address - searchRadius);
+                        const end = Math.min(totalLength, address + axisLen * itemSize + searchRadius);
+                        
+                        // This nested loop makes it very slow. This needs optimization.
+                        // Let's defer full axis-map pairing and focus on finding individual components first.
+                        // Or, we find a map, then look for axes around it.
+                    }
+                }
+            }
         }
 
-        if (bestAnalysis.confidence > confidenceThreshold) {
-          results.push({
-            address,
-            rows,
-            cols,
-            confidence: bestAnalysis.confidence,
-            suggestion: bestAnalysis.suggestion,
-            reason: bestAnalysis.reason,
-            dataSize: itemSize,
-            isBigEndian: isBigEndian,
-            dataType: dataTypeName,
-            equation: bestAnalysis.equation,
-            previewData: mapData.slice(0, 5),
-          });
+
+        for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
+            for (const rows of searchSizes.rows) {
+                for (const cols of searchSizes.cols) {
+                    for (const dataType of dataTypes) {
+                        const mapData = readDataFromAddress(view, address, rows * cols, dataType.size, dataType.be);
+                        if (!mapData) continue;
+
+                        const map2D = Array.from({ length: rows }, (_, r) => mapData.slice(r * cols, (r + 1) * cols));
+                        const mapSmoothness = calculateMapSmoothness(map2D);
+                        if (mapSmoothness < 0.4) continue;
+
+                        let bestEq = { suggestion: 'Genérico', confidence: 0, equation: 'x' };
+                        for(const eq of COMMON_EQUATIONS) {
+                            const analysis = analyzeMapCharacteristics(map2D, eq.equation);
+                            if(analysis.confidence > bestEq.confidence) {
+                                bestEq = {...analysis, equation: eq.equation};
+                            }
+                        }
+
+                        let totalConfidence = (bestEq.confidence * 0.7) + (mapSmoothness * 0.3);
+
+                        // Look for axes nearby to boost confidence
+                        let yAxis: any = null, xAxis: any = null;
+                        const AXIS_SEARCH_RADIUS = 512;
+
+                        // Look before the map for axes
+                        const startSearch = Math.max(0, address - AXIS_SEARCH_RADIUS);
+                        for(let axisAddr = startSearch; axisAddr < address; axisAddr += 2) {
+                            // Y-Axis (Rows)
+                            const yData = readDataFromAddress(view, axisAddr, rows, dataType.size, dataType.be);
+                            if(yData) {
+                                const yAnalysis = analyzeAxisCharacteristics(yData, dataType.size);
+                                if (yAnalysis.confidence > 0.7 && (!yAxis || yAnalysis.confidence > yAxis.confidence)) {
+                                    yAxis = { ...yAnalysis, address: axisAddr };
+                                }
+                            }
+                            // X-Axis (Cols)
+                             const xData = readDataFromAddress(view, axisAddr, cols, dataType.size, dataType.be);
+                            if(xData) {
+                                const xAnalysis = analyzeAxisCharacteristics(xData, dataType.size);
+                                 if (xAnalysis.confidence > 0.7 && (!xAxis || xAnalysis.confidence > xAxis.confidence)) {
+                                    xAxis = { ...xAnalysis, address: axisAddr };
+                                }
+                            }
+                        }
+
+                        if(xAxis && yAxis && xAxis.type !== yAxis.type) {
+                            totalConfidence = Math.min(1, totalConfidence + 0.2 + (xAxis.confidence + yAxis.confidence) / 10);
+                        } else if (xAxis || yAxis) {
+                            totalConfidence = Math.min(1, totalConfidence + 0.1);
+                        }
+
+                        if (totalConfidence >= confidenceThreshold) {
+                            results.push({
+                                address,
+                                rows,
+                                cols,
+                                dataSize: dataType.size,
+                                isBigEndian: dataType.be,
+                                dataType: dataType.name,
+                                confidence: totalConfidence,
+                                suggestion: bestEq.suggestion,
+                                equation: bestEq.equation,
+                                xAxisAddress: xAxis?.address,
+                                yAxisAddress: yAxis?.address,
+                                xAxisType: xAxis?.type || 'Desconhecido',
+                                yAxisType: yAxis?.type || 'Desconhecido'
+                            });
+                        }
+                    }
+                }
+            }
         }
-      }
-      
-      currentAddress = chunkEnd;
-
-      if (onProgress) {
-        onProgress((currentAddress / endAddress) * 100);
-      }
-
-      if (currentAddress < endAddress) {
-        setTimeout(processChunk, 0); // Schedule next chunk
-      } else {
-        if(onProgress) onProgress(100);
-        results.sort((a, b) => b.confidence - a.confidence);
-        resolvePromise(results);
-      }
+        currentAddress = chunkEnd;
     }
 
-    // Start the first chunk
-    processChunk();
-  });
+    if (onProgress) onProgress(100, "Finalizando...");
+    results.sort((a, b) => b.confidence - a.confidence);
+
+    // Filter out duplicates (maps found with slightly different parameters but same address)
+    const uniqueResults: PotentialMap[] = [];
+    const foundAddresses = new Set<number>();
+    for(const res of results) {
+        if(!foundAddresses.has(res.address)) {
+            uniqueResults.push(res);
+            foundAddresses.add(res.address);
+        }
+    }
+    
+    return uniqueResults;
 }
+
 // #endregion
