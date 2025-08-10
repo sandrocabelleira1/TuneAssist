@@ -81,9 +81,6 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
             setScanProgress(progress);
         };
 
-        // Give the UI a moment to update before starting the heavy work
-        await new Promise(resolve => setTimeout(resolve, 0));
-
         try {
             const results = await scanForMapsWithTemplate(binFile.buffer, {
                 rows: numRows,

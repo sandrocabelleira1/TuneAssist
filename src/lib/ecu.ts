@@ -888,7 +888,8 @@ function analyzeMapCharacteristics(mapData: number[][], equation: string): { sug
     return { suggestion, reason, confidence };
 }
 
-export async function scanForMapsWithTemplate(
+
+export function scanForMapsWithTemplate(
   binBuffer: ArrayBuffer,
   options: {
     rows: number;
@@ -899,95 +900,112 @@ export async function scanForMapsWithTemplate(
     onProgress?: (progress: number) => void;
   }
 ): Promise<PotentialMap[]> {
+  return new Promise((resolvePromise) => {
     const {
-        rows,
-        cols,
-        dataType,
-        searchIncrement = 4,
-        confidenceThreshold = 0.5, // 50%
-        onProgress
+      rows,
+      cols,
+      dataType,
+      searchIncrement = 4,
+      confidenceThreshold = 0.5, // 50%
+      onProgress,
     } = options;
 
     const results: PotentialMap[] = [];
     const view = new DataView(binBuffer);
-    
+
     let itemSize: number;
     let isBigEndian: boolean;
     let dataTypeName: string;
 
-    switch(dataType) {
-        case 'uint16le':
-            itemSize = 2;
-            isBigEndian = false;
-            dataTypeName = '16-bit LE';
-            break;
-        case 'uint16be':
-            itemSize = 2;
-            isBigEndian = true;
-            dataTypeName = '16-bit BE';
-            break;
-        default: // uint8
-            itemSize = 1;
-            isBigEndian = false;
-            dataTypeName = '8-bit';
-            break;
+    switch (dataType) {
+      case 'uint16le':
+        itemSize = 2;
+        isBigEndian = false;
+        dataTypeName = '16-bit LE';
+        break;
+      case 'uint16be':
+        itemSize = 2;
+        isBigEndian = true;
+        dataTypeName = '16-bit BE';
+        break;
+      default: // uint8
+        itemSize = 1;
+        isBigEndian = false;
+        dataTypeName = '8-bit';
+        break;
     }
-    
+
     const mapByteSize = rows * cols * itemSize;
-    if (mapByteSize === 0) return [];
-    
+    if (mapByteSize === 0) {
+      resolvePromise([]);
+      return;
+    }
+
     const totalLength = binBuffer.byteLength;
-    if (totalLength < mapByteSize) return [];
+    if (totalLength < mapByteSize) {
+      resolvePromise([]);
+      return;
+    }
 
     const endAddress = totalLength - mapByteSize;
+    let currentAddress = 0;
+    const chunkSize = 50000; // Process 50k addresses at a time
 
-    for (let address = 0; address <= endAddress; address += searchIncrement) {
-        if (address % 20000 === 0) { // Update progress and yield to UI thread periodically
-            if (onProgress) {
-                const progress = (address / endAddress) * 100;
-                onProgress(progress);
-            }
-            // Yield to the event loop to keep the UI responsive
-            await new Promise(resolve => setTimeout(resolve, 0));
-        }
-
+    function processChunk() {
+      const chunkEnd = Math.min(currentAddress + chunkSize, endAddress);
+      
+      for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
         const mapData = readMapDataFromAddress(view, address, rows, cols, itemSize, isBigEndian);
         if (!mapData) continue;
-        
+
         const smoothness = calculateMapSmoothness(mapData);
-        if (smoothness < 0.5) continue; // Basic filter for noise
+        if (smoothness < 0.5) continue;
 
         let bestAnalysis = { suggestion: 'Genérico', reason: 'Estrutura detectada', confidence: 0, equation: 'x' };
-        
-        for(const eq of COMMON_EQUATIONS) {
-            const analysis = analyzeMapCharacteristics(mapData, eq.equation);
-            // Combine smoothness and characteristic analysis for final confidence
-            const finalConfidence = (analysis.confidence * 0.7) + (smoothness * 0.3);
-            
-            if (finalConfidence > bestAnalysis.confidence) {
-                bestAnalysis = {...analysis, confidence: finalConfidence, equation: eq.equation};
-            }
+
+        for (const eq of COMMON_EQUATIONS) {
+          const analysis = analyzeMapCharacteristics(mapData, eq.equation);
+          const finalConfidence = (analysis.confidence * 0.7) + (smoothness * 0.3);
+
+          if (finalConfidence > bestAnalysis.confidence) {
+            bestAnalysis = { ...analysis, confidence: finalConfidence, equation: eq.equation };
+          }
         }
 
         if (bestAnalysis.confidence > confidenceThreshold) {
-            results.push({
-                address,
-                rows,
-                cols,
-                confidence: bestAnalysis.confidence,
-                suggestion: bestAnalysis.suggestion,
-                reason: bestAnalysis.reason,
-                dataSize: itemSize,
-                isBigEndian: isBigEndian,
-                dataType: dataTypeName,
-                equation: bestAnalysis.equation,
-                previewData: mapData.slice(0, 5), // Include some data for preview
-            });
+          results.push({
+            address,
+            rows,
+            cols,
+            confidence: bestAnalysis.confidence,
+            suggestion: bestAnalysis.suggestion,
+            reason: bestAnalysis.reason,
+            dataSize: itemSize,
+            isBigEndian: isBigEndian,
+            dataType: dataTypeName,
+            equation: bestAnalysis.equation,
+            previewData: mapData.slice(0, 5),
+          });
         }
-    }
-    
-    if(onProgress) onProgress(100);
-    return results.sort((a,b) => b.confidence - a.confidence);
-}
+      }
+      
+      currentAddress = chunkEnd;
 
+      if (onProgress) {
+        onProgress((currentAddress / endAddress) * 100);
+      }
+
+      if (currentAddress < endAddress) {
+        setTimeout(processChunk, 0); // Schedule next chunk
+      } else {
+        if(onProgress) onProgress(100);
+        results.sort((a, b) => b.confidence - a.confidence);
+        resolvePromise(results);
+      }
+    }
+
+    // Start the first chunk
+    processChunk();
+  });
+}
 // #endregion
