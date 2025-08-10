@@ -1,6 +1,7 @@
 
 
 
+
 import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, TemplateAnalysisConfig } from './types';
 
 // #region Utility Functions
@@ -1097,97 +1098,8 @@ export async function scanForPotentialMaps(
     return results.sort((a,b) => b.confidence - a.confidence);
 }
 
-
-export function analyzeDataWithTemplate(binBuffer: ArrayBuffer, config: TemplateAnalysisConfig & { address: number }): ProcessedMap {
-    const view = new DataView(binBuffer);
-
-    // 1. Read the raw data block from the binary
-    const itemSize = config.dataType === 'uint8' ? 1 : 2;
-    const isBigEndian = config.dataType === 'uint16be';
-    const littleEndian = !isBigEndian;
-
-    const numValues = Math.floor(config.dataLength / itemSize);
-    const rawValues: number[] = [];
-
-    for (let i = 0; i < numValues; i++) {
-        const offset = config.address + (i * itemSize);
-        if (offset + itemSize > view.byteLength) break;
-
-        if (itemSize === 1) {
-            rawValues.push(view.getUint8(offset));
-        } else {
-            rawValues.push(view.getUint16(offset, littleEndian));
-        }
-    }
-
-    if (rawValues.length === 0) {
-        throw new Error("Nenhum dado pôde ser lido no endereço e tamanho especificados.");
-    }
-
-    // 2. Apply the equation to the raw data
-    const calculatedValues = rawValues.map(v => evaluateEquation(config.equation, v));
-    
-    const minCalculated = Math.min(...calculatedValues);
-    const maxCalculated = Math.max(...calculatedValues);
-    const valueRange = maxCalculated - minCalculated;
-
-    // 3. Create the virtual axes
-    const rpmAxisValues = Array.from({ length: config.rows }, (_, i) => config.rpmMin + (i * (config.rpmMax - config.rpmMin) / (config.rows - 1)));
-    const loadAxisValues = Array.from({ length: config.cols }, (_, i) => config.loadMin + (i * (config.loadMax - config.loadMin) / (config.cols - 1)));
-
-    // 4. Create the final map grid and initialize with null
-    const finalMap: MapData = Array.from({ length: config.rows }, () => Array(config.cols).fill(null));
-    const valueBins: number[][][] = Array.from({ length: config.rows }, () => Array.from({ length: config.cols }, () => []));
-
-    // 5. Distribute calculated values into the grid bins
-    // This is a simplified distribution based on value. A more advanced method would use curve fitting.
-    for(const val of calculatedValues) {
-        if(isNaN(val)) continue;
-
-        const yRatio = (val - minCalculated) / valueRange;
-        // This is a placeholder for a more complex distribution logic.
-        // For now, let's just create a pattern to visualize.
-        // This logic needs to be improved significantly. It's just for visualization.
-    }
-    
-    // Naive distribution for visualization: Fill the grid based on the 1D data
-    let k = 0;
-    for (let i = 0; i < config.rows; i++) {
-        for (let j = 0; j < config.cols; j++) {
-            if (k < calculatedValues.length) {
-                finalMap[i][j] = calculatedValues[k];
-                k++;
-            }
-        }
-    }
-
-    // 6. Assemble the ProcessedMap object
-    const yAxis: AxisData = {
-        label: "RPM",
-        raw: rpmAxisValues,
-        calculated: rpmAxisValues,
-        address: null,
-        originalIndices: rpmAxisValues.map((_, i) => i)
-    };
-     const xAxis: AxisData = {
-        label: "Carga",
-        raw: loadAxisValues,
-        calculated: loadAxisValues,
-        address: null,
-        originalIndices: loadAxisValues.map((_, i) => i)
-    };
-
-
-    return {
-        calculatedMap: finalMap,
-        rawMap: null, // Raw map is not directly applicable in this mode
-        addresses: null, // No real addresses for this virtual map
-        axes: { x: xAxis, y: yAxis }
-    };
-}
-
-
 // #endregion
+
 
 
 

@@ -976,7 +976,7 @@ export default function EcuTuningAssistant() {
         
         const tempId = `potential_${map.address}_${map.rows}x${map.cols}`;
         
-        const tempDef: XDFDefinition = {
+        const tempDef: XDFinition = {
             uniqueId: tempId,
             name: `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
             address: map.address,
