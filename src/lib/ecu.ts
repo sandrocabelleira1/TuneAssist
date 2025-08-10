@@ -934,14 +934,21 @@ export async function scanForMapsWithTemplate(
     }
     
     const mapByteSize = rows * cols * itemSize;
-    const totalSteps = Math.floor((binBuffer.byteLength - mapByteSize) / searchIncrement);
-    let currentStep = 0;
+    if (mapByteSize === 0) return [];
+    
+    const totalLength = binBuffer.byteLength;
+    if (totalLength < mapByteSize) return [];
 
-    for (let address = 0; address <= binBuffer.byteLength - mapByteSize; address += searchIncrement) {
-        currentStep++;
-        if (currentStep % 2000 === 0) { // Update progress less frequently to improve performance
-             if (onProgress) onProgress((currentStep / totalSteps) * 100);
-             await new Promise(resolve => setTimeout(resolve, 0)); // Unblock UI thread
+    const endAddress = totalLength - mapByteSize;
+
+    for (let address = 0; address <= endAddress; address += searchIncrement) {
+        if (address % 20000 === 0) { // Update progress and yield to UI thread periodically
+            if (onProgress) {
+                const progress = (address / endAddress) * 100;
+                onProgress(progress);
+            }
+            // Yield to the event loop to keep the UI responsive
+            await new Promise(resolve => setTimeout(resolve, 0));
         }
 
         const mapData = readMapDataFromAddress(view, address, rows, cols, itemSize, isBigEndian);
