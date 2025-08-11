@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AlertTriangle, Loader2, Search, DownloadCloud, Microscope, Rss, Gauge } from 'lucide-react';
+import { AlertTriangle, Loader2, Search, DownloadCloud, Microscope, Gauge } from 'lucide-react';
 import type { LogMessage, PotentialMap } from '@/lib/types';
 import { scanForMapsWithTemplate } from '@/lib/ecu';
 import { Progress } from '@/components/ui/progress';
@@ -73,9 +73,6 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
         setPotentialMaps([]);
         addLog(`A iniciar análise com template: ${templateConfig.rows}x${templateConfig.cols} ${templateConfig.dataType}`, 'info');
         
-        // Give the UI a moment to update before starting the heavy task
-        await new Promise(resolve => setTimeout(resolve, 50));
-
         try {
             const config = {
                 rows: templateConfig.rows,
@@ -179,7 +176,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {isScanning ? (
+                            {isScanning && potentialMaps.length === 0 ? (
                                 <TableRow>
                                      <TableCell colSpan={6} className="h-24 text-center">
                                         <div className="flex items-center justify-center gap-2">
