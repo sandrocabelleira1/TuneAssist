@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 
 const SparkLinePreview = ({ data }: { data: number[][] | undefined }) => {
-    if (!data || data.length === 0) return null;
+    if (!data || data.length === 0 || data[0].length === 0) return null;
 
     const chartData = data[0].map((value, index) => ({ name: index, value }));
     const min = Math.min(...chartData.map(d => d.value));
@@ -80,12 +80,13 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                 dataSize: templateConfig.dataType.includes('16') ? 2 : 1,
                 isBigEndian: templateConfig.dataType.includes('BE'),
             };
-
+            
             const results = await scanForMapsWithTemplate(binFile.buffer, config, {
                 onProgress: (progress, status) => {
                     setScanProgress(progress);
                     setScanStatus(status);
                 },
+                confidenceThreshold: 0.4
             });
             
             setPotentialMaps(results);
@@ -96,9 +97,9 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
         } finally {
             setIsScanning(false);
             setScanProgress(100);
-            setScanStatus("Concluído");
+            setScanStatus(`Concluído. Encontrados ${potentialMaps.length} mapas.`);
         }
-    }, [binFile, addLog, setPotentialMaps, templateConfig]);
+    }, [binFile, addLog, setPotentialMaps, templateConfig, potentialMaps.length]);
 
     if (!binFile) {
         return (
@@ -124,15 +125,15 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 flex-1">
                             <div className="space-y-1.5">
                                 <Label htmlFor="template-rows">Linhas</Label>
-                                <Input id="template-rows" type="number" value={templateConfig.rows} onChange={e => setTemplateConfig(c => ({...c, rows: parseInt(e.target.value, 10) || 0}))} />
+                                <Input id="template-rows" type="number" value={templateConfig.rows} onChange={e => setTemplateConfig(c => ({...c, rows: parseInt(e.target.value, 10) || 0}))} disabled={isScanning} />
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="template-cols">Colunas</Label>
-                                <Input id="template-cols" type="number" value={templateConfig.cols} onChange={e => setTemplateConfig(c => ({...c, cols: parseInt(e.target.value, 10) || 0}))} />
+                                <Input id="template-cols" type="number" value={templateConfig.cols} onChange={e => setTemplateConfig(c => ({...c, cols: parseInt(e.target.value, 10) || 0}))} disabled={isScanning} />
                             </div>
                             <div className="space-y-1.5 col-span-2 sm:col-span-1">
                                 <Label htmlFor="template-datatype">Tipo de Dados</Label>
-                                 <Select value={templateConfig.dataType} onValueChange={v => setTemplateConfig(c => ({...c, dataType: v}))}>
+                                 <Select value={templateConfig.dataType} onValueChange={v => setTemplateConfig(c => ({...c, dataType: v}))} disabled={isScanning}>
                                     <SelectTrigger id="template-datatype">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -152,8 +153,8 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                             </div>
                         ) : (
                             <Button onClick={handleScan} disabled={isScanning} className="w-full sm:w-auto">
-                                <Search className="mr-2 h-4 w-4" />
-                                Iniciar Análise com Template
+                                {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
+                                {isScanning ? 'A Analisar...' : 'Iniciar Análise com Template'}
                             </Button>
                         )}
                     </div>
