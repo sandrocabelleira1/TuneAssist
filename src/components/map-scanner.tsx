@@ -12,7 +12,6 @@ import type { LogMessage, PotentialMap } from '@/lib/types';
 import { scanForMapsWithTemplate } from '@/lib/ecu';
 import { Progress } from '@/components/ui/progress';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -99,7 +98,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
             setScanProgress(100);
             setScanStatus(`Concluído. Encontrados ${potentialMaps.length} mapas.`);
         }
-    }, [binFile, addLog, setPotentialMaps, templateConfig, potentialMaps.length]);
+    }, [binFile, addLog, setPotentialMaps, templateConfig]);
 
     if (!binFile) {
         return (

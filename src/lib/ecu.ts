@@ -1,6 +1,6 @@
 
 
-import type { XDFDefinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
+import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
 
 // #region Utility Functions
 
@@ -885,13 +885,13 @@ export function scanForMapsWithTemplate(
         confidenceThreshold?: number;
     }
 ): Promise<PotentialMap[]> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
         const { onProgress, confidenceThreshold = 0.5 } = options;
         const { rows, cols, dataSize, isBigEndian } = config;
         const view = new DataView(binBuffer);
         const totalLength = binBuffer.byteLength;
         const mapByteSize = rows * cols * dataSize;
-        
+
         if (mapByteSize === 0 || mapByteSize > totalLength) {
             resolve([]);
             return;
@@ -900,10 +900,10 @@ export function scanForMapsWithTemplate(
         const results: PotentialMap[] = [];
         const dataType = `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
         const searchIncrement = 4; // Scan every 4 bytes for alignment
-        const CHUNK_SIZE = 50000; // Number of addresses to process per chunk
+        const CHUNK_SIZE = 50000; // Number of addresses to process before yielding to UI
         let currentAddress = 0;
 
-        function processChunk() {
+        const processChunk = () => {
             const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
             
             for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
@@ -959,16 +959,12 @@ export function scanForMapsWithTemplate(
                     const progress = (currentAddress / (totalLength - mapByteSize)) * 100;
                     onProgress(progress, `Analisando 0x${currentAddress.toString(16)}...`);
                 }
-                setTimeout(processChunk, 0); // Schedule next chunk
+                setTimeout(processChunk, 0); // Schedule next chunk, non-blocking
             }
-        }
+        };
         
-        try {
-            if (onProgress) onProgress(0, 'A iniciar...');
-            processChunk(); // Start the first chunk
-        } catch (error) {
-            reject(error);
-        }
+        if (onProgress) onProgress(0, 'A iniciar...');
+        setTimeout(processChunk, 0); // Start the first chunk
     });
 }
 
