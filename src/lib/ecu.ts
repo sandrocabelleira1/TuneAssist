@@ -299,13 +299,13 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, stride?: number): AxisData {
     if (!axisDef) throw new Error("Definição de eixo fornecida é inválida.");
     
-    // For virtual axes (like from potential maps) that don't have a real address
+    // For virtual axes that don't have a real address
     if (axisDef.address === undefined || axisDef.address === null || isNaN(axisDef.address)) {
         if (axisDef.count > 0) {
             const calculated = Array.from({ length: axisDef.count }, (_, i) => i); // Simple index
             return {
                 label: axisDef.label || 'Índice',
-                raw: calculated, // Raw is same as calculated here
+                raw: calculated,
                 calculated,
                 address: null,
                 originalIndices: calculated.map((_, i) => i)
@@ -872,6 +872,98 @@ function analyzeMapCharacteristics(mapData: number[][], equation: string): { sug
     return { suggestion, confidence };
 }
 
+
+function isMonotonic(arr: number[]): boolean {
+    if (arr.length < 2) return true;
+    const isIncreasing = arr[1] > arr[0];
+    for (let i = 1; i < arr.length - 1; i++) {
+      if (isIncreasing) {
+        if (arr[i+1] <= arr[i]) return false;
+      } else {
+        if (arr[i+1] >= arr[i]) return false;
+      }
+    }
+    return true;
+}
+
+function analyzeAxis(axisData: number[], dataSize: number): { type: 'RPM' | 'Carga' | 'Desconhecido'; confidence: number } {
+    if (axisData.length < 3) return { type: 'Desconhecido', confidence: 0 };
+  
+    const min = Math.min(...axisData);
+    const max = Math.max(...axisData);
+    
+    if (!isMonotonic(axisData)) return { type: 'Desconhecido', confidence: 0 };
+  
+    let confidence = 0.5; // Base confidence for being monotonic
+    
+    // Check for RPM characteristics
+    if (max > 1000 && max < 9000 && min >= 0 && (max - min) > 2000) {
+        return { type: 'RPM', confidence: confidence + 0.4 };
+    }
+  
+    // Check for Load characteristics (e.g., TPS %, MAP kPa)
+    if (max > 50 && max <= 1024 && min >= 0) { // Can be TPS, Load, MAP
+        confidence += 0.2;
+        if(max <= 101) confidence += 0.2; // Likely TPS
+        return { type: 'Carga', confidence };
+    }
+    
+    return { type: 'Desconhecido', confidence: 0.2 };
+}
+
+async function findAxes(view: DataView, map: PotentialMap, config: {dataSize: number, isBigEndian: boolean}): Promise<void> {
+    const { address, rows, cols } = map;
+    const { dataSize, isBigEndian } = config;
+    const SEARCH_WINDOW = 512; // How many bytes to search backwards from the map address
+
+    const searchStart = Math.max(0, address - SEARCH_WINDOW);
+
+    let bestX = { address: undefined, confidence: 0, type: 'Desconhecido' as 'RPM' | 'Carga' | 'Desconhecido' };
+    let bestY = { address: undefined, confidence: 0, type: 'Desconhecido' as 'RPM' | 'Carga' | 'Desconhecido' };
+
+    for (let addr = searchStart; addr < address; addr += 2) { // Search on 2-byte alignment
+        // Look for X axis (cols)
+        const xAxisData = readDataFromAddress(view, addr, cols, dataSize, isBigEndian);
+        if (xAxisData) {
+            const analysis = analyzeAxis(xAxisData, dataSize);
+            if (analysis.confidence > bestX.confidence) {
+                bestX = { address: addr, confidence: analysis.confidence, type: analysis.type };
+            }
+        }
+        
+        // Look for Y axis (rows)
+        const yAxisData = readDataFromAddress(view, addr, rows, dataSize, isBigEndian);
+        if (yAxisData) {
+            const analysis = analyzeAxis(yAxisData, dataSize);
+            if (analysis.confidence > bestY.confidence) {
+                bestY = { address: addr, confidence: analysis.confidence, type: analysis.type };
+            }
+        }
+    }
+
+    if (bestX.address && bestY.address && bestX.address !== bestY.address) {
+        map.xAxisAddress = bestX.address;
+        map.yAxisAddress = bestY.address;
+        map.xAxisType = bestX.type;
+        map.yAxisType = bestY.type;
+
+        // If one is RPM and the other is Load, we are very confident
+        if ((bestX.type === 'RPM' && bestY.type === 'Carga') || (bestX.type === 'Carga' && bestY.type === 'RPM')) {
+            map.confidence = Math.min(1, map.confidence + 0.35);
+        } else {
+            map.confidence = Math.min(1, map.confidence + 0.2);
+        }
+    } else if (bestX.address) {
+         map.xAxisAddress = bestX.address;
+         map.xAxisType = bestX.type;
+         map.confidence = Math.min(1, map.confidence + 0.1);
+    } else if (bestY.address) {
+        map.yAxisAddress = bestY.address;
+        map.yAxisType = bestY.type;
+        map.confidence = Math.min(1, map.confidence + 0.1);
+    }
+}
+
 export function scanForMapsWithTemplate(
     binBuffer: ArrayBuffer,
     config: {
@@ -879,15 +971,16 @@ export function scanForMapsWithTemplate(
         cols: number;
         dataSize: number;
         isBigEndian: boolean;
+        findAxes: boolean;
     },
     options: {
         onProgress?: (progress: number, status: string) => void;
         confidenceThreshold?: number;
     }
 ): Promise<PotentialMap[]> {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
         const { onProgress, confidenceThreshold = 0.5 } = options;
-        const { rows, cols, dataSize, isBigEndian } = config;
+        const { rows, cols, dataSize, isBigEndian, findAxes } = config;
         const view = new DataView(binBuffer);
         const totalLength = binBuffer.byteLength;
         const mapByteSize = rows * cols * dataSize;
@@ -900,10 +993,12 @@ export function scanForMapsWithTemplate(
         const results: PotentialMap[] = [];
         const dataType = `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
         const searchIncrement = 4; // Scan every 4 bytes for alignment
-        const CHUNK_SIZE = 50000; // Number of addresses to process before yielding to UI
+        const CHUNK_SIZE = 50000;
         let currentAddress = 0;
 
-        const processChunk = () => {
+        if (onProgress) onProgress(0, 'A iniciar...');
+
+        while (currentAddress < totalLength - mapByteSize) {
             const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
             
             for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
@@ -926,7 +1021,7 @@ export function scanForMapsWithTemplate(
                 const totalConfidence = (bestEq.confidence * 0.7) + (mapSmoothness * 0.3);
 
                 if (totalConfidence >= confidenceThreshold) {
-                    results.push({
+                    const potentialMap: PotentialMap = {
                         address,
                         rows,
                         cols,
@@ -941,33 +1036,34 @@ export function scanForMapsWithTemplate(
                         yAxisAddress: undefined,
                         xAxisType: 'Desconhecido',
                         yAxisType: 'Desconhecido'
-                    });
+                    };
+                    
+                    if (findAxes) {
+                        await findAxes(view, potentialMap, {dataSize, isBigEndian});
+                    }
+
+                    results.push(potentialMap);
                 }
             }
 
             currentAddress = chunkEnd;
 
-            if (currentAddress >= totalLength - mapByteSize) {
-                if (onProgress) onProgress(100, "Finalizando...");
-                results.sort((a, b) => b.confidence - a.confidence);
-                const uniqueResults = results.filter((map, index, self) =>
-                    index === self.findIndex((m) => m.address === map.address)
-                );
-                resolve(uniqueResults);
-            } else {
-                 if (onProgress) {
-                    const progress = (currentAddress / (totalLength - mapByteSize)) * 100;
-                    onProgress(progress, `Analisando 0x${currentAddress.toString(16)}...`);
-                }
-                setTimeout(processChunk, 0); // Schedule next chunk, non-blocking
+            if (onProgress) {
+                const progress = (currentAddress / (totalLength - mapByteSize)) * 100;
+                onProgress(progress, `Analisando 0x${currentAddress.toString(16)}...`);
             }
-        };
+            
+            await new Promise(r => setTimeout(r, 0)); // Yield to main thread
+        }
+
+        if (onProgress) onProgress(100, "Finalizando...");
         
-        if (onProgress) onProgress(0, 'A iniciar...');
-        setTimeout(processChunk, 0); // Start the first chunk
+        const uniqueResults = results.filter((map, index, self) =>
+            index === self.findIndex((m) => m.address === map.address)
+        );
+        resolve(uniqueResults);
     });
 }
-
 
 
 // #endregion
