@@ -978,7 +978,7 @@ export function scanForMapsWithTemplate(
         confidenceThreshold?: number;
     }
 ): Promise<PotentialMap[]> {
-    return new Promise(async (resolve) => {
+    return new Promise((resolve) => {
         const { onProgress, confidenceThreshold = 0.5 } = options;
         const { rows, cols, dataSize, isBigEndian, findAxes } = config;
         const view = new DataView(binBuffer);
@@ -998,7 +998,7 @@ export function scanForMapsWithTemplate(
 
         if (onProgress) onProgress(0, 'A iniciar...');
 
-        while (currentAddress < totalLength - mapByteSize) {
+        const processChunk = async () => {
             const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
             
             for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
@@ -1053,15 +1053,18 @@ export function scanForMapsWithTemplate(
                 onProgress(progress, `Analisando 0x${currentAddress.toString(16)}...`);
             }
             
-            await new Promise(r => setTimeout(r, 0)); // Yield to main thread
-        }
+            if (currentAddress < totalLength - mapByteSize) {
+                setTimeout(processChunk, 0); // Yield to main thread
+            } else {
+                if (onProgress) onProgress(100, "Finalizando...");
+                const uniqueResults = results.filter((map, index, self) =>
+                    index === self.findIndex((m) => m.address === map.address)
+                );
+                resolve(uniqueResults.sort((a, b) => a.address - b.address));
+            }
+        };
 
-        if (onProgress) onProgress(100, "Finalizando...");
-        
-        const uniqueResults = results.filter((map, index, self) =>
-            index === self.findIndex((m) => m.address === map.address)
-        );
-        resolve(uniqueResults);
+        processChunk();
     });
 }
 
