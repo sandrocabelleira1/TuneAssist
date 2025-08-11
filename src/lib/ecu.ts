@@ -964,7 +964,7 @@ async function findAxes(view: DataView, map: PotentialMap, config: {dataSize: nu
     }
 }
 
-export function scanForMapsWithTemplate(
+export async function scanForMapsWithTemplate(
     binBuffer: ArrayBuffer,
     config: {
         rows: number;
@@ -978,95 +978,90 @@ export function scanForMapsWithTemplate(
         confidenceThreshold?: number;
     }
 ): Promise<PotentialMap[]> {
-    return new Promise((resolve) => {
-        const { onProgress, confidenceThreshold = 0.5 } = options;
-        const { rows, cols, dataSize, isBigEndian, findAxes } = config;
-        const view = new DataView(binBuffer);
-        const totalLength = binBuffer.byteLength;
-        const mapByteSize = rows * cols * dataSize;
+    const { onProgress, confidenceThreshold = 0.5 } = options;
+    const { rows, cols, dataSize, isBigEndian, findAxes } = config;
+    const view = new DataView(binBuffer);
+    const totalLength = binBuffer.byteLength;
+    const mapByteSize = rows * cols * dataSize;
+    const results: PotentialMap[] = [];
 
-        if (mapByteSize === 0 || mapByteSize > totalLength) {
-            resolve([]);
-            return;
+    if (mapByteSize === 0 || mapByteSize > totalLength) {
+        return [];
+    }
+    
+    const dataType = `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
+    const searchIncrement = 4; // Scan every 4 bytes for alignment
+    const CHUNK_SIZE = 4096; // Number of addresses to process per chunk
+    let currentAddress = 0;
+
+    if (onProgress) onProgress(0, 'A iniciar...');
+
+    while (currentAddress < totalLength - mapByteSize) {
+        const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
+        
+        for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
+            const mapData = readDataFromAddress(view, address, rows * cols, dataSize, isBigEndian);
+            if (!mapData) continue;
+
+            const map2D = Array.from({ length: rows }, (_, r) => mapData.slice(r * cols, (r + 1) * cols));
+            const mapSmoothness = calculateMapSmoothness(map2D);
+
+            if (mapSmoothness < 0.3) continue;
+
+            let bestEq = { suggestion: 'Genérico', confidence: 0, equation: 'x' };
+            for (const eq of COMMON_EQUATIONS) {
+                const analysis = analyzeMapCharacteristics(map2D, eq.equation);
+                if (analysis.confidence > bestEq.confidence) {
+                    bestEq = { ...analysis, equation: eq.equation };
+                }
+            }
+
+            const totalConfidence = (bestEq.confidence * 0.7) + (mapSmoothness * 0.3);
+
+            if (totalConfidence >= confidenceThreshold) {
+                const potentialMap: PotentialMap = {
+                    address,
+                    rows,
+                    cols,
+                    dataSize,
+                    isBigEndian,
+                    dataType,
+                    confidence: totalConfidence,
+                    suggestion: bestEq.suggestion,
+                    equation: bestEq.equation,
+                    previewData: map2D,
+                    xAxisAddress: undefined,
+                    yAxisAddress: undefined,
+                    xAxisType: 'Desconhecido',
+                    yAxisType: 'Desconhecido'
+                };
+                
+                if (findAxes) {
+                    await findAxes(view, potentialMap, {dataSize, isBigEndian});
+                }
+                results.push(potentialMap);
+            }
         }
-
-        const results: PotentialMap[] = [];
-        const dataType = `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
-        const searchIncrement = 4; // Scan every 4 bytes for alignment
-        const CHUNK_SIZE = 50000;
-        let currentAddress = 0;
-
-        if (onProgress) onProgress(0, 'A iniciar...');
-
-        const processChunk = async () => {
-            const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
-            
-            for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
-                const mapData = readDataFromAddress(view, address, rows * cols, dataSize, isBigEndian);
-                if (!mapData) continue;
-
-                const map2D = Array.from({ length: rows }, (_, r) => mapData.slice(r * cols, (r + 1) * cols));
-                const mapSmoothness = calculateMapSmoothness(map2D);
-
-                if (mapSmoothness < 0.3) continue;
-
-                let bestEq = { suggestion: 'Genérico', confidence: 0, equation: 'x' };
-                for (const eq of COMMON_EQUATIONS) {
-                    const analysis = analyzeMapCharacteristics(map2D, eq.equation);
-                    if (analysis.confidence > bestEq.confidence) {
-                        bestEq = { ...analysis, equation: eq.equation };
-                    }
-                }
-
-                const totalConfidence = (bestEq.confidence * 0.7) + (mapSmoothness * 0.3);
-
-                if (totalConfidence >= confidenceThreshold) {
-                    const potentialMap: PotentialMap = {
-                        address,
-                        rows,
-                        cols,
-                        dataSize,
-                        isBigEndian,
-                        dataType,
-                        confidence: totalConfidence,
-                        suggestion: bestEq.suggestion,
-                        equation: bestEq.equation,
-                        previewData: map2D,
-                        xAxisAddress: undefined,
-                        yAxisAddress: undefined,
-                        xAxisType: 'Desconhecido',
-                        yAxisType: 'Desconhecido'
-                    };
-                    
-                    if (findAxes) {
-                        await findAxes(view, potentialMap, {dataSize, isBigEndian});
-                    }
-
-                    results.push(potentialMap);
-                }
-            }
-
-            currentAddress = chunkEnd;
-
-            if (onProgress) {
-                const progress = (currentAddress / (totalLength - mapByteSize)) * 100;
-                onProgress(progress, `Analisando 0x${currentAddress.toString(16)}...`);
-            }
-            
-            if (currentAddress < totalLength - mapByteSize) {
-                setTimeout(processChunk, 0); // Yield to main thread
-            } else {
-                if (onProgress) onProgress(100, "Finalizando...");
-                const uniqueResults = results.filter((map, index, self) =>
-                    index === self.findIndex((m) => m.address === map.address)
-                );
-                resolve(uniqueResults.sort((a, b) => a.address - b.address));
-            }
-        };
-
-        processChunk();
-    });
+        
+        currentAddress = chunkEnd;
+        
+        if (onProgress) {
+            const progress = (currentAddress / (totalLength - mapByteSize)) * 100;
+            onProgress(progress, `Analisando 0x${currentAddress.toString(16)}...`);
+        }
+        
+        // Yield to the main thread to prevent the UI from freezing
+        await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    
+    if (onProgress) onProgress(100, "Finalizando...");
+    
+    // Sort and remove duplicates before returning
+    const uniqueResults = results.filter((map, index, self) =>
+        index === self.findIndex((m) => m.address === map.address)
+    );
+    return uniqueResults.sort((a, b) => a.address - b.address);
 }
 
-
 // #endregion
+
