@@ -775,6 +775,19 @@ export async function scanForMapsWithTemplate(
         confidenceThreshold?: number;
     }
 ): Promise<PotentialMap[]> {
+    const { onProgress, confidenceThreshold = 0.5 } = options;
+    const { rows, cols, dataSize, isBigEndian, findAxes: shouldFindAxes } = config;
+
+    const view = new DataView(binBuffer);
+    const totalLength = binBuffer.byteLength;
+    const mapByteSize = rows * cols * dataSize;
+    const results: PotentialMap[] = [];
+
+    if (mapByteSize === 0 || mapByteSize > totalLength) {
+        if (onProgress) onProgress(100, "Tamanho do mapa inválido.");
+        return [];
+    }
+    
     // #region Nested Helper Functions
     
     function readDataFromAddress(view: DataView, address: number, count: number, itemSize: number, isBigEndian: boolean): number[] | null {
@@ -830,6 +843,17 @@ export async function scanForMapsWithTemplate(
         return Math.max(0, Math.min(1, score));
     }
 
+    const COMMON_EQUATIONS: { name: string; equation: string; type: 'Ignition' | 'Fuel' | 'Lambda' | 'Temp' | 'Genérico' }[] = [
+        { name: 'Ignição ° (Div/4)', equation: 'x/4', type: 'Ignition'},
+        { name: 'Bruto', equation: 'x', type: 'Fuel'},
+        { name: 'Ignição ° (Bosch 0.75-48)', equation: 'x*0.75-48', type: 'Ignition'},
+        { name: 'Ignição ° (VAG 0.25)', equation: 'x*0.25', type: 'Ignition' },
+        { name: 'Ignição ° (Siemens 0.5)', equation: 'x*0.5', type: 'Ignition' },
+        { name: 'Combustível VE (Bosch 0.01)', equation: 'x*0.01', type: 'Fuel' },
+        { name: 'Lambda (Bosch 0.001)', equation: 'x*0.001', type: 'Lambda' },
+        { name: 'Temp °C (Bosch 0.75-48)', equation: 'x*0.75-48', type: 'Temp' },
+    ];
+
     function analyzeMapCharacteristics(mapData: number[][], equation: string): { suggestion: string; confidence: number } {
         if (!mapData || mapData.length === 0 || mapData[0].length === 0) {
             return { suggestion: 'Desconhecido', confidence: 0 };
@@ -855,12 +879,12 @@ export async function scanForMapsWithTemplate(
                     confidence = 0.7;
                     if(max - min > 25) confidence += 0.15;
                 }
-                if(equation === 'x/4' && mapData[0].length > 0) confidence += 0.1; // Bonus for the specific requested equation
+                if(equation === 'x/4' && mapData[0].length > 0) confidence += 0.1;
                 break;
             case 'Fuel':
                 if (max > 10 && max < 255 && min >= 0) {
                     confidence = 0.6;
-                     if (equation === 'x' && max < 150) confidence += 0.1; // VE% likely < 150
+                     if (equation === 'x' && max < 150) confidence += 0.1;
                 }
                 break;
             case 'Lambda':
@@ -951,7 +975,6 @@ export async function scanForMapsWithTemplate(
             map.xAxisType = bestX.type;
             map.yAxisType = bestY.type;
 
-            // If one is RPM and the other is Load, we are very confident
             if ((bestX.type === 'RPM' && bestY.type === 'Carga') || (bestX.type === 'Carga' && bestY.type === 'RPM')) {
                 map.confidence = Math.min(1, map.confidence + 0.35);
             } else {
@@ -967,40 +990,19 @@ export async function scanForMapsWithTemplate(
             map.confidence = Math.min(1, map.confidence + 0.1);
         }
     }
-
-    const COMMON_EQUATIONS: { name: string; equation: string; type: 'Ignition' | 'Fuel' | 'Lambda' | 'Temp' }[] = [
-        { name: 'Ignição ° (Div/4)', equation: 'x/4', type: 'Ignition'},
-        { name: 'Bruto', equation: 'x', type: 'Fuel'},
-        { name: 'Ignição ° (Bosch 0.75-48)', equation: 'x*0.75-48', type: 'Ignition'},
-        { name: 'Ignição ° (VAG 0.25)', equation: 'x*0.25', type: 'Ignition' },
-        { name: 'Ignição ° (Siemens 0.5)', equation: 'x*0.5', type: 'Ignition' },
-        { name: 'Combustível VE (Bosch 0.01)', equation: 'x*0.01', type: 'Fuel' },
-        { name: 'Lambda (Bosch 0.001)', equation: 'x*0.001', type: 'Lambda' },
-        { name: 'Temp °C (Bosch 0.75-48)', equation: 'x*0.75-48', type: 'Temp' },
-    ];
     // #endregion
 
-    const { onProgress, confidenceThreshold = 0.5 } = options;
-    const { rows, cols, dataSize, isBigEndian, findAxes: shouldFindAxes } = config;
-    const view = new DataView(binBuffer);
-    const totalLength = binBuffer.byteLength;
-    const mapByteSize = rows * cols * dataSize;
-    const results: PotentialMap[] = [];
-
-    if (mapByteSize === 0 || mapByteSize > totalLength) {
-        return [];
-    }
-    
     const dataType = `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
-    const searchIncrement = 4; // Scan every 4 bytes for alignment
-    const CHUNK_SIZE = 50000; // Number of addresses to check before yielding to main thread
     let currentAddress = 0;
+    const CHUNK_SIZE = 2000; // Number of addresses to check before yielding
+    const searchIncrement = 4;
 
     if (onProgress) onProgress(0, 'A iniciar...');
 
     while (currentAddress < totalLength - mapByteSize) {
+        // Process a chunk of addresses
         const chunkEnd = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
-        
+
         for (let address = currentAddress; address < chunkEnd; address += searchIncrement) {
             const mapData = readDataFromAddress(view, address, rows * cols, dataSize, isBigEndian);
             if (!mapData) continue;
@@ -1039,27 +1041,25 @@ export async function scanForMapsWithTemplate(
                 };
                 
                 if (shouldFindAxes) {
-                    // This is now an async call, so we must await it
                     await findAxes(view, potentialMap, {dataSize, isBigEndian});
                 }
                 results.push(potentialMap);
             }
         }
-        
+
         currentAddress = chunkEnd;
+
+        // Yield to the main thread to allow UI updates
+        await new Promise(requestAnimationFrame);
         
         if (onProgress) {
             const progress = (currentAddress / (totalLength - mapByteSize)) * 100;
             onProgress(progress, `Analisando 0x${currentAddress.toString(16)}...`);
         }
-        
-        // Yield to the main thread to prevent the UI from freezing
-        await new Promise(resolve => setTimeout(resolve, 0));
     }
     
-    if (onProgress) onProgress(100, "Finalizando...");
-    
-    // Sort and remove duplicates before returning
+    if (onProgress) onProgress(100, `Concluído. Encontrados ${results.length} mapas.`);
+
     const uniqueResults = results.filter((map, index, self) =>
         index === self.findIndex((m) => m.address === map.address)
     );
