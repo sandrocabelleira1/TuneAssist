@@ -1,11 +1,11 @@
 
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Loader2, DownloadCloud, Microscope, MapPinned, Columns3, GitCommitHorizontal, Wand2 } from 'lucide-react';
+import { AlertTriangle, Loader2, DownloadCloud, MapPinned } from 'lucide-react';
 import type { LogMessage, PotentialMap } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -118,6 +118,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
 
             if (isNaN(address) || isNaN(rows) || isNaN(cols) || rows <= 0 || cols <= 0) {
                  toast({ title: "Definição Inválida", description: "Verifique os valores de endereço, linhas e colunas.", variant: "destructive" });
+                 setIsLoading(false);
                  return;
             }
             
@@ -126,6 +127,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
             
             if (address + (rows * cols * dataSize) > binFile.buffer.byteLength) {
                 toast({ title: "Mapa Fora dos Limites", description: "A definição do mapa excede o tamanho do ficheiro.", variant: "destructive" });
+                setIsLoading(false);
                 return;
             }
 
@@ -223,4 +225,3 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         </div>
     );
 }
-
