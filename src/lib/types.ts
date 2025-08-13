@@ -13,6 +13,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -103,6 +104,15 @@ export type IgnitionTimingRun = {
     modified: IgnitionTimingPoint[];
 }
 
+export type ScanConfig = {
+    rows: number;
+    cols: number;
+    dataType: '8-bit' | '16-bit LE' | '16-bit BE';
+    dataSize?: number;
+    isBigEndian?: boolean;
+    findAxes: boolean;
+}
+
 export type PotentialMap = {
     address: number;
     rows: number;
@@ -127,5 +137,3 @@ export type TemplateAnalysisConfig = {
     dataType: 'uint8' | 'uint16le' | 'uint16be';
     equation: string;
 }
-
-

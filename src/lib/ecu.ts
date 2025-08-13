@@ -1,6 +1,6 @@
 
 
-import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap } from './types';
+import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig } from './types';
 
 // #region Utility Functions
 
@@ -753,6 +753,188 @@ export function calculateCorrections(
     });
 
     return { correctedMap: newMap, modifiedIndices };
+}
+
+
+// #endregion
+
+// #region Intelligent Map Scanner
+
+/**
+ * Motor de Análise Inteligente de Mapas
+ * Combina a deteção de padrões "suaves" com a procura de eixos vinculados.
+ * Processa o ficheiro em pedaços para não bloquear a UI.
+ */
+export function scanForMaps(
+    binBuffer: ArrayBuffer,
+    config: ScanConfig,
+    onProgress: (progress: number, status: string, newMap?: PotentialMap) => void
+): Promise<PotentialMap[]> {
+    return new Promise((resolve, reject) => {
+        const { rows, cols, dataSize, isBigEndian, findAxes: shouldFindAxes } = config;
+
+        const view = new DataView(binBuffer);
+        const totalLength = binBuffer.byteLength;
+        const mapByteSize = rows * cols * dataSize;
+        const results: PotentialMap[] = [];
+
+        let currentAddress = 0;
+        const chunkSize = 1024 * 16; // Process 16KB of addresses at a time
+        const useLittleEndian = !isBigEndian;
+
+        const readValue = (address: number) => {
+            if (address < 0 || address + dataSize > totalLength) return null;
+            if (dataSize === 1) return view.getUint8(address);
+            if (dataSize === 2) return view.getUint16(address, useLittleEndian);
+            return null;
+        };
+
+        const calculateSmoothness = (data: (number|null)[]) => {
+            let diffSum = 0;
+            let validPoints = 0;
+            for (let i = 1; i < data.length; i++) {
+                if (data[i] !== null && data[i-1] !== null) {
+                     diffSum += Math.abs(data[i]! - data[i-1]!);
+                     validPoints++;
+                }
+            }
+            return validPoints > 0 ? diffSum / validPoints : Infinity;
+        };
+        
+        const readDataFromAddress = (startAddr: number, count: number, axisDataSize: number, axisBigEndian: boolean) => {
+            const data: number[] = [];
+            const useAxisLittleEndian = !axisBigEndian;
+            for (let i = 0; i < count; i++) {
+                const addr = startAddr + (i * axisDataSize);
+                if (addr + axisDataSize > totalLength) return null; // Out of bounds
+                if (axisDataSize === 1) data.push(view.getUint8(addr));
+                else if (axisDataSize === 2) data.push(view.getUint16(addr, useAxisLittleEndian));
+                else return null; // Unsupported axis data size
+            }
+            return data;
+        };
+
+        const isMonotonic = (arr: number[]) => {
+            if (arr.length < 2) return true;
+            const direction = arr[1] - arr[0];
+            for (let i = 2; i < arr.length; i++) {
+                if ((arr[i] - arr[i-1]) * direction <= 0) { // Allow zero difference
+                    return false;
+                }
+            }
+            return true;
+        };
+        
+        const analyzeAxis = (data: number[]) => {
+             const avg = data.reduce((a, b) => a + b, 0) / data.length;
+             const range = Math.max(...data) - Math.min(...data);
+             // Heuristic: RPM axes typically have a larger range and higher average values
+             if (range > 500 && avg > 1000) return 'RPM';
+             // Heuristic: Load axes are often 0-100 or similar small ranges
+             if (range <= 255 && avg < 200) return 'Carga';
+             return 'Desconhecido';
+        }
+
+        const findAxes = (mapCandidate: PotentialMap) => {
+             const AXIS_SEARCH_WINDOW = 256; // How many bytes to search backwards for axes
+             const startSearchAddress = Math.max(0, mapCandidate.address - AXIS_SEARCH_WINDOW);
+             
+             for(let addr = startSearchAddress; addr < mapCandidate.address; addr++) {
+                 // Try to find Y axis (rows) first, as it's often immediately before X
+                 const yAxisCandidateAddr = addr;
+                 const yData = readDataFromAddress(yAxisCandidateAddr, rows, dataSize, isBigEndian);
+                 if (yData && isMonotonic(yData)) {
+                     const xAxisCandidateAddr = yAxisCandidateAddr + (rows * dataSize);
+                      // Check if X axis fits before map starts
+                     if (xAxisCandidateAddr + (cols * dataSize) <= mapCandidate.address) {
+                         const xData = readDataFromAddress(xAxisCandidateAddr, cols, dataSize, isBigEndian);
+                         if (xData && isMonotonic(xData)) {
+                             // Success! We found both axes.
+                             mapCandidate.yAxisAddress = yAxisCandidateAddr;
+                             mapCandidate.xAxisAddress = xAxisCandidateAddr;
+                             mapCandidate.yAxisType = analyzeAxis(yData);
+                             mapCandidate.xAxisType = analyzeAxis(xData);
+                             mapCandidate.confidence += 0.5; // Big confidence boost
+                             mapCandidate.suggestion += ` | Eixos encontrados em 0x${yAxisCandidateAddr.toString(16).toUpperCase()}`;
+                             return; // Stop searching
+                         }
+                     }
+                 }
+             }
+        }
+
+
+        const scanChunk = () => {
+            try {
+                const endAddress = Math.min(currentAddress + chunkSize, totalLength - mapByteSize);
+                
+                while (currentAddress < endAddress) {
+                    const mapData: (number|null)[] = [];
+                    let isValid = true;
+                    for (let i = 0; i < rows * cols; i++) {
+                        const val = readValue(currentAddress + (i * dataSize));
+                        if (val === null) {
+                            isValid = false;
+                            break;
+                        }
+                        mapData.push(val);
+                    }
+
+                    if (isValid) {
+                        const smoothness = calculateSmoothness(mapData);
+                        // Heuristic: lower smoothness is better. Anything > 50 is probably noise.
+                        if (smoothness < 50) { 
+                            const confidence = Math.max(0, 1 - (smoothness / 50));
+                            
+                            const potentialMap: PotentialMap = {
+                                address: currentAddress,
+                                rows,
+                                cols,
+                                dataSize,
+                                isBigEndian,
+                                confidence: confidence,
+                                suggestion: `Suavidade: ${smoothness.toFixed(2)}`,
+                                dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
+                                equation: 'x',
+                                previewData: [mapData.slice(0, cols) as number[]],
+                                xAxisType: 'Desconhecido',
+                                yAxisType: 'Desconhecido',
+                            };
+
+                            if (shouldFindAxes) {
+                                findAxes(potentialMap);
+                            }
+                            
+                            // Only add if confidence is above a certain threshold
+                            if (potentialMap.confidence > 0.2) {
+                                onProgress(
+                                  (currentAddress / totalLength) * 100, 
+                                  `Analisando 0x${currentAddress.toString(16).toUpperCase()}... Mapa potencial encontrado!`,
+                                  potentialMap
+                                );
+                            }
+                        }
+                    }
+                    currentAddress += 4; // Check every 4 bytes for alignment
+                }
+
+                if (currentAddress >= totalLength - mapByteSize) {
+                    onProgress(100, "Análise concluída.");
+                    resolve(results);
+                } else {
+                    const progress = (currentAddress / totalLength) * 100;
+                    onProgress(progress, `Analisando 0x${currentAddress.toString(16).toUpperCase()}...`);
+                    setTimeout(scanChunk, 0); // Yield to main thread
+                }
+
+            } catch (e) {
+                console.error("Erro fatal durante a análise:", e);
+                reject(e);
+            }
+        };
+
+        scanChunk();
+    });
 }
 
 

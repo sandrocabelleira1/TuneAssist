@@ -1,163 +1,118 @@
 
 'use client';
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Loader2, DownloadCloud, MapPinned } from 'lucide-react';
-import type { LogMessage, PotentialMap } from '@/lib/types';
+import { AlertTriangle, Loader2, DownloadCloud, Wand2, Search, Table, BrainCircuit } from 'lucide-react';
+import type { LogMessage, PotentialMap, ScanConfig } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
+import { scanForMaps } from '@/lib/ecu';
+import {
+  Table as ResultTable,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
-const HexViewer = ({ buffer, highlightAddress, onAddressClick }: { 
-    buffer: ArrayBuffer | null;
-    highlightAddress: number | null;
-    onAddressClick: (address: number) => void;
-}) => {
-  const bytesPerLine = 16;
-  const hexValues = useMemo(() => {
-    if (!buffer) return [];
-    const view = new Uint8Array(buffer);
-    const lines = [];
-    for (let i = 0; i < view.length; i += bytesPerLine) {
-      const slice = view.slice(i, i + bytesPerLine);
-      lines.push({
-        address: i,
-        hex: Array.from(slice).map(b => b.toString(16).padStart(2, '0')).join(' '),
-        ascii: Array.from(slice).map(b => (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.').join('')
-      });
-    }
-    return lines;
-  }, [buffer]);
 
-  const highlightRef = React.useRef<HTMLDivElement>(null);
+const SparkLinePreview = ({ data }: { data: number[][] | undefined }) => {
+    if (!data || data.length === 0 || data[0].length === 0) return null;
+    
+    const height = 30;
+    const width = 100;
+    const allValues = data.flat().filter(v => v !== null) as number[];
+    if (allValues.length === 0) return null;
+    
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    const range = max - min;
 
-  useEffect(() => {
-    if (highlightAddress !== null && highlightRef.current) {
-      highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [highlightAddress]);
+    const points = data[0].map((val, i) => {
+        const x = (i / (data[0].length - 1)) * width;
+        const y = height - ((val - min) / (range || 1)) * height;
+        return `${x},${y}`;
+    }).join(' ');
 
-  if (!buffer) {
     return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground bg-muted/20 rounded-lg">
-        Carregue um ficheiro .BIN para visualizar os seus conteúdos.
-      </div>
-    );
-  }
-
-  const handleCellClick = (lineAddress: number, byteIndex: number) => {
-      onAddressClick(lineAddress + byteIndex);
-  };
-
-  return (
-    <ScrollArea className="h-full w-full bg-background border rounded-lg">
-      <div className="p-2 font-mono text-xs">
-        <div className="flex sticky top-0 bg-muted z-10">
-            <span className="text-muted-foreground w-20 shrink-0">Endereço</span>
-            <span className="flex-1 text-muted-foreground">00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F</span>
-            <span className="text-muted-foreground w-20 shrink-0 text-center">ASCII</span>
-        </div>
-        {hexValues.map(line => {
-          const isHighlighted = highlightAddress !== null && line.address <= highlightAddress && highlightAddress < line.address + bytesPerLine;
-          return (
-            <div key={line.address} ref={isHighlighted ? highlightRef : null} className={`flex hover:bg-muted/50 ${isHighlighted ? 'bg-primary/20 rounded' : ''}`}>
-              <span className="text-muted-foreground w-20 shrink-0 py-0.5">0x{line.address.toString(16).padStart(8, '0')}</span>
-              <span className="flex-1 text-foreground whitespace-pre cursor-pointer py-0.5" onClick={() => handleCellClick(line.address, 0)}>
-                {line.hex.split(' ').map((hexByte, index) => (
-                    <span key={index} onClick={(e) => { e.stopPropagation(); handleCellClick(line.address, index); }} className="px-[1px] hover:bg-primary/30 rounded">{hexByte}</span>
-                )).reduce((prev, curr) => <>{prev}{' '}{curr}</>)}
-              </span>
-              <span className="text-muted-foreground w-20 shrink-0 text-center py-0.5">{line.ascii}</span>
-            </div>
-          );
-        })}
-      </div>
-    </ScrollArea>
-  );
-};
-
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-24 h-auto">
+            <polyline
+                fill="none"
+                stroke="hsl(var(--primary))"
+                strokeWidth="2"
+                points={points}
+            />
+        </svg>
+    )
+}
 
 interface MapScannerProps {
     binFile: { name: string; buffer: ArrayBuffer } | null;
     onLoadMap: (map: PotentialMap) => void;
     addLog: (message: string, type?: LogMessage['type']) => void;
+    potentialMaps: PotentialMap[];
+    setPotentialMaps: React.Dispatch<React.SetStateAction<PotentialMap[]>>;
 }
 
-export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerProps) {
+export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, setPotentialMaps }: MapScannerProps) {
+    const [isScanning, setIsScanning] = useState(false);
+    const [scanProgress, setScanProgress] = useState(0);
+    const [scanStatus, setScanStatus] = useState('');
+    const [scanConfig, setScanConfig] = useState<ScanConfig>({
+        rows: 19,
+        cols: 32,
+        dataType: '8-bit',
+        findAxes: true
+    });
     
-    const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
 
-    const [mapDefinition, setMapDefinition] = useState({
-        address: '0x0',
-        rows: '16',
-        cols: '16',
-        dataType: '8-bit',
-    });
-
-    const handleAddressClick = (address: number) => {
-        setMapDefinition(def => ({ ...def, address: `0x${address.toString(16)}` }));
-    };
-
-    const handleCreateMap = useCallback(() => {
+    const handleScan = useCallback(async () => {
         if (!binFile) {
             toast({ title: "Ficheiro BIN não carregado", variant: "destructive" });
             return;
         }
 
-        setIsLoading(true);
+        setIsScanning(true);
+        setPotentialMaps([]);
+        setScanProgress(0);
+        addLog("A iniciar análise inteligente...", 'info');
+        
+        const dataSize = scanConfig.dataType.includes('16') ? 2 : 1;
+        const isBigEndian = scanConfig.dataType.includes('BE');
 
         try {
-            const address = parseInt(mapDefinition.address, 16);
-            const rows = parseInt(mapDefinition.rows, 10);
-            const cols = parseInt(mapDefinition.cols, 10);
-
-            if (isNaN(address) || isNaN(rows) || isNaN(cols) || rows <= 0 || cols <= 0) {
-                 toast({ title: "Definição Inválida", description: "Verifique os valores de endereço, linhas e colunas.", variant: "destructive" });
-                 setIsLoading(false);
-                 return;
-            }
-            
-            const dataSize = mapDefinition.dataType.includes('16') ? 2 : 1;
-            const isBigEndian = mapDefinition.dataType.includes('BE');
-            
-            if (address + (rows * cols * dataSize) > binFile.buffer.byteLength) {
-                toast({ title: "Mapa Fora dos Limites", description: "A definição do mapa excede o tamanho do ficheiro.", variant: "destructive" });
-                setIsLoading(false);
-                return;
-            }
-
-            const potentialMap: PotentialMap = {
-                address,
-                rows,
-                cols,
-                dataSize,
-                isBigEndian,
-                confidence: 1.0, // Manual definition is always 100% confidence
-                suggestion: `Manual @ 0x${address.toString(16).toUpperCase()}`,
-                dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
-                equation: 'x', // Default equation
-                xAxisAddress: undefined,
-                yAxisAddress: undefined,
-                xAxisType: 'Desconhecido',
-                yAxisType: 'Desconhecido',
-            };
-            
-            onLoadMap(potentialMap);
-            toast({ title: "Mapa Criado", description: `Mapa ${rows}x${cols} em 0x${address.toString(16).toUpperCase()} carregado para análise.` });
-
+            await scanForMaps(
+                binFile.buffer,
+                { ...scanConfig, dataSize, isBigEndian },
+                (progress, status, newMap) => {
+                    setScanProgress(progress);
+                    setScanStatus(status);
+                    if (newMap) {
+                        setPotentialMaps(prev => [...prev, newMap].sort((a,b) => b.confidence - a.confidence));
+                    }
+                }
+            );
+            toast({ title: "Análise Concluída", description: "O motor de análise terminou a pesquisa." });
         } catch (error) {
-             const msg = `Erro ao criar mapa: ${(error as Error).message}`;
-             addLog(msg, 'error');
-             toast({ title: "Erro", description: msg, variant: "destructive" });
+            const msg = `Erro durante a análise: ${(error as Error).message}`;
+            addLog(msg, 'error');
+            toast({ title: "Erro na Análise", description: msg, variant: "destructive" });
         } finally {
-            setIsLoading(false);
+            setIsScanning(false);
+            setScanStatus('Análise concluída.');
         }
-    }, [binFile, mapDefinition, onLoadMap, toast, addLog]);
+
+    }, [binFile, scanConfig, addLog, toast, setPotentialMaps]);
 
     if (!binFile) {
         return (
@@ -170,57 +125,112 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
     }
     
     return (
-        <div className="flex flex-col h-full gap-4">
-             <Card className="shrink-0">
+        <div className="flex flex-col lg:flex-row h-full gap-4">
+             <Card className="shrink-0 lg:w-1/3">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><MapPinned /> Definição Manual de Mapa</CardTitle>
+                    <CardTitle className="flex items-center gap-2"><BrainCircuit /> Motor de Análise</CardTitle>
                     <CardDescription>
-                    Clique num endereço no visualizador hexadecimal abaixo ou insira-o manualmente. Defina as dimensões e o tipo de dados para criar e carregar um mapa para análise.
+                        Configure as dimensões e o tipo de dados para a análise inteligente. O motor irá procurar por padrões e ligações de eixos.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
-                    <div className="flex flex-col sm:flex-row items-end gap-4">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 flex-1">
+                <CardContent className="space-y-6">
+                     <div className="space-y-4">
+                         <div className="grid grid-cols-2 gap-4">
                              <div className="space-y-1.5">
-                                <Label htmlFor="map-address">Endereço do Mapa</Label>
-                                <Input id="map-address" value={mapDefinition.address} onChange={e => setMapDefinition(c => ({...c, address: e.target.value}))} disabled={isLoading} />
+                                <Label htmlFor="map-rows">Linhas (Y)</Label>
+                                <Input id="map-rows" type="number" value={scanConfig.rows} onChange={e => setScanConfig(c => ({...c, rows: parseInt(e.target.value) || 0}))} disabled={isScanning} />
                             </div>
                             <div className="space-y-1.5">
-                                <Label htmlFor="map-rows">Linhas</Label>
-                                <Input id="map-rows" type="number" value={mapDefinition.rows} onChange={e => setMapDefinition(c => ({...c, rows: e.target.value}))} disabled={isLoading} />
+                                <Label htmlFor="map-cols">Colunas (X)</Label>
+                                <Input id="map-cols" type="number" value={scanConfig.cols} onChange={e => setScanConfig(c => ({...c, cols: parseInt(e.target.value) || 0}))} disabled={isScanning} />
                             </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="map-cols">Colunas</Label>
-                                <Input id="map-cols" type="number" value={mapDefinition.cols} onChange={e => setMapDefinition(c => ({...c, cols: e.target.value}))} disabled={isLoading} />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="map-datatype">Tipo de Dados</Label>
-                                <Select value={mapDefinition.dataType} onValueChange={v => setMapDefinition(c => ({...c, dataType: v}))} disabled={isLoading}>
-                                    <SelectTrigger id="map-datatype">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="8-bit">8-bit</SelectItem>
-                                        <SelectItem value="16-bit LE">16-bit (Little Endian)</SelectItem>
-                                        <SelectItem value="16-bit BE">16-bit (Big Endian)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                         </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="map-datatype">Tipo de Dados</Label>
+                            <Select value={scanConfig.dataType} onValueChange={v => setScanConfig(c => ({...c, dataType: v as ScanConfig['dataType']}))} disabled={isScanning}>
+                                <SelectTrigger id="map-datatype">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="8-bit">8-bit</SelectItem>
+                                    <SelectItem value="16-bit LE">16-bit (Little Endian)</SelectItem>
+                                    <SelectItem value="16-bit BE">16-bit (Big Endian)</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
-                        <Button onClick={handleCreateMap} disabled={isLoading} className="w-full sm:w-auto">
-                            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <DownloadCloud className="mr-2 h-4 w-4" />}
-                            {isLoading ? 'A Carregar...' : 'Criar e Carregar Mapa'}
+                        <div className="flex items-center space-x-2 pt-2">
+                             <Checkbox id="find-axes" checked={scanConfig.findAxes} onCheckedChange={checked => setScanConfig(c => ({...c, findAxes: !!checked}))} disabled={isScanning} />
+                             <Label htmlFor="find-axes" className="font-medium">Procurar eixos vinculados (IDA Pro Logic)</Label>
+                        </div>
+                     </div>
+                     <Separator />
+                     <div className="space-y-4">
+                        <Button onClick={handleScan} disabled={isScanning} className="w-full">
+                            {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
+                            {isScanning ? 'A Analisar...' : 'Iniciar Análise Inteligente'}
                         </Button>
-                    </div>
+                        {isScanning && (
+                            <div className="space-y-2">
+                                <Progress value={scanProgress} />
+                                <p className="text-xs text-muted-foreground text-center">{scanStatus} ({scanProgress.toFixed(0)}%)</p>
+                            </div>
+                        )}
+                     </div>
                 </CardContent>
             </Card>
 
-            <div className="flex-1 min-h-[300px]">
-                 <HexViewer 
-                    buffer={binFile?.buffer ?? null} 
-                    highlightAddress={parseInt(mapDefinition.address, 16)} 
-                    onAddressClick={handleAddressClick}
-                />
+            <div className="flex-1 min-h-0 flex flex-col gap-4">
+                <Card className="flex-1">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><Table /> Resultados da Análise</CardTitle>
+                        <CardDescription>Mapas potenciais encontrados, ordenados por confiança. Clique em "Carregar" para os analisar.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[calc(100%-6rem)]">
+                        <ScrollArea className="h-full">
+                            <ResultTable>
+                                <TableHeader className="sticky top-0 bg-muted">
+                                    <TableRow>
+                                        <TableHead>Confiança</TableHead>
+                                        <TableHead>Endereço</TableHead>
+                                        <TableHead>Sugestão</TableHead>
+                                        <TableHead>Eixos</TableHead>
+                                        <TableHead>Pré-visualização</TableHead>
+                                        <TableHead className="text-right">Ação</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {potentialMaps.length > 0 ? (
+                                        potentialMaps.map(map => (
+                                            <TableRow key={map.address}>
+                                                <TableCell className="font-semibold">{(map.confidence * 100).toFixed(0)}%</TableCell>
+                                                <TableCell className="font-mono">0x{map.address.toString(16).toUpperCase()}</TableCell>
+                                                <TableCell>{map.suggestion}</TableCell>
+                                                <TableCell className="text-xs font-mono">
+                                                   {map.xAxisAddress && <div>X: 0x{map.xAxisAddress.toString(16).toUpperCase()}</div>}
+                                                   {map.yAxisAddress && <div>Y: 0x{map.yAxisAddress.toString(16).toUpperCase()}</div>}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <SparkLinePreview data={map.previewData} />
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button size="sm" onClick={() => onLoadMap(map)}>
+                                                        <DownloadCloud className="mr-2 h-4 w-4" /> Carregar
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                                {isScanning ? "Aguardando resultados..." : "Nenhum resultado. Inicie uma análise para encontrar mapas."}
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </ResultTable>
+                        </ScrollArea>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     );
