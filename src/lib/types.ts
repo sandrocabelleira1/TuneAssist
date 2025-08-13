@@ -14,6 +14,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -111,6 +112,7 @@ export type ScanConfig = {
     dataSize?: number;
     isBigEndian?: boolean;
     findAxes: boolean;
+    rowStride?: number; // Total bytes per row, including padding
 }
 
 export type PotentialMap = {
@@ -123,6 +125,7 @@ export type PotentialMap = {
     suggestion: string;
     dataType: string;
     equation: string;
+    rowStride?: number;
     previewData?: number[][]; // For sparkline
     xAxisAddress?: number;
     yAxisAddress?: number;

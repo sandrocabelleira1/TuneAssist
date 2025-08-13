@@ -71,7 +71,8 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
         rows: 19,
         cols: 32,
         dataType: '8-bit',
-        findAxes: true
+        findAxes: true,
+        rowStride: undefined,
     });
     
     const { toast } = useToast();
@@ -158,6 +159,17 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="row-stride">Passo da Linha (bytes)</Label>
+                            <Input 
+                                id="row-stride" 
+                                type="number"
+                                placeholder="Automático (Colunas * Tamanho do Dado)"
+                                value={scanConfig.rowStride ?? ''}
+                                onChange={e => setScanConfig(c => ({...c, rowStride: e.target.value ? parseInt(e.target.value) : undefined}))}
+                                disabled={isScanning}
+                            />
+                        </div>
                         <div className="flex items-center space-x-2 pt-2">
                              <Checkbox id="find-axes" checked={scanConfig.findAxes} onCheckedChange={checked => setScanConfig(c => ({...c, findAxes: !!checked}))} disabled={isScanning} />
                              <Label htmlFor="find-axes" className="font-medium">Procurar eixos vinculados (IDA Pro Logic)</Label>
@@ -183,7 +195,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                 <Card className="flex-1">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Table /> Resultados da Análise</CardTitle>
-                        <CardDescription>Mapas potenciais encontrados, ordenados por confiança. Clique em "Carregar" para os analisar.</CardDescription>
+                        <CardDescription>Mapas potenciais encontrados, ordenados por endereço. Clique em "Carregar" para os analisar.</CardDescription>
                     </CardHeader>
                     <CardContent className="h-[calc(100%-6rem)]">
                         <ScrollArea className="h-full">
