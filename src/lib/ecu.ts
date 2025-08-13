@@ -231,7 +231,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
         }
         
         usedIds.add(uniqueId);
-        if (originalId) { // Still map the original ID for axis lookups
+        if (originalId) { // Still map the original ID for lookups
              allTables.set(originalId, tableEl);
         }
         allTables.set(uniqueId, tableEl);
@@ -760,6 +760,22 @@ export function calculateCorrections(
 
 // #region Intelligent Map Scanner
 
+export const analyzeAxis = (data: number[]) => {
+    const avg = data.reduce((a, b) => a + b, 0) / data.length;
+    const range = Math.max(...data) - Math.min(...data);
+    const name = data.length > 0 ? `Eixo de ${data.length} valores` : 'Eixo';
+
+    // Heuristic: RPM axes typically have a larger range and higher average values, often ending in 00s or 50s.
+    const isLikelyRpm = range > 1000 && avg > 1000 && data.every(v => v % 50 === 0 || v % 100 === 0);
+    if (isLikelyRpm) return 'RPM';
+    
+    // Heuristic: Load axes are often 0-100 or similar small ranges. Can also be pressure (kPa).
+    const isLikelyLoad = (range <= 255 && avg < 200) || (range > 100 && avg < 300); // Broader range for pressure
+    if (isLikelyLoad) return 'Carga';
+    
+    return 'Desconhecido';
+};
+
 /**
  * Motor de Análise Inteligente de Mapas
  * Combina a deteção de padrões "suaves" com a procura de eixos vinculados.
@@ -776,10 +792,7 @@ export function scanForMaps(
         const view = new DataView(binBuffer);
         const totalLength = binBuffer.byteLength;
         const mapByteSize = rows * cols * dataSize;
-        const results: PotentialMap[] = [];
-
         let currentAddress = 0;
-        const chunkSize = 1024 * 16; // Process 16KB of addresses at a time
         const useLittleEndian = !isBigEndian;
 
         const readValue = (address: number) => {
@@ -817,24 +830,24 @@ export function scanForMaps(
         const isMonotonic = (arr: number[]) => {
             if (arr.length < 2) return true;
             const direction = arr[1] - arr[0];
+            // If direction is 0, allow a flat line initially but then require change
+            if (direction === 0) {
+                 for (let i = 2; i < arr.length; i++) {
+                    if (arr[i] - arr[i-1] !== 0) return false; // Must be all same value if starts flat
+                }
+                return true;
+            }
+            
             for (let i = 2; i < arr.length; i++) {
-                if ((arr[i] - arr[i-1]) * direction <= 0) { // Allow zero difference
+                const currentDirection = arr[i] - arr[i-1];
+                // Allow flat sections (e.g. 10, 20, 20, 30) but not reversals
+                if (currentDirection * direction < 0) {
                     return false;
                 }
             }
             return true;
         };
         
-        const analyzeAxis = (data: number[]) => {
-             const avg = data.reduce((a, b) => a + b, 0) / data.length;
-             const range = Math.max(...data) - Math.min(...data);
-             // Heuristic: RPM axes typically have a larger range and higher average values
-             if (range > 500 && avg > 1000) return 'RPM';
-             // Heuristic: Load axes are often 0-100 or similar small ranges
-             if (range <= 255 && avg < 200) return 'Carga';
-             return 'Desconhecido';
-        }
-
         const findAxes = (mapCandidate: PotentialMap) => {
              const AXIS_SEARCH_WINDOW = 256; // How many bytes to search backwards for axes
              const startSearchAddress = Math.max(0, mapCandidate.address - AXIS_SEARCH_WINDOW);
@@ -855,7 +868,7 @@ export function scanForMaps(
                              mapCandidate.yAxisType = analyzeAxis(yData);
                              mapCandidate.xAxisType = analyzeAxis(xData);
                              mapCandidate.confidence += 0.5; // Big confidence boost
-                             mapCandidate.suggestion += ` | Eixos encontrados em 0x${yAxisCandidateAddr.toString(16).toUpperCase()}`;
+                             mapCandidate.suggestion += ` | Eixos em 0x${yAxisCandidateAddr.toString(16).toUpperCase()}`;
                              return; // Stop searching
                          }
                      }
@@ -866,8 +879,11 @@ export function scanForMaps(
 
         const scanChunk = () => {
             try {
-                const endAddress = Math.min(currentAddress + chunkSize, totalLength - mapByteSize);
+                const CHUNK_SIZE = 1024 * 32; // Process this many addresses per cycle
+                const endAddress = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
                 
+                let mapsInChunk: PotentialMap[] = [];
+
                 while (currentAddress < endAddress) {
                     const mapData: (number|null)[] = [];
                     let isValid = true;
@@ -882,7 +898,6 @@ export function scanForMaps(
 
                     if (isValid) {
                         const smoothness = calculateSmoothness(mapData);
-                        // Heuristic: lower smoothness is better. Anything > 50 is probably noise.
                         if (smoothness < 50) { 
                             const confidence = Math.max(0, 1 - (smoothness / 50));
                             
@@ -905,25 +920,30 @@ export function scanForMaps(
                                 findAxes(potentialMap);
                             }
                             
-                            // Only add if confidence is above a certain threshold
                             if (potentialMap.confidence > 0.2) {
-                                onProgress(
-                                  (currentAddress / totalLength) * 100, 
-                                  `Analisando 0x${currentAddress.toString(16).toUpperCase()}... Mapa potencial encontrado!`,
-                                  potentialMap
-                                );
+                                mapsInChunk.push(potentialMap);
                             }
                         }
                     }
-                    currentAddress += 4; // Check every 4 bytes for alignment
+                    currentAddress += 4;
+                }
+                
+                if (mapsInChunk.length > 0) {
+                     for (const newMap of mapsInChunk) {
+                        onProgress(
+                            (currentAddress / totalLength) * 100, 
+                            `Analisando 0x${currentAddress.toString(16).toUpperCase()}... Mapa potencial encontrado!`,
+                            newMap
+                        );
+                     }
+                } else {
+                     onProgress((currentAddress / totalLength) * 100, `Analisando 0x${currentAddress.toString(16).toUpperCase()}...`);
                 }
 
                 if (currentAddress >= totalLength - mapByteSize) {
                     onProgress(100, "Análise concluída.");
-                    resolve(results);
+                    resolve([]); // The results are passed via onProgress callback
                 } else {
-                    const progress = (currentAddress / totalLength) * 100;
-                    onProgress(progress, `Analisando 0x${currentAddress.toString(16).toUpperCase()}...`);
                     setTimeout(scanChunk, 0); // Yield to main thread
                 }
 

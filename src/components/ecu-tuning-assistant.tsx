@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections, analyzeAxis } from '@/lib/ecu';
 import type { XDFDefinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -135,7 +135,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     mapData: MapData | null;
     addresses: MapData | null;
     axes: { x: AxisData, y: AxisData } | null;
-    selectedMapDefinition: XDFDefinition | undefined;
+    selectedMapDefinition: XDFinition | undefined;
     onCellChange: (y: number, x: number, value: number) => void;
     onMassUpdate: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', value: number) => void;
     aiModifiedCells: Set<string>;
@@ -337,7 +337,7 @@ type StructureTemplate = {
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
-    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFDefinition[], allTables: Map<string, Element> } | null>(null);
+    const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFinition[], allTables: Map<string, Element> } | null>(null);
     const [logFile, setLogFile] = useState<{ name: string; content: string } | null>(null);
     const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
@@ -974,8 +974,21 @@ export default function EcuTuningAssistant() {
     const handleLoadPotentialMap = (map: PotentialMap) => {
         addLog(`A carregar mapa potencial em 0x${map.address.toString(16).toUpperCase()}.`, 'info');
         
+        if (!binFile) {
+            addLog('Ficheiro BIN não está carregado. Impossível ler os dados do eixo.', 'error');
+            return;
+        }
+
         const tempId = `potential_${map.address}_${map.rows}x${map.cols}`;
         
+        // This is a new feature: intelligently decide which axis is which and if it should be sorted
+        const isXrpm = map.xAxisType === 'RPM';
+        const isYrpm = map.yAxisType === 'RPM';
+
+        // An axis should be sorted if it's RPM. Load axes can also be sorted.
+        const sortX = isXrpm;
+        const sortY = isYrpm;
+
         const tempDef: XDFinition = {
             uniqueId: tempId,
             name: `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
@@ -988,24 +1001,27 @@ export default function EcuTuningAssistant() {
             equation: map.equation || 'x',
             decimalpl: 2,
             xAxisDef: {
-                label: map.xAxisType || 'Eixo X (scan)',
+                label: map.xAxisAddress ? `${map.xAxisType} (0x${map.xAxisAddress.toString(16).toUpperCase()})` : `Eixo X (scan)`,
                 count: map.cols,
-                requiresSort: false,
+                requiresSort: sortX, // Set sorting intelligently
                 address: map.xAxisAddress,
                 dataSize: map.dataSize,
                 isBigEndian: map.isBigEndian,
                 equation: 'x'
             },
             yAxisDef: {
-                label: map.yAxisType || 'Eixo Y (scan)',
+                label: map.yAxisAddress ? `${map.yAxisType} (0x${map.yAxisAddress.toString(16).toUpperCase()})` : `Eixo Y (scan)`,
                 count: map.rows,
-                requiresSort: false,
+                requiresSort: sortY, // Set sorting intelligently
                 address: map.yAxisAddress,
                 dataSize: map.dataSize,
                 isBigEndian: map.isBigEndian,
                 equation: 'x'
             }
         };
+        
+        addLog(`Eixo X (colunas) identificado como ${map.xAxisType}, ordenação: ${sortX}.`, 'info');
+        addLog(`Eixo Y (linhas) identificado como ${map.yAxisType}, ordenação: ${sortY}.`, 'info');
 
         const currentXdfDefs = xdfFile ? xdfFile.definitions.filter(d => d.uniqueId !== tempId) : [];
         const newDefs = [...currentXdfDefs, tempDef];
