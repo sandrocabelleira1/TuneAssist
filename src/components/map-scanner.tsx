@@ -98,7 +98,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                     setScanProgress(progress);
                     setScanStatus(status);
                     if (newMap) {
-                        setPotentialMaps(prev => [...prev, newMap].sort((a,b) => b.confidence - a.confidence));
+                        setPotentialMaps(prev => [...prev, newMap].sort((a,b) => a.address - b.address));
                     }
                 }
             );
