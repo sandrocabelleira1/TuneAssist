@@ -2,11 +2,11 @@
 
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { AlertTriangle, Loader2, DownloadCloud, Wand2, Search, Table, BrainCircuit } from 'lucide-react';
+import { AlertTriangle, Loader2, DownloadCloud, BrainCircuit, Search, Table } from 'lucide-react';
 import type { LogMessage, PotentialMap, ScanConfig } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
-import { scanForMaps } from '@/lib/ecu';
+import { scanForMapsByAxes } from '@/lib/ecu';
 import {
   Table as ResultTable,
   TableBody,
@@ -38,9 +38,18 @@ const SparkLinePreview = ({ data }: { data: number[][] | undefined }) => {
     const max = Math.max(...allValues);
     const range = max - min;
 
+    if (range === 0) { // Handle flat data
+        const y = height / 2;
+        return (
+             <svg viewBox={`0 0 ${width} ${height}`} className="w-24 h-auto">
+                <line x1="0" y1={y} x2={width} y2={y} stroke="hsl(var(--primary))" strokeWidth="2" />
+            </svg>
+        )
+    }
+
     const points = data[0].map((val, i) => {
         const x = (i / (data[0].length - 1)) * width;
-        const y = height - ((val - min) / (range || 1)) * height;
+        const y = height - ((val - min) / range) * height;
         return `${x},${y}`;
     }).join(' ');
 
@@ -69,11 +78,9 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
     const [scanProgress, setScanProgress] = useState(0);
     const [scanStatus, setScanStatus] = useState('');
     const [scanConfig, setScanConfig] = useState<ScanConfig>({
-        rows: 19,
-        cols: 32,
-        dataType: '8-bit',
-        findAxes: true,
-        rowStride: undefined,
+        minSize: 8,
+        maxSize: 40,
+        dataType: '16-bit LE',
     });
     
     const { toast } = useToast();
@@ -87,13 +94,13 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
         setIsScanning(true);
         setPotentialMaps([]);
         setScanProgress(0);
-        addLog("A iniciar análise inteligente...", 'info');
+        addLog("A iniciar análise orientada por eixos...", 'info');
         
         const dataSize = scanConfig.dataType.includes('16') ? 2 : 1;
         const isBigEndian = scanConfig.dataType.includes('BE');
 
         try {
-            await scanForMaps(
+            await scanForMapsByAxes(
                 binFile.buffer,
                 { ...scanConfig, dataSize, isBigEndian },
                 (progress, status, newMap) => {
@@ -132,23 +139,23 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><BrainCircuit /> Motor de Análise</CardTitle>
                     <CardDescription>
-                        Configure as dimensões e o tipo de dados para a análise inteligente. O motor irá procurar por padrões e ligações de eixos.
+                        Configure os parâmetros para a análise orientada por eixos. O motor irá primeiro encontrar eixos (RPM/Carga) e depois procurar mapas associados.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                      <div className="space-y-4">
                          <div className="grid grid-cols-2 gap-4">
                              <div className="space-y-1.5">
-                                <Label htmlFor="map-rows">Linhas (Y)</Label>
-                                <Input id="map-rows" type="number" value={scanConfig.rows} onChange={e => setScanConfig(c => ({...c, rows: parseInt(e.target.value) || 0}))} disabled={isScanning} />
+                                <Label htmlFor="axis-min-size">Comp. Mín. Eixo</Label>
+                                <Input id="axis-min-size" type="number" value={scanConfig.minSize} onChange={e => setScanConfig(c => ({...c, minSize: parseInt(e.target.value) || 0}))} disabled={isScanning} />
                             </div>
                             <div className="space-y-1.5">
-                                <Label htmlFor="map-cols">Colunas (X)</Label>
-                                <Input id="map-cols" type="number" value={scanConfig.cols} onChange={e => setScanConfig(c => ({...c, cols: parseInt(e.target.value) || 0}))} disabled={isScanning} />
+                                <Label htmlFor="axis-max-size">Comp. Máx. Eixo</Label>
+                                <Input id="axis-max-size" type="number" value={scanConfig.maxSize} onChange={e => setScanConfig(c => ({...c, maxSize: parseInt(e.target.value) || 0}))} disabled={isScanning} />
                             </div>
                          </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor="map-datatype">Tipo de Dados</Label>
+                            <Label htmlFor="map-datatype">Tipo de Dados (Eixos e Mapas)</Label>
                             <Select value={scanConfig.dataType} onValueChange={v => setScanConfig(c => ({...c, dataType: v as ScanConfig['dataType']}))} disabled={isScanning}>
                                 <SelectTrigger id="map-datatype">
                                     <SelectValue />
@@ -160,27 +167,12 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-1.5">
-                            <Label htmlFor="row-stride">Passo da Linha (bytes)</Label>
-                            <Input 
-                                id="row-stride" 
-                                type="number"
-                                placeholder="Automático (Colunas * Tamanho do Dado)"
-                                value={scanConfig.rowStride ?? ''}
-                                onChange={e => setScanConfig(c => ({...c, rowStride: e.target.value ? parseInt(e.target.value) : undefined}))}
-                                disabled={isScanning}
-                            />
-                        </div>
-                        <div className="flex items-center space-x-2 pt-2">
-                             <Checkbox id="find-axes" checked={scanConfig.findAxes} onCheckedChange={checked => setScanConfig(c => ({...c, findAxes: !!checked}))} disabled={isScanning} />
-                             <Label htmlFor="find-axes" className="font-medium">Procurar eixos vinculados (IDA Pro Logic)</Label>
-                        </div>
                      </div>
                      <Separator />
                      <div className="space-y-4">
                         <Button onClick={handleScan} disabled={isScanning} className="w-full">
                             {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Search className="mr-2 h-4 w-4" />}
-                            {isScanning ? 'A Analisar...' : 'Iniciar Análise Inteligente'}
+                            {isScanning ? 'A Analisar...' : 'Iniciar Análise Orientada por Eixos'}
                         </Button>
                         {isScanning && (
                             <div className="space-y-2">
@@ -205,8 +197,8 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                     <TableRow>
                                         <TableHead>Confiança</TableHead>
                                         <TableHead>Endereço</TableHead>
-                                        <TableHead>Sugestão</TableHead>
-                                        <TableHead>Eixos</TableHead>
+                                        <TableHead>Dimensões</TableHead>
+                                        <TableHead>Eixos (X, Y)</TableHead>
                                         <TableHead>Pré-visualização</TableHead>
                                         <TableHead className="text-right">Ação</TableHead>
                                     </TableRow>
@@ -217,7 +209,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                             <TableRow key={map.address}>
                                                 <TableCell className="font-semibold">{(map.confidence * 100).toFixed(0)}%</TableCell>
                                                 <TableCell className="font-mono">0x{map.address.toString(16).toUpperCase()}</TableCell>
-                                                <TableCell>{map.suggestion}</TableCell>
+                                                <TableCell>{map.cols}x{map.rows}</TableCell>
                                                 <TableCell className="text-xs font-mono">
                                                    {map.xAxisAddress && <div>X ({map.xAxisType}): 0x{map.xAxisAddress.toString(16).toUpperCase()}</div>}
                                                    {map.yAxisAddress && <div>Y ({map.yAxisType}): 0x{map.yAxisAddress.toString(16).toUpperCase()}</div>}

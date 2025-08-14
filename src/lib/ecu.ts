@@ -3,7 +3,8 @@
 
 
 
-import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig } from './types';
+
+import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig, FoundAxis } from './types';
 
 // #region Utility Functions
 
@@ -21,7 +22,7 @@ function evaluateEquation(equation: string, value: number): number {
 
         // Use \b for word boundary to only replace standalone 'x'
         const expr = sanitizedEq.replace(/\bx\b/g, `(${value.toString()})`);
-        // eslint-disable-next-line no-new-func
+        // eslint-disable--next-line no-new-func
         const result = new Function('return ' + expr)();
         if (typeof result !== 'number' || !isFinite(result)) {
             return NaN;
@@ -765,14 +766,23 @@ export function calculateCorrections(
 
 export function analyzeAxis(data: number[]): 'RPM' | 'Carga' | 'Desconhecido' {
     if (data.length < 2) return 'Desconhecido';
+
+    const isStrictlyMonotonic = (arr: number[]) => {
+        if (arr.length < 2) return true;
+        const direction = arr[1] - arr[0];
+        if (direction === 0) return false; // Not strictly monotonic if starts flat
+        for (let i = 2; i < arr.length; i++) {
+            if ((arr[i] - arr[i-1]) * direction <= 0) return false; // must be strictly increasing or decreasing
+        }
+        return true;
+    };
     
-    if (!isMonotonic(data)) return 'Desconhecido';
+    if (!isStrictlyMonotonic(data)) return 'Desconhecido';
 
     const avg = data.reduce((a, b) => a + b, 0) / data.length;
     const maxVal = Math.max(...data);
     const range = maxVal - Math.min(...data);
 
-    // Typical RPM axis characteristics: high values, large range, often in round steps
     const isLikelyRpm = (
         maxVal > 1000 &&
         avg > 500 &&
@@ -781,8 +791,7 @@ export function analyzeAxis(data: number[]): 'RPM' | 'Carga' | 'Desconhecido' {
 
     if (isLikelyRpm) return 'RPM';
     
-    // Typical Load axis (like TPS or MAP): lower values, smaller range
-    const isLikelyLoad = maxVal < 260; // Common for 8-bit MAP/TPS sensors
+    const isLikelyLoad = maxVal < 260 && data.every(v => v <= 255);
     if (isLikelyLoad) return 'Carga';
     
     return 'Desconhecido';
@@ -790,8 +799,7 @@ export function analyzeAxis(data: number[]): 'RPM' | 'Carga' | 'Desconhecido' {
 
 function isMonotonic(arr: number[]): boolean {
     if (arr.length < 2) return true;
-    let increasing = null;
-    let nonMonotonicChanges = 0;
+    let increasing: boolean | null = null;
 
     for (let i = 1; i < arr.length; i++) {
         const diff = arr[i] - arr[i - 1];
@@ -799,164 +807,147 @@ function isMonotonic(arr: number[]): boolean {
             if (increasing === null) {
                 increasing = diff > 0;
             } else if ((diff > 0) !== increasing) {
-                nonMonotonicChanges++;
+                return false; // Change of direction
             }
         }
     }
-    // Allow for a small number of deviations, making it more robust
-    return nonMonotonicChanges <= 2;
+    return true; // No change in direction or all elements are equal
 }
 
-export function scanForMaps(
+const calculateSmoothness = (data: number[]) => {
+    let diffSum = 0;
+    let validPoints = 0;
+    for (let i = 1; i < data.length; i++) {
+        if (data[i] !== null && data[i-1] !== null) {
+             diffSum += Math.abs(data[i]! - data[i-1]!);
+             validPoints++;
+        }
+    }
+    return validPoints > 0 ? diffSum / validPoints : Infinity;
+};
+
+const readDataFromAddress = (view: DataView, startAddr: number, count: number, dataSize: number, useLittleEndian: boolean): number[] | null => {
+    const data: number[] = [];
+    const totalLength = view.byteLength;
+    for (let i = 0; i < count; i++) {
+        const addr = startAddr + (i * dataSize);
+        if (addr + dataSize > totalLength) return null;
+        if (dataSize === 1) data.push(view.getUint8(addr));
+        else if (dataSize === 2) data.push(view.getUint16(addr, useLittleEndian));
+        else return null;
+    }
+    return data;
+};
+
+export function scanForMapsByAxes(
     binBuffer: ArrayBuffer,
-    config: ScanConfig,
+    config: ScanConfig & { dataSize: number; isBigEndian: boolean },
     onProgress: (progress: number, status: string, newMap?: PotentialMap) => void
 ): Promise<void> {
     return new Promise((resolve) => {
-        const { rows, cols, dataSize, isBigEndian, findAxes: shouldFindAxes, rowStride: customRowStride } = config;
-
+        const { minSize, maxSize, dataSize, isBigEndian } = config;
         const view = new DataView(binBuffer);
         const totalLength = binBuffer.byteLength;
-        const colByteSize = cols * dataSize;
-        const rowStride = customRowStride ?? colByteSize;
-        const mapByteSize = (rows - 1) * rowStride + colByteSize;
+        const useLittleEndian = !isBigEndian;
+        const foundAxes: FoundAxis[] = [];
 
         let currentAddress = 0;
-        const useLittleEndian = !isBigEndian;
 
-        const readValue = (address: number): number | null => {
-            if (address < 0 || address + dataSize > totalLength) return null;
-            if (dataSize === 1) return view.getUint8(address);
-            if (dataSize === 2) return view.getUint16(address, useLittleEndian);
-            return null;
-        };
+        const findAxes = () => {
+            onProgress(0, 'Fase 1: A procurar eixos potenciais...');
+            let progressAddress = 0;
+            const CHUNK_SIZE = 1024 * 64;
 
-        const calculateSmoothness = (data: (number|null)[]) => {
-            let diffSum = 0;
-            let validPoints = 0;
-            for (let i = 1; i < data.length; i++) {
-                if (data[i] !== null && data[i-1] !== null) {
-                     diffSum += Math.abs(data[i]! - data[i-1]!);
-                     validPoints++;
-                }
-            }
-            return validPoints > 0 ? diffSum / validPoints : Infinity;
-        };
-        
-        const readDataFromAddress = (startAddr: number, count: number, axisDataSize: number, axisBigEndian: boolean): number[] | null => {
-            const data: number[] = [];
-            const useAxisLittleEndian = !axisBigEndian;
-            for (let i = 0; i < count; i++) {
-                const addr = startAddr + (i * axisDataSize);
-                if (addr + axisDataSize > totalLength) return null;
-                if (axisDataSize === 1) data.push(view.getUint8(addr));
-                else if (axisDataSize === 2) data.push(view.getUint16(addr, useAxisLittleEndian));
-                else return null;
-            }
-            return data;
-        };
-        
-        const findAxes = (mapCandidate: PotentialMap) => {
-             const AXIS_SEARCH_WINDOW = 256;
-             const startSearchAddress = Math.max(0, mapCandidate.address - AXIS_SEARCH_WINDOW);
-             
-             for(let addr = startSearchAddress; addr < mapCandidate.address; addr++) {
-                 const yAxisCandidateAddr = addr;
-                 const yData = readDataFromAddress(yAxisCandidateAddr, rows, dataSize, isBigEndian);
-                 if (yData && isMonotonic(yData)) {
-                     const xAxisCandidateAddr = yAxisCandidateAddr + (rows * dataSize);
-                     if (xAxisCandidateAddr + (cols * dataSize) <= mapCandidate.address) {
-                         const xData = readDataFromAddress(xAxisCandidateAddr, cols, dataSize, isBigEndian);
-                         if (xData && isMonotonic(xData)) {
-                             mapCandidate.yAxisAddress = yAxisCandidateAddr;
-                             mapCandidate.xAxisAddress = xAxisCandidateAddr;
-                             mapCandidate.yAxisType = analyzeAxis(yData);
-                             mapCandidate.xAxisType = analyzeAxis(xData);
-                             mapCandidate.confidence += 0.5;
-                             mapCandidate.suggestion += ` | Eixos em 0x${yAxisCandidateAddr.toString(16).toUpperCase()}`;
-                             return;
-                         }
-                     }
-                 }
-             }
-        }
+            const processAxesChunk = () => {
+                const endAddress = Math.min(progressAddress + CHUNK_SIZE, totalLength);
 
-
-        const scanChunk = () => {
-            try {
-                const CHUNK_SIZE = 1024 * 16;
-                const endAddress = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
-                
-                while (currentAddress < endAddress) {
-                    const mapData: (number|null)[] = [];
-                    let isValid = true;
-                    for (let r = 0; r < rows; r++) {
-                        for (let c = 0; c < cols; c++) {
-                            const val = readValue(currentAddress + (r * rowStride) + (c * dataSize));
-                            if (val === null) {
-                                isValid = false;
-                                break;
-                            }
-                            mapData.push(val);
-                        }
-                        if (!isValid) break;
-                    }
-
-                    if (isValid) {
-                        const smoothness = calculateSmoothness(mapData);
-                        if (smoothness < 50) { 
-                            const confidence = Math.max(0, 1 - (smoothness / 50));
-                            
-                            const potentialMap: PotentialMap = {
-                                address: currentAddress,
-                                rows,
-                                cols,
-                                dataSize,
-                                isBigEndian,
-                                confidence,
-                                suggestion: `Suavidade: ${smoothness.toFixed(2)}`,
-                                dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
-                                equation: 'x',
-                                previewData: [mapData.slice(0, cols) as number[]],
-                                xAxisType: 'Desconhecido',
-                                yAxisType: 'Desconhecido',
-                                rowStride: customRowStride,
-                            };
-
-                            if (shouldFindAxes) {
-                                findAxes(potentialMap);
-                            }
-                            
-                            if (potentialMap.confidence > 0.2) {
-                                onProgress(
-                                    (currentAddress / totalLength) * 100, 
-                                    `Analisando 0x${currentAddress.toString(16).toUpperCase()}... Mapa potencial encontrado!`,
-                                    potentialMap
-                                );
+                for (let addr = progressAddress; addr < endAddress; addr += 4) { // Check every 4 bytes for alignment
+                    for (let len = minSize; len <= maxSize; len++) {
+                        const axisData = readDataFromAddress(view, addr, len, dataSize, useLittleEndian);
+                        if (axisData && isMonotonic(axisData)) {
+                            const type = analyzeAxis(axisData);
+                            if (type !== 'Desconhecido') {
+                                foundAxes.push({
+                                    address: addr,
+                                    length: len,
+                                    type,
+                                    data: axisData,
+                                });
                             }
                         }
                     }
-                    currentAddress += 4; // Scan every 4 bytes for alignment
                 }
                 
-                onProgress((currentAddress / totalLength) * 100, `Analisando 0x${currentAddress.toString(16).toUpperCase()}...`);
+                progressAddress = endAddress;
+                const progress = (progressAddress / totalLength) * 50; // Phase 1 is 50% of total
+                onProgress(progress, `Fase 1: A analisar eixos em 0x${progressAddress.toString(16).toUpperCase()}...`);
 
-                if (currentAddress >= totalLength - mapByteSize) {
-                    onProgress(100, "Análise concluída.");
-                    resolve();
+                if (progressAddress >= totalLength) {
+                    onProgress(50, `Fase 1 concluída. Encontrados ${foundAxes.length} eixos. A iniciar a Fase 2...`);
+                    findMapsFromAxes();
                 } else {
-                    setTimeout(scanChunk, 0);
+                    setTimeout(processAxesChunk, 0); // Yield to main thread
                 }
+            };
+            processAxesChunk();
+        };
+        
+        const findMapsFromAxes = () => {
+            onProgress(50, 'Fase 2: A procurar mapas associados...');
+            const MAP_SEARCH_WINDOW = 256;
+            
+            for (let i = 0; i < foundAxes.length; i++) {
+                for (let j = 0; j < foundAxes.length; j++) {
+                    if (i === j) continue;
+                    
+                    const xAxis = foundAxes[i];
+                    const yAxis = foundAxes[j];
+                    
+                    // Search for map data after the axes
+                    const searchStart = Math.max(xAxis.address, yAxis.address) + dataSize;
+                    
+                    for(let mapAddr = searchStart; mapAddr < searchStart + MAP_SEARCH_WINDOW; mapAddr +=4) {
+                        const mapData = readDataFromAddress(view, mapAddr, xAxis.length * yAxis.length, dataSize, useLittleEndian);
+                        
+                        if(mapData) {
+                            const smoothness = calculateSmoothness(mapData);
+                            if (smoothness < 50) { // Threshold for a 'smooth' map
+                                const confidence = 0.5 + Math.max(0, 0.5 - (smoothness / 100)); // Base confidence for finding a smooth map near axes
+                                const previewData = [];
+                                for (let k = 0; k < yAxis.length; k++) {
+                                    previewData.push(mapData.slice(k * xAxis.length, (k + 1) * xAxis.length));
+                                }
 
-            } catch (e) {
-                console.error("Erro fatal durante a análise:", e);
-                // In a Promise, you should reject on error.
-                // For simplicity, we resolve to avoid unhandled rejections, but in a real app, this should be handled.
-                resolve(); 
+                                const potentialMap: PotentialMap = {
+                                    address: mapAddr,
+                                    rows: yAxis.length,
+                                    cols: xAxis.length,
+                                    dataSize,
+                                    isBigEndian,
+                                    confidence,
+                                    suggestion: `Associado aos eixos em 0x${xAxis.address.toString(16)} e 0x${yAxis.address.toString(16)}`,
+                                    dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
+                                    equation: 'x',
+                                    previewData,
+                                    xAxisAddress: xAxis.address,
+                                    yAxisAddress: yAxis.address,
+                                    xAxisType: xAxis.type,
+                                    yAxisType: yAxis.type,
+                                };
+                                onProgress(50 + (i / foundAxes.length) * 50, `Fase 2: Mapa encontrado em 0x${mapAddr.toString(16).toUpperCase()}`, potentialMap);
+                            }
+                        }
+                    }
+                }
+                 const progress = 50 + ((i + 1) / foundAxes.length) * 50;
+                 onProgress(progress, `Fase 2: A verificar combinações de eixos (${i+1}/${foundAxes.length})...`);
             }
+
+            onProgress(100, "Análise concluída.");
+            resolve();
         };
 
-        scanChunk();
+        findAxes();
     });
 }
 // #endregion

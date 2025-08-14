@@ -15,6 +15,7 @@
 
 
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -106,13 +107,19 @@ export type IgnitionTimingRun = {
 }
 
 export type ScanConfig = {
-    rows: number;
-    cols: number;
+    minSize: number;
+    maxSize: number;
     dataType: '8-bit' | '16-bit LE' | '16-bit BE';
-    dataSize?: number;
+    // These are set internally based on dataType
+    dataSize?: number; 
     isBigEndian?: boolean;
-    findAxes: boolean;
-    rowStride?: number; // Total bytes per row, including padding
+}
+
+export type FoundAxis = {
+    address: number;
+    length: number;
+    type: 'RPM' | 'Carga';
+    data: number[];
 }
 
 export type PotentialMap = {
