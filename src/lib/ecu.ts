@@ -2,6 +2,7 @@
 
 
 
+
 import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig } from './types';
 
 // #region Utility Functions
@@ -765,18 +766,23 @@ export function calculateCorrections(
 export function analyzeAxis(data: number[]): 'RPM' | 'Carga' | 'Desconhecido' {
     if (data.length < 2) return 'Desconhecido';
     
+    if (!isMonotonic(data)) return 'Desconhecido';
+
     const avg = data.reduce((a, b) => a + b, 0) / data.length;
-    const range = Math.max(...data) - Math.min(...data);
-    const isMostlyMonotonic = isMonotonic(data);
+    const maxVal = Math.max(...data);
+    const range = maxVal - Math.min(...data);
 
-    if (!isMostlyMonotonic) return 'Desconhecido';
+    // Typical RPM axis characteristics: high values, large range, often in round steps
+    const isLikelyRpm = (
+        maxVal > 1000 &&
+        avg > 500 &&
+        range > 800
+    ) || data.every(v => v % 50 === 0 || v % 100 === 0);
 
-    // Typical RPM axis characteristics
-    const isLikelyRpm = (range > 1000 && avg > 800 && (data[data.length - 1] > 4000 || data[0] > 400)) || data.every(v => v % 50 === 0 || v % 100 === 0);
     if (isLikelyRpm) return 'RPM';
     
-    // Typical Load axis (like TPS or MAP)
-    const isLikelyLoad = (range <= 255 && avg < 200) || (range > 100 && avg < 300) || (Math.max(...data) <= 105);
+    // Typical Load axis (like TPS or MAP): lower values, smaller range
+    const isLikelyLoad = maxVal < 260; // Common for 8-bit MAP/TPS sensors
     if (isLikelyLoad) return 'Carga';
     
     return 'Desconhecido';
