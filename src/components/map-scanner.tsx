@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
@@ -218,8 +219,8 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                                 <TableCell className="font-mono">0x{map.address.toString(16).toUpperCase()}</TableCell>
                                                 <TableCell>{map.suggestion}</TableCell>
                                                 <TableCell className="text-xs font-mono">
-                                                   {map.xAxisAddress && <div>X: 0x{map.xAxisAddress.toString(16).toUpperCase()}</div>}
-                                                   {map.yAxisAddress && <div>Y: 0x{map.yAxisAddress.toString(16).toUpperCase()}</div>}
+                                                   {map.xAxisAddress && <div>X ({map.xAxisType}): 0x{map.xAxisAddress.toString(16).toUpperCase()}</div>}
+                                                   {map.yAxisAddress && <div>Y ({map.yAxisType}): 0x{map.yAxisAddress.toString(16).toUpperCase()}</div>}
                                                 </TableCell>
                                                 <TableCell>
                                                     <SparkLinePreview data={map.previewData} />
@@ -247,3 +248,4 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
         </div>
     );
 }
+

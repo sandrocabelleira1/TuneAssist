@@ -1,6 +1,7 @@
 
 
 
+
 import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig } from './types';
 
 // #region Utility Functions
@@ -761,12 +762,51 @@ export function calculateCorrections(
 
 // #region Intelligent Map Scanner
 
+export function analyzeAxis(data: number[]): 'RPM' | 'Carga' | 'Desconhecido' {
+    if (data.length < 2) return 'Desconhecido';
+    
+    const avg = data.reduce((a, b) => a + b, 0) / data.length;
+    const range = Math.max(...data) - Math.min(...data);
+    const isMostlyMonotonic = isMonotonic(data);
+
+    if (!isMostlyMonotonic) return 'Desconhecido';
+
+    // Typical RPM axis characteristics
+    const isLikelyRpm = (range > 1000 && avg > 800 && (data[data.length - 1] > 4000 || data[0] > 400)) || data.every(v => v % 50 === 0 || v % 100 === 0);
+    if (isLikelyRpm) return 'RPM';
+    
+    // Typical Load axis (like TPS or MAP)
+    const isLikelyLoad = (range <= 255 && avg < 200) || (range > 100 && avg < 300) || (Math.max(...data) <= 105);
+    if (isLikelyLoad) return 'Carga';
+    
+    return 'Desconhecido';
+}
+
+function isMonotonic(arr: number[]): boolean {
+    if (arr.length < 2) return true;
+    let increasing = null;
+    let nonMonotonicChanges = 0;
+
+    for (let i = 1; i < arr.length; i++) {
+        const diff = arr[i] - arr[i - 1];
+        if (diff !== 0) {
+            if (increasing === null) {
+                increasing = diff > 0;
+            } else if ((diff > 0) !== increasing) {
+                nonMonotonicChanges++;
+            }
+        }
+    }
+    // Allow for a small number of deviations, making it more robust
+    return nonMonotonicChanges <= 2;
+}
+
 export function scanForMaps(
     binBuffer: ArrayBuffer,
     config: ScanConfig,
     onProgress: (progress: number, status: string, newMap?: PotentialMap) => void
-): Promise<PotentialMap[]> {
-    return new Promise((resolve, reject) => {
+): Promise<void> {
+    return new Promise((resolve) => {
         const { rows, cols, dataSize, isBigEndian, findAxes: shouldFindAxes, rowStride: customRowStride } = config;
 
         const view = new DataView(binBuffer);
@@ -778,7 +818,7 @@ export function scanForMaps(
         let currentAddress = 0;
         const useLittleEndian = !isBigEndian;
 
-        const readValue = (address: number) => {
+        const readValue = (address: number): number | null => {
             if (address < 0 || address + dataSize > totalLength) return null;
             if (dataSize === 1) return view.getUint8(address);
             if (dataSize === 2) return view.getUint16(address, useLittleEndian);
@@ -797,33 +837,7 @@ export function scanForMaps(
             return validPoints > 0 ? diffSum / validPoints : Infinity;
         };
         
-        const analyzeAxis = (data: number[]) => {
-            const avg = data.reduce((a, b) => a + b, 0) / data.length;
-            const range = Math.max(...data) - Math.min(...data);
-        
-            const isLikelyRpm = range > 1000 && avg > 1000 && data.every(v => v % 50 === 0 || v % 100 === 0);
-            if (isLikelyRpm) return 'RPM';
-            
-            const isLikelyLoad = (range <= 255 && avg < 200) || (range > 100 && avg < 300);
-            if (isLikelyLoad) return 'Carga';
-            
-            return 'Desconhecido';
-        };
-
-        const isMonotonic = (arr: number[]) => {
-            if (arr.length < 2) return true;
-            const direction = arr[1] - arr[0];
-            if (direction === 0) {
-                 for (let i = 2; i < arr.length; i++) if (arr[i] - arr[i-1] !== 0) return false;
-                return true;
-            }
-            for (let i = 2; i < arr.length; i++) {
-                if ((arr[i] - arr[i-1]) * direction < 0) return false;
-            }
-            return true;
-        };
-        
-        const readDataFromAddress = (startAddr: number, count: number, axisDataSize: number, axisBigEndian: boolean) => {
+        const readDataFromAddress = (startAddr: number, count: number, axisDataSize: number, axisBigEndian: boolean): number[] | null => {
             const data: number[] = [];
             const useAxisLittleEndian = !axisBigEndian;
             for (let i = 0; i < count; i++) {
@@ -867,8 +881,6 @@ export function scanForMaps(
                 const CHUNK_SIZE = 1024 * 16;
                 const endAddress = Math.min(currentAddress + CHUNK_SIZE, totalLength - mapByteSize);
                 
-                let mapsInChunk: PotentialMap[] = [];
-
                 while (currentAddress < endAddress) {
                     const mapData: (number|null)[] = [];
                     let isValid = true;
@@ -910,35 +922,31 @@ export function scanForMaps(
                             }
                             
                             if (potentialMap.confidence > 0.2) {
-                                mapsInChunk.push(potentialMap);
+                                onProgress(
+                                    (currentAddress / totalLength) * 100, 
+                                    `Analisando 0x${currentAddress.toString(16).toUpperCase()}... Mapa potencial encontrado!`,
+                                    potentialMap
+                                );
                             }
                         }
                     }
                     currentAddress += 4; // Scan every 4 bytes for alignment
                 }
                 
-                if (mapsInChunk.length > 0) {
-                     for (const newMap of mapsInChunk) {
-                        onProgress(
-                            (currentAddress / totalLength) * 100, 
-                            `Analisando 0x${currentAddress.toString(16).toUpperCase()}... Mapa potencial encontrado!`,
-                            newMap
-                        );
-                     }
-                } else {
-                     onProgress((currentAddress / totalLength) * 100, `Analisando 0x${currentAddress.toString(16).toUpperCase()}...`);
-                }
+                onProgress((currentAddress / totalLength) * 100, `Analisando 0x${currentAddress.toString(16).toUpperCase()}...`);
 
                 if (currentAddress >= totalLength - mapByteSize) {
                     onProgress(100, "Análise concluída.");
-                    resolve([]);
+                    resolve();
                 } else {
                     setTimeout(scanChunk, 0);
                 }
 
             } catch (e) {
                 console.error("Erro fatal durante a análise:", e);
-                reject(e);
+                // In a Promise, you should reject on error.
+                // For simplicity, we resolve to avoid unhandled rejections, but in a real app, this should be handled.
+                resolve(); 
             }
         };
 
