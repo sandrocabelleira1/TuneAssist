@@ -104,7 +104,7 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
                 </div>
             </div>
              <div className="flex-1 min-h-0 relative">
-                 <ScrollArea className="h-full" onScroll={handleScroll} viewportRef={viewportRef}>
+                 <ScrollArea className="h-full" viewportRef={viewportRef} onScroll={handleScroll}>
                     <div style={{ height: `${numRows * ROW_HEIGHT}px`, position: 'relative' }}>
                          {Array.from({ length: visibleRows.end - visibleRows.start }).map((_, i) => (
                            <div 

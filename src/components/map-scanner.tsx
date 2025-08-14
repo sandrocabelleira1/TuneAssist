@@ -351,7 +351,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                     <CardDescription>Percorra o ficheiro binário. O endereço e o valor sob o cursor são exibidos.</CardDescription>
                 </CardHeader>
                  <CardContent className="h-[calc(100%-4rem)]">
-                    <HexViewer fileBuffer={binFile.buffer} />
+                    <HexViewer fileBuffer={binFile ? binFile.buffer : null} />
                  </CardContent>
              </Card>
         </div>
