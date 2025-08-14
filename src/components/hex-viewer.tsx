@@ -36,10 +36,13 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
         const start = Math.floor(scrollTop / ROW_HEIGHT);
         const end = start + Math.ceil(clientHeight / ROW_HEIGHT) + 5; // Add a buffer
         
-        if (start !== visibleRows.start || end !== visibleRows.end) {
-            setVisibleRows({ start: Math.max(0, start), end: Math.min(numRows, end) });
-        }
-    }, [fileBuffer, numRows, visibleRows.start, visibleRows.end]);
+        setVisibleRows(prev => {
+            if (start !== prev.start || end !== prev.end) {
+                return { start: Math.max(0, start), end: Math.min(numRows, end) };
+            }
+            return prev;
+        });
+    }, [fileBuffer, numRows]);
 
 
     const renderRow = (rowIndex: number) => {
