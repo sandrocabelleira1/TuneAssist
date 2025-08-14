@@ -982,46 +982,57 @@ export default function EcuTuningAssistant() {
         const tempId = `potential_${map.address}_${map.rows}x${map.cols}`;
         
         // This is a new feature: intelligently decide which axis is which and if it should be sorted
-        const isXrpm = map.xAxisType === 'RPM';
-        const isYrpm = map.yAxisType === 'RPM';
+        let { xAxisType, yAxisType } = map;
+        let finalXAxisAddress = map.xAxisAddress;
+        let finalYAxisAddress = map.yAxisAddress;
+        let finalRows = map.rows;
+        let finalCols = map.cols;
 
-        // An axis should be sorted if it's RPM. Load axes can also be sorted.
-        const sortX = isXrpm;
-        const sortY = isYrpm;
+        // Swap axes if Y is RPM and X is Load to follow convention
+        if (yAxisType === 'RPM' && xAxisType === 'Carga') {
+            [xAxisType, yAxisType] = [yAxisType, xAxisType];
+            [finalXAxisAddress, finalYAxisAddress] = [finalYAxisAddress, finalXAxisAddress];
+            [finalRows, finalCols] = [finalCols, finalRows];
+            addLog('Os eixos X e Y foram trocados para seguir a convenção (RPM em X).', 'info');
+        }
+
+        const sortX = xAxisType === 'RPM';
+        const sortY = yAxisType === 'RPM';
 
         const tempDef: XDFinition = {
             uniqueId: tempId,
             name: `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
             address: map.address,
-            rows: map.rows,
-            cols: map.cols,
+            rows: finalRows,
+            cols: finalCols,
             dataSize: map.dataSize,
             isBigEndian: map.isBigEndian,
             isRowMajor: true, 
             equation: map.equation || 'x',
             decimalpl: 2,
             xAxisDef: {
-                label: map.xAxisAddress ? `${map.xAxisType} (0x${map.xAxisAddress.toString(16).toUpperCase()})` : `Eixo X (scan)`,
-                count: map.cols,
+                label: finalXAxisAddress ? `${xAxisType} (0x${finalXAxisAddress.toString(16).toUpperCase()})` : `Eixo X (scan)`,
+                count: finalCols,
                 requiresSort: sortX, // Set sorting intelligently
-                address: map.xAxisAddress,
+                address: finalXAxisAddress,
                 dataSize: map.dataSize,
                 isBigEndian: map.isBigEndian,
                 equation: 'x'
             },
             yAxisDef: {
-                label: map.yAxisAddress ? `${map.yAxisType} (0x${map.yAxisAddress.toString(16).toUpperCase()})` : `Eixo Y (scan)`,
-                count: map.rows,
+                label: finalYAxisAddress ? `${yAxisType} (0x${finalYAxisAddress.toString(16).toUpperCase()})` : `Eixo Y (scan)`,
+                count: finalRows,
                 requiresSort: sortY, // Set sorting intelligently
-                address: map.yAxisAddress,
+                address: finalYAxisAddress,
                 dataSize: map.dataSize,
                 isBigEndian: map.isBigEndian,
                 equation: 'x'
-            }
+            },
+            rowStride: map.rowStride
         };
         
-        addLog(`Eixo X (colunas) identificado como ${map.xAxisType}, ordenação: ${sortX}.`, 'info');
-        addLog(`Eixo Y (linhas) identificado como ${map.yAxisType}, ordenação: ${sortY}.`, 'info');
+        addLog(`Eixo X (colunas) identificado como ${xAxisType}, ordenação: ${sortX}.`, 'info');
+        addLog(`Eixo Y (linhas) identificado como ${yAxisType}, ordenação: ${sortY}.`, 'info');
 
         const currentXdfDefs = xdfFile ? xdfFile.definitions.filter(d => d.uniqueId !== tempId) : [];
         const newDefs = [...currentXdfDefs, tempDef];
@@ -1728,5 +1739,4 @@ export default function EcuTuningAssistant() {
       </div>
     );
 }
-
 
