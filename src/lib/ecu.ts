@@ -843,130 +843,152 @@ export function scanForMapsByAxes(
     config: ScanConfig & { dataSize: number; isBigEndian: boolean },
     onProgress: (progress: number, status: string, newMap?: PotentialMap) => void
 ): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const { minSize, maxSize, dataSize, isBigEndian } = config;
         const view = new DataView(binBuffer);
         const totalLength = binBuffer.byteLength;
         const useLittleEndian = !isBigEndian;
         const foundAxes: FoundAxis[] = [];
-        const CHUNK_SIZE = 1024 * 32; // Smaller chunk for better responsiveness
-        const ALIGNMENT = 2; // Check every 2 bytes
+        const CHUNK_SIZE = 1024 * 64; // Process in 64KB chunks
+        const ALIGNMENT = 2; // Check every 2 bytes for performance
 
+        // --- PHASE 1: FIND ALL POTENTIAL AXES ---
         const findAxes = () => {
-            onProgress(0, 'Fase 1: A procurar eixos potenciais...');
             let progressAddress = 0;
 
             const processAxesChunk = () => {
-                const endAddress = Math.min(progressAddress + CHUNK_SIZE, totalLength);
+                try {
+                    const endAddress = Math.min(progressAddress + CHUNK_SIZE, totalLength);
 
-                for (let addr = progressAddress; addr < endAddress; addr += ALIGNMENT) {
-                    for (let len = minSize; len <= maxSize; len++) {
-                        const axisData = readDataFromAddress(view, addr, len, dataSize, useLittleEndian);
-                        if (axisData && isMonotonic(axisData)) {
-                            const type = analyzeAxis(axisData);
-                            if (type !== 'Desconhecido') {
-                                foundAxes.push({
-                                    address: addr,
-                                    length: len,
-                                    type,
-                                    data: axisData,
-                                });
-                            }
-                        }
-                    }
-                }
-                
-                progressAddress = endAddress;
-                const progress = (progressAddress / totalLength) * 50; // Phase 1 is 50% of total
-                onProgress(progress, `Fase 1: A analisar eixos... ${foundAxes.length} encontrados.`);
-
-                if (progressAddress >= totalLength) {
-                    onProgress(50, `Fase 1 concluída. Encontrados ${foundAxes.length} eixos. A iniciar a Fase 2...`);
-                    findMapsFromAxes();
-                } else {
-                    setTimeout(processAxesChunk, 0); // Yield to main thread
-                }
-            };
-            processAxesChunk();
-        };
-        
-        const findMapsFromAxes = () => {
-            onProgress(50, 'Fase 2: A procurar mapas associados...');
-            const MAP_SEARCH_WINDOW_BACK = 256;
-            const MAP_SEARCH_WINDOW_FORWARD = 256;
-            
-            let axesChecked = 0;
-            const totalAxesCombinations = foundAxes.length * foundAxes.length;
-
-            const processMapChunk = () => {
-                const CHUNK_ITERATIONS = 500;
-                let iterations = 0;
-                
-                while(iterations < CHUNK_ITERATIONS && axesChecked < totalAxesCombinations) {
-                    const i = Math.floor(axesChecked / foundAxes.length);
-                    const j = axesChecked % foundAxes.length;
-
-                    if (i !== j) {
-                        const xAxis = foundAxes[i];
-                        const yAxis = foundAxes[j];
-                        
-                        const searchStart = Math.max(0, Math.min(xAxis.address, yAxis.address) - MAP_SEARCH_WINDOW_BACK);
-                        const searchEnd = Math.min(totalLength, Math.max(xAxis.address, yAxis.address) + MAP_SEARCH_WINDOW_FORWARD);
-                        
-                        for(let mapAddr = searchStart; mapAddr < searchEnd; mapAddr += ALIGNMENT) {
-                            if (mapAddr === xAxis.address || mapAddr === yAxis.address) continue;
-
-                            const mapData = readDataFromAddress(view, mapAddr, xAxis.length * yAxis.length, dataSize, useLittleEndian);
-                            
-                            if(mapData) {
-                                const smoothness = calculateSmoothness(mapData);
-                                if (smoothness < 50 && smoothness > 0) { // Threshold for a 'smooth' map, not flat
-                                    const confidence = 0.5 + Math.max(0, 0.5 - (smoothness / 100));
-                                    
-                                    const previewData = [];
-                                    for (let k = 0; k < yAxis.length; k++) {
-                                        previewData.push(mapData.slice(k * xAxis.length, (k + 1) * xAxis.length));
-                                    }
-
-                                    const potentialMap: PotentialMap = {
-                                        address: mapAddr,
-                                        rows: yAxis.length,
-                                        cols: xAxis.length,
-                                        dataSize,
-                                        isBigEndian,
-                                        confidence,
-                                        suggestion: `Eixos em 0x${xAxis.address.toString(16)} e 0x${yAxis.address.toString(16)}`,
-                                        dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
-                                        equation: 'x',
-                                        previewData,
-                                        xAxisAddress: xAxis.address,
-                                        yAxisAddress: yAxis.address,
-                                        xAxisType: xAxis.type,
-                                        yAxisType: yAxis.type,
-                                    };
-                                    onProgress(50 + (axesChecked / totalAxesCombinations) * 50, `Mapa encontrado em 0x${mapAddr.toString(16).toUpperCase()}`, potentialMap);
+                    for (let addr = progressAddress; addr < endAddress; addr += ALIGNMENT) {
+                        for (let len = minSize; len <= maxSize; len++) {
+                            const axisData = readDataFromAddress(view, addr, len, dataSize, useLittleEndian);
+                            if (axisData && isMonotonic(axisData)) {
+                                const type = analyzeAxis(axisData);
+                                if (type !== 'Desconhecido') {
+                                    foundAxes.push({
+                                        address: addr,
+                                        length: len,
+                                        type,
+                                        data: axisData,
+                                    });
                                 }
                             }
                         }
                     }
-                    axesChecked++;
-                    iterations++;
-                }
-                
-                const progress = 50 + (axesChecked / totalAxesCombinations) * 50;
-                onProgress(progress, `Fase 2: A verificar combinações de eixos...`);
+                    
+                    progressAddress = endAddress;
+                    const progress = (progressAddress / totalLength) * 50; // Phase 1 is 50% of total
+                    onProgress(progress, `Fase 1: A analisar eixos... ${foundAxes.length} encontrados.`);
 
-                if (axesChecked >= totalAxesCombinations) {
-                    onProgress(100, "Análise concluída.");
-                    resolve();
-                } else {
-                    setTimeout(processMapChunk, 0); // Yield to main thread
+                    if (progressAddress >= totalLength) {
+                        onProgress(50, `Fase 1 concluída. Encontrados ${foundAxes.length} eixos. A iniciar a Fase 2...`);
+                        setTimeout(() => findMapsFromAxes(foundAxes), 0); // Start phase 2
+                    } else {
+                        setTimeout(processAxesChunk, 0); // Yield to main thread
+                    }
+                } catch (error) {
+                    reject(error);
                 }
             };
-            processMapChunk();
+            
+            onProgress(0, 'Fase 1: A procurar eixos potenciais...');
+            processAxesChunk();
+        };
+        
+        // --- PHASE 2: FIND MAPS FROM THE FOUND AXES ---
+        const findMapsFromAxes = (axes: FoundAxis[]) => {
+            const MAP_SEARCH_WINDOW_BACK = 256;
+            const MAP_SEARCH_WINDOW_FORWARD = 256;
+            const totalAxesCombinations = axes.length * axes.length;
+            let combinationsChecked = 0;
+
+            const processMapChunk = (startIndex: number) => {
+                try {
+                    const CHUNK_ITERATIONS = 5000; // Increase iterations per chunk
+                    let iterations = 0;
+                    
+                    for (let i = startIndex; i < totalAxesCombinations && iterations < CHUNK_ITERATIONS; i++) {
+                        const yAxisIndex = Math.floor(i / axes.length);
+                        const xAxisIndex = i % axes.length;
+
+                        if (xAxisIndex !== yAxisIndex) {
+                            const xAxis = axes[xAxisIndex];
+                            const yAxis = axes[yAxisIndex];
+                            
+                            // Don't check the same pair twice (e.g. A-B and B-A) if they are close
+                            if (yAxisIndex < xAxisIndex && Math.abs(xAxis.address - yAxis.address) < MAP_SEARCH_WINDOW_FORWARD) {
+                                combinationsChecked++;
+                                continue;
+                            }
+
+                            const searchStart = Math.max(0, Math.min(xAxis.address, yAxis.address) - MAP_SEARCH_WINDOW_BACK);
+                            const searchEnd = Math.min(totalLength, Math.max(xAxis.address, yAxis.address) + yAxis.length * dataSize + MAP_SEARCH_WINDOW_FORWARD);
+
+                            for(let mapAddr = searchStart; mapAddr < searchEnd; mapAddr += ALIGNMENT) {
+                                if (mapAddr === xAxis.address || mapAddr === yAxis.address) continue;
+                                
+                                const mapSizeInBytes = xAxis.length * yAxis.length * dataSize;
+                                if (mapAddr + mapSizeInBytes > totalLength) continue;
+
+                                const mapData = readDataFromAddress(view, mapAddr, xAxis.length * yAxis.length, dataSize, useLittleEndian);
+                                
+                                if(mapData) {
+                                    const smoothness = calculateSmoothness(mapData);
+                                    if (smoothness < 50 && smoothness > 0.1) {
+                                        const confidence = 0.5 + Math.max(0, 0.5 - (smoothness / 100));
+                                        
+                                        const previewData: number[][] = [];
+                                        for (let k = 0; k < yAxis.length; k++) {
+                                            const row = mapData.slice(k * xAxis.length, (k + 1) * xAxis.length);
+                                            previewData.push(row);
+                                        }
+
+                                        const potentialMap: PotentialMap = {
+                                            address: mapAddr,
+                                            rows: yAxis.length,
+                                            cols: xAxis.length,
+                                            dataSize,
+                                            isBigEndian,
+                                            confidence,
+                                            suggestion: `Eixos em 0x${xAxis.address.toString(16)} e 0x${yAxis.address.toString(16)}`,
+                                            dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
+                                            equation: 'x',
+                                            previewData,
+                                            xAxisAddress: xAxis.address,
+                                            yAxisAddress: yAxis.address,
+                                            xAxisType: xAxis.type,
+                                            yAxisType: yAxis.type,
+                                        };
+                                        onProgress(50 + (combinationsChecked / totalAxesCombinations) * 50, `Mapa encontrado em 0x${mapAddr.toString(16).toUpperCase()}`, potentialMap);
+                                    }
+                                }
+                            }
+                        }
+                        combinationsChecked++;
+                        iterations++;
+                    }
+
+                    const progress = 50 + (combinationsChecked / totalAxesCombinations) * 50;
+                    onProgress(progress, `Fase 2: A verificar ${combinationsChecked} de ${totalAxesCombinations} combinações de eixos...`);
+
+                    if (combinationsChecked >= totalAxesCombinations) {
+                        onProgress(100, "Análise concluída.");
+                        resolve();
+                    } else {
+                        setTimeout(() => processMapChunk(combinationsChecked), 0); // Yield to main thread
+                    }
+                } catch(error) {
+                    reject(error);
+                }
+            };
+            processMapChunk(0);
         };
 
+        // Start the process
         findAxes();
     });
 }
 // #endregion
+
+    
