@@ -849,8 +849,8 @@ export function scanForMapsByAxes(
         const totalLength = binBuffer.byteLength;
         const useLittleEndian = !isBigEndian;
         const foundAxes: FoundAxis[] = [];
-        const CHUNK_SIZE = 1024 * 32; // Process in smaller 32KB chunks
-        const ALIGNMENT = 2;
+        const CHUNK_SIZE = 1024 * 64; 
+        const ALIGNMENT = dataSize > 1 ? 2 : 1;
 
         // --- PHASE 1: FIND ALL POTENTIAL AXES (NON-BLOCKING) ---
         const findAxes = () => {
@@ -885,7 +885,7 @@ export function scanForMapsByAxes(
                         onProgress(50, `Fase 1 concluída. Encontrados ${foundAxes.length} eixos. A iniciar a Fase 2...`);
                         setTimeout(() => findMapsFromAxes(foundAxes), 0); // Start phase 2
                     } else {
-                        setTimeout(processAxesChunk, 0); // Yield to main thread to prevent freezing
+                        setTimeout(processAxesChunk, 0); // Yield to main thread
                     }
                 } catch (error) {
                     reject(error);
@@ -902,78 +902,69 @@ export function scanForMapsByAxes(
             const MAP_SEARCH_WINDOW_BACK = 256;
             const MAP_SEARCH_WINDOW_FORWARD = 256;
             const BATCH_SIZE = 10;
-            let currentGroupIndex = 0;
+            let currentAxisIndex = 0;
         
             axes.sort((a, b) => a.address - b.address);
         
-            const axisGroups: FoundAxis[][] = [];
-            if (axes.length > 0) {
-                let currentGroup = [axes[0]];
-                for (let i = 1; i < axes.length; i++) {
-                    if (axes[i].address - currentGroup[currentGroup.length - 1].address < AXIS_GROUPING_DISTANCE) {
-                        currentGroup.push(axes[i]);
-                    } else {
-                        axisGroups.push(currentGroup);
-                        currentGroup = [axes[i]];
-                    }
-                }
-                axisGroups.push(currentGroup);
-            }
-        
             const processNextBatch = () => {
                 try {
-                    const batchEndIndex = Math.min(currentGroupIndex + BATCH_SIZE, axisGroups.length);
+                    const batchEndIndex = Math.min(currentAxisIndex + BATCH_SIZE, axes.length);
         
-                    for (let i = currentGroupIndex; i < batchEndIndex; i++) {
-                        const group = axisGroups[i];
-                        if (group.length < 2) continue;
-        
-                        for (let j = 0; j < group.length; j++) {
-                            for (let k = j + 1; k < group.length; k++) {
-                                const combinations = [[group[j], group[k]], [group[k], group[j]]];
-        
-                                for (const [xAxis, yAxis] of combinations) {
-                                    const mapSizeInBytes = xAxis.length * yAxis.length * dataSize;
-                                    const searchStart = Math.max(0, Math.min(xAxis.address, yAxis.address) - MAP_SEARCH_WINDOW_BACK);
-                                    const searchEnd = Math.min(totalLength - mapSizeInBytes, Math.max(xAxis.address, yAxis.address) + yAxis.length * dataSize + MAP_SEARCH_WINDOW_FORWARD);
-        
-                                    for (let mapAddr = searchStart; mapAddr < searchEnd; mapAddr += ALIGNMENT) {
-                                        if ((mapAddr >= xAxis.address && mapAddr < xAxis.address + xAxis.length * dataSize) ||
-                                            (mapAddr >= yAxis.address && mapAddr < yAxis.address + yAxis.length * dataSize)) {
-                                            continue;
-                                        }
+                    for (let i = currentAxisIndex; i < batchEndIndex; i++) {
+                        const axis1 = axes[i];
+                        // Look for a nearby partner axis
+                        for (let j = i + 1; j < axes.length; j++) {
+                            const axis2 = axes[j];
+                            if (axis2.address - axis1.address > AXIS_GROUPING_DISTANCE) {
+                                break; // Partner is too far away, move to next axis1
+                            }
 
-                                        const mapData = readDataFromAddress(view, mapAddr, xAxis.length * yAxis.length, dataSize, useLittleEndian);
+                            if (axis1.type === axis2.type) continue; // Skip same-type pairs
+
+                            const combinations: [FoundAxis, FoundAxis][] = [[axis1, axis2], [axis2, axis1]];
         
-                                        if (mapData) {
-                                            const smoothness = calculateSmoothness(mapData);
-                                            if (smoothness < 50 && smoothness > 0.1) {
-                                                const confidence = 0.5 + Math.max(0, 0.5 - (smoothness / 100));
-                                                
-                                                const previewData: number[][] = [];
-                                                for (let rowIdx = 0; rowIdx < yAxis.length; rowIdx++) {
-                                                    const row = mapData.slice(rowIdx * xAxis.length, (rowIdx + 1) * xAxis.length);
-                                                    previewData.push(row);
-                                                }
+                            for (const [xAxis, yAxis] of combinations) {
+                                const mapSizeInBytes = xAxis.length * yAxis.length * dataSize;
+                                const searchStart = Math.max(0, Math.min(xAxis.address, yAxis.address) - MAP_SEARCH_WINDOW_BACK);
+                                const searchEnd = Math.min(totalLength - mapSizeInBytes, Math.max(xAxis.address, yAxis.address) + yAxis.length * dataSize + MAP_SEARCH_WINDOW_FORWARD);
         
-                                                const potentialMap: PotentialMap = {
-                                                    address: mapAddr,
-                                                    rows: yAxis.length,
-                                                    cols: xAxis.length,
-                                                    dataSize,
-                                                    isBigEndian,
-                                                    confidence,
-                                                    suggestion: `Eixos em 0x${xAxis.address.toString(16)} e 0x${yAxis.address.toString(16)}`,
-                                                    dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
-                                                    equation: 'x',
-                                                    previewData,
-                                                    xAxisAddress: xAxis.address,
-                                                    yAxisAddress: yAxis.address,
-                                                    xAxisType: xAxis.type,
-                                                    yAxisType: yAxis.type,
-                                                };
-                                                onProgress(50 + (i / axisGroups.length) * 50, `Mapa encontrado em 0x${mapAddr.toString(16).toUpperCase()}`, potentialMap);
+                                for (let mapAddr = searchStart; mapAddr < searchEnd; mapAddr += ALIGNMENT) {
+                                    // Ensure map doesn't overlap with its axes
+                                    if ((mapAddr >= xAxis.address && mapAddr < xAxis.address + xAxis.length * dataSize) ||
+                                        (mapAddr >= yAxis.address && mapAddr < yAxis.address + yAxis.length * dataSize)) {
+                                        continue;
+                                    }
+
+                                    const mapData = readDataFromAddress(view, mapAddr, xAxis.length * yAxis.length, dataSize, useLittleEndian);
+        
+                                    if (mapData) {
+                                        const smoothness = calculateSmoothness(mapData);
+                                        if (smoothness < 50 && smoothness > 0.1) {
+                                            const confidence = 0.5 + Math.max(0, 0.5 - (smoothness / 100));
+                                            
+                                            const previewData: number[][] = [];
+                                            for (let rowIdx = 0; rowIdx < yAxis.length; rowIdx++) {
+                                                const row = mapData.slice(rowIdx * xAxis.length, (rowIdx + 1) * xAxis.length);
+                                                previewData.push(row);
                                             }
+    
+                                            const potentialMap: PotentialMap = {
+                                                address: mapAddr,
+                                                rows: yAxis.length,
+                                                cols: xAxis.length,
+                                                dataSize,
+                                                isBigEndian,
+                                                confidence,
+                                                suggestion: `Eixos em 0x${xAxis.address.toString(16)} e 0x${yAxis.address.toString(16)}`,
+                                                dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
+                                                equation: 'x',
+                                                previewData,
+                                                xAxisAddress: xAxis.address,
+                                                yAxisAddress: yAxis.address,
+                                                xAxisType: xAxis.type,
+                                                yAxisType: yAxis.type,
+                                            };
+                                            onProgress(50 + (i / axes.length) * 50, `Mapa encontrado em 0x${mapAddr.toString(16).toUpperCase()}`, potentialMap);
                                         }
                                     }
                                 }
@@ -981,11 +972,11 @@ export function scanForMapsByAxes(
                         }
                     }
         
-                    currentGroupIndex = batchEndIndex;
-                    const progress = 50 + (currentGroupIndex / axisGroups.length) * 50;
-                    onProgress(progress, `Fase 2: A verificar ${axisGroups.length} grupos de eixos...`);
+                    currentAxisIndex = batchEndIndex;
+                    const progress = 50 + (currentAxisIndex / axes.length) * 50;
+                    onProgress(progress, `Fase 2: A verificar ${axes.length} eixos...`);
         
-                    if (currentGroupIndex >= axisGroups.length) {
+                    if (currentAxisIndex >= axes.length) {
                         onProgress(100, "Análise concluída.");
                         resolve();
                     } else {
@@ -996,7 +987,7 @@ export function scanForMapsByAxes(
                 }
             };
         
-            onProgress(50, `A agrupar ${axes.length} eixos em ${axisGroups.length} grupos...`);
+            onProgress(50, `A procurar mapas para ${axes.length} eixos encontrados...`);
             processNextBatch();
         };
 
@@ -1007,4 +998,5 @@ export function scanForMapsByAxes(
 // #endregion
 
     
+
 
