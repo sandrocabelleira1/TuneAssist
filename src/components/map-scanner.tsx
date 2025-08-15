@@ -2,93 +2,118 @@
 
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, DownloadCloud, Settings, Table } from 'lucide-react';
-import type { PotentialMap } from '@/lib/types';
+import { AlertTriangle, DownloadCloud, Settings, Table, Play, Loader, Square, X } from 'lucide-react';
+import type { PotentialMap, ScanConfig } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { readDataFromAddress } from '@/lib/ecu';
+import { readDataFromAddress, scanForPotentialMaps } from '@/lib/ecu';
 import { HexViewer } from '@/components/hex-viewer';
-
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Table as ShadcnTable,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
 
 interface MapScannerProps {
     binFile: { name: string; buffer: ArrayBuffer } | null;
     onLoadMap: (map: PotentialMap) => void;
+    addLog: (message: string, type?: 'info' | 'success' | 'error' | 'debug') => void;
+    potentialMaps: PotentialMap[];
+    setPotentialMaps: React.Dispatch<React.SetStateAction<PotentialMap[]>>;
 }
 
-export default function MapScanner({ binFile, onLoadMap }: MapScannerProps) {
+export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, setPotentialMaps }: MapScannerProps) {
     
-    const [definition, setDefinition] = useState({
-        address: '',
-        rows: '',
-        cols: '',
+    const [scanConfig, setScanConfig] = useState<Omit<ScanConfig, 'dataSize' | 'isBigEndian'>>({
+        minSize: 8,
+        maxSize: 32,
         dataType: '16-bit LE',
-        equation: 'x',
-        rowStride: '',
     });
+    
+    const [isScanning, setIsScanning] = useState(false);
+    const [scanProgress, setScanProgress] = useState(0);
+    const [scanStatus, setScanStatus] = useState('');
+    const scanAbortController = useRef<AbortController | null>(null);
 
     const { toast } = useToast();
 
-    const handleCreateMap = useCallback(() => {
+    useEffect(() => {
+        // Stop scanning if component is unmounted or binFile changes
+        return () => {
+            if (scanAbortController.current) {
+                scanAbortController.current.abort();
+                setIsScanning(false);
+            }
+        };
+    }, [binFile]);
+
+    const handleStartScan = useCallback(async () => {
         if (!binFile) {
             toast({ title: "Ficheiro BIN não carregado", variant: "destructive" });
             return;
         }
+
+        setIsScanning(true);
+        setScanProgress(0);
+        setPotentialMaps([]);
+        addLog("A iniciar análise de mapas...", "info");
         
-        const addr = parseInt(definition.address, 16);
-        const rows = parseInt(definition.rows, 10);
-        const cols = parseInt(definition.cols, 10);
+        scanAbortController.current = new AbortController();
+        const { signal } = scanAbortController.current;
 
-        if (isNaN(addr) || isNaN(rows) || isNaN(cols) || rows <= 0 || cols <= 0) {
-            toast({ title: "Valores Inválidos", description: "Verifique o endereço, as linhas e as colunas. Devem ser números positivos.", variant: "destructive" });
-            return;
-        }
-
-        const dataSize = definition.dataType.includes('16') ? 2 : 1;
-        const isBigEndian = definition.dataType.includes('BE');
-
-        const view = new DataView(binFile.buffer);
-        const rowStrideVal = definition.rowStride ? parseInt(definition.rowStride, 10) : cols * dataSize;
-        
-        const previewData: number[][] = [];
         try {
-            for (let r = 0; r < Math.min(rows, 10); r++) { // Preview up to 10 rows
-                const rowData = readDataFromAddress(view, addr + (r * rowStrideVal), cols, dataSize, !isBigEndian);
-                if (rowData) {
-                    previewData.push(rowData);
-                } else {
-                     throw new Error(`Não foi possível ler a linha ${r} no endereço 0x${(addr + (r * rowStrideVal)).toString(16)}`);
-                }
+            const config: ScanConfig = {
+                ...scanConfig,
+                dataSize: scanConfig.dataType.includes('16') ? 2 : 1,
+                isBigEndian: scanConfig.dataType.includes('BE'),
+            };
+
+            await scanForPotentialMaps(
+                binFile.buffer,
+                config,
+                (progress, status, newMap) => {
+                    setScanProgress(progress);
+                    setScanStatus(status);
+                    if (newMap) {
+                        setPotentialMaps(prev => [...prev, newMap].sort((a,b) => a.address - b.address));
+                    }
+                },
+                signal
+            );
+            
+            addLog("Análise de mapas concluída.", "success");
+            toast({ title: "Análise Concluída", description: `Encontrados ${potentialMaps.length} mapas potenciais.` });
+
+        } catch (error) {
+            if ((error as Error).name === 'AbortError') {
+                addLog("Análise cancelada pelo utilizador.", "info");
+                toast({ title: "Análise Cancelada", variant: 'default' });
+            } else {
+                addLog(`Erro durante a análise: ${(error as Error).message}`, "error");
+                toast({ title: "Erro na Análise", description: (error as Error).message, variant: "destructive" });
             }
-        } catch (e) {
-            toast({ title: "Erro ao Ler Dados", description: (e as Error).message, variant: "destructive" });
-            return;
+        } finally {
+            setIsScanning(false);
+            scanAbortController.current = null;
         }
 
-
-        const newMap: PotentialMap = {
-            address: addr,
-            rows,
-            cols,
-            dataSize,
-            isBigEndian,
-            confidence: 1, // Manual creation has 100% confidence
-            suggestion: "Criado manualmente",
-            dataType: definition.dataType,
-            equation: definition.equation,
-            rowStride: definition.rowStride ? parseInt(definition.rowStride, 10) : undefined,
-            previewData,
-            xAxisType: 'Desconhecido',
-            yAxisType: 'Desconhecido',
-        };
-        
-        onLoadMap(newMap);
-
-    }, [binFile, definition, onLoadMap, toast]);
+    }, [binFile, scanConfig, toast, addLog, setPotentialMaps, potentialMaps.length]);
+    
+    const handleStopScan = () => {
+        if(scanAbortController.current) {
+            scanAbortController.current.abort();
+        }
+    };
     
 
     if (!binFile) {
@@ -106,50 +131,44 @@ export default function MapScanner({ binFile, onLoadMap }: MapScannerProps) {
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card className="lg:col-span-1">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Settings /> Definição Manual de Mapa</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><Settings /> Análise Inteligente</CardTitle>
                         <CardDescription>
-                           Use o Visualizador Hexadecimal abaixo para encontrar o endereço de início de um mapa. Defina as suas dimensões e carregue-o para análise.
+                          Configure e inicie uma análise para encontrar mapas potenciais automaticamente. O processo é executado em segundo plano e não irá congelar a aplicação.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <Label htmlFor="def-addr">Endereço (Hex)</Label>
-                                <Input id="def-addr" placeholder="0x8000" value={definition.address} onChange={e => setDefinition(d => ({...d, address: e.target.value}))} />
+                               <Label htmlFor="scan-min">Dimensão Mín Eixo</Label>
+                               <Input id="scan-min" type="number" value={scanConfig.minSize} onChange={e => setScanConfig(c => ({...c, minSize: parseInt(e.target.value, 10)}))} />
                             </div>
                             <div>
-                                <Label htmlFor="def-type">Tipo de Dados</Label>
-                                <Select value={definition.dataType} onValueChange={v => setDefinition(d => ({...d, dataType: v as any}))}>
-                                    <SelectTrigger id="def-type"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="8-bit">8-bit</SelectItem>
-                                        <SelectItem value="16-bit LE">16-bit LE</SelectItem>
-                                        <SelectItem value="16-bit BE">16-bit BE</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                               <Label htmlFor="scan-max">Dimensão Máx Eixo</Label>
+                               <Input id="scan-max" type="number" value={scanConfig.maxSize} onChange={e => setScanConfig(c => ({...c, maxSize: parseInt(e.target.value, 10)}))} />
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label htmlFor="def-rows">Linhas (Y)</Label>
-                                <Input id="def-rows" type="number" placeholder="16" value={definition.rows} onChange={e => setDefinition(d => ({...d, rows: e.target.value}))} />
-                            </div>
-                             <div>
-                                <Label htmlFor="def-cols">Colunas (X)</Label>
-                                <Input id="def-cols" type="number" placeholder="20" value={definition.cols} onChange={e => setDefinition(d => ({...d, cols: e.target.value}))} />
-                            </div>
+                        <div>
+                            <Label htmlFor="scan-type">Tipo de Dados</Label>
+                            <Select value={scanConfig.dataType} onValueChange={v => setScanConfig(d => ({...d, dataType: v as any}))}>
+                                <SelectTrigger id="scan-type"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="8-bit">8-bit</SelectItem>
+                                    <SelectItem value="16-bit LE">16-bit LE</SelectItem>
+                                    <SelectItem value="16-bit BE">16-bit BE</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label htmlFor="def-eq">Equação</Label>
-                                <Input id="def-eq" placeholder="x" value={definition.equation} onChange={e => setDefinition(d => ({...d, equation: e.target.value}))} />
+                        {isScanning ? (
+                            <div className="space-y-2">
+                                <Progress value={scanProgress} />
+                                <div className="text-xs text-muted-foreground">{scanStatus}</div>
+                                <Button onClick={handleStopScan} variant="destructive" className="w-full"><Square className="mr-2"/> Parar Análise</Button>
                             </div>
-                             <div>
-                                <Label htmlFor="def-stride">Passo da Linha (Bytes)</Label>
-                                <Input id="def-stride" type="number" placeholder="Auto (Cols * DataSize)" value={definition.rowStride} onChange={e => setDefinition(d => ({...d, rowStride: e.target.value}))} />
-                            </div>
-                        </div>
-                        <Button onClick={handleCreateMap} className="w-full"><DownloadCloud className="mr-2" /> Carregar Mapa Manual</Button>
+                        ) : (
+                             <Button onClick={handleStartScan} className="w-full">
+                                <Play className="mr-2" /> Iniciar Análise Inteligente
+                            </Button>
+                        )}
                     </CardContent>
                 </Card>
                 
@@ -158,26 +177,69 @@ export default function MapScanner({ binFile, onLoadMap }: MapScannerProps) {
                         <CardTitle className="flex items-center gap-2"><Table /> Visualizador Hexadecimal</CardTitle>
                         <CardDescription>Use esta ferramenta para encontrar os endereços dos mapas e dos eixos no ficheiro. Os dados da ECU são armazenados em formato hexadecimal.</CardDescription>
                     </CardHeader>
-                    <CardContent className="h-[calc(100%-6rem)]">
+                    <CardContent className="h-[calc(100%-8rem)]">
                         <HexViewer fileBuffer={binFile ? binFile.buffer : null} />
                     </CardContent>
                 </Card>
              </div>
              
-             <Card className="flex-1 min-h-[300px]">
+             <Card className="flex-1 min-h-[300px] flex flex-col">
                 <CardHeader>
-                    <CardTitle>Como Encontrar Mapas Manualmente</CardTitle>
-                    <CardDescription>Encontrar mapas requer um olhar atento para padrões nos dados.</CardDescription>
+                    <CardTitle>Resultados da Análise</CardTitle>
+                    <CardDescription>Mapas potenciais encontrados no ficheiro. Clique em "Carregar" para os analisar.</CardDescription>
                 </CardHeader>
-                 <CardContent className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground">
-                    <ol>
-                        <li><strong>Procure por Eixos:</strong> Percorra o ficheiro no Visualizador Hexadecimal. Procure por sequências de números que aumentam ou diminuem de forma consistente. Estes são os seus eixos de RPM e Carga. Anote os seus endereços de início.</li>
-                        <li><strong>Identifique a Estrutura:</strong> Olhe para os dados imediatamente a seguir aos eixos. Frequentemente, encontrará um bloco de dados que se parece com uma tabela 3D. A "forma" destes dados pode indicar que é um mapa.</li>
-                        <li><strong>Determine as Dimensões:</strong> Conte o número de valores em cada eixo que encontrou. Se um eixo tem 16 valores e o outro 20, você está provavelmente à procura de um mapa de 20x16 (Colunas x Linhas).</li>
-                        <li><strong>Insira os Dados:</strong> Introduza o endereço de início do mapa (não dos eixos), as dimensões (Linhas e Colunas) e o tipo de dados no painel "Definição Manual" e clique em "Carregar".</li>
-                        <li><strong>Analise:</strong> A aplicação irá carregar o mapa. Use os gráficos 2D e 3D para ver se ele se parece com um mapa de ignição, injeção ou outro. Se não parecer correto, ajuste as dimensões ou o endereço e tente novamente.</li>
-                    </ol>
-                 </CardContent>
+                <CardContent className="flex-1 min-h-0">
+                    <ScrollArea className="h-full">
+                        <ShadcnTable>
+                            <TableHeader className="sticky top-0 bg-muted">
+                                <TableRow>
+                                    <TableHead>Endereço</TableHead>
+                                    <TableHead>Dimensões</TableHead>
+                                    <TableHead>Tipo Dados</TableHead>
+                                    <TableHead>Confiança</TableHead>
+                                    <TableHead>Sugestão</TableHead>
+                                    <TableHead className="text-right">Ação</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {potentialMaps.length > 0 ? (
+                                    potentialMaps.map((map) => (
+                                        <TableRow key={`${map.address}-${map.rows}x${map.cols}`}>
+                                            <TableCell className="font-mono">0x{map.address.toString(16).toUpperCase()}</TableCell>
+                                            <TableCell>{map.rows}x{map.cols}</TableCell>
+                                            <TableCell>{map.dataType}</TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                     <Progress value={map.confidence * 100} className="w-20 h-2"/>
+                                                     <span>{(map.confidence * 100).toFixed(0)}%</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{map.suggestion}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button size="sm" variant="outline" onClick={() => onLoadMap(map)}>
+                                                    <DownloadCloud className="mr-2 h-4 w-4"/> Carregar
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                            {isScanning ? (
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <Loader className="h-5 w-5 animate-spin" />
+                                                    <span>Aguardando resultados da análise...</span>
+                                                </div>
+                                            ) : (
+                                                "Nenhum mapa encontrado. Inicie uma análise ou ajuste os parâmetros."
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </ShadcnTable>
+                    </ScrollArea>
+                </CardContent>
              </Card>
         </div>
     );
