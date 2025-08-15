@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -86,25 +85,24 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                 dataSize: scanConfig.dataType.includes('16') ? 2 : 1,
                 isBigEndian: scanConfig.dataType.includes('BE'),
             };
-
-            await findPotentialAxes(
+            
+            const axes = await findPotentialAxes(
                 binFile.buffer,
                 config,
-                (progress, status, newAxis) => {
-                    setScanProgress(progress);
-                    setScanStatus(status);
-                    if (newAxis) {
-                        setFoundAxes(prev => [...prev, newAxis].sort((a,b) => a.address - b.address));
-                    }
+                (progress, status) => {
+                     setScanProgress(progress);
+                     setScanStatus(status);
                 },
                 signal
             );
             
-            addLog("Procura por eixos concluída.", "success");
-            toast({ title: "Análise Concluída", description: `Encontrados ${foundAxes.length} eixos potenciais.` });
+            setFoundAxes(axes);
+            
+            addLog(`Análise de eixos concluída. Encontrados ${axes.length} eixos potenciais.`, "success");
+            toast({ title: "Análise Concluída", description: `Encontrados ${axes.length} eixos potenciais.` });
 
         } catch (error) {
-            if ((error as Error).name === 'AbortError') {
+            if ((error as Error).message.includes('AbortError')) {
                 addLog("Análise cancelada pelo utilizador.", "info");
                 toast({ title: "Análise Cancelada", variant: 'default' });
             } else {
@@ -331,3 +329,5 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         </div>
     );
 }
+
+    
