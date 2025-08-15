@@ -1,4 +1,5 @@
 
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];
@@ -100,9 +101,10 @@ export type ScanConfig = {
 }
 
 export type FoundAxis = {
+    id: string;
     address: number;
     length: number;
-    type: 'RPM' | 'Carga';
+    type: 'RPM' | 'Carga' | 'Desconhecido';
     data: number[];
 }
 
