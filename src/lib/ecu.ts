@@ -895,83 +895,115 @@ export function scanForMapsByAxes(
             processAxesChunk();
         };
         
-        // --- PHASE 2: FIND MAPS FROM THE FOUND AXES ---
+        // --- PHASE 2: FIND MAPS FROM THE FOUND AXES (REFACTORED) ---
         const findMapsFromAxes = (axes: FoundAxis[]) => {
+            const AXIS_GROUPING_DISTANCE = 512; // Group axes that are within 512 bytes of each other
             const MAP_SEARCH_WINDOW_BACK = 256;
             const MAP_SEARCH_WINDOW_FORWARD = 256;
-            const BATCH_SIZE = 20; // Process N axes per batch to avoid freezing
-            let currentAxisIndex = 0;
-
+            const BATCH_SIZE = 10;
+            let currentGroupIndex = 0;
+        
+            // Sort axes by address to make grouping easier
+            axes.sort((a, b) => a.address - b.address);
+        
+            // Group nearby axes to drastically reduce combinations
+            const axisGroups: FoundAxis[][] = [];
+            if (axes.length > 0) {
+                let currentGroup = [axes[0]];
+                for (let i = 1; i < axes.length; i++) {
+                    if (axes[i].address - currentGroup[currentGroup.length - 1].address < AXIS_GROUPING_DISTANCE) {
+                        currentGroup.push(axes[i]);
+                    } else {
+                        axisGroups.push(currentGroup);
+                        currentGroup = [axes[i]];
+                    }
+                }
+                axisGroups.push(currentGroup);
+            }
+        
             const processNextBatch = () => {
                 try {
-                    const batchEndIndex = Math.min(currentAxisIndex + BATCH_SIZE, axes.length);
-
-                    for (let i = currentAxisIndex; i < batchEndIndex; i++) {
-                        for (let j = 0; j < axes.length; j++) {
-                            if (i === j) continue;
-
-                            const xAxis = axes[i];
-                            const yAxis = axes[j];
-                            
-                            const searchStart = Math.max(0, Math.min(xAxis.address, yAxis.address) - MAP_SEARCH_WINDOW_BACK);
-                            const searchEnd = Math.min(totalLength, Math.max(xAxis.address, yAxis.address) + yAxis.length * dataSize + MAP_SEARCH_WINDOW_FORWARD);
-
-                            for(let mapAddr = searchStart; mapAddr < searchEnd; mapAddr += ALIGNMENT) {
-                                if (mapAddr === xAxis.address || mapAddr === yAxis.address) continue;
-                                
-                                const mapSizeInBytes = xAxis.length * yAxis.length * dataSize;
-                                if (mapAddr + mapSizeInBytes > totalLength) continue;
-
-                                const mapData = readDataFromAddress(view, mapAddr, xAxis.length * yAxis.length, dataSize, useLittleEndian);
-                                
-                                if(mapData) {
-                                    const smoothness = calculateSmoothness(mapData);
-                                    if (smoothness < 50 && smoothness > 0.1) {
-                                        const confidence = 0.5 + Math.max(0, 0.5 - (smoothness / 100));
-                                        
-                                        const previewData: number[][] = [];
-                                        for (let k = 0; k < yAxis.length; k++) {
-                                            const row = mapData.slice(k * xAxis.length, (k + 1) * xAxis.length);
-                                            previewData.push(row);
+                    const batchEndIndex = Math.min(currentGroupIndex + BATCH_SIZE, axisGroups.length);
+        
+                    for (let i = currentGroupIndex; i < batchEndIndex; i++) {
+                        const group = axisGroups[i];
+                        if (group.length < 2) continue;
+        
+                        // Combine every axis with every other axis *within the same group*
+                        for (let j = 0; j < group.length; j++) {
+                            for (let k = j + 1; k < group.length; k++) {
+                                const axis1 = group[j];
+                                const axis2 = group[k];
+        
+                                // Test both combinations (axis1 as X, axis2 as Y and vice-versa)
+                                const combinations = [[axis1, axis2], [axis2, axis1]];
+        
+                                for (const [xAxis, yAxis] of combinations) {
+                                    const mapSizeInBytes = xAxis.length * yAxis.length * dataSize;
+                                    const searchStart = Math.max(0, Math.min(xAxis.address, yAxis.address) - MAP_SEARCH_WINDOW_BACK);
+                                    const searchEnd = Math.min(totalLength - mapSizeInBytes, Math.max(xAxis.address, yAxis.address) + yAxis.length * dataSize + MAP_SEARCH_WINDOW_FORWARD);
+        
+                                    for (let mapAddr = searchStart; mapAddr < searchEnd; mapAddr += ALIGNMENT) {
+                                        // Skip if map address overlaps with axes addresses
+                                        if ((mapAddr >= xAxis.address && mapAddr < xAxis.address + xAxis.length * dataSize) ||
+                                            (mapAddr >= yAxis.address && mapAddr < yAxis.address + yAxis.length * dataSize)) {
+                                            continue;
                                         }
 
-                                        const potentialMap: PotentialMap = {
-                                            address: mapAddr,
-                                            rows: yAxis.length,
-                                            cols: xAxis.length,
-                                            dataSize,
-                                            isBigEndian,
-                                            confidence,
-                                            suggestion: `Eixos em 0x${xAxis.address.toString(16)} e 0x${yAxis.address.toString(16)}`,
-                                            dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
-                                            equation: 'x',
-                                            previewData,
-                                            xAxisAddress: xAxis.address,
-                                            yAxisAddress: yAxis.address,
-                                            xAxisType: xAxis.type,
-                                            yAxisType: yAxis.type,
-                                        };
-                                        onProgress(50 + (i / axes.length) * 50, `Mapa encontrado em 0x${mapAddr.toString(16).toUpperCase()}`, potentialMap);
+                                        const mapData = readDataFromAddress(view, mapAddr, xAxis.length * yAxis.length, dataSize, useLittleEndian);
+        
+                                        if (mapData) {
+                                            const smoothness = calculateSmoothness(mapData);
+                                            if (smoothness < 50 && smoothness > 0.1) {
+                                                const confidence = 0.5 + Math.max(0, 0.5 - (smoothness / 100));
+                                                
+                                                const previewData: number[][] = [];
+                                                for (let rowIdx = 0; rowIdx < yAxis.length; rowIdx++) {
+                                                    const row = mapData.slice(rowIdx * xAxis.length, (rowIdx + 1) * xAxis.length);
+                                                    previewData.push(row);
+                                                }
+        
+                                                const potentialMap: PotentialMap = {
+                                                    address: mapAddr,
+                                                    rows: yAxis.length,
+                                                    cols: xAxis.length,
+                                                    dataSize,
+                                                    isBigEndian,
+                                                    confidence,
+                                                    suggestion: `Eixos em 0x${xAxis.address.toString(16)} e 0x${yAxis.address.toString(16)}`,
+                                                    dataType: `${dataSize * 8}-bit${dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`,
+                                                    equation: 'x',
+                                                    previewData,
+                                                    xAxisAddress: xAxis.address,
+                                                    yAxisAddress: yAxis.address,
+                                                    xAxisType: xAxis.type,
+                                                    yAxisType: yAxis.type,
+                                                };
+                                                onProgress(50 + (i / axisGroups.length) * 50, `Mapa encontrado em 0x${mapAddr.toString(16).toUpperCase()}`, potentialMap);
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-
-                    currentAxisIndex = batchEndIndex;
-                    const progress = 50 + (currentAxisIndex / axes.length) * 50;
-                    onProgress(progress, `Fase 2: A verificar eixos ${currentAxisIndex} de ${axes.length}...`);
-
-                    if (currentAxisIndex >= axes.length) {
+        
+                    currentGroupIndex = batchEndIndex;
+                    const progress = 50 + (currentGroupIndex / axisGroups.length) * 50;
+                    onProgress(progress, `Fase 2: A verificar ${axisGroups.length} grupos de eixos...`);
+        
+                    if (currentGroupIndex >= axisGroups.length) {
                         onProgress(100, "Análise concluída.");
                         resolve();
                     } else {
                         setTimeout(processNextBatch, 0); // Yield to main thread
                     }
-                } catch(error) {
+                } catch (error) {
                     reject(error);
                 }
             };
+        
+            onProgress(50, `A agrupar ${axes.length} eixos em ${axisGroups.length} grupos...`);
             processNextBatch();
         };
 
