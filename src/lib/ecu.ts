@@ -833,17 +833,17 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export async function findPotentialAxes(
     binBuffer: ArrayBuffer,
     config: ScanConfig,
-    onProgress: (progress: number, status: string, newAxis?: FoundAxis) => void,
+    onProgress: (progress: number, status: string) => void,
     signal: AbortSignal
-): Promise<void> {
+): Promise<FoundAxis[]> {
     const { minSize, maxSize, dataSize, isBigEndian } = config;
     const view = new DataView(binBuffer);
     const totalLength = binBuffer.byteLength;
     const useLittleEndian = !isBigEndian;
     const ALIGNMENT = dataSize > 1 ? 2 : 1;
-    const CHUNK_SIZE = 1024 * 64; // Process 64KB chunks
+    const CHUNK_SIZE = 1024 * 32; // Process in smaller chunks to be more responsive
+    const foundAxes: FoundAxis[] = [];
     
-    let foundCount = 0;
     let currentAddress = 0;
     
     while (currentAddress < totalLength) {
@@ -857,24 +857,26 @@ export async function findPotentialAxes(
                 if (axisData && isMonotonic(axisData)) {
                     const type = analyzeAxis(axisData);
                     if (type !== 'Desconhecido') {
-                        const id = `axis_${addr}_${len}`;
-                        onProgress(
-                            (currentAddress / totalLength) * 100, 
-                            `A procurar... Encontrados ${++foundCount} eixos.`,
-                            { id, address: addr, length: len, type, data: axisData }
-                        );
+                        foundAxes.push({
+                            id: `axis_${addr}_${len}`,
+                            address: addr,
+                            length: len,
+                            type,
+                            data: axisData
+                        });
                     }
                 }
             }
         }
         
         currentAddress = chunkEndAddress;
+        onProgress((currentAddress / totalLength) * 100, `A procurar... Encontrados ${foundAxes.length} eixos.`);
         
         // Yield to the main thread to prevent UI freezing
-        await sleep(5); 
+        await sleep(1); 
     }
 
-    onProgress(100, `Análise concluída. Encontrados ${foundCount} eixos.`);
+    return foundAxes;
 }
 
 

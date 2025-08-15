@@ -365,7 +365,6 @@ export default function EcuTuningAssistant() {
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-    const [potentialMaps, setPotentialMaps] = useState<PotentialMap[]>([]);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -444,7 +443,6 @@ export default function EcuTuningAssistant() {
         setTargetLambda(1.0);
         setAggressiveness(100);
         setIgnitionRuns({ base: [], modified: [] });
-        setPotentialMaps([]);
         logEntryForm.reset();
         
         if (binInputRef.current) binInputRef.current.value = '';
@@ -1708,8 +1706,6 @@ export default function EcuTuningAssistant() {
                             binFile={binFile}
                             onLoadMap={handleLoadPotentialMap}
                             addLog={addLog}
-                            potentialMaps={potentialMaps}
-                            setPotentialMaps={setPotentialMaps}
                           />
                       </TabsContent>
                     </>

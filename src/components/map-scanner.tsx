@@ -28,8 +28,6 @@ interface MapScannerProps {
     binFile: { name: string; buffer: ArrayBuffer } | null;
     onLoadMap: (map: PotentialMap) => void;
     addLog: (message: string, type?: 'info' | 'success' | 'error' | 'debug') => void;
-    potentialMaps: PotentialMap[];
-    setPotentialMaps: React.Dispatch<React.SetStateAction<PotentialMap[]>>;
 }
 
 export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerProps) {
@@ -179,11 +177,11 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                 <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                        <Label htmlFor="scan-min">Dimensão Mín Eixo</Label>
-                       <Input id="scan-min" type="number" value={scanConfig.minSize} onChange={e => setScanConfig(c => ({...c, minSize: parseInt(e.target.value, 10)}))} disabled={isScanning} />
+                       <Input id="scan-min" type="number" value={scanConfig.minSize || ''} onChange={e => setScanConfig(c => ({...c, minSize: parseInt(e.target.value, 10)}))} disabled={isScanning} />
                     </div>
                     <div className="space-y-2">
                        <Label htmlFor="scan-max">Dimensão Máx Eixo</Label>
-                       <Input id="scan-max" type="number" value={scanConfig.maxSize} onChange={e => setScanConfig(c => ({...c, maxSize: parseInt(e.target.value, 10)}))} disabled={isScanning}/>
+                       <Input id="scan-max" type="number" value={scanConfig.maxSize || ''} onChange={e => setScanConfig(c => ({...c, maxSize: parseInt(e.target.value, 10)}))} disabled={isScanning}/>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="scan-type">Tipo de Dados</Label>
@@ -329,5 +327,3 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         </div>
     );
 }
-
-    
