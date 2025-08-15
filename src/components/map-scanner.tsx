@@ -100,7 +100,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
             toast({ title: "Análise Concluída", description: `Encontrados ${axes.length} eixos potenciais.` });
 
         } catch (error) {
-            if ((error as Error).message.includes('AbortError')) {
+            if ((error as Error).name === 'AbortError') {
                 addLog("Análise cancelada pelo utilizador.", "info");
                 toast({ title: "Análise Cancelada", variant: 'default' });
             } else {
@@ -177,11 +177,11 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                 <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
                        <Label htmlFor="scan-min">Dimensão Mín Eixo</Label>
-                       <Input id="scan-min" type="number" value={scanConfig.minSize || ''} onChange={e => setScanConfig(c => ({...c, minSize: parseInt(e.target.value, 10)}))} disabled={isScanning} />
+                       <Input id="scan-min" type="number" value={scanConfig.minSize || ''} onChange={e => setScanConfig(c => ({...c, minSize: parseInt(e.target.value, 10) || 0}))} disabled={isScanning} />
                     </div>
                     <div className="space-y-2">
                        <Label htmlFor="scan-max">Dimensão Máx Eixo</Label>
-                       <Input id="scan-max" type="number" value={scanConfig.maxSize || ''} onChange={e => setScanConfig(c => ({...c, maxSize: parseInt(e.target.value, 10)}))} disabled={isScanning}/>
+                       <Input id="scan-max" type="number" value={scanConfig.maxSize || ''} onChange={e => setScanConfig(c => ({...c, maxSize: parseInt(e.target.value, 10) || 0}))} disabled={isScanning}/>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="scan-type">Tipo de Dados</Label>
@@ -319,7 +319,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                         </Button>
                          <div className="flex items-start gap-2 text-xs text-muted-foreground p-2 border rounded-lg">
                             <Info className="h-4 w-4 shrink-0 mt-0.5" />
-                            <p>Use o <span className="font-semibold text-foreground">Visualizador Hexadecimal</span> na aba "Scanner de Mapas" da versão anterior para o ajudar a encontrar o endereço do seu mapa visualmente.</p>
+                            <p>Use um editor hexadecimal para encontrar visualmente o endereço de início do seu mapa. A ferramenta irá então usar os eixos selecionados para ler o bloco de dados a partir desse endereço.</p>
                          </div>
                     </CardContent>
                 </Card>
