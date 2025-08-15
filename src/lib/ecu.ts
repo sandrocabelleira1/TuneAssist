@@ -776,10 +776,11 @@ export function analyzeAxis(data: number[]): 'RPM' | 'Carga' | 'Desconhecido' {
     if (!isStrictlyMonotonic(data)) return 'Desconhecido';
 
     const maxVal = Math.max(...data);
+    const minVal = Math.min(...data);
 
     // Heuristics for RPM: high values, typically end in 00 or 50
     // A stricter check could be maxVal > 1000 and range > 800
-    if (maxVal > 800 && data.every(v => v >= 0)) {
+    if (maxVal > 1000 && (maxVal - minVal) > 500 && data.every(v => v >= 0)) {
         return 'RPM';
     }
     
@@ -848,18 +849,18 @@ export function scanForMapsByAxes(
         const totalLength = binBuffer.byteLength;
         const useLittleEndian = !isBigEndian;
         const foundAxes: FoundAxis[] = [];
-        const CHUNK_SIZE = 1024 * 64; // Process in 64KB chunks
-        const ALIGNMENT = 2; // Check every 2 bytes for performance
+        const CHUNK_SIZE = 1024 * 32; // Process in smaller 32KB chunks
+        const ALIGNMENT = 2;
 
-        // --- PHASE 1: FIND ALL POTENTIAL AXES ---
+        // --- PHASE 1: FIND ALL POTENTIAL AXES (NON-BLOCKING) ---
         const findAxes = () => {
-            let progressAddress = 0;
+            let currentAddress = 0;
 
             const processAxesChunk = () => {
                 try {
-                    const endAddress = Math.min(progressAddress + CHUNK_SIZE, totalLength);
+                    const chunkEndAddress = Math.min(currentAddress + CHUNK_SIZE, totalLength);
 
-                    for (let addr = progressAddress; addr < endAddress; addr += ALIGNMENT) {
+                    for (let addr = currentAddress; addr < chunkEndAddress; addr += ALIGNMENT) {
                         for (let len = minSize; len <= maxSize; len++) {
                             const axisData = readDataFromAddress(view, addr, len, dataSize, useLittleEndian);
                             if (axisData && isMonotonic(axisData)) {
@@ -876,15 +877,15 @@ export function scanForMapsByAxes(
                         }
                     }
                     
-                    progressAddress = endAddress;
-                    const progress = (progressAddress / totalLength) * 50; // Phase 1 is 50% of total
+                    currentAddress = chunkEndAddress;
+                    const progress = (currentAddress / totalLength) * 50; // Phase 1 is 50% of total
                     onProgress(progress, `Fase 1: A analisar eixos... ${foundAxes.length} encontrados.`);
 
-                    if (progressAddress >= totalLength) {
+                    if (currentAddress >= totalLength) {
                         onProgress(50, `Fase 1 concluída. Encontrados ${foundAxes.length} eixos. A iniciar a Fase 2...`);
                         setTimeout(() => findMapsFromAxes(foundAxes), 0); // Start phase 2
                     } else {
-                        setTimeout(processAxesChunk, 0); // Yield to main thread
+                        setTimeout(processAxesChunk, 0); // Yield to main thread to prevent freezing
                     }
                 } catch (error) {
                     reject(error);
@@ -895,18 +896,16 @@ export function scanForMapsByAxes(
             processAxesChunk();
         };
         
-        // --- PHASE 2: FIND MAPS FROM THE FOUND AXES (REFACTORED) ---
+        // --- PHASE 2: FIND MAPS FROM THE FOUND AXES (NON-BLOCKING) ---
         const findMapsFromAxes = (axes: FoundAxis[]) => {
-            const AXIS_GROUPING_DISTANCE = 512; // Group axes that are within 512 bytes of each other
+            const AXIS_GROUPING_DISTANCE = 512;
             const MAP_SEARCH_WINDOW_BACK = 256;
             const MAP_SEARCH_WINDOW_FORWARD = 256;
             const BATCH_SIZE = 10;
             let currentGroupIndex = 0;
         
-            // Sort axes by address to make grouping easier
             axes.sort((a, b) => a.address - b.address);
         
-            // Group nearby axes to drastically reduce combinations
             const axisGroups: FoundAxis[][] = [];
             if (axes.length > 0) {
                 let currentGroup = [axes[0]];
@@ -929,14 +928,9 @@ export function scanForMapsByAxes(
                         const group = axisGroups[i];
                         if (group.length < 2) continue;
         
-                        // Combine every axis with every other axis *within the same group*
                         for (let j = 0; j < group.length; j++) {
                             for (let k = j + 1; k < group.length; k++) {
-                                const axis1 = group[j];
-                                const axis2 = group[k];
-        
-                                // Test both combinations (axis1 as X, axis2 as Y and vice-versa)
-                                const combinations = [[axis1, axis2], [axis2, axis1]];
+                                const combinations = [[group[j], group[k]], [group[k], group[j]]];
         
                                 for (const [xAxis, yAxis] of combinations) {
                                     const mapSizeInBytes = xAxis.length * yAxis.length * dataSize;
@@ -944,7 +938,6 @@ export function scanForMapsByAxes(
                                     const searchEnd = Math.min(totalLength - mapSizeInBytes, Math.max(xAxis.address, yAxis.address) + yAxis.length * dataSize + MAP_SEARCH_WINDOW_FORWARD);
         
                                     for (let mapAddr = searchStart; mapAddr < searchEnd; mapAddr += ALIGNMENT) {
-                                        // Skip if map address overlaps with axes addresses
                                         if ((mapAddr >= xAxis.address && mapAddr < xAxis.address + xAxis.length * dataSize) ||
                                             (mapAddr >= yAxis.address && mapAddr < yAxis.address + yAxis.length * dataSize)) {
                                             continue;
@@ -1014,3 +1007,4 @@ export function scanForMapsByAxes(
 // #endregion
 
     
+
