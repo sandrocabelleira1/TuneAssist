@@ -776,19 +776,18 @@ export function analyzeAxis(data: number[]): 'RPM' | 'Carga' | 'Desconhecido' {
     if (!isStrictlyMonotonic(data)) return 'Desconhecido';
 
     const maxVal = Math.max(...data);
-    const range = maxVal - Math.min(...data);
 
-    // Heuristics for RPM: high values, large range, often ends in 00 or 50
-    const isLikelyRpm = (
-        maxVal > 1000 &&
-        range > 800
-    ) || data.every(v => v % 50 === 0 || v % 100 === 0);
-
-    if (isLikelyRpm) return 'RPM';
+    // Heuristics for RPM: high values, typically end in 00 or 50
+    // A stricter check could be maxVal > 1000 and range > 800
+    if (maxVal > 800 && data.every(v => v >= 0)) {
+        return 'RPM';
+    }
     
     // Heuristics for Load: low values (e.g. < 260 for MAP sensor, < 101 for TPS)
-    const isLikelyLoad = maxVal < 260 && data.every(v => v <= 255);
-    if (isLikelyLoad) return 'Carga';
+    // and values are typically positive
+    if (maxVal < 300 && data.every(v => v >= 0)) {
+        return 'Carga';
+    }
     
     return 'Desconhecido';
 }
@@ -900,28 +899,20 @@ export function scanForMapsByAxes(
         const findMapsFromAxes = (axes: FoundAxis[]) => {
             const MAP_SEARCH_WINDOW_BACK = 256;
             const MAP_SEARCH_WINDOW_FORWARD = 256;
-            const totalAxesCombinations = axes.length * axes.length;
-            let combinationsChecked = 0;
+            const BATCH_SIZE = 20; // Process N axes per batch to avoid freezing
+            let currentAxisIndex = 0;
 
-            const processMapChunk = (startIndex: number) => {
+            const processNextBatch = () => {
                 try {
-                    const CHUNK_ITERATIONS = 5000; // Increase iterations per chunk
-                    let iterations = 0;
-                    
-                    for (let i = startIndex; i < totalAxesCombinations && iterations < CHUNK_ITERATIONS; i++) {
-                        const yAxisIndex = Math.floor(i / axes.length);
-                        const xAxisIndex = i % axes.length;
+                    const batchEndIndex = Math.min(currentAxisIndex + BATCH_SIZE, axes.length);
 
-                        if (xAxisIndex !== yAxisIndex) {
-                            const xAxis = axes[xAxisIndex];
-                            const yAxis = axes[yAxisIndex];
+                    for (let i = currentAxisIndex; i < batchEndIndex; i++) {
+                        for (let j = 0; j < axes.length; j++) {
+                            if (i === j) continue;
+
+                            const xAxis = axes[i];
+                            const yAxis = axes[j];
                             
-                            // Don't check the same pair twice (e.g. A-B and B-A) if they are close
-                            if (yAxisIndex < xAxisIndex && Math.abs(xAxis.address - yAxis.address) < MAP_SEARCH_WINDOW_FORWARD) {
-                                combinationsChecked++;
-                                continue;
-                            }
-
                             const searchStart = Math.max(0, Math.min(xAxis.address, yAxis.address) - MAP_SEARCH_WINDOW_BACK);
                             const searchEnd = Math.min(totalLength, Math.max(xAxis.address, yAxis.address) + yAxis.length * dataSize + MAP_SEARCH_WINDOW_FORWARD);
 
@@ -960,29 +951,28 @@ export function scanForMapsByAxes(
                                             xAxisType: xAxis.type,
                                             yAxisType: yAxis.type,
                                         };
-                                        onProgress(50 + (combinationsChecked / totalAxesCombinations) * 50, `Mapa encontrado em 0x${mapAddr.toString(16).toUpperCase()}`, potentialMap);
+                                        onProgress(50 + (i / axes.length) * 50, `Mapa encontrado em 0x${mapAddr.toString(16).toUpperCase()}`, potentialMap);
                                     }
                                 }
                             }
                         }
-                        combinationsChecked++;
-                        iterations++;
                     }
 
-                    const progress = 50 + (combinationsChecked / totalAxesCombinations) * 50;
-                    onProgress(progress, `Fase 2: A verificar ${combinationsChecked} de ${totalAxesCombinations} combinações de eixos...`);
+                    currentAxisIndex = batchEndIndex;
+                    const progress = 50 + (currentAxisIndex / axes.length) * 50;
+                    onProgress(progress, `Fase 2: A verificar eixos ${currentAxisIndex} de ${axes.length}...`);
 
-                    if (combinationsChecked >= totalAxesCombinations) {
+                    if (currentAxisIndex >= axes.length) {
                         onProgress(100, "Análise concluída.");
                         resolve();
                     } else {
-                        setTimeout(() => processMapChunk(combinationsChecked), 0); // Yield to main thread
+                        setTimeout(processNextBatch, 0); // Yield to main thread
                     }
                 } catch(error) {
                     reject(error);
                 }
             };
-            processMapChunk(0);
+            processNextBatch();
         };
 
         // Start the process
