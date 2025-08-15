@@ -313,7 +313,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog, potentialMaps, 
                                 <TableBody>
                                     {potentialMaps.length > 0 ? (
                                         potentialMaps.map(map => (
-                                            <TableRow key={map.address}>
+                                            <TableRow key={`${map.address}-${map.rows}x${map.cols}`}>
                                                 <TableCell className="font-semibold">{(map.confidence * 100).toFixed(0)}%</TableCell>
                                                 <TableCell className="font-mono text-xs">0x{map.address.toString(16).toUpperCase()}</TableCell>
                                                 <TableCell>{map.cols}x{map.rows}</TableCell>
