@@ -4,7 +4,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, DownloadCloud, Settings, Play, Loader, Square, X, Table2, Info } from 'lucide-react';
+import { AlertTriangle, DownloadCloud, Settings, Play, Loader, Square, Info } from 'lucide-react';
 import type { PotentialMap, ScanConfig, FoundAxis } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
