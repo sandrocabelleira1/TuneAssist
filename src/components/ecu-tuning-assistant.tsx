@@ -2,10 +2,10 @@
 
 'use client';
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Papa from 'papaparse';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray, useFormContext } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Sidebar, SidebarProvider, SidebarHeader, SidebarContent, SidebarFooter, SidebarTrigger, SidebarRail, SidebarInset } from '@/components/ui/sidebar';
@@ -35,6 +35,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import IgnitionTimingAnalyzer from '@/components/ignition-timing-analyzer';
 import MapScanner from '@/components/map-scanner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -54,21 +56,20 @@ type MassEditPayload = {
 };
 
 const logEntrySchema = z.object({
-    yAxis: z.preprocess(
-      (a) => (a === '' ? undefined : a),
-      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("Valor do Eixo Y deve ser positivo")
-    ),
-    xAxis: z.preprocess(
-      (a) => (a === '' ? undefined : a),
-      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("Valor do Eixo X deve ser positivo")
-    ),
-    lambda: z.preprocess(
-      (a) => (a === '' ? undefined : a),
-      z.coerce.number({invalid_type_error: "Deve ser um número"}).positive("Lambda deve ser positivo")
-    ),
+  loadValue: z.number(),
+  rpm: z.string().optional(),
+  lambda: z.string().optional(),
 });
 
-type LogEntryForm = z.infer<typeof logEntrySchema>;
+const dynoFormSchema = z.object({
+  loadColumns: z.array(z.object({ id: z.string(), value: z.number() })),
+  logRows: z.array(z.object({
+    rpm: z.string(),
+    lambdas: z.array(z.object({ value: z.string() }))
+  }))
+});
+
+type DynoFormValues = z.infer<typeof dynoFormSchema>;
 
 
 function MassEditDialog({
@@ -319,6 +320,128 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
 }
 
 
+function DynoEntryTable() {
+    const { control, getValues, watch, setValue } = useFormContext<DynoFormValues>();
+    const { fields: loadColumnFields, append: appendLoadColumn, remove: removeLoadColumn } = useFieldArray({ control, name: "loadColumns" });
+    const { fields: logRowFields, append: appendLogRow, remove: removeLogRow } = useFieldArray({ control, name: "logRows" });
+    const { toast } = useToast();
+
+    const { processedMap } = useEcuTuningState();
+    const yAxis = processedMap?.axes?.y;
+
+    const [selectedLoadToAdd, setSelectedLoadToAdd] = useState('');
+
+    const currentLoadColumnValues = watch('loadColumns').map(c => c.value);
+
+    const handleAddLoadColumn = () => {
+        if (!yAxis) return;
+        const loadValue = parseFloat(selectedLoadToAdd);
+        if (isNaN(loadValue)) return;
+        if (currentLoadColumnValues.includes(loadValue)) {
+            toast({ title: "Carga duplicada", description: "Esta coluna de carga já foi adicionada.", variant: "destructive" });
+            return;
+        }
+        appendLoadColumn({ id: `load_${loadValue}`, value: loadValue });
+        
+        logRowFields.forEach((_, rowIndex) => {
+            setValue(`logRows.${rowIndex}.lambdas.${loadColumnFields.length}.value`, '');
+        });
+        setSelectedLoadToAdd('');
+    };
+
+    const handleAddRpmRow = () => {
+        const newLambdas = loadColumnFields.map(() => ({ value: '' }));
+        appendLogRow({ rpm: '', lambdas: newLambdas });
+    };
+
+    if (!processedMap || !yAxis) {
+        return <p className="text-sm text-muted-foreground">Selecione um mapa para ativar a entrada de dados do dinamómetro.</p>;
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="flex gap-4 items-end">
+                <div className="flex-1 space-y-2">
+                    <Label>Eixo de Carga ({yAxis.label})</Label>
+                    <Select value={selectedLoadToAdd} onValueChange={setSelectedLoadToAdd}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Selecione um valor de carga para adicionar..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {yAxis.calculated.map((val, idx) => (
+                                <SelectItem key={idx} value={String(val)} disabled={currentLoadColumnValues.includes(Number(val))}>
+                                    {val}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <Button type="button" onClick={handleAddLoadColumn} disabled={!selectedLoadToAdd}><PlusCircle className="mr-2 h-4 w-4" />Adicionar Coluna de Carga</Button>
+            </div>
+            
+            {loadColumnFields.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[120px]">RPM</TableHead>
+                                {loadColumnFields.map((field, index) => (
+                                    <TableHead key={field.id}>
+                                        <div className="flex items-center justify-between">
+                                            <span>{field.value}</span>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeLoadColumn(index)}>
+                                                <X className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </TableHead>
+                                ))}
+                                <TableHead className="w-[50px]"></TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {logRowFields.map((rowField, rowIndex) => (
+                                <TableRow key={rowField.id}>
+                                    <TableCell>
+                                        <FormField
+                                            control={control}
+                                            name={`logRows.${rowIndex}.rpm`}
+                                            render={({ field }) => <Input type="number" placeholder="Ex: 3000" {...field} />}
+                                        />
+                                    </TableCell>
+                                    {loadColumnFields.map((_, colIndex) => (
+                                        <TableCell key={`${rowField.id}-${colIndex}`}>
+                                            <FormField
+                                                control={control}
+                                                name={`logRows.${rowIndex}.lambdas.${colIndex}.value`}
+                                                render={({ field }) => <Input type="number" step="0.01" placeholder="Ex: 0.85" {...field} />}
+                                            />
+                                        </TableCell>
+                                    ))}
+                                    <TableCell>
+                                        <Button variant="ghost" size="icon" onClick={() => removeLogRow(rowIndex)}>
+                                            <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                    <div className="p-2 border-t">
+                        <Button type="button" variant="secondary" size="sm" onClick={handleAddRpmRow}><Plus className="mr-2 h-4 w-4" />Adicionar Linha de RPM</Button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+const EcuTuningStateContext = React.createContext<{
+    processedMap: ProcessedMap | null;
+}>({ processedMap: null });
+
+const useEcuTuningState = () => React.useContext(EcuTuningStateContext);
+
+
 const initialManualConfig: ManualAxisConfig = {
     x: { equation: '', stride: undefined },
     y: { equation: '', stride: undefined },
@@ -358,7 +481,7 @@ export default function EcuTuningAssistant() {
     const [isProcessing, setIsProcessing] = useState(false);
     
     const [templateConfig, setTemplateConfig] = useState<StructureTemplate | null>(null);
-    const [targetLambda, setTargetLambda] = useState<number | ''>(1.0);
+    const [targetLambda, setTargetLambda] = useState<number | ''>(0.87);
     const [aggressiveness, setAggressiveness] = useState<number>(100);
     const [ignitionRuns, setIgnitionRuns] = useState<IgnitionTimingRun>({ base: [], modified: [] });
 
@@ -371,12 +494,11 @@ export default function EcuTuningAssistant() {
     const xdfInputRef = useRef<HTMLInputElement>(null);
     const logInputRef = useRef<HTMLInputElement>(null);
 
-    const logEntryForm = useForm<LogEntryForm>({
-        resolver: zodResolver(logEntrySchema),
+    const dynoForm = useForm<DynoFormValues>({
+        resolver: zodResolver(dynoFormSchema),
         defaultValues: {
-            yAxis: '',
-            xAxis: '',
-            lambda: '',
+            loadColumns: [],
+            logRows: []
         },
     });
 
@@ -419,10 +541,11 @@ export default function EcuTuningAssistant() {
     const handleClearLogData = useCallback(() => {
         setLogFile(null);
         setLogData([]);
+        dynoForm.reset({ loadColumns: [], logRows: [] });
         if (logInputRef.current) logInputRef.current.value = '';
         addLog('Dados de ensaio limpos.', 'success');
         toast({ title: 'Dados Limpos', description: 'Os dados de ensaio foram limpos com sucesso.' });
-    }, [addLog, toast]);
+    }, [addLog, toast, dynoForm]);
 
     const handleResetAll = useCallback(() => {
         setBinFile(null);
@@ -440,10 +563,10 @@ export default function EcuTuningAssistant() {
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
         setTemplateConfig(null);
-        setTargetLambda(1.0);
+        setTargetLambda(0.87);
         setAggressiveness(100);
         setIgnitionRuns({ base: [], modified: [] });
-        logEntryForm.reset();
+        dynoForm.reset();
         
         if (binInputRef.current) binInputRef.current.value = '';
         if (xdfInputRef.current) xdfInputRef.current.value = '';
@@ -452,7 +575,7 @@ export default function EcuTuningAssistant() {
         const successMsg = 'Aplicação reiniciada para o estado inicial.';
         addLog(successMsg, 'success');
         toast({ title: 'Tudo Limpo', description: successMsg });
-    }, [addLog, toast, logEntryForm]);
+    }, [addLog, toast, dynoForm]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
@@ -547,24 +670,46 @@ export default function EcuTuningAssistant() {
         if (logInputRef.current) logInputRef.current.value = '';
     };
 
-    const handleAddManualLogEntry = (data: LogEntryForm) => {
+    const handleAddDynoLogData = (data: DynoFormValues) => {
         if (!processedMap?.axes) {
-            toast({title: "Mapa não carregado", description: "Carregue e selecione um mapa para adicionar dados de ensaio.", variant: "destructive"});
+            toast({ title: "Mapa não carregado", description: "Carregue um mapa para adicionar dados.", variant: "destructive" });
             return;
         }
 
         const yAxisLabel = processedMap.axes.y.label || 'Eixo Y';
         const xAxisLabel = processedMap.axes.x.label || 'Eixo X';
+        const newEntries: any[] = [];
 
-        const newEntry = {
-            [yAxisLabel]: data.yAxis,
-            [xAxisLabel]: data.xAxis,
-            'Lambda': data.lambda,
-        };
-        setLogData(prev => [...prev, newEntry]);
-        addLog(`Ponto de ensaio manual adicionado: ${yAxisLabel}=${data.yAxis}, ${xAxisLabel}=${data.xAxis}, Lambda=${data.lambda}`, 'success');
-        logEntryForm.reset();
+        data.logRows.forEach(row => {
+            if (row.rpm) {
+                row.lambdas.forEach((lambda, colIndex) => {
+                    if (lambda.value) {
+                        const loadValue = data.loadColumns[colIndex].value;
+                        newEntries.push({
+                            [yAxisLabel]: Number(loadValue),
+                            [xAxisLabel]: Number(row.rpm),
+                            'Lambda': Number(lambda.value),
+                        });
+                    }
+                });
+            }
+        });
+
+        if(newEntries.length === 0) {
+            toast({title: "Nenhum Dado", description: "A tabela de ensaio está vazia.", variant: "destructive"});
+            return;
+        }
+
+        setLogData(prev => [...prev, ...newEntries]);
+        addLog(`${newEntries.length} ponto(s) de ensaio adicionados a partir da tabela.`, 'success');
+        
+        // Clear only the values, not the structure
+        dynoForm.reset({
+            loadColumns: data.loadColumns,
+            logRows: data.logRows.map(r => ({ rpm: '', lambdas: r.lambdas.map(() => ({ value: '' })) }))
+        });
     };
+
 
     const processAndCacheMap = useCallback(async (mapId: string, configToProcess: ManualAxisConfig) => {
         if (!mapId || !binFile || !xdfFile) return;
@@ -948,8 +1093,6 @@ export default function EcuTuningAssistant() {
         setSelectedLine(0);
     };
     
-    const yAxisLabelForForm = processedMap?.axes.y.label || 'Eixo Y';
-    const xAxisLabelForForm = processedMap?.axes.x.label || 'Eixo X';
 
     const handleMapSelectionChange = (id: string) => {
         const isPotential = id.startsWith('potential_');
@@ -1051,687 +1194,651 @@ export default function EcuTuningAssistant() {
     };
     
     return (
-      <div className="h-full w-full bg-background">
-        <SidebarProvider>
-          <Sidebar side="left" className="border-r">
-            <SidebarRail />
-            <SidebarHeader>
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Cpu size={20} /> Painel de Controlo
-              </h2>
-            </SidebarHeader>
-            <SidebarContent className="p-2 flex flex-col gap-4">
-              <Card>
-                <CardHeader className="p-4">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <UploadCloud size={18} /> Ficheiros
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 pt-0 flex flex-col gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => binInputRef.current?.click()}
-                  >
-                    <Binary className="mr-2" />{' '}
-                    {binFile?.name ? 'Trocar BIN' : 'Carregar .BIN'}
-                  </Button>
-                  <input
-                    ref={binInputRef}
-                    type="file"
-                    accept=".bin"
-                    className="hidden"
-                    onChange={(e) => handleFileChange(e, 'bin')}
-                  />
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => xdfInputRef.current?.click()}
-                  >
-                    <FileCog className="mr-2" />{' '}
-                    {xdfFile?.name ? 'Trocar XDF' : 'Carregar .XDF'}
-                  </Button>
-                  <input
-                    ref={xdfInputRef}
-                    type="file"
-                    accept=".xdf"
-                    className="hidden"
-                    onChange={(e) => handleFileChange(e, 'xdf')}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="p-4">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Table2 size={18} /> Seleção de Mapa
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 pt-0">
-                  <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-                    <PopoverTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className="w-full justify-between"
-                            disabled={!binFile || !xdfFile}
-                        >
-                            <span className="truncate">
-                                {selectedMapIds.length === 0 && "Selecione mapas"}
-                                {selectedMapIds.length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds[0])?.name}
-                                {selectedMapIds.length > 1 && `${selectedMapIds.length} mapas selecionados`}
-                            </span>
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                    </PopoverTrigger>
-                     <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                        {binFile && xdfFile && (
-                            <ScrollArea className="h-72">
-                               <div className="p-4 space-y-2">
-                                   {xdfFile?.definitions.filter(d => !d.uniqueId.startsWith('potential_')).sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
-                                      <div key={def.uniqueId} className="flex items-center space-x-2">
-                                        <Checkbox
-                                          id={def.uniqueId}
-                                          checked={selectedMapIds.includes(def.uniqueId)}
-                                          onCheckedChange={() => handleMapSelectionChange(def.uniqueId)}
-                                        />
-                                        <label
-                                          htmlFor={def.uniqueId}
-                                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
-                                          onClick={() => handleMapSelectionChange(def.uniqueId)}
-                                        >
-                                          {def.name}
-                                        </label>
-                                      </div>
-                                   ))}
-                               </div>
-                            </ScrollArea>
-                        )}
-                     </PopoverContent>
-                  </Popover>
-
-                  {selectedMapIds.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                        {selectedMapIds.map(id => {
-                            const def = xdfFile?.definitions.find(d => d.uniqueId === id);
-                            if (!def) return null;
-                            const isPotential = id.startsWith('potential_');
-                            return (
-                                <Badge 
-                                    key={id} 
-                                    variant={id === activeMapId ? "default" : (isPotential ? "destructive" : "secondary")}
-                                    className="cursor-pointer hover:ring-2 hover:ring-ring"
-                                    onClick={() => setActiveMap(id)}
-                                >
-                                    {def.name}
-                                    <X 
-                                      className="ml-1 h-3 w-3 rounded-full hover:bg-muted/50"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleMapSelectionChange(id);
-                                      }}
-                                    />
-                                </Badge>
-                            )
-                        })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="p-4">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Settings2 size={18} /> Substituir
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Use para substituir a configuração do XDF. Útil para
-                    depuração.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-4 pt-0 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="y-equation"
-                        className="font-semibold text-sm"
-                      >
-                        Equação Y
-                      </Label>
-                      <Input
-                        id="y-equation"
-                        placeholder="x"
-                        value={manualConfig.y.equation}
-                        onChange={(e) =>
-                          handleManualConfigChange('y', e.target.value, 'equation')
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="y-stride"
-                        className="font-semibold text-sm"
-                      >
-                        Passo Y (bytes)
-                      </Label>
-                      <Input
-                        id="y-stride"
-                        type="number"
-                        placeholder="-"
-                        value={manualConfig.y.stride ?? ''}
-                        onChange={(e) =>
-                          handleManualConfigChange(
-                            'y',
-                            e.target.value === ''
-                              ? undefined
-                              : parseInt(e.target.value),
-                            'stride'
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="x-equation"
-                        className="font-semibold text-sm"
-                      >
-                        Equação X
-                      </Label>
-                      <Input
-                        id="x-equation"
-                        placeholder="x"
-                        value={manualConfig.x.equation}
-                        onChange={(e) =>
-                          handleManualConfigChange('x', e.target.value, 'equation')
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="x-stride"
-                        className="font-semibold text-sm"
-                      >
-                        Passo X (bytes)
-                      </Label>
-                      <Input
-                        id="x-stride"
-                        type="number"
-                        placeholder="-"
-                        value={manualConfig.x.stride ?? ''}
-                        onChange={(e) =>
-                          handleManualConfigChange(
-                            'x',
-                            e.target.value === ''
-                              ? undefined
-                              : parseInt(e.target.value),
-                            'stride'
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-                   <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="z-equation"
-                        className="font-semibold text-sm"
-                      >
-                        Equação Z (Mapa)
-                      </Label>
-                      <Input
-                        id="z-equation"
-                        placeholder="x"
-                        value={manualConfig.z.equation}
-                        onChange={(e) =>
-                          handleManualConfigChange('z', e.target.value, 'equation')
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="z-stride"
-                        className="font-semibold text-sm"
-                      >
-                        Passo Z (bytes)
-                      </Label>
-                      <Input
-                        id="z-stride"
-                        type="number"
-                        placeholder="-"
-                        value={manualConfig.z.stride ?? ''}
-                        onChange={(e) =>
-                          handleManualConfigChange(
-                            'z',
-                            e.target.value === ''
-                              ? undefined
-                              : parseInt(e.target.value),
-                            'stride'
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label
-                        htmlFor="z-row-stride"
-                        className="font-semibold text-sm"
-                    >
-                        Passo da Linha (bytes)
-                    </Label>
-                    <Input
-                        id="z-row-stride"
-                        type="number"
-                        placeholder="Automático (Cols * Passo Z)"
-                        value={manualConfig.z.rowStride ?? ''}
-                        onChange={(e) =>
-                          handleManualConfigChange(
-                            'z',
-                             e.target.value === ''
-                              ? undefined
-                              : parseInt(e.target.value),
-                            'rowStride'
-                          )
-                        }
-                    />
-                  </div>
-
-                  <div className="flex items-center space-x-4">
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="sort-x"
-                        checked={manualConfig.sortX ?? false}
-                        onCheckedChange={(checked) =>
-                          handleManualConfigChange('sortX', checked)
-                        }
-                      />
-                      <Label htmlFor="sort-x">Ordenar Eixo X</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="sort-y"
-                        checked={manualConfig.sortY ?? false}
-                        onCheckedChange={(checked) =>
-                          handleManualConfigChange('sortY', checked)
-                        }
-                      />
-                      <Label htmlFor="sort-y">Ordenar Eixo Y</Label>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="big-endian"
-                      checked={manualConfig.isBigEndian ?? false}
-                      onCheckedChange={(checked) =>
-                        handleManualConfigChange('isBigEndian', checked)
-                      }
-                    />
-                    <Label htmlFor="big-endian">Big Endian</Label>
-                  </div>
-                  <div className="flex flex-col gap-2">
+      <EcuTuningStateContext.Provider value={{ processedMap }}>
+        <div className="h-full w-full bg-background">
+          <SidebarProvider>
+            <Sidebar side="left" className="border-r">
+              <SidebarRail />
+              <SidebarHeader>
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Cpu size={20} /> Painel de Controlo
+                </h2>
+              </SidebarHeader>
+              <SidebarContent className="p-2 flex flex-col gap-4">
+                <Card>
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <UploadCloud size={18} /> Ficheiros
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0 flex flex-col gap-3">
                     <Button
+                      variant="outline"
                       size="sm"
-                      onClick={handleApplyAndRecalculate}
-                      disabled={!activeMapId || isProcessing}
+                      onClick={() => binInputRef.current?.click()}
                     >
-                      {isProcessing ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : <Play className="mr-2 h-4 w-4" /> }
-                      Aplicar e Recalcular
+                      <Binary className="mr-2" />{' '}
+                      {binFile?.name ? 'Trocar BIN' : 'Carregar .BIN'}
                     </Button>
-                     <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={handleSetTemplate}
-                        disabled={!activeMapId}
-                    >
-                        <Star className="mr-2 h-4 w-4" />
-                        Usar como Padrão
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                    <input
+                      ref={binInputRef}
+                      type="file"
+                      accept=".bin"
+                      className="hidden"
+                      onChange={(e) => handleFileChange(e, 'bin')}
+                    />
 
-              <Card>
-                <CardHeader className="p-4">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <BrainCircuit size={18} /> Ações
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 pt-0 flex flex-col gap-3">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    disabled={!anyMapModified || isProcessing}
-                    onClick={handleSave}
-                  >
-                    <Save className="mr-2 h-4 w-4" /> Salvar .BIN Modificado
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleResetAll}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" /> Resetar Tudo
-                  </Button>
-                </CardContent>
-              </Card>
-            </SidebarContent>
-            <SidebarFooter>
-              <div className="p-2">
-                <h3 className="font-semibold text-sm mb-2 px-2">
-                  Log de Processamento
-                </h3>
-                <ScrollArea className="h-48 w-full rounded-md border p-2 font-mono text-xs">
-                  {logs.length > 0 ? (
-                    logs.map((log) => (
-                      <div key={log.id} className="flex items-start">
-                        <span className="text-muted-foreground/60 mr-2 shrink-0">
-                          {log.timestamp}
-                        </span>
-                        <span
-                          className={`break-words ${
-                            log.type === 'error'
-                              ? 'text-destructive font-semibold'
-                              : log.type === 'success'
-                              ? 'text-green-500 font-semibold'
-                              : log.type === 'debug'
-                              ? 'text-amber-500'
-                              : 'text-foreground/80'
-                          }`}
-                        >
-                          {log.message}
-                        </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => xdfInputRef.current?.click()}
+                    >
+                      <FileCog className="mr-2" />{' '}
+                      {xdfFile?.name ? 'Trocar XDF' : 'Carregar .XDF'}
+                    </Button>
+                    <input
+                      ref={xdfInputRef}
+                      type="file"
+                      accept=".xdf"
+                      className="hidden"
+                      onChange={(e) => handleFileChange(e, 'xdf')}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Table2 size={18} /> Seleção de Mapa
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                      <PopoverTrigger asChild>
+                          <Button
+                              variant="outline"
+                              className="w-full justify-between"
+                              disabled={!binFile || !xdfFile}
+                          >
+                              <span className="truncate">
+                                  {selectedMapIds.length === 0 && "Selecione mapas"}
+                                  {selectedMapIds.length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds[0])?.name}
+                                  {selectedMapIds.length > 1 && `${selectedMapIds.length} mapas selecionados`}
+                              </span>
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                      </PopoverTrigger>
+                       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                          {binFile && xdfFile && (
+                              <ScrollArea className="h-72">
+                                 <div className="p-4 space-y-2">
+                                     {xdfFile?.definitions.filter(d => !d.uniqueId.startsWith('potential_')).sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
+                                        <div key={def.uniqueId} className="flex items-center space-x-2">
+                                          <Checkbox
+                                            id={def.uniqueId}
+                                            checked={selectedMapIds.includes(def.uniqueId)}
+                                            onCheckedChange={() => handleMapSelectionChange(def.uniqueId)}
+                                          />
+                                          <label
+                                            htmlFor={def.uniqueId}
+                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
+                                            onClick={() => handleMapSelectionChange(def.uniqueId)}
+                                          >
+                                            {def.name}
+                                          </label>
+                                        </div>
+                                     ))}
+                                 </div>
+                              </ScrollArea>
+                          )}
+                       </PopoverContent>
+                    </Popover>
+
+                    {selectedMapIds.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                          {selectedMapIds.map(id => {
+                              const def = xdfFile?.definitions.find(d => d.uniqueId === id);
+                              if (!def) return null;
+                              const isPotential = id.startsWith('potential_');
+                              return (
+                                  <Badge 
+                                      key={id} 
+                                      variant={id === activeMapId ? "default" : (isPotential ? "destructive" : "secondary")}
+                                      className="cursor-pointer hover:ring-2 hover:ring-ring"
+                                      onClick={() => setActiveMap(id)}
+                                  >
+                                      {def.name}
+                                      <X 
+                                        className="ml-1 h-3 w-3 rounded-full hover:bg-muted/50"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMapSelectionChange(id);
+                                        }}
+                                      />
+                                  </Badge>
+                              )
+                          })}
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-muted-foreground/60 text-center py-4">
-                      Aguardando ações...
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Settings2 size={18} /> Substituir
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Use para substituir a configuração do XDF. Útil para
+                      depuração.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="y-equation"
+                          className="font-semibold text-sm"
+                        >
+                          Equação Y
+                        </Label>
+                        <Input
+                          id="y-equation"
+                          placeholder="x"
+                          value={manualConfig.y.equation}
+                          onChange={(e) =>
+                            handleManualConfigChange('y', e.target.value, 'equation')
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="y-stride"
+                          className="font-semibold text-sm"
+                        >
+                          Passo Y (bytes)
+                        </Label>
+                        <Input
+                          id="y-stride"
+                          type="number"
+                          placeholder="-"
+                          value={manualConfig.y.stride ?? ''}
+                          onChange={(e) =>
+                            handleManualConfigChange(
+                              'y',
+                              e.target.value === ''
+                                ? undefined
+                                : parseInt(e.target.value),
+                              'stride'
+                            )
+                          }
+                        />
+                      </div>
                     </div>
-                  )}
-                </ScrollArea>
-              </div>
-            </SidebarFooter>
-          </Sidebar>
-          <SidebarInset>
-            <Header />
-            <main className="flex flex-col h-[calc(100%-3.5rem)]">
-              <div className="flex items-center p-2 border-b">
-                <SidebarTrigger />
-                <div className="flex items-center ml-2">
-                  <h1 className="text-lg font-semibold">
-                    {selectedMapDefinition?.name || 'Nenhum Mapa Selecionado'}
-                  </h1>
-                  {isModified && (
-                    <span className="ml-2 text-xs font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
-                      Modificado
-                    </span>
-                  )}
-                  {isProcessing && (
-                    <Loader2 className="ml-3 h-5 w-5 animate-spin" />
-                  )}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="x-equation"
+                          className="font-semibold text-sm"
+                        >
+                          Equação X
+                        </Label>
+                        <Input
+                          id="x-equation"
+                          placeholder="x"
+                          value={manualConfig.x.equation}
+                          onChange={(e) =>
+                            handleManualConfigChange('x', e.target.value, 'equation')
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="x-stride"
+                          className="font-semibold text-sm"
+                        >
+                          Passo X (bytes)
+                        </Label>
+                        <Input
+                          id="x-stride"
+                          type="number"
+                          placeholder="-"
+                          value={manualConfig.x.stride ?? ''}
+                          onChange={(e) =>
+                            handleManualConfigChange(
+                              'x',
+                              e.target.value === ''
+                                ? undefined
+                                : parseInt(e.target.value),
+                              'stride'
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                     <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="z-equation"
+                          className="font-semibold text-sm"
+                        >
+                          Equação Z (Mapa)
+                        </Label>
+                        <Input
+                          id="z-equation"
+                          placeholder="x"
+                          value={manualConfig.z.equation}
+                          onChange={(e) =>
+                            handleManualConfigChange('z', e.target.value, 'equation')
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="z-stride"
+                          className="font-semibold text-sm"
+                        >
+                          Passo Z (bytes)
+                        </Label>
+                        <Input
+                          id="z-stride"
+                          type="number"
+                          placeholder="-"
+                          value={manualConfig.z.stride ?? ''}
+                          onChange={(e) =>
+                            handleManualConfigChange(
+                              'z',
+                              e.target.value === ''
+                                ? undefined
+                                : parseInt(e.target.value),
+                              'stride'
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label
+                          htmlFor="z-row-stride"
+                          className="font-semibold text-sm"
+                      >
+                          Passo da Linha (bytes)
+                      </Label>
+                      <Input
+                          id="z-row-stride"
+                          type="number"
+                          placeholder="Automático (Cols * Passo Z)"
+                          value={manualConfig.z.rowStride ?? ''}
+                          onChange={(e) =>
+                            handleManualConfigChange(
+                              'z',
+                               e.target.value === ''
+                                ? undefined
+                                : parseInt(e.target.value),
+                              'rowStride'
+                            )
+                          }
+                      />
+                    </div>
+
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="sort-x"
+                          checked={manualConfig.sortX ?? false}
+                          onCheckedChange={(checked) =>
+                            handleManualConfigChange('sortX', checked)
+                          }
+                        />
+                        <Label htmlFor="sort-x">Ordenar Eixo X</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="sort-y"
+                          checked={manualConfig.sortY ?? false}
+                          onCheckedChange={(checked) =>
+                            handleManualConfigChange('sortY', checked)
+                          }
+                        />
+                        <Label htmlFor="sort-y">Ordenar Eixo Y</Label>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="big-endian"
+                        checked={manualConfig.isBigEndian ?? false}
+                        onCheckedChange={(checked) =>
+                          handleManualConfigChange('isBigEndian', checked)
+                        }
+                      />
+                      <Label htmlFor="big-endian">Big Endian</Label>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleApplyAndRecalculate}
+                        disabled={!activeMapId || isProcessing}
+                      >
+                        {isProcessing ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : <Play className="mr-2 h-4 w-4" /> }
+                        Aplicar e Recalcular
+                      </Button>
+                       <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={handleSetTemplate}
+                          disabled={!activeMapId}
+                      >
+                          <Star className="mr-2 h-4 w-4" />
+                          Usar como Padrão
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <BrainCircuit size={18} /> Ações
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0 flex flex-col gap-3">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={!anyMapModified || isProcessing}
+                      onClick={handleSave}
+                    >
+                      <Save className="mr-2 h-4 w-4" /> Salvar .BIN Modificado
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleResetAll}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" /> Resetar Tudo
+                    </Button>
+                  </CardContent>
+                </Card>
+              </SidebarContent>
+              <SidebarFooter>
+                <div className="p-2">
+                  <h3 className="font-semibold text-sm mb-2 px-2">
+                    Log de Processamento
+                  </h3>
+                  <ScrollArea className="h-48 w-full rounded-md border p-2 font-mono text-xs">
+                    {logs.length > 0 ? (
+                      logs.map((log) => (
+                        <div key={log.id} className="flex items-start">
+                          <span className="text-muted-foreground/60 mr-2 shrink-0">
+                            {log.timestamp}
+                          </span>
+                          <span
+                            className={`break-words ${
+                              log.type === 'error'
+                                ? 'text-destructive font-semibold'
+                                : log.type === 'success'
+                                ? 'text-green-500 font-semibold'
+                                : log.type === 'debug'
+                                ? 'text-amber-500'
+                                : 'text-foreground/80'
+                            }`}
+                          >
+                            {log.message}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-muted-foreground/60 text-center py-4">
+                        Aguardando ações...
+                      </div>
+                    )}
+                  </ScrollArea>
                 </div>
-              </div>
-              <div className="flex-1 flex flex-col p-4 min-h-0">
-                <Tabs
-                  value={activeTab}
-                  onValueChange={setActiveTab}
-                  className="flex-1 flex flex-col w-full min-h-0"
-                >
-                  <TabsList className="shrink-0">
-                    <TabsTrigger value="view-table">
-                      <Table2 className="mr-2" />
-                      Tabela de Dados
-                    </TabsTrigger>
-                    <TabsTrigger value="view-3d">
-                      <BarChart3 className="mr-2" />
-                      Gráfico 3D
-                    </TabsTrigger>
-                    <TabsTrigger value="view-2d">
-                      <BarChart3 className="mr-2" />
-                      Gráfico 2D
-                    </TabsTrigger>
-                    <TabsTrigger value="fuel-analysis">
-                        <ClipboardList className="mr-2" />
-                        Análise de Combustível
-                    </TabsTrigger>
-                     <TabsTrigger value="ignition-analysis">
-                        <Flame className="mr-2" />
-                        Análise de Ignição
-                    </TabsTrigger>
-                    <TabsTrigger value="map-scanner">
-                        <Search className="mr-2" />
-                        Scanner de Mapas
-                    </TabsTrigger>
-                  </TabsList>
-                  {isProcessing && !processedMap ? (
-                    <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                      <Loader2 className="mr-2 h-8 w-8 animate-spin" />
-                      <p>A processar o mapa...</p>
-                    </div>
-                  ) : (
-                    <>
-                      <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
+              </SidebarFooter>
+            </Sidebar>
+            <SidebarInset>
+              <Header />
+              <main className="flex flex-col h-[calc(100%-3.5rem)]">
+                <div className="flex items-center p-2 border-b">
+                  <SidebarTrigger />
+                  <div className="flex items-center ml-2">
+                    <h1 className="text-lg font-semibold">
+                      {selectedMapDefinition?.name || 'Nenhum Mapa Selecionado'}
+                    </h1>
+                    {isModified && (
+                      <span className="ml-2 text-xs font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+                        Modificado
+                      </span>
+                    )}
+                    {isProcessing && (
+                      <Loader2 className="ml-3 h-5 w-5 animate-spin" />
+                    )}
+                  </div>
+                </div>
+                <div className="flex-1 flex flex-col p-4 min-h-0">
+                  <Tabs
+                    value={activeTab}
+                    onValueChange={setActiveTab}
+                    className="flex-1 flex flex-col w-full min-h-0"
+                  >
+                    <TabsList className="shrink-0">
+                      <TabsTrigger value="view-table">
+                        <Table2 className="mr-2" />
+                        Tabela de Dados
+                      </TabsTrigger>
+                      <TabsTrigger value="view-3d">
+                        <BarChart3 className="mr-2" />
+                        Gráfico 3D
+                      </TabsTrigger>
+                      <TabsTrigger value="view-2d">
+                        <BarChart3 className="mr-2" />
+                        Gráfico 2D
+                      </TabsTrigger>
+                      <TabsTrigger value="fuel-analysis">
+                          <ClipboardList className="mr-2" />
+                          Análise de Combustível
+                      </TabsTrigger>
+                       <TabsTrigger value="ignition-analysis">
+                          <Flame className="mr-2" />
+                          Análise de Ignição
+                      </TabsTrigger>
+                      <TabsTrigger value="map-scanner">
+                          <Search className="mr-2" />
+                          Scanner de Mapas
+                      </TabsTrigger>
+                    </TabsList>
+                    {isProcessing && !processedMap ? (
+                      <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                        <Loader2 className="mr-2 h-8 w-8 animate-spin" />
+                        <p>A processar o mapa...</p>
+                      </div>
+                    ) : (
+                      <>
+                        <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
+                             <div className="h-full w-full">
+                                  <DataTable
+                                  key={activeMapId}
+                                  mapData={processedMap?.calculatedMap ?? null}
+                                  addresses={processedMap?.addresses ?? null}
+                                  axes={processedMap?.axes ?? null}
+                                  selectedMapDefinition={selectedMapDefinition}
+                                  onCellChange={handleCellChange}
+                                  onMassUpdate={handleMassUpdate}
+                                  aiModifiedCells={aiModifiedCells}
+                                  />
+                             </div>
+                        </TabsContent>
+                        <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
+                              <div className="h-full w-full">
+                                  {processedMap?.axes && processedMap?.calculatedMap ? (
+                                      <SurfacePlot3D
+                                          mapData={processedMap.calculatedMap}
+                                          xAxis={processedMap.axes.x.calculated}
+                                          yAxis={processedMap.axes.y.calculated}
+                                          xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
+                                          yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
+                                          zAxisLabel={
+                                          selectedMapDefinition?.name || 'Mapa Principal'
+                                          }
+                                      />
+                                  ) : (
+                                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                                      <p>
+                                      A aguardar dados completos do mapa para o gráfico
+                                      3D.
+                                      </p>
+                                  </div>
+                                  )}
+                             </div>
+                        </TabsContent>
+                        <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
                            <div className="h-full w-full">
-                                <DataTable
-                                key={activeMapId}
-                                mapData={processedMap?.calculatedMap ?? null}
-                                addresses={processedMap?.addresses ?? null}
-                                axes={processedMap?.axes ?? null}
-                                selectedMapDefinition={selectedMapDefinition}
-                                onCellChange={handleCellChange}
-                                onMassUpdate={handleMassUpdate}
-                                aiModifiedCells={aiModifiedCells}
+                                <LinePlot2D
+                                  mapData={processedMap?.calculatedMap ?? null}
+                                  xAxis={processedMap?.axes?.x ?? null}
+                                  yAxis={processedMap?.axes?.y ?? null}
+                                  mapName={
+                                    selectedMapDefinition?.name || 'Mapa Principal'
+                                  }
+                                  selectedLineIndex={selectedLine}
+                                  onLineSelect={setSelectedLine}
+                                  onPointChange={handlePointChange}
+                                  orientation={plotOrientation}
+                                  togglePlotOrientation={togglePlotOrientation}
                                 />
                            </div>
-                      </TabsContent>
-                      <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
-                            <div className="h-full w-full">
-                                {processedMap?.axes && processedMap?.calculatedMap ? (
-                                    <SurfacePlot3D
-                                        mapData={processedMap.calculatedMap}
-                                        xAxis={processedMap.axes.x.calculated}
-                                        yAxis={processedMap.axes.y.calculated}
-                                        xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
-                                        yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
-                                        zAxisLabel={
-                                        selectedMapDefinition?.name || 'Mapa Principal'
-                                        }
-                                    />
-                                ) : (
-                                <div className="flex items-center justify-center h-full text-muted-foreground">
-                                    <p>
-                                    A aguardar dados completos do mapa para o gráfico
-                                    3D.
-                                    </p>
-                                </div>
-                                )}
-                           </div>
-                      </TabsContent>
-                      <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
-                         <div className="h-full w-full">
-                              <LinePlot2D
-                                mapData={processedMap?.calculatedMap ?? null}
-                                xAxis={processedMap?.axes?.x ?? null}
-                                yAxis={processedMap?.axes?.y ?? null}
-                                mapName={
-                                  selectedMapDefinition?.name || 'Mapa Principal'
-                                }
-                                selectedLineIndex={selectedLine}
-                                onLineSelect={setSelectedLine}
-                                onPointChange={handlePointChange}
-                                orientation={plotOrientation}
-                                togglePlotOrientation={togglePlotOrientation}
-                              />
-                         </div>
-                      </TabsContent>
-                      <TabsContent value="fuel-analysis" className="flex-1 flex flex-col mt-4 min-h-0 gap-4">
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                            <Card className="lg:col-span-2">
-                                <CardHeader>
-                                    <CardTitle>Dados de Ensaio (Lambda)</CardTitle>
-                                    <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente.</CardDescription>
+                        </TabsContent>
+                        <TabsContent value="fuel-analysis" className="flex-1 flex flex-col mt-4 min-h-0 gap-4">
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                              <Card className="lg:col-span-2">
+                                  <CardHeader>
+                                      <CardTitle>Dados de Ensaio (Lambda)</CardTitle>
+                                      <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente abaixo.</CardDescription>
 
-                                </CardHeader>
-                                <CardContent className="flex flex-col gap-4">
-                                    <div className="flex items-center gap-4">
-                                        <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
-                                            <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
-                                        </Button>
-                                        <input
-                                          ref={logInputRef}
-                                          type="file"
-                                          accept=".csv"
-                                          className="hidden"
-                                          onChange={handleLogFileChange}
-                                        />
-                                        <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={logData.length === 0}>
-                                            <Eraser className="h-4 w-4" />
-                                            <span className="sr-only">Limpar Dados de Ensaio</span>
-                                        </Button>
-                                    </div>
+                                  </CardHeader>
+                                  <CardContent className="flex flex-col gap-4">
+                                      <div className="flex items-center gap-4">
+                                          <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
+                                              <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
+                                          </Button>
+                                          <input
+                                            ref={logInputRef}
+                                            type="file"
+                                            accept=".csv"
+                                            className="hidden"
+                                            onChange={handleLogFileChange}
+                                          />
+                                          <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={logData.length === 0}>
+                                              <Eraser className="h-4 w-4" />
+                                              <span className="sr-only">Limpar Dados de Ensaio</span>
+                                          </Button>
+                                      </div>
 
-                                    <div className="flex items-center gap-4">
-                                        <Separator />
-                                        <span className="text-xs text-muted-foreground">OU</span>
-                                        <Separator />
-                                    </div>
-                                    
-                                    <Form {...logEntryForm}>
-                                        <form onSubmit={logEntryForm.handleSubmit(handleAddManualLogEntry)} className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                                            <FormField
-                                                control={logEntryForm.control}
-                                                name="yAxis"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>{yAxisLabelForForm}</FormLabel>
-                                                        <FormControl>
-                                                            <Input type="number" placeholder="Ex: 3000" {...field} value={field.value ?? ''} />
-                                                        </FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={logEntryForm.control}
-                                                name="xAxis"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>{xAxisLabelForForm}</FormLabel>
-                                                        <FormControl>
-                                                            <Input type="number" placeholder="Ex: 80" {...field} value={field.value ?? ''} />
-                                                        </FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={logEntryForm.control}
-                                                name="lambda"
-                                                render={({ field }) => (
-                                                    <FormItem>
-                                                        <FormLabel>Lambda (Sonda)</FormLabel>
-                                                        <FormControl>
-                                                            <Input type="number" step="0.01" placeholder="Ex: 0.85" {...field} value={field.value ?? ''} />
-                                                        </FormControl>
-                                                        <FormMessage />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <Button type="submit" className="w-full" disabled={!processedMap}>
-                                                <PlusCircle className="mr-2" /> Adicionar Ponto
+                                      <div className="flex items-center gap-4">
+                                          <Separator />
+                                          <span className="text-xs text-muted-foreground">OU</span>
+                                          <Separator />
+                                      </div>
+                                      
+                                      <Form {...dynoForm}>
+                                          <form onSubmit={dynoForm.handleSubmit(handleAddDynoLogData)} className="space-y-4">
+                                            <DynoEntryTable />
+                                            <Button type="submit" className="w-full" disabled={!processedMap || dynoForm.getValues('loadColumns').length === 0}>
+                                                <PlusCircle className="mr-2" /> Adicionar Pontos ao Ensaio
                                             </Button>
-                                        </form>
-                                    </Form>
-                                </CardContent>
-                            </Card>
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Definições de IA</CardTitle>
-                                    <CardDescription>Configure os parâmetros para o ajuste automático.</CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div>
-                                        <Label htmlFor="target-lambda">Lambda Alvo</Label>
-                                        <Input 
-                                            id="target-lambda" 
-                                            type="number" 
-                                            step="0.01"
-                                            value={targetLambda}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-                                                setTargetLambda(value === '' ? '' : parseFloat(value));
-                                            }}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
-                                        <Slider
-                                            id="aggressiveness"
-                                            min={0}
-                                            max={100}
-                                            step={1}
-                                            value={[aggressiveness]}
-                                            onValueChange={(value) => setAggressiveness(value[0])}
-                                        />
-                                    </div>
-                                    <Button className="w-full" onClick={handleAiTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing}>
-                                        <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        </div>
-                        <div className="flex-1 border rounded-lg min-h-0">
-                            {logData.length > 0 ? (
-                                <LogDataTable data={logData} />
-                            ) : (
-                                <div className="flex items-center justify-center h-full text-muted-foreground">
-                                    <p>Aguardando dados do ensaio...</p>
-                                </div>
-                            )}
-                        </div>
-                      </TabsContent>
-                      <TabsContent value="ignition-analysis" className="flex-1 mt-4 min-h-0">
-                          <IgnitionTimingAnalyzer 
-                            runs={ignitionRuns} 
-                            onRunsChange={setIgnitionRuns}
-                            binFile={binFile}
-                            processedMap={processedMap}
-                            selectedMapDefinition={selectedMapDefinition}
-                           />
-                      </TabsContent>
-                       <TabsContent value="map-scanner" className="flex-1 mt-4 min-h-0">
-                          <MapScanner
-                            binFile={binFile}
-                            onLoadMap={handleLoadPotentialMap}
-                            addLog={addLog}
-                          />
-                      </TabsContent>
-                    </>
-                  )}
-
-                  {!isProcessing && !processedMap && activeMapId === null && (
-                     <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
-                        <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
-                          <div>
-                            <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
-                            <p className="mt-2 font-semibold">
-                              Nenhum dado para exibir.
-                            </p>
-                            <p className="text-sm">
-                              Carregue os seus ficheiros e selecione um mapa para
-                              iniciar.
-                            </p>
+                                          </form>
+                                      </Form>
+                                  </CardContent>
+                              </Card>
+                              <Card>
+                                  <CardHeader>
+                                      <CardTitle>Definições de IA</CardTitle>
+                                      <CardDescription>Configure os parâmetros para o ajuste automático.</CardDescription>
+                                  </CardHeader>
+                                  <CardContent className="space-y-4">
+                                      <div>
+                                          <Label htmlFor="target-lambda">Lambda Alvo</Label>
+                                          <Input 
+                                              id="target-lambda" 
+                                              type="number" 
+                                              step="0.01"
+                                              value={targetLambda}
+                                              onChange={(e) => {
+                                                  const value = e.target.value;
+                                                  setTargetLambda(value === '' ? '' : parseFloat(value));
+                                              }}
+                                          />
+                                      </div>
+                                      <div>
+                                          <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
+                                          <Slider
+                                              id="aggressiveness"
+                                              min={0}
+                                              max={100}
+                                              step={1}
+                                              value={[aggressiveness]}
+                                              onValueChange={(value) => setAggressiveness(value[0])}
+                                          />
+                                      </div>
+                                      <Button className="w-full" onClick={handleAiTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing}>
+                                          <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
+                                      </Button>
+                                  </CardContent>
+                              </Card>
                           </div>
-                        </div>
-                      </TabsContent>
-                  )}
-                </Tabs>
-              </div>
-            </main>
-          </SidebarInset>
-        </SidebarProvider>
-      </div>
+                          <div className="flex-1 border rounded-lg min-h-0">
+                              {logData.length > 0 ? (
+                                  <LogDataTable data={logData} />
+                              ) : (
+                                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                                      <p>Aguardando dados do ensaio...</p>
+                                  </div>
+                              )}
+                          </div>
+                        </TabsContent>
+                        <TabsContent value="ignition-analysis" className="flex-1 mt-4 min-h-0">
+                            <IgnitionTimingAnalyzer 
+                              runs={ignitionRuns} 
+                              onRunsChange={setIgnitionRuns}
+                              binFile={binFile}
+                              processedMap={processedMap}
+                              selectedMapDefinition={selectedMapDefinition}
+                             />
+                        </TabsContent>
+                         <TabsContent value="map-scanner" className="flex-1 mt-4 min-h-0">
+                            <MapScanner
+                              binFile={binFile}
+                              onLoadMap={handleLoadPotentialMap}
+                              addLog={addLog}
+                            />
+                        </TabsContent>
+                      </>
+                    )}
+
+                    {!isProcessing && !processedMap && activeMapId === null && (
+                       <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
+                          <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
+                            <div>
+                              <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+                              <p className="mt-2 font-semibold">
+                                Nenhum dado para exibir.
+                              </p>
+                              <p className="text-sm">
+                                Carregue os seus ficheiros e selecione um mapa para
+                                iniciar.
+                              </p>
+                            </div>
+                          </div>
+                        </TabsContent>
+                    )}
+                  </Tabs>
+                </div>
+              </main>
+            </SidebarInset>
+          </SidebarProvider>
+        </div>
+      </EcuTuningStateContext.Provider>
     );
 }
