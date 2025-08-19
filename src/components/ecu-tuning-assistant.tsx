@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo } from 'react';
@@ -327,14 +326,23 @@ function DynoEntryTable() {
     const { toast } = useToast();
 
     const { processedMap } = useEcuTuningState();
-    const yAxis = processedMap?.axes?.y;
+    
+    const loadAxis = useMemo(() => {
+        if (!processedMap?.axes) return null;
+        const { x, y } = processedMap.axes;
+        const loadRegex = /tps|map|carga|load|throttle/i;
+        if (x.label && loadRegex.test(x.label)) return x;
+        if (y.label && loadRegex.test(y.label)) return y;
+        // Default to Y if no match, a common convention
+        return y; 
+    }, [processedMap]);
 
     const [selectedLoadToAdd, setSelectedLoadToAdd] = useState('');
 
     const currentLoadColumnValues = watch('loadColumns').map(c => c.value);
 
     const handleAddLoadColumn = () => {
-        if (!yAxis) return;
+        if (!loadAxis) return;
         const loadValue = parseFloat(selectedLoadToAdd);
         if (isNaN(loadValue)) return;
         if (currentLoadColumnValues.includes(loadValue)) {
@@ -354,7 +362,7 @@ function DynoEntryTable() {
         appendLogRow({ rpm: '', lambdas: newLambdas });
     };
 
-    if (!processedMap || !yAxis) {
+    if (!processedMap || !loadAxis) {
         return <p className="text-sm text-muted-foreground">Selecione um mapa para ativar a entrada de dados do dinamómetro.</p>;
     }
 
@@ -362,13 +370,13 @@ function DynoEntryTable() {
         <div className="space-y-4">
             <div className="flex gap-4 items-end">
                 <div className="flex-1 space-y-2">
-                    <Label>Eixo de Carga ({yAxis.label})</Label>
+                    <Label>Eixo de Carga ({loadAxis.label})</Label>
                     <Select value={selectedLoadToAdd} onValueChange={setSelectedLoadToAdd}>
                         <SelectTrigger>
                             <SelectValue placeholder="Selecione um valor de carga para adicionar..." />
                         </SelectTrigger>
                         <SelectContent>
-                            {yAxis.calculated.map((val, idx) => (
+                            {loadAxis.calculated.map((val, idx) => (
                                 <SelectItem key={idx} value={String(val)} disabled={currentLoadColumnValues.includes(Number(val))}>
                                     {val}
                                 </SelectItem>
@@ -676,8 +684,23 @@ export default function EcuTuningAssistant() {
             return;
         }
 
-        const loadAxisLabel = processedMap.axes.y.label || 'Carga';
-        const rpmAxisLabel = processedMap.axes.x.label || 'RPM';
+        const { x: xAxis, y: yAxis } = processedMap.axes;
+        
+        const rpmRegex = /rpm/i;
+        const loadRegex = /tps|map|carga|load|throttle/i;
+
+        const getAxisByRegex = (regex: RegExp) => {
+            if (xAxis.label && regex.test(xAxis.label)) return xAxis;
+            if (yAxis.label && regex.test(yAxis.label)) return yAxis;
+            return null;
+        }
+
+        const rpmAxis = getAxisByRegex(rpmRegex) || xAxis; // Default to X if no clear RPM
+        const loadAxis = getAxisByRegex(loadRegex) || yAxis; // Default to Y if no clear load
+
+        const loadAxisLabel = loadAxis.label || 'Carga';
+        const rpmAxisLabel = rpmAxis.label || 'RPM';
+        
         const newEntries: any[] = [];
 
         data.logRows.forEach(row => {
