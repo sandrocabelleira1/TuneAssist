@@ -676,8 +676,8 @@ export default function EcuTuningAssistant() {
             return;
         }
 
-        const yAxisLabel = processedMap.axes.y.label || 'Eixo Y';
-        const xAxisLabel = processedMap.axes.x.label || 'Eixo X';
+        const loadAxisLabel = processedMap.axes.y.label || 'Carga';
+        const rpmAxisLabel = processedMap.axes.x.label || 'RPM';
         const newEntries: any[] = [];
 
         data.logRows.forEach(row => {
@@ -685,11 +685,11 @@ export default function EcuTuningAssistant() {
                 row.lambdas.forEach((lambda, colIndex) => {
                     if (lambda.value) {
                         const loadValue = data.loadColumns[colIndex].value;
-                        newEntries.push({
-                            [yAxisLabel]: Number(loadValue),
-                            [xAxisLabel]: Number(row.rpm),
-                            'Lambda': Number(lambda.value),
-                        });
+                        const newEntry: Record<string, number> = {};
+                        newEntry[loadAxisLabel] = Number(loadValue);
+                        newEntry[rpmAxisLabel] = Number(row.rpm);
+                        newEntry['Lambda'] = Number(lambda.value);
+                        newEntries.push(newEntry);
                     }
                 });
             }
