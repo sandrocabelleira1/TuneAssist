@@ -1728,18 +1728,16 @@ export default function EcuTuningAssistant() {
                     ) : (
                       <>
                         <TabsContent value="view-table" className="flex-1 flex flex-col mt-4 min-h-0">
-                             <div className="h-full w-full">
-                                  <DataTable
-                                  key={activeMapId}
-                                  mapData={processedMap?.calculatedMap ?? null}
-                                  addresses={processedMap?.addresses ?? null}
-                                  axes={processedMap?.axes ?? null}
-                                  selectedMapDefinition={selectedMapDefinition}
-                                  onCellChange={handleCellChange}
-                                  onMassUpdate={handleMassUpdate}
-                                  aiModifiedCells={aiModifiedCells}
-                                  />
-                             </div>
+                             <DataTable
+                                key={activeMapId}
+                                mapData={processedMap?.calculatedMap ?? null}
+                                addresses={processedMap?.addresses ?? null}
+                                axes={processedMap?.axes ?? null}
+                                selectedMapDefinition={selectedMapDefinition}
+                                onCellChange={handleCellChange}
+                                onMassUpdate={handleMassUpdate}
+                                aiModifiedCells={aiModifiedCells}
+                             />
                         </TabsContent>
                         <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
                               <div className="h-full w-full">
