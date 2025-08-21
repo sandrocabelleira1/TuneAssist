@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -525,6 +525,9 @@ export default function EcuTuningAssistant() {
     }, [modifiedStatusCache]);
 
     const clearAiModifications = () => {
+        if (activeMapId) {
+            addLog(`A limpar modificações de IA para o mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
+        }
         const newCache = { ...aiModifiedCellsCache };
         if (activeMapId && newCache[activeMapId]) {
             delete newCache[activeMapId];
@@ -844,6 +847,7 @@ export default function EcuTuningAssistant() {
 
     const handleApplyAndRecalculate = () => {
         if (!activeMapId) return;
+        addLog(`A aplicar substituições manuais e a recalcular o mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
         processAndCacheMap(activeMapId, manualConfig).then(result => {
              if(result) {
                  setProcessedMap(result);
@@ -857,7 +861,7 @@ export default function EcuTuningAssistant() {
     const handleCellChange = (rowIndex: number, colIndex: number, newValue: number) => {
         if (!processedMap || !processedMap.calculatedMap || !activeMapId) return;
 
-        addLog(`Alteração de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)}`, 'info');
+        addLog(`Alteração manual de célula [${rowIndex}, ${colIndex}] para ${newValue.toFixed(2)} no mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
         const newMap = processedMap.calculatedMap.map(row => [...row]);
         newMap[rowIndex][colIndex] = newValue;
         
@@ -879,7 +883,7 @@ export default function EcuTuningAssistant() {
         const originalRowIdx = yOriginalIndices[rowIndex];
         const originalColIdx = xOriginalIndices[colIndex];
     
-        addLog(`Alteração de ponto [${rowIndex}, ${colIndex}] (Original [${originalRowIdx}, ${originalColIdx}]) para ${newValue.toFixed(2)}`, 'info');
+        addLog(`Alteração de ponto [${rowIndex}, ${colIndex}] (Original [${originalRowIdx}, ${originalColIdx}]) para ${newValue.toFixed(2)} no mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
     
         const newMap = processedMap.calculatedMap.map(row => [...row]);
         newMap[rowIndex][colIndex] = newValue;
@@ -1112,7 +1116,9 @@ export default function EcuTuningAssistant() {
     };
 
     const togglePlotOrientation = () => {
-        setPlotOrientation(prev => prev === 'y-vs-x' ? 'x-vs-y' : 'y-vs-x');
+        const newOrientation = plotOrientation === 'y-vs-x' ? 'x-vs-y' : 'y-vs-x';
+        addLog(`A orientação do gráfico 2D foi alterada para ${newOrientation}.`, 'info');
+        setPlotOrientation(newOrientation);
         setSelectedLine(0);
     };
     
@@ -1125,6 +1131,8 @@ export default function EcuTuningAssistant() {
             : [...selectedMapIds, id];
     
         setSelectedMapIds(newSelectedIds);
+        const def = xdfFile?.definitions.find(d => d.uniqueId === id);
+        addLog(`Mapa "${def?.name ?? id}" ${newSelectedIds.includes(id) ? 'selecionado' : 'desselecionado'}.`, 'info');
     
         // If unselecting the active map, or if there's no active map
         if ((activeMapId === id && !newSelectedIds.includes(id)) || (!activeMapId && newSelectedIds.length > 0)) {
@@ -1216,6 +1224,32 @@ export default function EcuTuningAssistant() {
         toast({ title: "Mapa Potencial Carregado", description: "Dados preenchidos no painel de substituição. Ajuste e recalcule se necessário." });
     };
     
+    const handleDownloadLog = () => {
+        if (logs.length === 0) {
+            toast({ title: 'Log Vazio', description: 'Não há nada para descarregar.', variant: 'default' });
+            return;
+        }
+
+        const logContent = logs
+            .slice() // Create a copy to avoid mutating state
+            .reverse() // Oldest logs first
+            .map(log => `[${log.timestamp}] ${log.type.toUpperCase()}: ${log.message}`)
+            .join('\n');
+
+        const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        a.download = `tuneassist-log-${timestamp}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        addLog('Log descarregado com sucesso.', 'success');
+    };
+
+
     return (
       <EcuTuningStateContext.Provider value={{ processedMap }}>
         <div className="h-full w-full bg-background">
@@ -1587,9 +1621,23 @@ export default function EcuTuningAssistant() {
               </SidebarContent>
               <SidebarFooter>
                 <div className="p-2">
-                  <h3 className="font-semibold text-sm mb-2 px-2">
-                    Log de Processamento
-                  </h3>
+                  <div className="flex items-center justify-between mb-2 px-2">
+                     <h3 className="font-semibold text-sm">
+                        Log de Processamento
+                     </h3>
+                     <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleDownloadLog}>
+                                    <DownloadCloud size={16} />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Descarregar Log</p>
+                            </TooltipContent>
+                        </Tooltip>
+                     </TooltipProvider>
+                  </div>
                   <ScrollArea className="h-48 w-full rounded-md border p-2 font-mono text-xs">
                     {logs.length > 0 ? (
                       logs.map((log) => (
