@@ -1727,7 +1727,7 @@ export default function EcuTuningAssistant() {
                       </div>
                     ) : (
                       <>
-                        <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
+                        <TabsContent value="view-table" className="flex-1 flex flex-col mt-4 min-h-0">
                              <div className="h-full w-full">
                                   <DataTable
                                   key={activeMapId}
@@ -1913,3 +1913,5 @@ export default function EcuTuningAssistant() {
       </EcuTuningStateContext.Provider>
     );
 }
+
+    
