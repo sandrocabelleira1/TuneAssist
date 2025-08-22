@@ -1255,7 +1255,7 @@ export default function EcuTuningAssistant() {
         <div className="h-full w-full bg-background">
           <SidebarProvider>
             <Sidebar side="left" className="border-r">
-              <SidebarRail />
+              
               <SidebarHeader>
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <Cpu size={20} /> Painel de Controlo
