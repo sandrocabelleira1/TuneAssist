@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud, Download } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -1236,7 +1236,7 @@ export default function EcuTuningAssistant() {
             .map(log => `[${log.timestamp}] ${log.type.toUpperCase()}: ${log.message}`)
             .join('\n');
 
-        const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' });
+        const blob = new Blob([logContent], { type: 'text/plain;charset=utf-t' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -1629,7 +1629,7 @@ export default function EcuTuningAssistant() {
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleDownloadLog}>
-                                    <DownloadCloud size={16} />
+                                    <Download size={16} />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -1688,7 +1688,7 @@ export default function EcuTuningAssistant() {
                     )}
                   </div>
                 </div>
-                <div className="flex-1 flex flex-col p-4 min-h-0">
+                <div className="flex-1 flex flex-col p-4 gap-4 min-h-0">
                   <Tabs
                     value={activeTab}
                     onValueChange={setActiveTab}
@@ -1720,188 +1720,191 @@ export default function EcuTuningAssistant() {
                           Scanner de Mapas
                       </TabsTrigger>
                     </TabsList>
-                    {isProcessing && !processedMap ? (
-                      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                        <Loader2 className="mr-2 h-8 w-8 animate-spin" />
-                        <p>A processar o mapa...</p>
-                      </div>
-                    ) : (
-                      <>
-                        <TabsContent value="view-table" className="flex-1 flex flex-col mt-4 min-h-0">
-                             <DataTable
-                                key={activeMapId}
-                                mapData={processedMap?.calculatedMap ?? null}
-                                addresses={processedMap?.addresses ?? null}
-                                axes={processedMap?.axes ?? null}
-                                selectedMapDefinition={selectedMapDefinition}
-                                onCellChange={handleCellChange}
-                                onMassUpdate={handleMassUpdate}
-                                aiModifiedCells={aiModifiedCells}
-                             />
-                        </TabsContent>
-                        <TabsContent value="view-3d" className="flex-1 mt-4 min-h-0">
-                              <div className="h-full w-full">
-                                  {processedMap?.axes && processedMap?.calculatedMap ? (
-                                      <SurfacePlot3D
-                                          mapData={processedMap.calculatedMap}
-                                          xAxis={processedMap.axes.x.calculated}
-                                          yAxis={processedMap.axes.y.calculated}
-                                          xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
-                                          yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
-                                          zAxisLabel={
-                                          selectedMapDefinition?.name || 'Mapa Principal'
-                                          }
-                                      />
-                                  ) : (
-                                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                                      <p>
-                                      A aguardar dados completos do mapa para o gráfico
-                                      3D.
-                                      </p>
-                                  </div>
-                                  )}
-                             </div>
-                        </TabsContent>
-                        <TabsContent value="view-2d" className="flex-1 mt-4 min-h-0">
-                           <div className="h-full w-full">
-                                <LinePlot2D
+                    
+                    <div className="flex-1 flex flex-col mt-4 min-h-0">
+                      {isProcessing && !processedMap ? (
+                        <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                          <Loader2 className="mr-2 h-8 w-8 animate-spin" />
+                          <p>A processar o mapa...</p>
+                        </div>
+                      ) : (
+                        <>
+                          <TabsContent value="view-table" className="flex-1 flex flex-col min-h-0">
+                              <DataTable
+                                  key={activeMapId}
                                   mapData={processedMap?.calculatedMap ?? null}
-                                  xAxis={processedMap?.axes?.x ?? null}
-                                  yAxis={processedMap?.axes?.y ?? null}
-                                  mapName={
-                                    selectedMapDefinition?.name || 'Mapa Principal'
-                                  }
-                                  selectedLineIndex={selectedLine}
-                                  onLineSelect={setSelectedLine}
-                                  onPointChange={handlePointChange}
-                                  orientation={plotOrientation}
-                                  togglePlotOrientation={togglePlotOrientation}
-                                />
-                           </div>
-                        </TabsContent>
-                        <TabsContent value="fuel-analysis" className="flex-1 flex flex-col mt-4 min-h-0 gap-4">
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                              <Card className="lg:col-span-2">
-                                  <CardHeader>
-                                      <CardTitle>Dados de Ensaio (Lambda)</CardTitle>
-                                      <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente abaixo.</CardDescription>
-
-                                  </CardHeader>
-                                  <CardContent className="flex flex-col gap-4">
-                                      <div className="flex items-center gap-4">
-                                          <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
-                                              <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
-                                          </Button>
-                                          <input
-                                            ref={logInputRef}
-                                            type="file"
-                                            accept=".csv"
-                                            className="hidden"
-                                            onChange={handleLogFileChange}
-                                          />
-                                          <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={logData.length === 0}>
-                                              <Eraser className="h-4 w-4" />
-                                              <span className="sr-only">Limpar Dados de Ensaio</span>
-                                          </Button>
-                                      </div>
-
-                                      <div className="flex items-center gap-4">
-                                          <Separator />
-                                          <span className="text-xs text-muted-foreground">OU</span>
-                                          <Separator />
-                                      </div>
-                                      
-                                      <Form {...dynoForm}>
-                                          <form onSubmit={dynoForm.handleSubmit(handleAddDynoLogData)} className="space-y-4">
-                                            <DynoEntryTable />
-                                            <Button type="submit" className="w-full" disabled={!processedMap || dynoForm.getValues('loadColumns').length === 0}>
-                                                <PlusCircle className="mr-2" /> Adicionar Pontos ao Ensaio
-                                            </Button>
-                                          </form>
-                                      </Form>
-                                  </CardContent>
-                              </Card>
-                              <Card>
-                                  <CardHeader>
-                                      <CardTitle>Definições de IA</CardTitle>
-                                      <CardDescription>Configure os parâmetros para o ajuste automático.</CardDescription>
-                                  </CardHeader>
-                                  <CardContent className="space-y-4">
-                                      <div>
-                                          <Label htmlFor="target-lambda">Lambda Alvo</Label>
-                                          <Input 
-                                              id="target-lambda" 
-                                              type="number" 
-                                              step="0.01"
-                                              value={targetLambda}
-                                              onChange={(e) => {
-                                                  const value = e.target.value;
-                                                  setTargetLambda(value === '' ? '' : parseFloat(value));
-                                              }}
-                                          />
-                                      </div>
-                                      <div>
-                                          <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
-                                          <Slider
-                                              id="aggressiveness"
-                                              min={0}
-                                              max={100}
-                                              step={1}
-                                              value={[aggressiveness]}
-                                              onValueChange={(value) => setAggressiveness(value[0])}
-                                          />
-                                      </div>
-                                      <Button className="w-full" onClick={handleAiTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing}>
-                                          <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
-                                      </Button>
-                                  </CardContent>
-                              </Card>
-                          </div>
-                          <div className="flex-1 border rounded-lg min-h-0">
-                              {logData.length > 0 ? (
-                                  <LogDataTable data={logData} />
-                              ) : (
-                                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                                      <p>Aguardando dados do ensaio...</p>
-                                  </div>
-                              )}
-                          </div>
-                        </TabsContent>
-                        <TabsContent value="ignition-analysis" className="flex-1 mt-4 min-h-0">
-                            <IgnitionTimingAnalyzer 
-                              runs={ignitionRuns} 
-                              onRunsChange={setIgnitionRuns}
-                              binFile={binFile}
-                              processedMap={processedMap}
-                              selectedMapDefinition={selectedMapDefinition}
-                             />
-                        </TabsContent>
-                         <TabsContent value="map-scanner" className="flex-1 mt-4 min-h-0">
-                            <MapScanner
-                              binFile={binFile}
-                              onLoadMap={handleLoadPotentialMap}
-                              addLog={addLog}
-                            />
-                        </TabsContent>
-                      </>
-                    )}
-
-                    {!isProcessing && !processedMap && activeMapId === null && (
-                       <TabsContent value="view-table" className="flex-1 mt-4 min-h-0">
-                          <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
-                            <div>
-                              <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
-                              <p className="mt-2 font-semibold">
-                                Nenhum dado para exibir.
-                              </p>
-                              <p className="text-sm">
-                                Carregue os seus ficheiros e selecione um mapa para
-                                iniciar.
-                              </p>
+                                  addresses={processedMap?.addresses ?? null}
+                                  axes={processedMap?.axes ?? null}
+                                  selectedMapDefinition={selectedMapDefinition}
+                                  onCellChange={handleCellChange}
+                                  onMassUpdate={handleMassUpdate}
+                                  aiModifiedCells={aiModifiedCells}
+                              />
+                          </TabsContent>
+                          <TabsContent value="view-3d" className="flex-1 flex flex-col min-h-0">
+                                <div className="h-full w-full">
+                                    {processedMap?.axes && processedMap?.calculatedMap ? (
+                                        <SurfacePlot3D
+                                            mapData={processedMap.calculatedMap}
+                                            xAxis={processedMap.axes.x.calculated}
+                                            yAxis={processedMap.axes.y.calculated}
+                                            xAxisLabel={processedMap.axes.x.label || 'Eixo X'}
+                                            yAxisLabel={processedMap.axes.y.label || 'Eixo Y'}
+                                            zAxisLabel={
+                                            selectedMapDefinition?.name || 'Mapa Principal'
+                                            }
+                                        />
+                                    ) : (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        <p>
+                                        A aguardar dados completos do mapa para o gráfico
+                                        3D.
+                                        </p>
+                                    </div>
+                                    )}
+                              </div>
+                          </TabsContent>
+                          <TabsContent value="view-2d" className="flex-1 flex flex-col min-h-0">
+                            <div className="h-full w-full">
+                                  <LinePlot2D
+                                    mapData={processedMap?.calculatedMap ?? null}
+                                    xAxis={processedMap?.axes?.x ?? null}
+                                    yAxis={processedMap?.axes?.y ?? null}
+                                    mapName={
+                                      selectedMapDefinition?.name || 'Mapa Principal'
+                                    }
+                                    selectedLineIndex={selectedLine}
+                                    onLineSelect={setSelectedLine}
+                                    onPointChange={handlePointChange}
+                                    orientation={plotOrientation}
+                                    togglePlotOrientation={togglePlotOrientation}
+                                  />
                             </div>
-                          </div>
-                        </TabsContent>
-                    )}
+                          </TabsContent>
+                          <TabsContent value="fuel-analysis" className="flex-1 flex flex-col gap-4 min-h-0">
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                <Card className="lg:col-span-2">
+                                    <CardHeader>
+                                        <CardTitle>Dados de Ensaio (Lambda)</CardTitle>
+                                        <CardDescription>Carregue um ficheiro de log (.csv) ou adicione pontos de dados manualmente abaixo.</CardDescription>
+
+                                    </CardHeader>
+                                    <CardContent className="flex flex-col gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
+                                                <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
+                                            </Button>
+                                            <input
+                                              ref={logInputRef}
+                                              type="file"
+                                              accept=".csv"
+                                              className="hidden"
+                                              onChange={handleLogFileChange}
+                                            />
+                                            <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={logData.length === 0}>
+                                                <Eraser className="h-4 w-4" />
+                                                <span className="sr-only">Limpar Dados de Ensaio</span>
+                                            </Button>
+                                        </div>
+
+                                        <div className="flex items-center gap-4">
+                                            <Separator />
+                                            <span className="text-xs text-muted-foreground">OU</span>
+                                            <Separator />
+                                        </div>
+                                        
+                                        <Form {...dynoForm}>
+                                            <form onSubmit={dynoForm.handleSubmit(handleAddDynoLogData)} className="space-y-4">
+                                              <DynoEntryTable />
+                                              <Button type="submit" className="w-full" disabled={!processedMap || dynoForm.getValues('loadColumns').length === 0}>
+                                                  <PlusCircle className="mr-2" /> Adicionar Pontos ao Ensaio
+                                              </Button>
+                                            </form>
+                                        </Form>
+                                    </CardContent>
+                                </Card>
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Definições de IA</CardTitle>
+                                        <CardDescription>Configure os parâmetros para o ajuste automático.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div>
+                                            <Label htmlFor="target-lambda">Lambda Alvo</Label>
+                                            <Input 
+                                                id="target-lambda" 
+                                                type="number" 
+                                                step="0.01"
+                                                value={targetLambda}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    setTargetLambda(value === '' ? '' : parseFloat(value));
+                                                }}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
+                                            <Slider
+                                                id="aggressiveness"
+                                                min={0}
+                                                max={100}
+                                                step={1}
+                                                value={[aggressiveness]}
+                                                onValueChange={(value) => setAggressiveness(value[0])}
+                                            />
+                                        </div>
+                                        <Button className="w-full" onClick={handleAiTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing}>
+                                            <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                            <div className="flex-1 border rounded-lg min-h-0">
+                                {logData.length > 0 ? (
+                                    <LogDataTable data={logData} />
+                                ) : (
+                                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        <p>Aguardando dados do ensaio...</p>
+                                    </div>
+                                )}
+                            </div>
+                          </TabsContent>
+                          <TabsContent value="ignition-analysis" className="flex-1 flex flex-col min-h-0">
+                              <IgnitionTimingAnalyzer 
+                                runs={ignitionRuns} 
+                                onRunsChange={setIgnitionRuns}
+                                binFile={binFile}
+                                processedMap={processedMap}
+                                selectedMapDefinition={selectedMapDefinition}
+                              />
+                          </TabsContent>
+                          <TabsContent value="map-scanner" className="flex-1 flex flex-col min-h-0">
+                              <MapScanner
+                                binFile={binFile}
+                                onLoadMap={handleLoadPotentialMap}
+                                addLog={addLog}
+                              />
+                          </TabsContent>
+                        </>
+                      )}
+
+                      {!isProcessing && !processedMap && activeMapId === null && (
+                        <TabsContent value="view-table" className="flex-1 flex flex-col mt-4 min-h-0">
+                            <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
+                              <div>
+                                <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+                                <p className="mt-2 font-semibold">
+                                  Nenhum dado para exibir.
+                                </p>
+                                <p className="text-sm">
+                                  Carregue os seus ficheiros e selecione um mapa para
+                                  iniciar.
+                                </p>
+                              </div>
+                            </div>
+                          </TabsContent>
+                      )}
+                    </div>
                   </Tabs>
                 </div>
               </main>
@@ -1911,5 +1914,3 @@ export default function EcuTuningAssistant() {
       </EcuTuningStateContext.Provider>
     );
 }
-
-    
