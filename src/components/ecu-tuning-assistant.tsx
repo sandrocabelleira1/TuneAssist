@@ -1694,7 +1694,7 @@ export default function EcuTuningAssistant() {
                     onValueChange={setActiveTab}
                     className="flex-1 flex flex-col w-full min-h-0"
                   >
-                    <TabsList className="shrink-0">
+                    <TabsList className="shrink-0 self-start">
                       <TabsTrigger value="view-table">
                         <Table2 className="mr-2" />
                         Tabela de Dados
@@ -1727,6 +1727,31 @@ export default function EcuTuningAssistant() {
                           <Loader2 className="mr-2 h-8 w-8 animate-spin" />
                           <p>A processar o mapa...</p>
                         </div>
+                      ) : !processedMap && activeMapId ? (
+                        <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
+                           <div>
+                                <AlertTriangle className="mx-auto h-12 w-12 text-destructive" />
+                                <p className="mt-2 font-semibold">
+                                  Falha ao Processar o Mapa
+                                </p>
+                                <p className="text-sm">
+                                  Verifique a configuração de substituição e os logs de erro.
+                                </p>
+                            </div>
+                        </div>
+                      ) : !processedMap && !activeMapId ? (
+                         <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
+                           <div>
+                             <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+                             <p className="mt-2 font-semibold">
+                               Nenhum dado para exibir.
+                             </p>
+                             <p className="text-sm">
+                               Carregue os seus ficheiros e selecione um mapa para
+                               iniciar.
+                             </p>
+                           </div>
+                         </div>
                       ) : (
                         <>
                           <TabsContent value="view-table" className="flex-1 flex flex-col min-h-0">
@@ -1781,7 +1806,7 @@ export default function EcuTuningAssistant() {
                                   />
                             </div>
                           </TabsContent>
-                          <TabsContent value="fuel-analysis" className="flex-1 flex flex-col gap-4 min-h-0">
+                          <TabsContent value="fuel-analysis" className="flex-1 flex flex-col gap-4 min-h-0 overflow-y-auto">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                                 <Card className="lg:col-span-2">
                                     <CardHeader>
@@ -1869,7 +1894,7 @@ export default function EcuTuningAssistant() {
                                 )}
                             </div>
                           </TabsContent>
-                          <TabsContent value="ignition-analysis" className="flex-1 flex flex-col min-h-0">
+                          <TabsContent value="ignition-analysis" className="flex-1 flex flex-col min-h-0 overflow-y-auto">
                               <IgnitionTimingAnalyzer 
                                 runs={ignitionRuns} 
                                 onRunsChange={setIgnitionRuns}
@@ -1887,23 +1912,6 @@ export default function EcuTuningAssistant() {
                           </TabsContent>
                         </>
                       )}
-
-                      {!isProcessing && !processedMap && activeMapId === null && (
-                        <TabsContent value="view-table" className="flex-1 flex flex-col mt-4 min-h-0">
-                            <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
-                              <div>
-                                <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
-                                <p className="mt-2 font-semibold">
-                                  Nenhum dado para exibir.
-                                </p>
-                                <p className="text-sm">
-                                  Carregue os seus ficheiros e selecione um mapa para
-                                  iniciar.
-                                </p>
-                              </div>
-                            </div>
-                          </TabsContent>
-                      )}
                     </div>
                   </Tabs>
                 </div>
@@ -1914,3 +1922,5 @@ export default function EcuTuningAssistant() {
       </EcuTuningStateContext.Provider>
     );
 }
+
+    
