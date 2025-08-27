@@ -93,7 +93,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
             toast({ title: "Análise Concluída", description: `Encontrados ${maps.length} mapas potenciais.` });
 
         } catch (error) {
-            if ((error as Error).name === 'AbortError') {
+            if ((error as Error).message === 'AbortError') {
                 addLog("Análise cancelada pelo utilizador.", "info");
                 toast({ title: "Análise Cancelada", variant: 'default' });
             } else {

@@ -838,14 +838,15 @@ async function findPotentialAxes(
     const ALIGNMENT = dataSize > 1 ? 2 : 1;
     const CHUNK_SIZE = 1024 * 64; 
     const foundAxes: FoundAxis[] = [];
-    let scannedAddresses = 0;
+    let lastProgressUpdate = Date.now();
     
     for (let addr = 0; addr < totalLength; addr += ALIGNMENT) {
-        if (addr > scannedAddresses + CHUNK_SIZE) {
-            scannedAddresses = addr;
+        const now = Date.now();
+        if (now - lastProgressUpdate > 100) { // Update progress every 100ms
             onProgress((addr / totalLength) * 100, `A procurar eixos... Encontrados ${foundAxes.length}`);
             if (signal.aborted) throw new Error('AbortError');
-            await sleep(1);
+            await sleep(1); // Yield to the main thread
+            lastProgressUpdate = now;
         }
 
         for (let len = minSize; len <= maxSize; len++) {
@@ -946,14 +947,17 @@ export async function findPotentialMaps(
 
     const totalCombinations = rpmAxes.length * loadAxes.length;
     let combinationsDone = 0;
+    let lastProgressUpdate = Date.now();
 
     for (const rpmAxis of rpmAxes) {
         for (const loadAxis of loadAxes) {
             combinationsDone++;
-            if (combinationsDone % 50 === 0) {
+            const now = Date.now();
+            if (now - lastProgressUpdate > 100) {
                  if (signal.aborted) throw new Error('AbortError');
                  onProgress(50 + (combinationsDone / totalCombinations * 50), `A verificar combinação ${combinationsDone} de ${totalCombinations}`);
                  await sleep(1); // Yield
+                 lastProgressUpdate = now;
             }
 
             const mapCols = rpmAxis.length;
