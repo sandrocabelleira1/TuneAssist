@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo } from 'react';
@@ -1676,7 +1677,7 @@ export default function EcuTuningAssistant() {
                   <SidebarTrigger />
                   <div className="flex items-center ml-2">
                     <h1 className="text-lg font-semibold">
-                      {selectedMapDefinition?.name || 'Nenhum Mapa Selecionado'}
+                      {selectedMapDefinition?.name || (!xdfFile ? 'Carregue um .XDF ou use o Scanner' : 'Nenhum Mapa Selecionado')}
                     </h1>
                     {isModified && (
                       <span className="ml-2 text-xs font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
@@ -1688,34 +1689,34 @@ export default function EcuTuningAssistant() {
                     )}
                   </div>
                 </div>
-                <div className="p-4 flex flex-col flex-1">
+                <div className="p-4 flex-1 flex flex-col">
                   <Tabs
                     value={activeTab}
                     onValueChange={setActiveTab}
-                    className="w-full flex-1"
+                    className="w-full flex-1 flex flex-col"
                   >
                     <TabsList className="shrink-0 self-start">
-                      <TabsTrigger value="view-table">
+                      <TabsTrigger value="view-table" disabled={!activeMapId}>
                         <Table2 className="mr-2" />
                         Tabela de Dados
                       </TabsTrigger>
-                      <TabsTrigger value="view-3d">
+                      <TabsTrigger value="view-3d" disabled={!activeMapId}>
                         <BarChart3 className="mr-2" />
                         Gráfico 3D
                       </TabsTrigger>
-                      <TabsTrigger value="view-2d">
+                      <TabsTrigger value="view-2d" disabled={!activeMapId}>
                         <BarChart3 className="mr-2" />
                         Gráfico 2D
                       </TabsTrigger>
-                      <TabsTrigger value="fuel-analysis">
+                      <TabsTrigger value="fuel-analysis" disabled={!activeMapId}>
                           <ClipboardList className="mr-2" />
                           Análise de Combustível
                       </TabsTrigger>
-                       <TabsTrigger value="ignition-analysis">
+                       <TabsTrigger value="ignition-analysis" disabled={!activeMapId}>
                           <Flame className="mr-2" />
                           Análise de Ignição
                       </TabsTrigger>
-                      <TabsTrigger value="map-scanner">
+                      <TabsTrigger value="map-scanner" disabled={!binFile}>
                           <Search className="mr-2" />
                           Scanner de Mapas
                       </TabsTrigger>
@@ -1738,7 +1739,7 @@ export default function EcuTuningAssistant() {
                               </p>
                           </div>
                       </TabsContent>
-                    ) : !processedMap && !activeMapId ? (
+                    ) : !activeMapId && activeTab !== 'map-scanner' ? (
                        <TabsContent value={activeTab} className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
                          <div>
                            <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
@@ -1753,7 +1754,7 @@ export default function EcuTuningAssistant() {
                        </TabsContent>
                     ) : (
                       <>
-                        <TabsContent value="view-table">
+                        <TabsContent value="view-table" className="flex-1 min-h-0">
                             <DataTable
                                 key={activeMapId}
                                 mapData={processedMap?.calculatedMap ?? null}
@@ -1765,7 +1766,7 @@ export default function EcuTuningAssistant() {
                                 aiModifiedCells={aiModifiedCells}
                             />
                         </TabsContent>
-                        <TabsContent value="view-3d">
+                        <TabsContent value="view-3d" className="flex-1 min-h-0">
                               <div className="h-full w-full">
                                   {processedMap?.axes && processedMap?.calculatedMap ? (
                                       <SurfacePlot3D
@@ -1788,7 +1789,7 @@ export default function EcuTuningAssistant() {
                                   )}
                             </div>
                         </TabsContent>
-                        <TabsContent value="view-2d">
+                        <TabsContent value="view-2d" className="flex-1 min-h-0">
                           <div className="h-full w-full">
                                 <LinePlot2D
                                   mapData={processedMap?.calculatedMap ?? null}
@@ -1805,7 +1806,7 @@ export default function EcuTuningAssistant() {
                                 />
                           </div>
                         </TabsContent>
-                        <TabsContent value="fuel-analysis" className="flex flex-col gap-4 overflow-y-auto">
+                        <TabsContent value="fuel-analysis" className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto">
                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                               <Card className="lg:col-span-2">
                                   <CardHeader>
@@ -1893,7 +1894,7 @@ export default function EcuTuningAssistant() {
                               )}
                           </div>
                         </TabsContent>
-                        <TabsContent value="ignition-analysis">
+                        <TabsContent value="ignition-analysis" className="flex-1 min-h-0">
                             <IgnitionTimingAnalyzer 
                               runs={ignitionRuns} 
                               onRunsChange={setIgnitionRuns}
@@ -1902,7 +1903,7 @@ export default function EcuTuningAssistant() {
                               selectedMapDefinition={selectedMapDefinition}
                             />
                         </TabsContent>
-                        <TabsContent value="map-scanner">
+                        <TabsContent value="map-scanner" className="flex-1 min-h-0">
                             <MapScanner
                               binFile={binFile}
                               onLoadMap={handleLoadPotentialMap}
