@@ -93,12 +93,12 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
             toast({ title: "Análise Concluída", description: `Encontrados ${maps.length} mapas potenciais.` });
 
         } catch (error) {
-            if ((error as Error).message === 'AbortError') {
+            if (error instanceof Error && error.name === 'AbortError') {
                 addLog("Análise cancelada pelo utilizador.", "info");
                 toast({ title: "Análise Cancelada", variant: 'default' });
-            } else {
-                addLog(`Erro durante a análise: ${(error as Error).message}`, "error");
-                toast({ title: "Erro na Análise", description: (error as Error).message, variant: "destructive" });
+            } else if (error instanceof Error) {
+                addLog(`Erro durante a análise: ${error.message}`, "error");
+                toast({ title: "Erro na Análise", description: error.message, variant: "destructive" });
             }
         } finally {
             setIsScanning(false);

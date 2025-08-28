@@ -836,17 +836,16 @@ async function findPotentialAxes(
     const totalLength = binBuffer.byteLength;
     const useLittleEndian = !isBigEndian;
     const ALIGNMENT = dataSize > 1 ? 2 : 1;
-    const CHUNK_SIZE = 1024 * 64; 
     const foundAxes: FoundAxis[] = [];
     let lastProgressUpdate = Date.now();
-    
+    const YIELD_INTERVAL_MS = 50;
+
     for (let addr = 0; addr < totalLength; addr += ALIGNMENT) {
-        const now = Date.now();
-        if (now - lastProgressUpdate > 100) { // Update progress every 100ms
+        if (Date.now() - lastProgressUpdate > YIELD_INTERVAL_MS) {
             onProgress((addr / totalLength) * 100, `A procurar eixos... Encontrados ${foundAxes.length}`);
+            await sleep(0); // Yield to the main thread
             if (signal.aborted) throw new Error('AbortError');
-            await sleep(1); // Yield to the main thread
-            lastProgressUpdate = now;
+            lastProgressUpdate = Date.now();
         }
 
         for (let len = minSize; len <= maxSize; len++) {
@@ -929,7 +928,8 @@ export async function findPotentialMaps(
 ): Promise<PotentialMap[]> {
 
     const { dataSize, isBigEndian } = config;
-
+    const YIELD_INTERVAL_MS = 50;
+    
     onProgress(0, "A procurar eixos potenciais...");
     const allAxes = await findPotentialAxes(binBuffer, config, (p, s) => onProgress(p * 0.5, s), signal);
     
@@ -938,7 +938,7 @@ export async function findPotentialMaps(
 
     if (signal.aborted) throw new Error('AbortError');
     onProgress(50, `Encontrados ${rpmAxes.length} eixos de RPM e ${loadAxes.length} de carga. A procurar mapas...`);
-    await sleep(1);
+    await sleep(0); // Yield before next heavy computation
 
     const potentialMaps: PotentialMap[] = [];
     const view = new DataView(binBuffer);
@@ -946,29 +946,32 @@ export async function findPotentialMaps(
     const dataTypeString = `${config.dataSize * 8}-bit${config.dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
 
     const totalCombinations = rpmAxes.length * loadAxes.length;
+    if (totalCombinations === 0) {
+        onProgress(100, "Análise concluída. Nenhum eixo de RPM ou Carga encontrado.");
+        return [];
+    }
+
     let combinationsDone = 0;
     let lastProgressUpdate = Date.now();
 
     for (const rpmAxis of rpmAxes) {
         for (const loadAxis of loadAxes) {
-            combinationsDone++;
-            const now = Date.now();
-            if (now - lastProgressUpdate > 100) {
+            if (Date.now() - lastProgressUpdate > YIELD_INTERVAL_MS) {
                  if (signal.aborted) throw new Error('AbortError');
                  onProgress(50 + (combinationsDone / totalCombinations * 50), `A verificar combinação ${combinationsDone} de ${totalCombinations}`);
-                 await sleep(1); // Yield
-                 lastProgressUpdate = now;
+                 await sleep(0); // Yield
+                 lastProgressUpdate = Date.now();
             }
+            combinationsDone++;
 
             const mapCols = rpmAxis.length;
             const mapRows = loadAxis.length;
             const mapSizeInBytes = mapRows * mapCols * dataSize;
             
-            // Heuristic: map data should start after its axes
+            // Heuristic: map data should start after its axes, but within a reasonable distance
             const searchStartAddress = Math.max(rpmAxis.address + rpmAxis.length * dataSize, loadAxis.address + loadAxis.length * dataSize);
-            
-            // Limit search area to reduce false positives
-            const searchEndAddress = Math.min(searchStartAddress + 4096, binBuffer.byteLength - mapSizeInBytes);
+            const SEARCH_WINDOW = 2048; // Limit search to 2KB after the axes
+            const searchEndAddress = Math.min(searchStartAddress + SEARCH_WINDOW, binBuffer.byteLength - mapSizeInBytes);
             
             for (let mapAddr = searchStartAddress; mapAddr < searchEndAddress; mapAddr += dataSize) {
                 if (mapAddr + mapSizeInBytes > binBuffer.byteLength) continue;
@@ -986,7 +989,7 @@ export async function findPotentialMaps(
                 
                 if (isValidBlock) {
                     const { confidence, suggestion } = calculateMapConfidence(mapDataBlock);
-                    if (confidence > 0.4) {
+                    if (confidence > 0.5) { // Increased confidence threshold
                         potentialMaps.push({
                             address: mapAddr,
                             rows: mapRows,

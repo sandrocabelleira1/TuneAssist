@@ -27,6 +27,7 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
         }
         // Reset visible rows when file changes
         setVisibleRows({ start: 0, end: 50 });
+        setCursorPosition({ offset: -1, value: null });
     }, [fileBuffer]);
     
     const handleScroll = useCallback(() => {
@@ -56,7 +57,7 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
 
         return (
             <div key={startOffset} className="flex font-mono text-xs h-[20px]">
-                <div className="w-20 text-muted-foreground pr-4 text-right">
+                <div className="w-20 text-muted-foreground pr-4 text-right shrink-0">
                     {startOffset.toString(16).toUpperCase().padStart(8, '0')}
                 </div>
                 <div className="flex flex-1">
@@ -69,7 +70,7 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
                             <span 
                                 key={i}
                                 onMouseEnter={() => setCursorPosition({ offset: currentOffset, value: byte })}
-                                className={cn('w-7 text-center', {
+                                className={cn('w-7 text-center shrink-0', {
                                     'bg-primary/20': isCursorOn,
                                     'text-muted-foreground': byte === null
                                 })}
@@ -79,11 +80,11 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
                         );
                     })}
                 </div>
-                <div className="w-40 pl-4">
+                <div className="w-40 pl-4 shrink-0">
                      {Array.from({ length: BYTES_PER_LINE }).map((_, i) => {
                         const byte = i < rowBytes.length ? rowBytes[i] : null;
                         return (
-                            <span key={i} className={cn({'text-muted-foreground': byte === null})}>
+                            <span key={i} className={cn('shrink-0', {'text-muted-foreground': byte === null})}>
                                 {byte !== null ? (byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.') : ' '}
                             </span>
                         );
@@ -101,9 +102,9 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
         <div className="h-full w-full flex flex-col border rounded-lg bg-card text-card-foreground">
             <div className="flex-shrink-0 p-2 border-b text-xs font-semibold">
                 <div className="flex">
-                    <div className="w-20 pr-4 text-right text-muted-foreground">Endereço</div>
+                    <div className="w-20 pr-4 text-right text-muted-foreground shrink-0">Endereço</div>
                     <div className="flex-1 text-muted-foreground">00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F</div>
-                    <div className="w-40 pl-4 text-muted-foreground">ASCII</div>
+                    <div className="w-40 pl-4 text-muted-foreground shrink-0">ASCII</div>
                 </div>
             </div>
              <div className="flex-1 min-h-0 relative">
@@ -126,7 +127,7 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
                 </ScrollArea>
              </div>
             <div className="flex-shrink-0 p-2 border-t text-xs text-muted-foreground font-mono">
-                {cursorPosition.offset !== -1 && (
+                {cursorPosition.offset !== -1 && cursorPosition.value !== null && (
                     <span>
                         Endereço: 0x{cursorPosition.offset.toString(16).toUpperCase().padStart(8, '0')} | Valor: 0x{cursorPosition.value?.toString(16).toUpperCase().padStart(2, '0')} ({cursorPosition.value})
                     </span>
