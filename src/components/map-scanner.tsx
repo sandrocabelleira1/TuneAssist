@@ -5,8 +5,8 @@
 import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, DownloadCloud, Settings, Play, Search, FolderDown } from 'lucide-react';
-import type { PotentialMap, ScanConfig } from '@/lib/types';
+import { AlertTriangle, DownloadCloud, Settings, Play, Search, FolderDown, BarChart3, Table2 } from 'lucide-react';
+import type { PotentialMap, ScanConfig, ProcessedMap, PlotOrientation } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { readAndCalculateMapFromBinManual } from '@/lib/ecu';
 import { XDFinition } from '@/lib/types';
 import { HexViewer } from './hex-viewer';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const SurfacePlot3D = React.lazy(() => import('@/components/surface-plot'));
 const LinePlot2D = React.lazy(() => import('@/components/line-plot'));
@@ -36,7 +37,12 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
     const [xAxisAddress, setXAxisAddress] = useState('');
     const [yAxisAddress, setYAxisAddress] = useState('');
 
-    const [discoveredMap, setDiscoveredMap] = useState<any | null>(null);
+    const [discoveredMap, setDiscoveredMap] = useState<(ProcessedMap & { definition: XDFinition }) | null>(null);
+    
+    // State for the 2D plot
+    const [selectedLine, setSelectedLine] = useState<number | null>(0);
+    const [plotOrientation, setPlotOrientation] = useState<PlotOrientation>('y-vs-x');
+
 
     const { toast } = useToast();
 
@@ -122,6 +128,8 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                 ...result,
                 definition: tempDef
             });
+            setSelectedLine(0);
+            setPlotOrientation('y-vs-x');
 
             addLog(`Mapa em 0x${mapAddress.toUpperCase()} lido com sucesso.`, 'success');
 
@@ -147,7 +155,6 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
             equation: definition.equation,
             xAxisAddress: definition.xAxisDef.address,
             yAxisAddress: definition.yAxisDef.address,
-            // These are unknown from this context, placeholder values
             confidence: 0.9, 
             suggestion: "Carregado do Scanner",
             dataType: scanConfig.dataType,
@@ -157,6 +164,12 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         
         onLoadMap(potentialMap);
         addLog(`Mapa "${definition.name}" promovido para o painel principal.`, 'success');
+    };
+
+    const togglePlotOrientation = () => {
+        const newOrientation = plotOrientation === 'y-vs-x' ? 'x-vs-y' : 'y-vs-x';
+        setPlotOrientation(newOrientation);
+        setSelectedLine(0);
     };
 
     if (!binFile) {
@@ -243,18 +256,39 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                     </CardHeader>
                     <CardContent className="flex-1 min-h-0">
                         {discoveredMap ? (
-                             <div className="h-full w-full">
-                                <React.Suspense fallback={<div className="flex items-center justify-center h-full">A carregar gráfico...</div>}>
-                                     <SurfacePlot3D
-                                        mapData={discoveredMap.calculatedMap}
-                                        xAxis={discoveredMap.axes.x.calculated}
-                                        yAxis={discoveredMap.axes.y.calculated}
-                                        xAxisLabel={discoveredMap.axes.x.label || 'Eixo X'}
-                                        yAxisLabel={discoveredMap.axes.y.label || 'Eixo Y'}
-                                        zAxisLabel={discoveredMap.definition.name || 'Mapa'}
-                                    />
-                                </React.Suspense>
-                            </div>
+                            <Tabs defaultValue="view-3d" className="h-full">
+                                 <TabsList className="mb-2">
+                                    <TabsTrigger value="view-3d"><BarChart3 className="mr-2" /> Gráfico 3D</TabsTrigger>
+                                    <TabsTrigger value="view-2d"><Table2 className="mr-2" /> Gráfico 2D</TabsTrigger>
+                                 </TabsList>
+                                 <TabsContent value="view-3d" className="h-full">
+                                     <React.Suspense fallback={<div className="flex items-center justify-center h-full">A carregar gráfico...</div>}>
+                                         <SurfacePlot3D
+                                            mapData={discoveredMap.calculatedMap}
+                                            xAxis={discoveredMap.axes.x.calculated}
+                                            yAxis={discoveredMap.axes.y.calculated}
+                                            xAxisLabel={discoveredMap.axes.x.label || 'Eixo X'}
+                                            yAxisLabel={discoveredMap.axes.y.label || 'Eixo Y'}
+                                            zAxisLabel={discoveredMap.definition.name || 'Mapa'}
+                                        />
+                                    </React.Suspense>
+                                 </TabsContent>
+                                 <TabsContent value="view-2d" className="h-full">
+                                     <React.Suspense fallback={<div className="flex items-center justify-center h-full">A carregar gráfico...</div>}>
+                                        <LinePlot2D
+                                            mapData={discoveredMap.calculatedMap}
+                                            xAxis={discoveredMap.axes.x}
+                                            yAxis={discoveredMap.axes.y}
+                                            mapName={discoveredMap.definition.name}
+                                            selectedLineIndex={selectedLine}
+                                            onLineSelect={setSelectedLine}
+                                            onPointChange={() => {}} // Read-only in scanner
+                                            orientation={plotOrientation}
+                                            togglePlotOrientation={togglePlotOrientation}
+                                        />
+                                    </React.Suspense>
+                                 </TabsContent>
+                            </Tabs>
                         ) : (
                             <div className="h-full flex items-center justify-center text-muted-foreground text-center">
                                 <div>
@@ -269,3 +303,4 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         </div>
     );
 }
+
