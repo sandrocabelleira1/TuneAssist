@@ -10,9 +10,10 @@ const ROW_HEIGHT = 20; // Estimated height of a row in pixels
 
 interface HexViewerProps {
     fileBuffer: ArrayBuffer | null;
+    onAddressSelect?: (address: number) => void;
 }
 
-export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
+export const HexViewer = ({ fileBuffer, onAddressSelect }: HexViewerProps) => {
     const [cursorPosition, setCursorPosition] = useState<{ offset: number; value: number | null }>({ offset: -1, value: null });
     const [numRows, setNumRows] = useState(0);
     const [visibleRows, setVisibleRows] = useState({ start: 0, end: 50 }); // Render 50 rows at a time
@@ -45,6 +46,11 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
         });
     }, [fileBuffer, numRows]);
 
+    const handleAddressClick = (address: number) => {
+        if (onAddressSelect) {
+            onAddressSelect(address);
+        }
+    };
 
     const renderRow = (rowIndex: number) => {
         if (!fileBuffer) return null;
@@ -57,7 +63,11 @@ export const HexViewer = ({ fileBuffer }: HexViewerProps) => {
 
         return (
             <div key={startOffset} className="flex font-mono text-xs h-[20px]">
-                <div className="w-20 text-muted-foreground pr-4 text-right shrink-0">
+                <div 
+                    className="w-20 text-muted-foreground pr-4 text-right shrink-0 cursor-pointer hover:text-primary"
+                    onClick={() => handleAddressClick(startOffset)}
+                    title={`Clique para selecionar o endereço 0x${startOffset.toString(16).toUpperCase()}`}
+                >
                     {startOffset.toString(16).toUpperCase().padStart(8, '0')}
                 </div>
                 <div className="flex flex-1">

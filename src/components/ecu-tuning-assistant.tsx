@@ -1144,7 +1144,7 @@ export default function EcuTuningAssistant() {
         }
     };
 
-    const handleLoadPotentialMap = (map: PotentialMap) => {
+    const handleLoadPotentialMap = useCallback((map: PotentialMap) => {
         addLog(`A carregar mapa potencial em 0x${map.address.toString(16).toUpperCase()}.`, 'info');
         
         if (!binFile) {
@@ -1154,49 +1154,31 @@ export default function EcuTuningAssistant() {
 
         const tempId = `potential_${map.address}_${map.rows}x${map.cols}`;
         
-        // This is a new feature: intelligently decide which axis is which and if it should be sorted
-        let { xAxisType, yAxisType } = map;
-        let finalXAxisAddress = map.xAxisAddress;
-        let finalYAxisAddress = map.yAxisAddress;
-        let finalRows = map.rows;
-        let finalCols = map.cols;
-
-        // Swap axes if Y is RPM and X is Load to follow convention
-        if (yAxisType === 'RPM' && xAxisType === 'Carga') {
-            [xAxisType, yAxisType] = [yAxisType, xAxisType];
-            [finalXAxisAddress, finalYAxisAddress] = [finalYAxisAddress, finalXAxisAddress];
-            [finalRows, finalCols] = [finalCols, finalRows];
-            addLog('Os eixos X e Y foram trocados para seguir a convenção (RPM em X).', 'info');
-        }
-
-        const sortX = xAxisType === 'RPM';
-        const sortY = yAxisType === 'RPM';
-
         const tempDef: XDFinition = {
             uniqueId: tempId,
-            name: `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
+            name: map.name ?? `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
             address: map.address,
-            rows: finalRows,
-            cols: finalCols,
+            rows: map.rows,
+            cols: map.cols,
             dataSize: map.dataSize,
             isBigEndian: map.isBigEndian,
             isRowMajor: true, 
             equation: map.equation || 'x',
             decimalpl: 2,
             xAxisDef: {
-                label: finalXAxisAddress ? `${xAxisType} (0x${finalXAxisAddress.toString(16).toUpperCase()})` : `Eixo X (scan)`,
-                count: finalCols,
-                requiresSort: sortX, // Set sorting intelligently
-                address: finalXAxisAddress,
+                label: map.xAxisAddress ? `Eixo X (0x${map.xAxisAddress.toString(16).toUpperCase()})` : `Eixo X (scan)`,
+                count: map.cols,
+                requiresSort: false,
+                address: map.xAxisAddress,
                 dataSize: map.dataSize,
                 isBigEndian: map.isBigEndian,
                 equation: 'x'
             },
             yAxisDef: {
-                label: finalYAxisAddress ? `${yAxisType} (0x${finalYAxisAddress.toString(16).toUpperCase()})` : `Eixo Y (scan)`,
-                count: finalRows,
-                requiresSort: sortY, // Set sorting intelligently
-                address: finalYAxisAddress,
+                label: map.yAxisAddress ? `Eixo Y (0x${map.yAxisAddress.toString(16).toUpperCase()})` : `Eixo Y (scan)`,
+                count: map.rows,
+                requiresSort: false,
+                address: map.yAxisAddress,
                 dataSize: map.dataSize,
                 isBigEndian: map.isBigEndian,
                 equation: 'x'
@@ -1204,9 +1186,6 @@ export default function EcuTuningAssistant() {
             rowStride: map.rowStride
         };
         
-        addLog(`Eixo X (colunas) identificado como ${xAxisType}, ordenação: ${sortX}.`, 'info');
-        addLog(`Eixo Y (linhas) identificado como ${yAxisType}, ordenação: ${sortY}.`, 'info');
-
         const currentXdfDefs = xdfFile ? xdfFile.definitions.filter(d => d.uniqueId !== tempId) : [];
         const newDefs = [...currentXdfDefs, tempDef];
 
@@ -1223,7 +1202,7 @@ export default function EcuTuningAssistant() {
         
         setActiveTab('view-table');
         toast({ title: "Mapa Potencial Carregado", description: "Dados preenchidos no painel de substituição. Ajuste e recalcule se necessário." });
-    };
+    }, [addLog, binFile, xdfFile, selectedMapIds, toast, setActiveMap]);
     
     const handleDownloadLog = () => {
         if (logs.length === 0) {
@@ -1903,7 +1882,7 @@ export default function EcuTuningAssistant() {
                               selectedMapDefinition={selectedMapDefinition}
                             />
                         </TabsContent>
-                        <TabsContent value="map-scanner" className="flex-1 min-h-0">
+                        <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
                             <MapScanner
                               binFile={binFile}
                               onLoadMap={handleLoadPotentialMap}
@@ -1929,3 +1908,4 @@ export default function EcuTuningAssistant() {
     
 
     
+
