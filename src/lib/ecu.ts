@@ -798,7 +798,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function findPotentialAxes(
     view: DataView,
-    config: ScanConfig,
+    config: Required<ScanConfig>,
     onProgress: (progress: number, status: string) => void,
     signal: AbortSignal
 ): Promise<FoundAxis[]> {
@@ -809,13 +809,14 @@ async function findPotentialAxes(
     const foundAxes: FoundAxis[] = [];
 
     const CHUNK_SIZE = 1024 * 16; // Process 16KB chunks
-    const YIELD_INTERVAL_MS = 16; // Yield roughly every 60 frames
+    const YIELD_INTERVAL_MS = 0; // Yield to browser event loop
 
     for (let addr = 0; addr < totalLength; addr += CHUNK_SIZE) {
         const chunkEnd = Math.min(addr + CHUNK_SIZE, totalLength);
         
         for (let currentAddr = addr; currentAddr < chunkEnd; currentAddr += ALIGNMENT) {
             for (let len = minSize; len <= maxSize; len++) {
+                 if (signal.aborted) throw new Error('AbortError');
                 const axisData = readDataFromAddress(view, currentAddr, len, dataSize, useLittleEndian);
                 if (axisData && isStrictlyMonotonic(axisData)) {
                     const type = analyzeAxis(axisData);
@@ -834,7 +835,6 @@ async function findPotentialAxes(
         
         onProgress((chunkEnd / totalLength) * 50, `A procurar eixos... Encontrados ${foundAxes.length}`);
         await sleep(YIELD_INTERVAL_MS);
-        if (signal.aborted) throw new Error('AbortError');
     }
     return foundAxes;
 }
@@ -893,12 +893,12 @@ function calculateMapConfidence(mapData: (number | null)[][]): { confidence: num
 
 export async function findPotentialMaps(
     binBuffer: ArrayBuffer,
-    config: ScanConfig,
+    config: Required<ScanConfig>,
     onProgress: (progress: number, status: string) => void,
     signal: AbortSignal
 ): Promise<PotentialMap[]> {
     const { dataSize, isBigEndian } = config;
-    const YIELD_INTERVAL_MS = 16;
+    const YIELD_INTERVAL_MS = 0;
     const view = new DataView(binBuffer);
     const useLittleEndian = !isBigEndian;
     const dataTypeString = `${config.dataSize * 8}-bit${config.dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
@@ -926,10 +926,11 @@ export async function findPotentialMaps(
     for (const yAxis of loadAxes) { // Assume Load is Y axis
         for (const xAxis of rpmAxes) { // Assume RPM is X axis
             combinationsDone++;
-            if (combinationsDone % 100 === 0) { // Update progress periodically
+             if (signal.aborted) throw new Error('AbortError');
+
+            if (combinationsDone % 500 === 0) { // Update progress periodically and yield
                  onProgress(50 + (combinationsDone / totalCombinations * 50), `A verificar combinação ${combinationsDone} de ${totalCombinations}`);
                  await sleep(YIELD_INTERVAL_MS);
-                 if (signal.aborted) throw new Error('AbortError');
             }
 
             const mapCols = xAxis.length;
@@ -937,40 +938,48 @@ export async function findPotentialMaps(
             const mapSizeInBytes = mapRows * mapCols * dataSize;
             
             // Heuristic: The map data block starts immediately after one of the axes ends.
-            const mapStartAddress = Math.max(xAxis.address + xAxis.length * dataSize, yAxis.address + yAxis.length * dataSize);
-            
-            if (mapStartAddress + mapSizeInBytes > view.byteLength) continue;
+            // Check for map start right after X axis and right after Y axis.
+            const potentialStartAddresses = [
+                xAxis.address + xAxis.length * dataSize,
+                yAxis.address + yAxis.length * dataSize,
+            ];
 
-            const mapDataBlock: MapData = [];
-            let isValidBlock = true;
-            for(let r=0; r<mapRows; r++){
-                // Assuming row-major order for scanning
-                const rowData = readDataFromAddress(view, mapStartAddress + (r * mapCols * dataSize), mapCols, dataSize, useLittleEndian);
-                if (rowData === null) {
-                    isValidBlock = false;
-                    break;
+            for (const mapStartAddress of potentialStartAddresses) {
+                if (mapStartAddress + mapSizeInBytes > view.byteLength) continue;
+
+                const mapDataBlock: MapData = [];
+                let isValidBlock = true;
+                for(let r=0; r<mapRows; r++){
+                    // Assuming row-major order for scanning
+                    const rowData = readDataFromAddress(view, mapStartAddress + (r * mapCols * dataSize), mapCols, dataSize, useLittleEndian);
+                    if (rowData === null) {
+                        isValidBlock = false;
+                        break;
+                    }
+                    mapDataBlock.push(rowData);
                 }
-                mapDataBlock.push(rowData);
-            }
-            
-            if (isValidBlock) {
-                const { confidence, suggestion } = calculateMapConfidence(mapDataBlock);
-                if (confidence > 0.6) { // Use a reasonable confidence threshold
-                    potentialMaps.push({
-                        address: mapStartAddress,
-                        rows: mapRows,
-                        cols: mapCols,
-                        dataSize: dataSize,
-                        isBigEndian: isBigEndian,
-                        confidence,
-                        suggestion,
-                        dataType: dataTypeString,
-                        equation: 'x',
-                        xAxisAddress: xAxis.address,
-                        yAxisAddress: yAxis.address,
-                        xAxisType: xAxis.type,
-                        yAxisType: yAxis.type,
-                    });
+                
+                if (isValidBlock) {
+                    const { confidence, suggestion } = calculateMapConfidence(mapDataBlock);
+                    if (confidence > 0.55) { // Use a reasonable confidence threshold
+                        if (!potentialMaps.some(p => p.address === mapStartAddress && p.rows === mapRows && p.cols === mapCols)) {
+                            potentialMaps.push({
+                                address: mapStartAddress,
+                                rows: mapRows,
+                                cols: mapCols,
+                                dataSize: dataSize,
+                                isBigEndian: isBigEndian,
+                                confidence,
+                                suggestion,
+                                dataType: dataTypeString,
+                                equation: 'x',
+                                xAxisAddress: xAxis.address,
+                                yAxisAddress: yAxis.address,
+                                xAxisType: xAxis.type,
+                                yAxisType: yAxis.type,
+                            });
+                        }
+                    }
                 }
             }
         }

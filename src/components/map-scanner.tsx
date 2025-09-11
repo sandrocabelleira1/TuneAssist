@@ -2,19 +2,23 @@
 
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, DownloadCloud, Settings, Play, Search, FolderDown, BarChart3, Table2 } from 'lucide-react';
+import { AlertTriangle, DownloadCloud, Settings, Play, Search, FolderDown, BarChart3, Table2, ListTree, X } from 'lucide-react';
 import type { PotentialMap, ScanConfig, ProcessedMap, PlotOrientation } from '@/lib/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { readAndCalculateMapFromBinManual } from '@/lib/ecu';
+import { findPotentialMaps, readAndCalculateMapFromBinManual } from '@/lib/ecu';
 import { XDFinition } from '@/lib/types';
-import { HexViewer } from './hex-viewer';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+
 
 const SurfacePlot3D = React.lazy(() => import('@/components/surface-plot'));
 const LinePlot2D = React.lazy(() => import('@/components/line-plot'));
@@ -27,18 +31,20 @@ interface MapScannerProps {
 }
 
 export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerProps) {
-    const [scanConfig, setScanConfig] = useState<Omit<ScanConfig, 'dataSize' | 'isBigEndian'>>({
-        rows: 16,
-        cols: 20,
+    const [scanConfig, setScanConfig] = useState<ScanConfig>({
+        minSize: 8,
+        maxSize: 32,
         dataType: '16-bit LE',
     });
-
-    const [mapAddress, setMapAddress] = useState('');
-    const [xAxisAddress, setXAxisAddress] = useState('');
-    const [yAxisAddress, setYAxisAddress] = useState('');
-
-    const [discoveredMap, setDiscoveredMap] = useState<(ProcessedMap & { definition: XDFinition }) | null>(null);
     
+    const [isScanning, setIsScanning] = useState(false);
+    const [scanProgress, setScanProgress] = useState(0);
+    const [scanStatus, setScanStatus] = useState('');
+    const [potentialMaps, setPotentialMaps] = useState<PotentialMap[]>([]);
+    const [selectedPotentialMap, setSelectedPotentialMap] = useState<PotentialMap | null>(null);
+    const [discoveredMap, setDiscoveredMap] = useState<(ProcessedMap & { definition: XDFinition }) | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
+
     // State for the 2D plot
     const [selectedLine, setSelectedLine] = useState<number | null>(0);
     const [plotOrientation, setPlotOrientation] = useState<PlotOrientation>('y-vs-x');
@@ -46,72 +52,93 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
 
     const { toast } = useToast();
 
-    const handleAddressInput = (setter: React.Dispatch<React.SetStateAction<string>>, value: string) => {
-        const cleanValue = value.toLowerCase().startsWith('0x') ? value.substring(2) : value;
-        setter(cleanValue.replace(/[^0-9a-f]/gi, ''));
-    }
+    const handleProgressUpdate = useCallback((progress: number, status: string) => {
+        setScanProgress(progress);
+        setScanStatus(status);
+    }, []);
 
-    const handleAddressSelectFromHex = useCallback((address: number) => {
-        const hexAddress = address.toString(16);
-        if (!mapAddress) {
-            setMapAddress(hexAddress);
-            toast({ title: "Endereço do Mapa Preenchido", description: `0x${hexAddress.toUpperCase()} foi definido como o endereço do mapa.` });
-        } else if (!xAxisAddress) {
-            setXAxisAddress(hexAddress);
-            toast({ title: "Endereço do Eixo X Preenchido", description: `0x${hexAddress.toUpperCase()} foi definido como o endereço do eixo X.` });
-        } else if (!yAxisAddress) {
-            setYAxisAddress(hexAddress);
-            toast({ title: "Endereço do Eixo Y Preenchido", description: `0x${hexAddress.toUpperCase()} foi definido como o endereço do eixo Y.` });
-        } else {
-             toast({ title: "Todos os campos preenchidos", description: "Considere limpar um campo se quiser selecionar um novo endereço.", variant: "default" });
-        }
-    }, [mapAddress, xAxisAddress, yAxisAddress, toast]);
-
-
-    const handleDiscoverMap = () => {
-        if (!binFile || !mapAddress) {
-            toast({ title: "Dados Insuficientes", description: "É necessário carregar um ficheiro BIN e fornecer um endereço de mapa.", variant: "destructive" });
+    const handleStartScan = async () => {
+        if (!binFile) {
+            toast({ title: "Ficheiro BIN em falta", description: "Por favor, carregue um ficheiro .BIN primeiro.", variant: "destructive" });
             return;
         }
 
-        const mapAddr = parseInt(mapAddress, 16);
-        if (isNaN(mapAddr)) {
-            toast({ title: "Endereço Inválido", description: "O endereço do mapa não é um hexadecimal válido.", variant: "destructive" });
-            return;
-        }
+        setIsScanning(true);
+        setScanProgress(0);
+        setPotentialMaps([]);
+        setSelectedPotentialMap(null);
+        setDiscoveredMap(null);
+        addLog(`A iniciar scan automático com tipo de dados ${scanConfig.dataType}...`, 'info');
 
-        addLog(`A tentar descobrir o mapa em 0x${mapAddress.toUpperCase()}...`, 'info');
-
+        abortControllerRef.current = new AbortController();
+        const signal = abortControllerRef.current.signal;
+        
         try {
-            const dataSize = scanConfig.dataType.includes('16') ? 2 : 1;
-            const isBigEndian = scanConfig.dataType.includes('BE');
+            const internalConfig = {
+                ...scanConfig,
+                dataSize: scanConfig.dataType.includes('16') ? 2 : 1,
+                isBigEndian: scanConfig.dataType.includes('BE'),
+            }
+            const maps = await findPotentialMaps(binFile.buffer, internalConfig, handleProgressUpdate, signal);
+            
+            const sortedMaps = maps.sort((a,b) => b.confidence - a.confidence);
+            setPotentialMaps(sortedMaps);
 
+            addLog(`Scan concluído. Encontrados ${maps.length} mapas potenciais.`, 'success');
+            toast({ title: "Scan Concluído", description: `Encontrados ${maps.length} mapas potenciais.` });
+
+        } catch (error: any) {
+             if (error.message === 'AbortError') {
+                addLog("Scan cancelado pelo utilizador.", 'info');
+                toast({ title: "Scan Cancelado" });
+            } else {
+                addLog(`Erro durante o scan: ${error.message}`, 'error');
+                toast({ title: "Erro no Scan", description: error.message, variant: "destructive" });
+            }
+        } finally {
+            setIsScanning(false);
+            abortControllerRef.current = null;
+        }
+    };
+    
+    const handleStopScan = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+    };
+
+    const handleSelectPotentialMap = async (map: PotentialMap) => {
+        if (!binFile) return;
+        setSelectedPotentialMap(map);
+        addLog(`A visualizar mapa potencial em 0x${map.address.toString(16).toUpperCase()}`, 'info');
+
+         try {
             const tempDef: XDFinition = {
-                uniqueId: `scanner_${mapAddr}`,
-                name: `Mapa Descoberto @ 0x${mapAddress.toUpperCase()}`,
-                address: mapAddr,
-                rows: scanConfig.rows,
-                cols: scanConfig.cols,
-                dataSize: dataSize,
-                isBigEndian: isBigEndian,
+                uniqueId: `scanner_${map.address}`,
+                name: map.name ?? `Mapa Descoberto @ 0x${map.address.toString(16).toUpperCase()}`,
+                address: map.address,
+                rows: map.rows,
+                cols: map.cols,
+                dataSize: map.dataSize,
+                isBigEndian: map.isBigEndian,
                 isRowMajor: true,
                 equation: 'x',
                 decimalpl: 2,
                 xAxisDef: {
-                    label: 'Eixo X',
-                    count: scanConfig.cols,
+                    label: 'Eixo X (RPM)',
+                    count: map.cols,
                     requiresSort: false,
-                    address: xAxisAddress ? parseInt(xAxisAddress, 16) : undefined,
-                    dataSize,
-                    isBigEndian
+                    address: map.xAxisAddress,
+                    dataSize: map.dataSize,
+                    isBigEndian: map.isBigEndian
                 },
                 yAxisDef: {
-                    label: 'Eixo Y',
-                    count: scanConfig.rows,
+                    label: 'Eixo Y (Carga)',
+                    count: map.rows,
                     requiresSort: false,
-                    address: yAxisAddress ? parseInt(yAxisAddress, 16) : undefined,
-                    dataSize,
-                    isBigEndian
+                    address: map.yAxisAddress,
+                    dataSize: map.dataSize,
+                    isBigEndian: map.isBigEndian
                 }
             };
 
@@ -119,9 +146,9 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                 x: { equation: 'x' },
                 y: { equation: 'x' },
                 z: { equation: 'x' },
-                isBigEndian: isBigEndian,
-                sortX: false,
-                sortY: false
+                isBigEndian: map.isBigEndian,
+                sortX: true, // Always sort scanned axes for consistency
+                sortY: true,
             });
 
             setDiscoveredMap({
@@ -131,39 +158,17 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
             setSelectedLine(0);
             setPlotOrientation('y-vs-x');
 
-            addLog(`Mapa em 0x${mapAddress.toUpperCase()} lido com sucesso.`, 'success');
-
         } catch (error: any) {
-            addLog(`Erro ao descobrir o mapa: ${error.message}`, 'error');
-            toast({ title: "Erro na Descoberta", description: error.message, variant: "destructive" });
+            addLog(`Erro ao visualizar mapa: ${error.message}`, 'error');
+            toast({ title: "Erro na Visualização", description: error.message, variant: "destructive" });
             setDiscoveredMap(null);
         }
     };
     
     const handlePromoteToMain = () => {
-        if (!discoveredMap) return;
-
-        const { definition } = discoveredMap;
-
-        const potentialMap: PotentialMap = {
-            name: definition.name,
-            address: definition.address,
-            rows: definition.rows,
-            cols: definition.cols,
-            dataSize: definition.dataSize,
-            isBigEndian: definition.isBigEndian,
-            equation: definition.equation,
-            xAxisAddress: definition.xAxisDef.address,
-            yAxisAddress: definition.yAxisDef.address,
-            confidence: 0.9, 
-            suggestion: "Carregado do Scanner",
-            dataType: scanConfig.dataType,
-            xAxisType: 'Desconhecido',
-            yAxisType: 'Desconhecido',
-        };
-        
-        onLoadMap(potentialMap);
-        addLog(`Mapa "${definition.name}" promovido para o painel principal.`, 'success');
+        if (!selectedPotentialMap) return;
+        onLoadMap(selectedPotentialMap);
+        addLog(`Mapa "${selectedPotentialMap.name || `0x${selectedPotentialMap.address.toString(16)}`}" promovido para o painel principal.`, 'success');
     };
 
     const togglePlotOrientation = () => {
@@ -187,20 +192,20 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
             <div className="lg:w-1/3 flex flex-col gap-4">
                  <Card>
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><Settings /> Configuração do Scanner</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><Settings /> Configuração do Scan Automático</CardTitle>
                         <CardDescription>
-                          Defina a estrutura do mapa que procura e os seus endereços (em hexadecimal). Clique num endereço no Hex Viewer para preencher os campos.
+                          Defina os parâmetros para a procura automática de mapas no ficheiro .bin.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="grid grid-cols-3 gap-4">
+                         <div className="grid grid-cols-3 gap-4">
                             <div className="space-y-2">
-                               <Label htmlFor="scan-rows">Linhas</Label>
-                               <Input id="scan-rows" type="number" value={scanConfig.rows || ''} onChange={e => setScanConfig(c => ({...c, rows: parseInt(e.target.value, 10) || 0}))} />
+                               <Label htmlFor="scan-min">Lin/Col Mín</Label>
+                               <Input id="scan-min" type="number" value={scanConfig.minSize || ''} onChange={e => setScanConfig(c => ({...c, minSize: parseInt(e.target.value, 10) || 0}))} />
                             </div>
                             <div className="space-y-2">
-                               <Label htmlFor="scan-cols">Colunas</Label>
-                               <Input id="scan-cols" type="number" value={scanConfig.cols || ''} onChange={e => setScanConfig(c => ({...c, cols: parseInt(e.target.value, 10) || 0}))} />
+                               <Label htmlFor="scan-max">Lin/Col Máx</Label>
+                               <Input id="scan-max" type="number" value={scanConfig.maxSize || ''} onChange={e => setScanConfig(c => ({...c, maxSize: parseInt(e.target.value, 10) || 0}))} />
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="scan-type">Tipo Dados</Label>
@@ -214,54 +219,86 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                                 </Select>
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                             <div className="space-y-2">
-                                <Label htmlFor="map-address">Endereço Mapa</Label>
-                                <Input id="map-address" placeholder="ex: 1A2B3" value={mapAddress} onChange={e => handleAddressInput(setMapAddress, e.target.value)} />
-                             </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="xaxis-address">Endereço Eixo X</Label>
-                                <Input id="xaxis-address" placeholder="Opcional" value={xAxisAddress} onChange={e => handleAddressInput(setXAxisAddress, e.target.value)} />
-                             </div>
-                             <div className="space-y-2">
-                                <Label htmlFor="yaxis-address">Endereço Eixo Y</Label>
-                                <Input id="yaxis-address" placeholder="Opcional" value={yAxisAddress} onChange={e => handleAddressInput(setYAxisAddress, e.target.value)} />
-                             </div>
-                        </div>
 
-                        <div className="flex gap-2">
-                             <Button onClick={handleDiscoverMap} className="flex-1">
-                                <Search className="mr-2" /> Descobrir Mapa
-                            </Button>
-                            {discoveredMap && (
-                                <Button onClick={handlePromoteToMain} variant="secondary" className="flex-1">
-                                    <FolderDown className="mr-2" /> Carregar no Painel
+                        {isScanning ? (
+                            <div className="space-y-2">
+                                <Progress value={scanProgress} />
+                                <p className="text-xs text-muted-foreground animate-pulse">{scanStatus}</p>
+                                <Button onClick={handleStopScan} variant="destructive" className="w-full">
+                                    <X className="mr-2 h-4 w-4"/> Parar Análise
                                 </Button>
-                            )}
-                        </div>
+                            </div>
+                        ) : (
+                             <Button onClick={handleStartScan} className="w-full">
+                                <Search className="mr-2" /> Iniciar Scan Automático
+                            </Button>
+                        )}
                     </CardContent>
                 </Card>
-                <div className="flex-1 min-h-[300px] lg:min-h-0">
-                    <HexViewer fileBuffer={binFile.buffer} onAddressSelect={handleAddressSelectFromHex} />
-                </div>
+                <Card className="flex-1 min-h-[200px] lg:min-h-0">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><ListTree /> Mapas Encontrados</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                         {potentialMaps.length > 0 ? (
+                            <ScrollArea className="h-full max-h-96">
+                                <div className="space-y-2">
+                                {potentialMaps.map((map, index) => (
+                                    <div
+                                        key={index}
+                                        onClick={() => handleSelectPotentialMap(map)}
+                                        className={cn(
+                                            "border p-3 rounded-lg cursor-pointer hover:bg-accent",
+                                            selectedPotentialMap?.address === map.address && "bg-accent border-primary"
+                                        )}
+                                    >
+                                        <div className="flex justify-between items-center">
+                                            <p className="font-semibold text-sm">
+                                                0x{map.address.toString(16).toUpperCase()} <span className="font-normal text-muted-foreground">({map.rows}x{map.cols})</span>
+                                            </p>
+                                            <Badge variant={map.confidence > 0.8 ? "default" : "secondary"}>
+                                                {(map.confidence * 100).toFixed(0)}%
+                                            </Badge>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">{map.suggestion}</p>
+                                    </div>
+                                ))}
+                                </div>
+                            </ScrollArea>
+                        ) : (
+                             <div className="text-center text-muted-foreground text-sm py-8">
+                                {isScanning ? "A procurar..." : "Nenhum mapa encontrado. Inicie uma análise."}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
              
             <div className="lg:w-2/3 flex-1 min-h-0">
                 <Card className="h-full flex flex-col">
                     <CardHeader>
-                        <CardTitle>Visualização do Mapa Descoberto</CardTitle>
-                        <CardDescription>
-                            {discoveredMap ? `Visualizando mapa ${discoveredMap.definition.rows}x${discoveredMap.definition.cols} de 0x${discoveredMap.definition.address.toString(16).toUpperCase()}` : "A aguardar descoberta de mapa..."}
-                        </CardDescription>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <CardTitle>Visualização do Mapa Descoberto</CardTitle>
+                                <CardDescription>
+                                    {selectedPotentialMap ? `Visualizando mapa ${selectedPotentialMap.rows}x${selectedPotentialMap.cols} de 0x${selectedPotentialMap.address.toString(16).toUpperCase()}` : "Selecione um mapa da lista à esquerda."}
+                                </CardDescription>
+                            </div>
+                            {selectedPotentialMap && (
+                                <Button onClick={handlePromoteToMain} size="sm">
+                                    <FolderDown className="mr-2" /> Carregar no Painel
+                                </Button>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardContent className="flex-1 min-h-0">
                         {discoveredMap ? (
-                            <Tabs defaultValue="view-3d" className="h-full">
-                                 <TabsList className="mb-2">
+                            <Tabs defaultValue="view-3d" className="h-full flex flex-col">
+                                 <TabsList className="mb-2 shrink-0">
                                     <TabsTrigger value="view-3d"><BarChart3 className="mr-2" /> Gráfico 3D</TabsTrigger>
                                     <TabsTrigger value="view-2d"><Table2 className="mr-2" /> Gráfico 2D</TabsTrigger>
                                  </TabsList>
-                                 <TabsContent value="view-3d" className="h-full">
+                                 <TabsContent value="view-3d" className="flex-1 min-h-0">
                                      <React.Suspense fallback={<div className="flex items-center justify-center h-full">A carregar gráfico...</div>}>
                                          <SurfacePlot3D
                                             mapData={discoveredMap.calculatedMap}
@@ -273,7 +310,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                                         />
                                     </React.Suspense>
                                  </TabsContent>
-                                 <TabsContent value="view-2d" className="h-full">
+                                 <TabsContent value="view-2d" className="flex-1 min-h-0">
                                      <React.Suspense fallback={<div className="flex items-center justify-center h-full">A carregar gráfico...</div>}>
                                         <LinePlot2D
                                             mapData={discoveredMap.calculatedMap}
@@ -293,7 +330,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                             <div className="h-full flex items-center justify-center text-muted-foreground text-center">
                                 <div>
                                     <p className="font-semibold">Nenhum mapa para exibir.</p>
-                                    <p className="text-sm">Configure e clique em "Descobrir Mapa".</p>
+                                    <p className="text-sm">Configure e clique em "Iniciar Scan" ou selecione um mapa encontrado.</p>
                                 </div>
                             </div>
                         )}

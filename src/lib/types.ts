@@ -91,8 +91,8 @@ export type IgnitionTimingRun = {
 }
 
 export type ScanConfig = {
-    rows: number;
-    cols: number;
+    minSize: number;
+    maxSize: number;
     dataType: '8-bit' | '16-bit LE' | '16-bit BE';
     // These are set internally based on dataType
     dataSize?: number; 
@@ -117,6 +117,14 @@ export type PotentialMap = {
     yAxisAddress?: number;
     xAxisType: 'RPM' | 'Carga' | 'Desconhecido';
     yAxisType: 'RPM' | 'Carga' | 'Desconhecido';
+}
+
+export type FoundAxis = {
+  id: string;
+  address: number;
+  length: number;
+  type: 'RPM' | 'Carga';
+  data: number[];
 }
 
 export type TemplateAnalysisConfig = {
