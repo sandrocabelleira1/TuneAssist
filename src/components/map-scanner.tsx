@@ -340,4 +340,3 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
         </div>
     );
 }
-
