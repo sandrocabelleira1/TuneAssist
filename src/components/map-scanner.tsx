@@ -245,9 +245,9 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><ListTree /> Mapas Encontrados</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="h-full max-h-96">
                          {potentialMaps.length > 0 ? (
-                            <ScrollArea className="h-full max-h-96">
+                            <ScrollArea className="h-full">
                                 <div className="space-y-2">
                                 {potentialMaps.map((map, index) => (
                                     <div
