@@ -839,17 +839,18 @@ async function findPotentialAxes(
     return foundAxes;
 }
 
-function calculateMapConfidence(mapData: (number | null)[][]): { confidence: number, suggestion: string } {
-    if (mapData.length < 4 || mapData[0].length < 4) return { confidence: 0, suggestion: "Mapa muito pequeno" };
+function calculateMapConfidence(mapData: (number | null)[][]): { confidence: number, suggestion: string, name: string } {
+    if (mapData.length < 4 || mapData[0].length < 4) return { confidence: 0, suggestion: "Mapa muito pequeno", name: "Mapa Pequeno" };
 
     const flatData = mapData.flat().filter(v => v !== null && isFinite(v as number)) as number[];
-    if (flatData.length < 10) return { confidence: 0.1, suggestion: "Poucos dados válidos" };
+    if (flatData.length < 10) return { confidence: 0.1, suggestion: "Poucos dados válidos", name: "Dados Inválidos" };
 
     const avg = flatData.reduce((a, b) => a + b, 0) / flatData.length;
     const stdDev = Math.sqrt(flatData.map(x => Math.pow(x - avg, 2)).reduce((a, b) => a + b, 0) / flatData.length);
     
     let confidence = 0.4;
     let suggestion = "Mapa genérico";
+    let name = "Mapa Genérico";
 
     // Smoothness check
     let totalDiff = 0;
@@ -879,15 +880,18 @@ function calculateMapConfidence(mapData: (number | null)[][]): { confidence: num
     }
     
     if (avg > 50 && stdDev > 10) {
-      suggestion = "Potencial Combustível/Ignição";
+      suggestion = "Valores e distribuição consistentes com mapa de Combustível ou Ignição.";
+      name = "Potencial Mapa de Combustível/Ignição"
     } else if (avg < 50 && stdDev < 15) {
-      suggestion = "Potencial Ignição (baixo avanço)";
+      suggestion = "Valores baixos e consistentes, possível mapa de Ignição em baixa carga.";
+      name = "Potencial Mapa de Ignição";
     } else if (avg > 200) {
-       suggestion = "Potencial Combustível (valores altos)";
+       suggestion = "Valores altos, pode ser um mapa de tempo de injeção ou fator de correção.";
+       name = "Potencial Mapa de Combustível";
     }
 
 
-    return { confidence: Math.max(0, Math.min(1, confidence)), suggestion };
+    return { confidence: Math.max(0, Math.min(1, confidence)), suggestion, name };
 }
 
 
@@ -960,11 +964,12 @@ export async function findPotentialMaps(
                 }
                 
                 if (isValidBlock) {
-                    const { confidence, suggestion } = calculateMapConfidence(mapDataBlock);
+                    const { confidence, suggestion, name } = calculateMapConfidence(mapDataBlock);
                     if (confidence > 0.55) { // Use a reasonable confidence threshold
                         if (!potentialMaps.some(p => p.address === mapStartAddress && p.rows === mapRows && p.cols === mapCols)) {
                             potentialMaps.push({
                                 address: mapStartAddress,
+                                name,
                                 rows: mapRows,
                                 cols: mapCols,
                                 dataSize: dataSize,

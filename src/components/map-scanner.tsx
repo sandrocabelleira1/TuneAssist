@@ -167,8 +167,14 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
     
     const handlePromoteToMain = () => {
         if (!selectedPotentialMap) return;
-        onLoadMap(selectedPotentialMap);
-        addLog(`Mapa "${selectedPotentialMap.name || `0x${selectedPotentialMap.address.toString(16)}`}" promovido para o painel principal.`, 'success');
+        
+        const mapToLoad = {
+            ...selectedPotentialMap,
+            name: selectedPotentialMap.name ?? `Mapa @ 0x${selectedPotentialMap.address.toString(16).toUpperCase()}`
+        };
+
+        onLoadMap(mapToLoad);
+        addLog(`Mapa "${mapToLoad.name}" promovido para o painel principal.`, 'success');
     };
 
     const togglePlotOrientation = () => {
@@ -254,13 +260,15 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                                     >
                                         <div className="flex justify-between items-center">
                                             <p className="font-semibold text-sm">
-                                                0x{map.address.toString(16).toUpperCase()} <span className="font-normal text-muted-foreground">({map.rows}x{map.cols})</span>
+                                                {map.name ?? `Mapa @ 0x${map.address.toString(16).toUpperCase()}`}
                                             </p>
                                             <Badge variant={map.confidence > 0.8 ? "default" : "secondary"}>
                                                 {(map.confidence * 100).toFixed(0)}%
                                             </Badge>
                                         </div>
-                                        <p className="text-xs text-muted-foreground">{map.suggestion}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {map.suggestion} ({map.rows}x{map.cols})
+                                        </p>
                                     </div>
                                 ))}
                                 </div>
