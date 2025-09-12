@@ -122,30 +122,32 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                 dataSize: map.dataSize,
                 isBigEndian: map.isBigEndian,
                 isRowMajor: true,
-                equation: 'x',
+                equation: map.equation,
                 decimalpl: 2,
                 xAxisDef: {
-                    label: 'Eixo X (RPM)',
+                    label: map.xAxisType, // Use 'RPM' or 'Carga'
                     count: map.cols,
                     requiresSort: false,
                     address: map.xAxisAddress,
                     dataSize: map.dataSize,
-                    isBigEndian: map.isBigEndian
+                    isBigEndian: map.isBigEndian,
+                    equation: 'x' // Keep axis equations simple for now
                 },
                 yAxisDef: {
-                    label: 'Eixo Y (Carga)',
+                    label: map.yAxisType, // Use 'RPM' or 'Carga'
                     count: map.rows,
                     requiresSort: false,
                     address: map.yAxisAddress,
                     dataSize: map.dataSize,
-                    isBigEndian: map.isBigEndian
+                    isBigEndian: map.isBigEndian,
+                    equation: 'x'
                 }
             };
 
             const result = readAndCalculateMapFromBinManual(binFile.buffer, tempDef, {
                 x: { equation: 'x' },
                 y: { equation: 'x' },
-                z: { equation: 'x' },
+                z: { equation: tempDef.equation },
                 isBigEndian: map.isBigEndian,
                 sortX: true, // Always sort scanned axes for consistency
                 sortY: true,
@@ -241,11 +243,11 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                         )}
                     </CardContent>
                 </Card>
-                <Card className="flex-1 min-h-[200px] lg:min-h-0">
+                <Card className="flex-1 min-h-[200px] lg:min-h-0 flex flex-col">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><ListTree /> Mapas Encontrados</CardTitle>
                     </CardHeader>
-                    <CardContent className="h-full max-h-96">
+                    <CardContent className="flex-1 min-h-0">
                          {potentialMaps.length > 0 ? (
                             <ScrollArea className="h-full">
                                 <div className="space-y-2">
@@ -274,7 +276,7 @@ export default function MapScanner({ binFile, onLoadMap, addLog }: MapScannerPro
                                 </div>
                             </ScrollArea>
                         ) : (
-                             <div className="text-center text-muted-foreground text-sm py-8">
+                             <div className="text-center text-muted-foreground text-sm py-8 h-full flex items-center justify-center">
                                 {isScanning ? "A procurar..." : "Nenhum mapa encontrado. Inicie uma análise."}
                             </div>
                         )}

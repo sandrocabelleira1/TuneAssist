@@ -839,11 +839,11 @@ async function findPotentialAxes(
     return foundAxes;
 }
 
-function calculateMapConfidence(mapData: (number | null)[][]): { confidence: number, suggestion: string, name: string } {
-    if (mapData.length < 4 || mapData[0].length < 4) return { confidence: 0, suggestion: "Mapa muito pequeno", name: "Mapa Pequeno" };
+function calculateMapConfidence(mapData: (number | null)[][]): { confidence: number, suggestion: string, name: string, equation: string } {
+    if (mapData.length < 4 || mapData[0].length < 4) return { confidence: 0, suggestion: "Mapa muito pequeno", name: "Mapa Pequeno", equation: "x" };
 
     const flatData = mapData.flat().filter(v => v !== null && isFinite(v as number)) as number[];
-    if (flatData.length < 10) return { confidence: 0.1, suggestion: "Poucos dados válidos", name: "Dados Inválidos" };
+    if (flatData.length < 10) return { confidence: 0.1, suggestion: "Poucos dados válidos", name: "Dados Inválidos", equation: "x" };
 
     const avg = flatData.reduce((a, b) => a + b, 0) / flatData.length;
     const stdDev = Math.sqrt(flatData.map(x => Math.pow(x - avg, 2)).reduce((a, b) => a + b, 0) / flatData.length);
@@ -851,6 +851,7 @@ function calculateMapConfidence(mapData: (number | null)[][]): { confidence: num
     let confidence = 0.4;
     let suggestion = "Mapa genérico";
     let name = "Mapa Genérico";
+    let equation = "x";
 
     // Smoothness check
     let totalDiff = 0;
@@ -882,16 +883,19 @@ function calculateMapConfidence(mapData: (number | null)[][]): { confidence: num
     if (avg > 50 && stdDev > 10) {
       suggestion = "Valores e distribuição consistentes com mapa de Combustível ou Ignição.";
       name = "Potencial Mapa de Combustível/Ignição"
+      equation = "x * 0.1";
     } else if (avg < 50 && stdDev < 15) {
       suggestion = "Valores baixos e consistentes, possível mapa de Ignição em baixa carga.";
       name = "Potencial Mapa de Ignição";
+      equation = "x * 0.5 - 30";
     } else if (avg > 200) {
        suggestion = "Valores altos, pode ser um mapa de tempo de injeção ou fator de correção.";
        name = "Potencial Mapa de Combustível";
+       equation = "x * 0.01";
     }
 
 
-    return { confidence: Math.max(0, Math.min(1, confidence)), suggestion, name };
+    return { confidence: Math.max(0, Math.min(1, confidence)), suggestion, name, equation };
 }
 
 
@@ -964,7 +968,7 @@ export async function findPotentialMaps(
                 }
                 
                 if (isValidBlock) {
-                    const { confidence, suggestion, name } = calculateMapConfidence(mapDataBlock);
+                    const { confidence, suggestion, name, equation } = calculateMapConfidence(mapDataBlock);
                     if (confidence > 0.55) { // Use a reasonable confidence threshold
                         if (!potentialMaps.some(p => p.address === mapStartAddress && p.rows === mapRows && p.cols === mapCols)) {
                             potentialMaps.push({
@@ -977,7 +981,7 @@ export async function findPotentialMaps(
                                 confidence,
                                 suggestion,
                                 dataType: dataTypeString,
-                                equation: 'x',
+                                equation,
                                 xAxisAddress: xAxis.address,
                                 yAxisAddress: yAxis.address,
                                 xAxisType: xAxis.type,
