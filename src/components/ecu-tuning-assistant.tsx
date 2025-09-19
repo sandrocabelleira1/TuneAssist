@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo } from 'react';
@@ -13,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud, Download } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud, Download, LineChart as LineChartIcon } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -37,6 +36,9 @@ import IgnitionTimingAnalyzer from '@/components/ignition-timing-analyzer';
 import MapScanner from '@/components/map-scanner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import Image from 'next/image';
+import { analyzeDynoChart } from '@/ai/flows/analyze-dyno-chart-flow';
+import ReactMarkdown from 'react-markdown';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -497,11 +499,16 @@ export default function EcuTuningAssistant() {
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+    
+    const [dynoChartImage, setDynoChartImage] = useState<string | null>(null);
+    const [dynoAnalysis, setDynoAnalysis] = useState<string>('');
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
     const logInputRef = useRef<HTMLInputElement>(null);
+    const dynoChartInputRef = useRef<HTMLInputElement>(null);
 
     const dynoForm = useForm<DynoFormValues>({
         resolver: zodResolver(dynoFormSchema),
@@ -578,6 +585,8 @@ export default function EcuTuningAssistant() {
         setTargetLambda(0.87);
         setAggressiveness(100);
         setIgnitionRuns({ base: [], modified: [] });
+        setDynoChartImage(null);
+        setDynoAnalysis('');
         dynoForm.reset();
         
         if (binInputRef.current) binInputRef.current.value = '';
@@ -737,6 +746,56 @@ export default function EcuTuningAssistant() {
         });
     };
 
+    const handleDynoChartImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        addLog(`A ler a imagem do gráfico do dinamómetro: ${file.name}`, 'info');
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const dataUrl = event.target?.result as string;
+            setDynoChartImage(dataUrl);
+            setDynoAnalysis(''); // Limpa a análise anterior
+            addLog('Imagem do gráfico do dinamómetro carregada.', 'success');
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleAnalyzeDynoChart = async () => {
+        if (!dynoChartImage || !processedMap) {
+            toast({
+                title: 'Dados em Falta',
+                description: 'Por favor, carregue uma imagem do gráfico e certifique-se de que um mapa está ativo.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        setIsAnalyzing(true);
+        setDynoAnalysis('');
+        addLog('A iniciar análise de IA do gráfico do dinamómetro...', 'info');
+
+        try {
+            const result = await analyzeDynoChart({
+                mapJson: JSON.stringify(processedMap.calculatedMap, null, 2),
+                axesJson: JSON.stringify(processedMap.axes, null, 2),
+                photoDataUri: dynoChartImage,
+            });
+
+            if (result.analysis) {
+                setDynoAnalysis(result.analysis);
+                addLog('Análise de IA concluída com sucesso.', 'success');
+            } else {
+                throw new Error('A análise retornou vazia.');
+            }
+        } catch (error) {
+            const errorMessage = `Erro na análise de IA: ${(error as Error).message}`;
+            addLog(errorMessage, 'error');
+            toast({ title: 'Erro de Análise', description: errorMessage, variant: 'destructive' });
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
 
     const processAndCacheMap = useCallback(async (mapId: string, configToProcess: ManualAxisConfig) => {
         if (!mapId || !binFile || !xdfFile) return;
@@ -1256,7 +1315,7 @@ export default function EcuTuningAssistant() {
             );
         }
 
-        if (!activeMapId && activeTab !== 'map-scanner') {
+        if (!activeMapId && !['map-scanner', 'dyno-analysis'].includes(activeTab)) {
             return (
                 <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
                     <div>
@@ -1423,6 +1482,65 @@ export default function EcuTuningAssistant() {
                         processedMap={processedMap}
                         selectedMapDefinition={selectedMapDefinition}
                     />
+                </TabsContent>
+                <TabsContent value="dyno-analysis" className="flex-1 min-h-0 overflow-y-auto">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
+                        <Card className="flex flex-col">
+                            <CardHeader>
+                                <CardTitle>Análise de Gráfico de Dinamómetro</CardTitle>
+                                <CardDescription>Carregue uma imagem do seu gráfico de dinamómetro (com curvas de potência/torque e AFR) e a IA irá sugerir alterações no mapa de combustível ativo.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex-1 flex flex-col gap-4">
+                                <div className="flex-1 border-2 border-dashed rounded-lg flex items-center justify-center text-center p-4 relative">
+                                    {dynoChartImage ? (
+                                        <Image src={dynoChartImage} alt="Gráfico do Dinamómetro" layout="fill" objectFit="contain" />
+                                    ) : (
+                                        <p className="text-muted-foreground">Pré-visualização da imagem aqui</p>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-4">
+                                     <Button variant="outline" onClick={() => dynoChartInputRef.current?.click()} className="flex-1">
+                                        <UploadCloud className="mr-2" /> {dynoChartImage ? 'Trocar Imagem' : 'Carregar Imagem'}
+                                    </Button>
+                                    <input
+                                        ref={dynoChartInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={handleDynoChartImageChange}
+                                    />
+                                    <Button onClick={handleAnalyzeDynoChart} disabled={!dynoChartImage || !processedMap || isAnalyzing}>
+                                        {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <Wand2 className="mr-2" />}
+                                        Analisar com IA
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                         <Card className="flex flex-col">
+                             <CardHeader>
+                                <CardTitle>Sugestões da IA</CardTitle>
+                                <CardDescription>As sugestões aparecerão aqui após a análise.</CardDescription>
+                            </CardHeader>
+                             <CardContent className="flex-1 overflow-y-auto">
+                                {isAnalyzing && (
+                                     <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        <Loader2 className="mr-2 h-8 w-8 animate-spin" />
+                                        <span>A analisar...</span>
+                                    </div>
+                                )}
+                                {dynoAnalysis && !isAnalyzing && (
+                                    <div className="prose dark:prose-invert max-w-none">
+                                        <ReactMarkdown>{dynoAnalysis}</ReactMarkdown>
+                                    </div>
+                                )}
+                                 {!dynoAnalysis && !isAnalyzing && (
+                                     <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        <p>A aguardar análise...</p>
+                                    </div>
+                                 )}
+                             </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
                 <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
                     <MapScanner
@@ -1900,22 +2018,87 @@ export default function EcuTuningAssistant() {
                           <Flame className="mr-2" />
                           Análise de Ignição
                       </TabsTrigger>
+                      <TabsTrigger value="dyno-analysis" disabled={!binFile}>
+                        <LineChartIcon className="mr-2" />
+                        Análise de Dinamómetro
+                      </TabsTrigger>
                       <TabsTrigger value="map-scanner" disabled={!binFile}>
                           <Search className="mr-2" />
                           Scanner de Mapas
                       </TabsTrigger>
                     </TabsList>
                     
-                    {activeTab !== 'map-scanner' ? (
+                    {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' ? (
                         renderContent()
                     ) : (
-                        <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
-                            <MapScanner
-                                binFile={binFile}
-                                onLoadMap={handleLoadPotentialMap}
-                                addLog={addLog}
-                            />
-                        </TabsContent>
+                        <>
+                            <TabsContent value="dyno-analysis" className="flex-1 min-h-0 overflow-y-auto">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
+                                    <Card className="flex flex-col">
+                                        <CardHeader>
+                                            <CardTitle>Análise de Gráfico de Dinamómetro</CardTitle>
+                                            <CardDescription>Carregue uma imagem do seu gráfico de dinamómetro (com curvas de potência/torque e AFR) e a IA irá sugerir alterações no mapa de combustível ativo.</CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="flex-1 flex flex-col gap-4">
+                                            <div className="flex-1 border-2 border-dashed rounded-lg flex items-center justify-center text-center p-4 relative">
+                                                {dynoChartImage ? (
+                                                    <Image src={dynoChartImage} alt="Gráfico do Dinamómetro" layout="fill" objectFit="contain" />
+                                                ) : (
+                                                    <p className="text-muted-foreground">Pré-visualização da imagem aqui</p>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                 <Button variant="outline" onClick={() => dynoChartInputRef.current?.click()} className="flex-1">
+                                                    <UploadCloud className="mr-2" /> {dynoChartImage ? 'Trocar Imagem' : 'Carregar Imagem'}
+                                                </Button>
+                                                <input
+                                                    ref={dynoChartInputRef}
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={handleDynoChartImageChange}
+                                                />
+                                                <Button onClick={handleAnalyzeDynoChart} disabled={!dynoChartImage || !processedMap || isAnalyzing}>
+                                                    {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <Wand2 className="mr-2" />}
+                                                    Analisar com IA
+                                                </Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                     <Card className="flex flex-col">
+                                         <CardHeader>
+                                            <CardTitle>Sugestões da IA</CardTitle>
+                                            <CardDescription>As sugestões aparecerão aqui após a análise.</CardDescription>
+                                        </CardHeader>
+                                         <CardContent className="flex-1 overflow-y-auto">
+                                            {isAnalyzing && (
+                                                 <div className="flex items-center justify-center h-full text-muted-foreground">
+                                                    <Loader2 className="mr-2 h-8 w-8 animate-spin" />
+                                                    <span>A analisar...</span>
+                                                </div>
+                                            )}
+                                            {dynoAnalysis && !isAnalyzing && (
+                                                <div className="prose dark:prose-invert max-w-none">
+                                                    <ReactMarkdown>{dynoAnalysis}</ReactMarkdown>
+                                                </div>
+                                            )}
+                                             {!dynoAnalysis && !isAnalyzing && (
+                                                 <div className="flex items-center justify-center h-full text-muted-foreground">
+                                                    <p>A aguardar análise...</p>
+                                                </div>
+                                             )}
+                                         </CardContent>
+                                    </Card>
+                                </div>
+                            </TabsContent>
+                            <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
+                                <MapScanner
+                                    binFile={binFile}
+                                    onLoadMap={handleLoadPotentialMap}
+                                    addLog={addLog}
+                                />
+                            </TabsContent>
+                        </>
                     )}
 
                   </Tabs>
@@ -1929,11 +2112,3 @@ export default function EcuTuningAssistant() {
 }
 
     
-
-    
-
-    
-
-    
-
-
