@@ -1,6 +1,6 @@
 'use server';
 import {genkit} from 'genkit';
-import { firebase } from '@genkit-ai/firebase/plugin';
+import { firebase } from '@genkit-ai/firebase';
 import {googleAI} from '@genkit-ai/googleai';
 
 // Esta é a sintaxe correta para inicializar o Genkit v1.x.
@@ -13,5 +13,3 @@ export const ai = genkit({
     }),
   ],
 });
-
-    
