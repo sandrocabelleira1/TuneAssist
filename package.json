@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@genkit-ai/firebase": "^1.2.1",
-    "@genkit-ai/googleai": "^1.1.2",
+    "@genkit-ai/firebase": "^1.0.0",
+    "@genkit-ai/googleai": "^1.0.0",
     "@hookform/resolvers": "^3.9.0",
     "@radix-ui/react-accordion": "^1.2.3",
     "@radix-ui/react-alert-dialog": "^1.1.6",
