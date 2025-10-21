@@ -134,3 +134,17 @@ export type TemplateAnalysisConfig = {
     dataType: 'uint8' | 'uint16le' | 'uint16be';
     equation: string;
 }
+
+export interface DynoRunDataPoint {
+  id: string;
+  rpm: number;
+  torque: number;
+  power: number;
+}
+
+export interface DynoRun {
+  id: string;
+  name: string;
+  data: DynoRunDataPoint[];
+  color: string;
+}

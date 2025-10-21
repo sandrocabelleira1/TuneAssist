@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud, Download, LineChart as LineChartIcon } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap } from '@/lib/types';
+import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -39,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
+import DynoAnalyzer from '@/components/dyno-analyzer';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -500,15 +501,12 @@ export default function EcuTuningAssistant() {
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     
-    const [dynoChartImage, setDynoChartImage] = useState<string | null>(null);
-    const [dynoAnalysis, setDynoAnalysis] = useState<string>('');
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [dynoRuns, setDynoRuns] = useState<DynoRun[]>([]);
 
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
     const logInputRef = useRef<HTMLInputElement>(null);
-    const dynoChartInputRef = useRef<HTMLInputElement>(null);
 
     const dynoForm = useForm<DynoFormValues>({
         resolver: zodResolver(dynoFormSchema),
@@ -585,8 +583,7 @@ export default function EcuTuningAssistant() {
         setTargetLambda(0.87);
         setAggressiveness(100);
         setIgnitionRuns({ base: [], modified: [] });
-        setDynoChartImage(null);
-        setDynoAnalysis('');
+        setDynoRuns([]);
         dynoForm.reset();
         
         if (binInputRef.current) binInputRef.current.value = '';
@@ -744,25 +741,6 @@ export default function EcuTuningAssistant() {
             loadColumns: data.loadColumns,
             logRows: data.logRows.map(r => ({ rpm: '', lambdas: r.lambdas.map(() => ({ value: '' })) }))
         });
-    };
-
-    const handleDynoChartImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        addLog(`A ler a imagem do gráfico do dinamómetro: ${file.name}`, 'info');
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const dataUrl = event.target?.result as string;
-            setDynoChartImage(dataUrl);
-            setDynoAnalysis(''); // Limpa a análise anterior
-            addLog('Imagem do gráfico do dinamómetro carregada.', 'success');
-        };
-        reader.readAsDataURL(file);
-    };
-
-    const handleAnalyzeDynoChart = async () => {
-        // This functionality is disabled
     };
 
     const processAndCacheMap = useCallback(async (mapId: string, configToProcess: ManualAxisConfig) => {
@@ -1452,9 +1430,7 @@ export default function EcuTuningAssistant() {
                     />
                 </TabsContent>
                 <TabsContent value="dyno-analysis" className="flex-1 min-h-0 overflow-y-auto">
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                        <p>Funcionalidade de IA desativada temporariamente.</p>
-                    </div>
+                    <DynoAnalyzer runs={dynoRuns} onRunsChange={setDynoRuns} />
                 </TabsContent>
                 <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
                     <MapScanner
@@ -1947,9 +1923,7 @@ export default function EcuTuningAssistant() {
                     ) : (
                         <>
                             <TabsContent value="dyno-analysis" className="flex-1 min-h-0 overflow-y-auto">
-                                <div className="flex items-center justify-center h-full text-muted-foreground">
-                                  <p>Funcionalidade de IA desativada temporariamente.</p>
-                                </div>
+                                <DynoAnalyzer runs={dynoRuns} onRunsChange={setDynoRuns} />
                             </TabsContent>
                             <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
                                 <MapScanner
