@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo } from 'react';
@@ -37,7 +38,6 @@ import MapScanner from '@/components/map-scanner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
-import { analyzeDynoChart } from '@/ai/flows/analyze-dyno-chart-flow';
 import ReactMarkdown from 'react-markdown';
 
 
@@ -762,39 +762,7 @@ export default function EcuTuningAssistant() {
     };
 
     const handleAnalyzeDynoChart = async () => {
-        if (!dynoChartImage || !processedMap) {
-            toast({
-                title: 'Dados em Falta',
-                description: 'Por favor, carregue uma imagem do gráfico e certifique-se de que um mapa está ativo.',
-                variant: 'destructive',
-            });
-            return;
-        }
-
-        setIsAnalyzing(true);
-        setDynoAnalysis('');
-        addLog('A iniciar análise de IA do gráfico do dinamómetro...', 'info');
-
-        try {
-            const result = await analyzeDynoChart({
-                mapJson: JSON.stringify(processedMap.calculatedMap, null, 2),
-                axesJson: JSON.stringify(processedMap.axes, null, 2),
-                photoDataUri: dynoChartImage,
-            });
-
-            if (result.analysis) {
-                setDynoAnalysis(result.analysis);
-                addLog('Análise de IA concluída com sucesso.', 'success');
-            } else {
-                throw new Error('A análise retornou vazia.');
-            }
-        } catch (error) {
-            const errorMessage = `Erro na análise de IA: ${(error as Error).message}`;
-            addLog(errorMessage, 'error');
-            toast({ title: 'Erro de Análise', description: errorMessage, variant: 'destructive' });
-        } finally {
-            setIsAnalyzing(false);
-        }
+        // This functionality is disabled
     };
 
     const processAndCacheMap = useCallback(async (mapId: string, configToProcess: ManualAxisConfig) => {
@@ -1484,62 +1452,8 @@ export default function EcuTuningAssistant() {
                     />
                 </TabsContent>
                 <TabsContent value="dyno-analysis" className="flex-1 min-h-0 overflow-y-auto">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
-                        <Card className="flex flex-col">
-                            <CardHeader>
-                                <CardTitle>Análise de Gráfico de Dinamómetro</CardTitle>
-                                <CardDescription>Carregue uma imagem do seu gráfico de dinamómetro (com curvas de potência/torque e AFR) e a IA irá sugerir alterações no mapa de combustível ativo.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex-1 flex flex-col gap-4">
-                                <div className="flex-1 border-2 border-dashed rounded-lg flex items-center justify-center text-center p-4 relative">
-                                    {dynoChartImage ? (
-                                        <Image src={dynoChartImage} alt="Gráfico do Dinamómetro" layout="fill" objectFit="contain" />
-                                    ) : (
-                                        <p className="text-muted-foreground">Pré-visualização da imagem aqui</p>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-4">
-                                     <Button variant="outline" onClick={() => dynoChartInputRef.current?.click()} className="flex-1">
-                                        <UploadCloud className="mr-2" /> {dynoChartImage ? 'Trocar Imagem' : 'Carregar Imagem'}
-                                    </Button>
-                                    <input
-                                        ref={dynoChartInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={handleDynoChartImageChange}
-                                    />
-                                    <Button onClick={handleAnalyzeDynoChart} disabled={!dynoChartImage || !processedMap || isAnalyzing}>
-                                        {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <Wand2 className="mr-2" />}
-                                        Analisar com IA
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                         <Card className="flex flex-col">
-                             <CardHeader>
-                                <CardTitle>Sugestões da IA</CardTitle>
-                                <CardDescription>As sugestões aparecerão aqui após a análise.</CardDescription>
-                            </CardHeader>
-                             <CardContent className="flex-1 overflow-y-auto">
-                                {isAnalyzing && (
-                                     <div className="flex items-center justify-center h-full text-muted-foreground">
-                                        <Loader2 className="mr-2 h-8 w-8 animate-spin" />
-                                        <span>A analisar...</span>
-                                    </div>
-                                )}
-                                {dynoAnalysis && !isAnalyzing && (
-                                    <div className="prose dark:prose-invert max-w-none">
-                                        <ReactMarkdown>{dynoAnalysis}</ReactMarkdown>
-                                    </div>
-                                )}
-                                 {!dynoAnalysis && !isAnalyzing && (
-                                     <div className="flex items-center justify-center h-full text-muted-foreground">
-                                        <p>A aguardar análise...</p>
-                                    </div>
-                                 )}
-                             </CardContent>
-                        </Card>
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                        <p>Funcionalidade de IA desativada temporariamente.</p>
                     </div>
                 </TabsContent>
                 <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
@@ -1686,7 +1600,7 @@ export default function EcuTuningAssistant() {
                 <Card>
                   <CardHeader className="p-4">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Settings2 size={18} /> Substituir
+                      <Settings2 size={18} /> Substituir Manualmente
                     </CardTitle>
                     <CardDescription className="text-xs">
                       Use para substituir a configuração do XDF. Útil para
@@ -2033,62 +1947,8 @@ export default function EcuTuningAssistant() {
                     ) : (
                         <>
                             <TabsContent value="dyno-analysis" className="flex-1 min-h-0 overflow-y-auto">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
-                                    <Card className="flex flex-col">
-                                        <CardHeader>
-                                            <CardTitle>Análise de Gráfico de Dinamómetro</CardTitle>
-                                            <CardDescription>Carregue uma imagem do seu gráfico de dinamómetro (com curvas de potência/torque e AFR) e a IA irá sugerir alterações no mapa de combustível ativo.</CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="flex-1 flex flex-col gap-4">
-                                            <div className="flex-1 border-2 border-dashed rounded-lg flex items-center justify-center text-center p-4 relative">
-                                                {dynoChartImage ? (
-                                                    <Image src={dynoChartImage} alt="Gráfico do Dinamómetro" layout="fill" objectFit="contain" />
-                                                ) : (
-                                                    <p className="text-muted-foreground">Pré-visualização da imagem aqui</p>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-4">
-                                                 <Button variant="outline" onClick={() => dynoChartInputRef.current?.click()} className="flex-1">
-                                                    <UploadCloud className="mr-2" /> {dynoChartImage ? 'Trocar Imagem' : 'Carregar Imagem'}
-                                                </Button>
-                                                <input
-                                                    ref={dynoChartInputRef}
-                                                    type="file"
-                                                    accept="image/*"
-                                                    className="hidden"
-                                                    onChange={handleDynoChartImageChange}
-                                                />
-                                                <Button onClick={handleAnalyzeDynoChart} disabled={!dynoChartImage || !processedMap || isAnalyzing}>
-                                                    {isAnalyzing ? <Loader2 className="mr-2 animate-spin" /> : <Wand2 className="mr-2" />}
-                                                    Analisar com IA
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                     <Card className="flex flex-col">
-                                         <CardHeader>
-                                            <CardTitle>Sugestões da IA</CardTitle>
-                                            <CardDescription>As sugestões aparecerão aqui após a análise.</CardDescription>
-                                        </CardHeader>
-                                         <CardContent className="flex-1 overflow-y-auto">
-                                            {isAnalyzing && (
-                                                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                                                    <Loader2 className="mr-2 h-8 w-8 animate-spin" />
-                                                    <span>A analisar...</span>
-                                                </div>
-                                            )}
-                                            {dynoAnalysis && !isAnalyzing && (
-                                                <div className="prose dark:prose-invert max-w-none">
-                                                    <ReactMarkdown>{dynoAnalysis}</ReactMarkdown>
-                                                </div>
-                                            )}
-                                             {!dynoAnalysis && !isAnalyzing && (
-                                                 <div className="flex items-center justify-center h-full text-muted-foreground">
-                                                    <p>A aguardar análise...</p>
-                                                </div>
-                                             )}
-                                         </CardContent>
-                                    </Card>
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                  <p>Funcionalidade de IA desativada temporariamente.</p>
                                 </div>
                             </TabsContent>
                             <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
@@ -2110,5 +1970,3 @@ export default function EcuTuningAssistant() {
       </EcuTuningStateContext.Provider>
     );
 }
-
-    
