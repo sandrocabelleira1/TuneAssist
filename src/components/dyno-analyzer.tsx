@@ -8,10 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { PlusCircle, Trash2, Palette, Upload, Wand2, Loader2 } from 'lucide-react';
+import { PlusCircle, Trash2, Palette } from 'lucide-react';
 import { type DynoRun, type DynoRunDataPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import Image from 'next/image';
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--destructive))", "hsl(210, 40%, 96.1%)", "hsl(142.1 76.2% 36.3%)", "hsl(346.8 77.2% 49.8%)"];
 
@@ -104,7 +103,7 @@ export default function DynoAnalyzer({ runs, onRunsChange }: DynoAnalyzerProps) 
         <Card>
           <CardHeader>
             <CardTitle>Adicionar Corrida de Dinamómetro</CardTitle>
-            <CardDescription>Insira os dados manualmente para criar uma comparação de performance.</CardDescription>
+            <CardDescription>Insira os dados manualmente para cada corrida.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Input
