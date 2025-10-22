@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, 'useState', 'useRef', 'useCallback', 'useMemo' from 'react';
 import dynamic from 'next/dynamic';
 import Papa from 'papaparse';
 import { useForm, useFieldArray, useFormContext } from 'react-hook-form';

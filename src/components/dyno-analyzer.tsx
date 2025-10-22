@@ -1,16 +1,17 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { PlusCircle, Trash2, Palette } from 'lucide-react';
+import { PlusCircle, Trash2, Palette, Upload, Wand2, Loader2 } from 'lucide-react';
 import { type DynoRun, type DynoRunDataPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import Image from 'next/image';
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--destructive))", "hsl(210, 40%, 96.1%)", "hsl(142.1 76.2% 36.3%)", "hsl(346.8 77.2% 49.8%)"];
 
@@ -24,7 +25,7 @@ export default function DynoAnalyzer({ runs, onRunsChange }: DynoAnalyzerProps) 
   const [currentRunName, setCurrentRunName] = useState('');
   const [currentData, setCurrentData] = useState<Omit<DynoRunDataPoint, 'id'>[]>([]);
   const [newPoint, setNewPoint] = useState({ rpm: '', torque: '', power: '' });
-
+  
   const handleAddPoint = () => {
     const rpm = parseFloat(newPoint.rpm);
     const torque = parseFloat(newPoint.torque);
@@ -49,25 +50,30 @@ export default function DynoAnalyzer({ runs, onRunsChange }: DynoAnalyzerProps) 
   }
 
   const handleAddRun = () => {
-    if (!currentRunName) {
+    const name = currentRunName;
+    const data = currentData;
+
+    if (!name) {
       toast({ title: "Nome da Corrida em Falta", description: "Por favor, dê um nome à sua corrida.", variant: "destructive" });
       return;
     }
-    if (currentData.length < 2) {
+    if (data.length < 2) {
       toast({ title: "Dados Insuficientes", description: "Adicione pelo menos dois pontos de dados para a corrida.", variant: "destructive" });
       return;
     }
     
     const newRun: DynoRun = {
       id: `run_${Date.now()}`,
-      name: currentRunName,
-      data: currentData.map(p => ({...p, id: `point_${p.rpm}`})),
+      name: name,
+      data: data.map(p => ({...p, id: `point_${p.rpm}`})),
       color: COLORS[runs.length % COLORS.length],
     };
 
     onRunsChange([...runs, newRun]);
+    
     setCurrentRunName('');
     setCurrentData([]);
+
     toast({ title: "Corrida Adicionada", description: `"${newRun.name}" foi adicionada para comparação.` });
   };
   
@@ -98,7 +104,7 @@ export default function DynoAnalyzer({ runs, onRunsChange }: DynoAnalyzerProps) 
         <Card>
           <CardHeader>
             <CardTitle>Adicionar Corrida de Dinamómetro</CardTitle>
-            <CardDescription>Insira o nome da corrida e os pontos de dados abaixo.</CardDescription>
+            <CardDescription>Insira os dados manualmente para criar uma comparação de performance.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Input
