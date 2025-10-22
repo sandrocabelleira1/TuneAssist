@@ -9,7 +9,7 @@ import { Wand2, Sparkles, Loader2, Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Card, CardContent } from '@/components/ui/card';
 import { type ProcessedMap, type AiFuelSuggestion, type ChatMessage } from '@/lib/types';
-import { suggestFuelMapChanges } from '@/ai/flows/suggest-fuel-map-changes-flow';
+// import { suggestFuelMapChanges } from '@/ai/flows/suggest-fuel-map-changes-flow';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from './ui/badge';
@@ -23,7 +23,7 @@ interface AiChatTunerProps {
 
 const SYSTEM_MESSAGE: ChatMessage = {
     role: 'system',
-    content: 'Olá! Sou o seu co-piloto de afinação. Descreva o comportamento do motor, os dados do dinamómetro ou os seus objetivos, e eu irei sugerir alterações ao mapa de combustível atual. Por exemplo: "O carro hesita com carga parcial a 3000 RPM e o lambda está em 0.95. Quero um lambda de 0.87 nessa zona."'
+    content: 'Olá! Sou o seu co-piloto de afinação. A funcionalidade de chat está em desenvolvimento. Em breve poderá descrever o seu problema aqui para receber sugestões.'
 };
 
 export default function AiChatTuner({ processedMap, targetLambda, onApplySuggestion, disabled }: AiChatTunerProps) {
@@ -48,25 +48,32 @@ export default function AiChatTuner({ processedMap, targetLambda, onApplySuggest
         setIsLoading(true);
 
         try {
-            const suggestion = await suggestFuelMapChanges({
-                userRequest: userInput,
-                currentMap: processedMap.calculatedMap!,
-                xAxis: processedMap.axes.x,
-                yAxis: processedMap.axes.y,
-                targetLambda: Number(targetLambda) || undefined,
-            });
+            // A funcionalidade de IA está temporariamente desativada para corrigir erros de compilação.
+            // const suggestion = await suggestFuelMapChanges({
+            //     userRequest: userInput,
+            //     currentMap: processedMap.calculatedMap!,
+            //     xAxis: processedMap.axes.x,
+            //     yAxis: processedMap.axes.y,
+            //     targetLambda: Number(targetLambda) || undefined,
+            // });
+            
+            // Mensagem de placeholder
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const assistantMessage: ChatMessage = {
+                role: 'system',
+                content: "A funcionalidade de sugestões de IA está atualmente em desenvolvimento e estará disponível em breve."
+            };
 
-            const assistantMessage: ChatMessage = { role: 'assistant', content: suggestion };
             setMessages(prev => [...prev, assistantMessage]);
 
         } catch (error) {
             const errorMessage: ChatMessage = {
                 role: 'system',
-                content: `Desculpe, ocorreu um erro ao contactar a IA: ${(error as Error).message}`
+                content: `Desculpe, ocorreu um erro: ${(error as Error).message}`
             };
             setMessages(prev => [...prev, errorMessage]);
             toast({
-                title: "Erro de IA",
+                title: "Erro",
                 description: (error as Error).message,
                 variant: "destructive"
             })
