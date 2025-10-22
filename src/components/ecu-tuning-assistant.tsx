@@ -1442,10 +1442,10 @@ export default function EcuTuningAssistant() {
                         <Card className="flex flex-col">
                            <CardHeader>
                                 <CardTitle>Co-piloto de Afinação IA</CardTitle>
-                                <CardDescription>Funcionalidade de chat removida para estabilizar o projeto.</CardDescription>
+                                <CardDescription>Descreva o seu objetivo ou problema, e a IA irá sugerir alterações no mapa.</CardDescription>
                             </CardHeader>
-                            <CardContent className="flex-1 flex flex-col min-h-0 items-center justify-center text-muted-foreground">
-                                <p>A funcionalidade de chat com IA foi temporariamente desativada.</p>
+                            <CardContent className="flex-1 flex flex-col min-h-0">
+                                <p className="text-sm text-muted-foreground text-center p-4">A funcionalidade do co-piloto está temporariamente desativada.</p>
                             </CardContent>
                         </Card>
                     </div>
