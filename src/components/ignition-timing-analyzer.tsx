@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Wand2, Download, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { IgnitionTimingRun, IgnitionTimingPoint, ProcessedMap, AxisData, XDFDefinition } from '@/lib/types';
+import type { IgnitionTimingRun, IgnitionTimingPoint, ProcessedMap, AxisData, XDFinition } from '@/lib/types';
 import IgnitionTimingPlot from '@/components/ignition-timing-plot';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
@@ -19,7 +19,7 @@ interface IgnitionTimingAnalyzerProps {
     onRunsChange: (runs: IgnitionTimingRun) => void;
     binFile: { name: string; buffer: ArrayBuffer } | null;
     processedMap: ProcessedMap | null;
-    selectedMapDefinition: XDFDefinition | undefined;
+    selectedMapDefinition: XDFinition | undefined;
 }
 
 interface TimingSegment {
@@ -342,7 +342,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 p-4">
             <p className="text-sm text-muted-foreground p-4 border rounded-lg bg-background">
                 <strong className="text-foreground">Como usar:</strong> <br/>
                 1. Selecione a linha de carga (TPS/MAP) abaixo para pré-carregar os dados de avanço para o ensaio de base.<br />

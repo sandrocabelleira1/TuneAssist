@@ -1420,7 +1420,7 @@ export default function EcuTuningAssistant() {
                         )}
                     </div>
                 </TabsContent>
-                <TabsContent value="ignition-analysis" className="flex-1 min-h-0">
+                <TabsContent value="ignition-analysis" className="flex-1 min-h-0 overflow-y-auto">
                     <IgnitionTimingAnalyzer 
                         runs={ignitionRuns} 
                         onRunsChange={setIgnitionRuns}
@@ -1918,10 +1918,19 @@ export default function EcuTuningAssistant() {
                       </TabsTrigger>
                     </TabsList>
                     
-                    {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' ? (
+                    {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' && activeTab !== 'ignition-analysis' ? (
                         renderContent()
                     ) : (
                         <>
+                            <TabsContent value="ignition-analysis" className="flex-1 min-h-0 overflow-y-auto">
+                                <IgnitionTimingAnalyzer 
+                                    runs={ignitionRuns} 
+                                    onRunsChange={setIgnitionRuns}
+                                    binFile={binFile}
+                                    processedMap={processedMap}
+                                    selectedMapDefinition={selectedMapDefinition}
+                                />
+                            </TabsContent>
                             <TabsContent value="dyno-analysis" className="flex-1 min-h-0 overflow-y-auto">
                                 <DynoAnalyzer runs={dynoRuns} onRunsChange={setDynoRuns} />
                             </TabsContent>
