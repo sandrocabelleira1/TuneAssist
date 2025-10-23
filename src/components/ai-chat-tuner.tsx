@@ -1,165 +1,66 @@
-
-'use client';
-
-import { useState, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Wand2, Sparkles, Loader2, Send } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import { Card, CardContent } from '@/components/ui/card';
-import { type ProcessedMap, type AiFuelSuggestion, type ChatMessage } from '@/lib/types';
-// import { suggestFuelMapChanges } from '@/ai/flows/suggest-fuel-map-changes-flow';
-import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
-import { Badge } from './ui/badge';
-
-interface AiChatTunerProps {
-    processedMap: ProcessedMap;
-    targetLambda: number | '';
-    onApplySuggestion: (suggestion: AiFuelSuggestion) => void;
-    disabled?: boolean;
-}
-
-const SYSTEM_MESSAGE: ChatMessage = {
-    role: 'system',
-    content: 'Olá! Sou o seu co-piloto de afinação. A funcionalidade de chat está em desenvolvimento. Em breve poderá descrever o seu problema aqui para receber sugestões.'
-};
-
-export default function AiChatTuner({ processedMap, targetLambda, onApplySuggestion, disabled }: AiChatTunerProps) {
-    const [messages, setMessages] = useState<ChatMessage[]>([SYSTEM_MESSAGE]);
-    const [userInput, setUserInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const { toast } = useToast();
-    const scrollAreaRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (scrollAreaRef.current) {
-            scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
-        }
-    }, [messages]);
-
-    const handleSendMessage = async () => {
-        if (!userInput.trim() || isLoading || !processedMap) return;
-
-        const userMessage: ChatMessage = { role: 'user', content: userInput };
-        setMessages(prev => [...prev, userMessage]);
-        setUserInput('');
-        setIsLoading(true);
-
-        try {
-            // A funcionalidade de IA está temporariamente desativada para corrigir erros de compilação.
-            // const suggestion = await suggestFuelMapChanges({
-            //     userRequest: userInput,
-            //     currentMap: processedMap.calculatedMap!,
-            //     xAxis: processedMap.axes.x,
-            //     yAxis: processedMap.axes.y,
-            //     targetLambda: Number(targetLambda) || undefined,
-            // });
-            
-            // Mensagem de placeholder
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const assistantMessage: ChatMessage = {
-                role: 'system',
-                content: "A funcionalidade de sugestões de IA está atualmente em desenvolvimento e estará disponível em breve."
-            };
-
-            setMessages(prev => [...prev, assistantMessage]);
-
-        } catch (error) {
-            const errorMessage: ChatMessage = {
-                role: 'system',
-                content: `Desculpe, ocorreu um erro: ${(error as Error).message}`
-            };
-            setMessages(prev => [...prev, errorMessage]);
-            toast({
-                title: "Erro",
-                description: (error as Error).message,
-                variant: "destructive"
-            })
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    
-    const handleApplyClick = (suggestion: AiFuelSuggestion) => {
-        if(disabled) {
-            toast({ title: "Mapa Não Selecionado", description: "Por favor, selecione um mapa para aplicar as alterações.", variant: "destructive" });
-            return;
-        }
-        onApplySuggestion(suggestion);
-    }
-
-    const renderMessageContent = (message: ChatMessage) => {
-        if (typeof message.content === 'string') {
-            return <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none">{message.content}</ReactMarkdown>;
-        }
-
-        const suggestion = message.content as AiFuelSuggestion;
-        return (
-            <div className="space-y-2">
-                <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none">{suggestion.reasoning}</ReactMarkdown>
-                <div className="p-2 border rounded-md bg-background/50">
-                    <p className="text-xs font-semibold mb-2">Sugestão de Alteração ({suggestion.changes.length} células):</p>
-                    <Button size="sm" onClick={() => handleApplyClick(suggestion)}>
-                        <Wand2 className="mr-2" />Aplicar Alterações Sugeridas
-                    </Button>
-                </div>
-            </div>
-        );
-    };
-
-    return (
-        <div className="h-full flex flex-col gap-2">
-            <ScrollArea className="flex-1 border rounded-lg p-2" viewportRef={scrollAreaRef}>
-                <div className="space-y-4">
-                    {messages.map((msg, index) => (
-                        <div key={index} className={cn("flex items-start gap-2", {
-                            'justify-end': msg.role === 'user'
-                        })}>
-                            {msg.role !== 'user' && (
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                                    <Sparkles className="w-5 h-5 text-primary" />
-                                </div>
-                            )}
-                            <div className={cn("max-w-[85%] p-3 rounded-lg text-sm", {
-                                'bg-primary text-primary-foreground': msg.role === 'user',
-                                'bg-muted': msg.role !== 'user',
-                            })}>
-                                {renderMessageContent(msg)}
-                            </div>
-                        </div>
-                    ))}
-                    {isLoading && (
-                         <div className="flex items-start gap-2">
-                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                                <Sparkles className="w-5 h-5 text-primary" />
-                            </div>
-                             <div className="bg-muted p-3 rounded-lg">
-                                 <Loader2 className="w-5 h-5 animate-spin" />
-                             </div>
-                         </div>
-                    )}
-                </div>
-            </ScrollArea>
-            <div className="flex items-center gap-2">
-                <Textarea
-                    value={userInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    placeholder={disabled ? "Selecione um mapa para ativar o chat..." : "Descreva o seu problema..."}
-                    className="min-h-[40px] max-h-24 flex-1"
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendMessage();
-                        }
-                    }}
-                    disabled={isLoading || disabled}
-                />
-                <Button onClick={handleSendMessage} disabled={isLoading || !userInput.trim() || disabled}>
-                    <Send className="mr-2" /> Enviar
-                </Button>
-            </div>
-        </div>
-    );
+{
+  "name": "nextn",
+  "version": "1.0.2-partial-success-base",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.9.0",
+    "@radix-ui/react-accordion": "^1.2.3",
+    "@radix-ui/react-alert-dialog": "^1.1.6",
+    "@radix-ui/react-avatar": "^1.1.3",
+    "@radix-ui/react-checkbox": "^1.1.4",
+    "@radix-ui/react-dialog": "^1.1.6",
+    "@radix-ui/react-dropdown-menu": "^2.1.6",
+    "@radix-ui/react-label": "^2.1.2",
+    "@radix-ui/react-menubar": "^1.1.6",
+    "@radix-ui/react-popover": "^1.1.6",
+    "@radix-ui/react-progress": "^1.1.2",
+    "@radix-ui/react-radio-group": "^1.2.3",
+    "@radix-ui/react-scroll-area": "^1.2.3",
+    "@radix-ui/react-select": "^2.1.6",
+    "@radix-ui/react-separator": "^1.1.2",
+    "@radix-ui/react-slider": "^1.2.3",
+    "@radix-ui/react-slot": "^1.1.2",
+    "@radix-ui/react-switch": "^1.1.3",
+    "@radix-ui/react-tabs": "^1.1.3",
+    "@radix-ui/react-toast": "^1.2.6",
+    "@radix-ui/react-tooltip": "^1.1.8",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.0.0",
+    "date-fns": "^3.6.0",
+    "firebase": "^12.3.0",
+    "lucide-react": "^0.475.0",
+    "next": "15.3.3",
+    "papaparse": "^5.4.1",
+    "patch-package": "^8.0.0",
+    "plotly.js-dist-min": "^2.33.0",
+    "react": "^18.3.1",
+    "react-day-picker": "^8.10.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.52.1",
+    "react-markdown": "^9.0.1",
+    "recharts": "^2.15.1",
+    "remark-gfm": "^4.0.0",
+    "tailwind-merge": "^3.0.1",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.13",
+    "@types/node": "^20",
+    "@types/papaparse": "^5.3.14",
+    "@types/plotly.js-dist-min": "^2.3.4",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  }
 }

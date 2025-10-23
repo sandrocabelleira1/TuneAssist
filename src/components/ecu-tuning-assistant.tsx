@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getHeatmapColor, getTextColorForBackground } from '@/lib/colors';
 import { Switch } from '@/components/ui/switch';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import LogDataTable from '@/components/log-data-table';
@@ -40,7 +40,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import DynoAnalyzer from '@/components/dyno-analyzer';
-import AiChatTuner from '@/components/ai-chat-tuner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1446,12 +1445,11 @@ export default function EcuTuningAssistant() {
                                 <CardDescription>Descreva o seu objetivo ou problema, e a IA irá sugerir alterações no mapa.</CardDescription>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0">
-                                <AiChatTuner 
-                                    processedMap={processedMap} 
-                                    targetLambda={targetLambda}
-                                    onApplySuggestion={handleApplyAiChatSuggestion}
-                                    disabled={!activeMapId}
-                                />
+                                <div className="h-full flex flex-col gap-2 items-center justify-center text-center text-muted-foreground">
+                                    <BrainCircuit className="w-10 h-10 mb-2" />
+                                    <p className="font-semibold">Funcionalidade do Co-piloto em Manutenção</p>
+                                    <p className="text-sm">Esta funcionalidade está a ser investigada para resolver problemas de instabilidade.</p>
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
@@ -1999,3 +1997,5 @@ export default function EcuTuningAssistant() {
       </EcuTuningStateContext.Provider>
     );
 }
+
+    
