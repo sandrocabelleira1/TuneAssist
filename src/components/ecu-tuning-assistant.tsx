@@ -40,7 +40,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import DynoAnalyzer from '@/components/dyno-analyzer';
-import AiChatTuner from '@/components/ai-chat-tuner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1446,11 +1445,13 @@ export default function EcuTuningAssistant() {
                                 <CardDescription>Descreva o seu objetivo ou problema, e a IA irá sugerir alterações no mapa.</CardDescription>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0">
-                                <AiChatTuner
-                                    processedMap={processedMap}
-                                    onApplySuggestion={handleApplyAiChatSuggestion}
-                                    targetLambda={targetLambda}
-                                    />
+                                <div className="flex-1 flex items-center justify-center text-center text-muted-foreground p-8">
+                                    <div className="space-y-2">
+                                        <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
+                                        <h3 className="font-semibold">Funcionalidade do Co-piloto Desativada</h3>
+                                        <p className="text-sm">Esta funcionalidade está temporariamente desativada para garantir a estabilidade da aplicação.</p>
+                                    </div>
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
