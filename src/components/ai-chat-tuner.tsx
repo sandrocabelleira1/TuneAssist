@@ -9,7 +9,7 @@ import { Loader2, Sparkles, Send, User, AlertTriangle, Wand2 } from 'lucide-reac
 import ReactMarkdown from 'react-markdown';
 import { Card, CardContent } from '@/components/ui/card';
 import { type ProcessedMap, type AiFuelSuggestion, type ChatMessage } from '@/lib/types';
-// import { suggestFuelMapChanges } from '@/ai/flows/suggest-fuel-map-changes-flow';
+import { suggestFuelMapChanges } from '@/ai/flows/suggest-fuel-map-changes-flow';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from './ui/badge';
@@ -50,18 +50,7 @@ export default function AiChatTuner({ processedMap, targetLambda, onApplySuggest
         });
       return;
     }
-    
-    // TEMPORARILY DISABLED TO PREVENT BUILD ERRORS
-    toast({
-        title: "Funcionalidade em Desenvolvimento",
-        description: "A funcionalidade de sugestões de IA está atualmente em desenvolvimento.",
-        variant: "default"
-    });
-    return;
-    // END TEMPORARY
-    
 
-    /*
     const userMessage: ChatMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
@@ -101,7 +90,6 @@ export default function AiChatTuner({ processedMap, targetLambda, onApplySuggest
     } finally {
       setIsLoading(false);
     }
-    */
   }, [input, processedMap, messages, targetLambda, toast]);
   
   const renderMessageContent = (message: ChatMessage) => {

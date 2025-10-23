@@ -148,19 +148,3 @@ export interface DynoRun {
   data: DynoRunDataPoint[];
   color: string;
 }
-
-export interface AiFuelMapCellChange {
-    y: number;
-    x: number;
-    newValue: number;
-}
-
-export interface AiFuelSuggestion {
-    reasoning: string;
-    changes: AiFuelMapCellChange[];
-}
-
-export interface ChatMessage {
-    role: 'user' | 'assistant' | 'system';
-    content: string | AiFuelSuggestion;
-}

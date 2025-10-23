@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud, Download, LineChart as LineChartIcon } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion, ChatMessage } from '@/lib/types';
+import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -38,9 +38,7 @@ import MapScanner from '@/components/map-scanner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
-import ReactMarkdown from 'react-markdown';
 import DynoAnalyzer from '@/components/dyno-analyzer';
-import AiChatTuner from '@/components/ai-chat-tuner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1122,37 +1120,6 @@ export default function EcuTuningAssistant() {
         toast({ title: 'Ajuste em Massa Aplicado', description: successMsg });
     };
 
-    const handleApplyAiChatSuggestion = (suggestion: AiFuelSuggestion) => {
-        if (!activeMapId || !processedMap) {
-            toast({ title: "Mapa não Ativo", description: "Selecione um mapa para aplicar as sugestões.", variant: "destructive" });
-            return;
-        }
-
-        const newMap = processedMap.calculatedMap.map(row => [...row]);
-        const newAiModifiedCells = new Set(aiModifiedCells);
-
-        suggestion.changes.forEach(change => {
-            if (newMap[change.y] && newMap[change.y][change.x] !== undefined) {
-                newMap[change.y][change.x] = change.newValue;
-                newAiModifiedCells.add(`${change.y}-${change.x}`);
-            }
-        });
-        
-        const newProcessedMap = { ...processedMap, calculatedMap: newMap };
-
-        setProcessedMap(newProcessedMap);
-        setIsModified(true);
-        setAiModifiedCells(newAiModifiedCells);
-        
-        // Update caches
-        setProcessedMapCache(prev => ({ ...prev, [activeMapId]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({ ...prev, [activeMapId]: true }));
-        setAiModifiedCellsCache(prev => ({ ...prev, [activeMapId]: newAiModifiedCells }));
-
-        addLog(`${suggestion.changes.length} alterações da IA aplicadas ao mapa "${selectedMapDefinition?.name}".`, "success");
-        toast({ title: "Sugestões da IA Aplicadas", description: "Verifique as células destacadas e salve o ficheiro .BIN." });
-    };
-
     const togglePlotOrientation = () => {
         const newOrientation = plotOrientation === 'y-vs-x' ? 'x-vs-y' : 'y-vs-x';
         addLog(`A orientação do gráfico 2D foi alterada para ${newOrientation}.`, 'info');
@@ -1443,14 +1410,11 @@ export default function EcuTuningAssistant() {
                         <Card className="flex flex-col">
                            <CardHeader>
                                 <CardTitle>Co-piloto de Afinação IA</CardTitle>
-                                <CardDescription>Descreva o seu objetivo ou problema, e a IA irá sugerir alterações no mapa.</CardDescription>
+                                <CardDescription>Funcionalidade do Co-piloto desativada devido a problemas de dependência.</CardDescription>
                             </CardHeader>
-                            <CardContent className="flex-1 flex flex-col min-h-0">
-                                <AiChatTuner 
-                                    processedMap={processedMap}
-                                    targetLambda={Number(targetLambda)}
-                                    onApplySuggestion={handleApplyAiChatSuggestion}
-                                />
+                            <CardContent className="flex-1 flex flex-col min-h-0 items-center justify-center text-muted-foreground">
+                                <BrainCircuit className="h-12 w-12 mb-4" />
+                                <p className="text-center">A funcionalidade do co-piloto de afinação por IA está temporariamente indisponível.</p>
                             </CardContent>
                         </Card>
                     </div>
