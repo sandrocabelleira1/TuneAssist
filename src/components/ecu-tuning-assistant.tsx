@@ -1443,7 +1443,7 @@ setIsModified(true);
                         <Card className="flex flex-col">
                            <CardHeader>
                                 <CardTitle>Co-piloto de Afinação IA</CardTitle>
-                                <CardDescription>A funcionalidade do co-piloto foi substituída por um ajuste automático mais direto.</CardDescription>
+                                <CardDescription>Funcionalidade de chat de IA substituída pelo ajuste automático direto.</CardDescription>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0 items-center justify-center text-center text-muted-foreground p-8">
                                  <div className="space-y-2">
