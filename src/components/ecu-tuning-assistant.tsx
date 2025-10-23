@@ -276,12 +276,13 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                                         key={xi}
                                         className={cn("p-0 border border-border text-center h-10 transition-colors", {
                                             'outline outline-2 outline-offset-[-2px] outline-primary': selected,
-                                            'outline outline-2 outline-offset-[-2px] outline-amber-400': isAiModified,
+                                            'relative': isAiModified
                                         })}
                                         style={{ backgroundColor: bgColor, color: textColor }}
                                         onMouseDown={(e) => handleMouseDown(e, yi, xi)}
                                         onMouseMove={() => handleMouseMove(yi, xi)}
                                     >
+                                        {isAiModified && <div className="absolute inset-0 outline outline-2 outline-offset-[-2px] outline-amber-400 pointer-events-none"></div>}
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger className="w-full h-full flex items-center justify-center p-0">
@@ -1124,7 +1125,7 @@ setIsModified(true);
 
         addLog(`A aplicar ${suggestion.changes.length} sugestões da IA no mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
         const newMap = processedMap.calculatedMap.map(row => [...row]);
-        const newAiModified = new Set(aiModifiedCells);
+        const newAiModified = new Set<string>();
         
         suggestion.changes.forEach(change => {
             if(newMap[change.y] && newMap[change.y][change.x] !== undefined) {
@@ -1160,8 +1161,6 @@ setIsModified(true);
     };
     
 const handleMapSelectionChange = (id: string) => {
-    const isPotential = id.startsWith('potential_');
-
     const newSelectedIds = selectedMapIds.includes(id)
         ? selectedMapIds.filter(mapId => mapId !== id)
         : [...selectedMapIds, id];
