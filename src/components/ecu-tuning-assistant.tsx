@@ -1440,12 +1440,17 @@ const handleMapSelectionChange = (id: string) => {
                         <Card className="flex flex-col">
                            <CardHeader>
                                 <CardTitle>Co-piloto de Afinação IA</CardTitle>
-                                <CardDescription>Funcionalidade de chat interativo indisponível devido a conflitos de dependência.</CardDescription>
+                                <CardDescription>Descreva o seu objetivo e a IA irá sugerir alterações ao mapa de combustível ativo.</CardDescription>
                             </CardHeader>
-                            <CardContent className="flex-1 flex flex-col min-h-0 items-center justify-center text-muted-foreground">
-                                <BrainCircuit className="h-16 w-16 mb-4"/>
-                                <p className="text-center">O Co-piloto de IA está atualmente indisponível.</p>
-                                <p className="text-center text-sm">Utilize o "Ajuste Automático por Log" para correções.</p>
+                            <CardContent className="flex-1 flex flex-col min-h-0">
+                                <AiChatTuner
+                                  processedMap={processedMap}
+                                  logData={logData}
+                                  onSuggestion={handleAiSuggestion}
+                                  addLog={addLog}
+                                  isProcessing={isProcessing}
+                                  setIsProcessing={setIsProcessing}
+                                />
                             </CardContent>
                         </Card>
                     </div>
