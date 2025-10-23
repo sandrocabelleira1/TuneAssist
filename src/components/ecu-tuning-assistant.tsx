@@ -274,15 +274,14 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                                 return (
                                     <td
                                         key={xi}
-                                        className={cn("p-0 border border-border text-center h-10 transition-colors", {
+                                        className={cn("p-0 border border-border text-center h-10 transition-colors relative", {
                                             'outline outline-2 outline-offset-[-2px] outline-primary': selected,
-                                            'relative': isAiModified
+                                            'ring-2 ring-amber-400 ring-inset z-10': isAiModified,
                                         })}
                                         style={{ backgroundColor: bgColor, color: textColor }}
                                         onMouseDown={(e) => handleMouseDown(e, yi, xi)}
                                         onMouseMove={() => handleMouseMove(yi, xi)}
                                     >
-                                        {isAiModified && <div className="absolute inset-0 outline outline-2 outline-offset-[-2px] outline-amber-400 pointer-events-none"></div>}
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger className="w-full h-full flex items-center justify-center p-0">
@@ -1436,12 +1435,15 @@ const handleMapSelectionChange = (id: string) => {
                             </Card>
                         </div>
                         
-                        <div className="flex flex-col">
-                           <div className="flex flex-col h-full items-center justify-center text-center text-muted-foreground p-4 border rounded-lg bg-card">
-                                <BrainCircuit className="h-10 w-10 text-muted-foreground mb-2" />
-                                <p className="font-semibold">Co-piloto de Afinação IA</p>
-                                <p className="text-sm">Esta funcionalidade está a ser retrabalhada para uma melhor performance. Use o "Ajuste Automático por Log" à esquerda para correções baseadas em Lambda.</p>
-                            </div>
+                        <div className="flex flex-col h-full border rounded-lg bg-card p-4">
+                            <AiChatTuner
+                                processedMap={processedMap}
+                                logData={logData}
+                                onSuggestion={handleAiSuggestion}
+                                addLog={addLog}
+                                isProcessing={isProcessing}
+                                setIsProcessing={setIsProcessing}
+                            />
                         </div>
                     </div>
 
