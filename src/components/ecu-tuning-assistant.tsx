@@ -37,6 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import DynoAnalyzer from '@/components/dyno-analyzer';
+import AiChatTuner from '@/components/ai-chat-tuner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1158,26 +1159,24 @@ setIsModified(true);
         setSelectedLine(0);
     };
     
+const handleMapSelectionChange = (id: string) => {
+    const isPotential = id.startsWith('potential_');
 
-    const handleMapSelectionChange = (id: string) => {
-        const isPotential = id.startsWith('potential_');
-    
-        const newSelectedIds = selectedMapIds.includes(id)
-            ? selectedMapIds.filter(mapId => mapId !== id)
-            : [...selectedMapIds, id];
-    
-        setSelectedMapIds(newSelectedIds);
-        const def = xdfFile?.definitions.find(d => d.uniqueId === id);
-        addLog(`Mapa "${def?.name ?? id}" ${newSelectedIds.includes(id) ? 'selecionado' : 'desselecionado'}.`, 'info');
-    
-        // If unselecting the active map, or if there's no active map
-        if ((activeMapId === id && !newSelectedIds.includes(id)) || (!activeMapId && newSelectedIds.length > 0)) {
-            const nextActiveId = newSelectedIds.find(mapId => mapId !== id) || newSelectedIds[0] || null;
-            setActiveMap(nextActiveId);
-        } else if (newSelectedIds.length === 0) {
-            setActiveMap(null);
-        }
-    };
+    const newSelectedIds = selectedMapIds.includes(id)
+        ? selectedMapIds.filter(mapId => mapId !== id)
+        : [...selectedMapIds, id];
+
+    setSelectedMapIds(newSelectedIds);
+    const def = xdfFile?.definitions.find(d => d.uniqueId === id);
+    addLog(`Mapa "${def?.name ?? id}" ${newSelectedIds.includes(id) ? 'selecionado' : 'desselecionado'}.`, 'info');
+
+    if ((activeMapId === id && !newSelectedIds.includes(id)) || (!activeMapId && newSelectedIds.length > 0)) {
+        const nextActiveId = newSelectedIds.find(mapId => mapId !== id) || newSelectedIds[0] || null;
+        setActiveMap(nextActiveId);
+    } else if (newSelectedIds.length === 0) {
+        setActiveMap(null);
+    }
+};
 
     const handleLoadPotentialMap = useCallback((map: PotentialMap) => {
         addLog(`A carregar mapa potencial em 0x${map.address.toString(16).toUpperCase()}.`, 'info');
