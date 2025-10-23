@@ -1,5 +1,16 @@
 
 
+import { z } from 'zod';
+import { AiFuelSuggestionSchema } from '@/ai/flows/suggest-fuel-map-changes-flow';
+
+export type AiFuelSuggestion = z.infer<typeof AiFuelSuggestionSchema>;
+
+export type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string | AiFuelSuggestion;
+};
+
+
 export type AxisData = {
   label: string;
   raw: (number|string)[];

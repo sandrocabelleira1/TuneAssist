@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -9,7 +8,7 @@ import { Loader2, Sparkles, Send, User, AlertTriangle, Wand2 } from 'lucide-reac
 import ReactMarkdown from 'react-markdown';
 import { Card, CardContent } from '@/components/ui/card';
 import { type ProcessedMap, type AiFuelSuggestion, type ChatMessage } from '@/lib/types';
-import { suggestFuelMapChanges } from '@/ai/flows/suggest-fuel-map-changes-flow';
+// import { suggestFuelMapChanges } from '@/ai/flows/suggest-fuel-map-changes-flow';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from './ui/badge';
@@ -56,6 +55,18 @@ export default function AiChatTuner({ processedMap, targetLambda, onApplySuggest
     setInput('');
     setIsLoading(true);
 
+    // AI Logic is temporarily disabled to prevent build issues.
+    // Will be re-enabled in the next step.
+    setTimeout(() => {
+        const errorMessage: ChatMessage = {
+            role: 'assistant',
+            content: "A funcionalidade de sugestões de IA está em desenvolvimento. A lógica de back-end será conectada em breve."
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        setIsLoading(false);
+    }, 1000);
+
+    /*
     try {
       const mapData = {
         map: processedMap.calculatedMap,
@@ -90,6 +101,7 @@ export default function AiChatTuner({ processedMap, targetLambda, onApplySuggest
     } finally {
       setIsLoading(false);
     }
+    */
   }, [input, processedMap, messages, targetLambda, toast]);
   
   const renderMessageContent = (message: ChatMessage) => {

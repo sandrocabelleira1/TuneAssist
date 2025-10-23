@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud, Download, LineChart as LineChartIcon } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun } from '@/lib/types';
+import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -39,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import DynoAnalyzer from '@/components/dyno-analyzer';
+import AiChatTuner from '@/components/ai-chat-tuner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1120,6 +1121,39 @@ export default function EcuTuningAssistant() {
         toast({ title: 'Ajuste em Massa Aplicado', description: successMsg });
     };
 
+    const handleAiSuggestion = (suggestion: AiFuelSuggestion) => {
+        if (!processedMap || !processedMap.calculatedMap || !activeMapId) return;
+
+        addLog(`A aplicar ${suggestion.changes.length} sugestões da IA no mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
+        const newMap = processedMap.calculatedMap.map(row => [...row]);
+        const newAiModified = new Set(aiModifiedCells);
+        
+        suggestion.changes.forEach(change => {
+            if(newMap[change.y] && newMap[change.y][change.x] !== undefined) {
+                newMap[change.y][change.x] = change.newValue;
+                newAiModified.add(`${change.y}-${change.x}`);
+            }
+        });
+        
+        const newProcessedMap = { ...processedMap, calculatedMap: newMap };
+        setProcessedMap(newProcessedMap);
+        setAiModifiedCells(newAiModified);
+        
+        setIsModified(true);
+
+        const newCache = { ...aiModifiedCellsCache, [activeMapId]: newAiModified };
+        setAiModifiedCellsCache(newCache);
+        
+        setProcessedMapCache(prev => ({ ...prev, [activeMapId]: newProcessedMap }));
+        setModifiedStatusCache(prev => ({...prev, [activeMapId]: true}));
+        
+        toast({
+            title: "Sugestões Aplicadas",
+            description: `${suggestion.changes.length} alterações da IA foram aplicadas ao mapa.`
+        })
+    };
+
+
     const togglePlotOrientation = () => {
         const newOrientation = plotOrientation === 'y-vs-x' ? 'x-vs-y' : 'y-vs-x';
         addLog(`A orientação do gráfico 2D foi alterada para ${newOrientation}.`, 'info');
@@ -1408,13 +1442,16 @@ export default function EcuTuningAssistant() {
                         </div>
                         
                         <Card className="flex flex-col">
-                           <CardHeader>
+                            <CardHeader>
                                 <CardTitle>Co-piloto de Afinação IA</CardTitle>
-                                <CardDescription>Funcionalidade do Co-piloto desativada devido a problemas de dependência.</CardDescription>
+                                <CardDescription>Use linguagem natural para pedir sugestões de afinação.</CardDescription>
                             </CardHeader>
-                            <CardContent className="flex-1 flex flex-col min-h-0 items-center justify-center text-muted-foreground">
-                                <BrainCircuit className="h-12 w-12 mb-4" />
-                                <p className="text-center">A funcionalidade do co-piloto de afinação por IA está temporariamente indisponível.</p>
+                            <CardContent className="flex-1 flex flex-col min-h-0">
+                                <AiChatTuner 
+                                    processedMap={processedMap} 
+                                    targetLambda={Number(targetLambda) || 0}
+                                    onApplySuggestion={handleAiSuggestion}
+                                />
                             </CardContent>
                         </Card>
                     </div>
