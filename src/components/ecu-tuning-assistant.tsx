@@ -39,7 +39,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import DynoAnalyzer from '@/components/dyno-analyzer';
-import AiChatTuner from '@/components/ai-chat-tuner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1442,16 +1441,16 @@ export default function EcuTuningAssistant() {
                         </div>
                         
                         <Card className="flex flex-col">
-                            <CardHeader>
+                           <CardHeader>
                                 <CardTitle>Co-piloto de Afinação IA</CardTitle>
-                                <CardDescription>Use linguagem natural para pedir sugestões de afinação.</CardDescription>
+                                <CardDescription>A funcionalidade do co-piloto está temporariamente desativada.</CardDescription>
                             </CardHeader>
-                            <CardContent className="flex-1 flex flex-col min-h-0">
-                                <AiChatTuner 
-                                    processedMap={processedMap} 
-                                    targetLambda={Number(targetLambda) || 0}
-                                    onApplySuggestion={handleAiSuggestion}
-                                />
+                            <CardContent className="flex-1 flex flex-col min-h-0 items-center justify-center text-center text-muted-foreground p-8">
+                                 <div className="space-y-2">
+                                    <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
+                                    <h3 className="font-semibold">Indisponível</h3>
+                                    <p className="text-sm">Estamos a trabalhar para resolver um problema com este componente.</p>
+                                </div>
                             </CardContent>
                         </Card>
                     </div>

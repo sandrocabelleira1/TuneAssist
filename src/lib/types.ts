@@ -1,7 +1,17 @@
 
 
 import { z } from 'zod';
-import { AiFuelSuggestionSchema } from '@/ai/flows/suggest-fuel-map-changes-flow';
+
+// This is a placeholder as the actual schema is gone.
+export const AiFuelSuggestionSchema = z.object({
+  reasoning: z.string(),
+  changes: z.array(z.object({
+    y: z.number(),
+    x: z.number(),
+    newValue: z.number(),
+  })),
+});
+
 
 export type AiFuelSuggestion = z.infer<typeof AiFuelSuggestionSchema>;
 
