@@ -657,19 +657,21 @@ function findClosestIndex(arr: (number | string)[], target: number): number {
 }
 
 // Find a key in the log data headers that matches a target label
-function findKeyInHeader(header: string[], targetLabel: string): string | undefined {
-    if (!targetLabel) return undefined;
-    const cleanTargetLabel = targetLabel.trim().toLowerCase();
-    
-    for (const key of header) {
-        if (key.trim().toLowerCase() === cleanTargetLabel) {
-            return key;
+function findKeyInHeader(header: string[], targetLabels: string[]): string | undefined {
+    for (const targetLabel of targetLabels) {
+        const cleanTargetLabel = targetLabel.trim().toLowerCase();
+        
+        // Exact match first
+        for (const key of header) {
+            if (key.trim().toLowerCase() === cleanTargetLabel) {
+                return key;
+            }
         }
-    }
-    // Fallback for partial match if exact match fails
-    for (const key of header) {
-        if (key.trim().toLowerCase().includes(cleanTargetLabel)) {
-            return key;
+        // Fallback for partial match
+        for (const key of header) {
+            if (key.trim().toLowerCase().includes(cleanTargetLabel)) {
+                return key;
+            }
         }
     }
     return undefined;
@@ -696,39 +698,60 @@ export function calculateCorrections(
 
     // Dynamically find the keys for X, Y, and Lambda from the log data headers
     const header = Object.keys(logData[0] || {});
-    const xAxisKey = findKeyInHeader(header, xAxis.label);
-    const yAxisKey = findKeyInHeader(header, yAxis.label);
-    const lambdaKey = findKeyInHeader(header, 'lambda') || findKeyInHeader(header, 'Lambda') || 'Lambda';
+    
+    // Identify which map axis is RPM and which is Load
+    const rpmRegex = /rpm/i;
+    const loadRegex = /tps|map|carga|load|throttle/i;
+
+    let rpmMapAxis: AxisData, loadMapAxis: AxisData;
+    if (xAxis.label && rpmRegex.test(xAxis.label)) {
+        rpmMapAxis = xAxis;
+        loadMapAxis = yAxis;
+    } else if (yAxis.label && rpmRegex.test(yAxis.label)) {
+        rpmMapAxis = yAxis;
+        loadMapAxis = xAxis;
+    } else {
+        // Default assumption if no label matches 'rpm'
+        throw new Error("Não foi possível identificar o eixo de RPM no mapa. Verifique as etiquetas dos eixos (deve incluir 'rpm').");
+    }
+
+    const rpmLogKey = findKeyInHeader(header, ['rpm', rpmMapAxis.label]);
+    const loadLogKey = findKeyInHeader(header, ['tps', 'map', 'load', 'carga', loadMapAxis.label]);
+    const lambdaLogKey = findKeyInHeader(header, ['lambda', 'afr']);
 
 
-    if (!xAxisKey) {
-        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo X do mapa ("${xAxis.label}"). Certifique-se de que os nomes correspondem.`);
+    if (!rpmLogKey) {
+        throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos disponíveis: ${header.join(', ')}`);
     }
-    if (!yAxisKey) {
-        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio correspondente ao eixo Y do mapa ("${yAxis.label}"). Certifique-se de que os nomes correspondem.`);
+    if (!loadLogKey) {
+        throw new Error(`Não foi possível encontrar a coluna de Carga ('${loadMapAxis.label}') nos dados do ensaio. Cabeçalhos disponíveis: ${header.join(', ')}`);
     }
-     if (!header.some(h => h.trim().toLowerCase() === lambdaKey.trim().toLowerCase())) {
-        throw new Error(`Não foi possível encontrar a coluna de dados de ensaio para Lambda. Verifique o cabeçalho do seu CSV.`);
+     if (!lambdaLogKey) {
+        throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'AFR' nos dados do ensaio. Cabeçalhos disponíveis: ${header.join(', ')}`);
     }
 
     logData.forEach(logEntry => {
-        const xValue = logEntry[xAxisKey];
-        const yValue = logEntry[yAxisKey];
-        const measuredLambda = logEntry[lambdaKey];
+        const logRpm = logEntry[rpmLogKey];
+        const logLoad = logEntry[loadLogKey];
+        const measuredLambda = logEntry[lambdaLogKey];
 
-        if (xValue === undefined || yValue === undefined || measuredLambda === undefined) {
+        if (logRpm === undefined || logLoad === undefined || measuredLambda === undefined) {
             console.warn("Entrada de log ignorada devido a dados em falta:", logEntry);
             return;
         }
 
-        const yIndex = findClosestIndex(yAxis.calculated, yValue);
-        const xIndex = findClosestIndex(xAxis.calculated, xValue);
+        const rpmIndex = findClosestIndex(rpmMapAxis.calculated, logRpm);
+        const loadIndex = findClosestIndex(loadMapAxis.calculated, logLoad);
 
-        if (xIndex === -1 || yIndex === -1) {
-            console.warn(`Nenhuma célula correspondente encontrada para o ponto do log: ${yAxis.label}=${yValue}, ${xAxis.label}=${xValue}`);
+        if (rpmIndex === -1 || loadIndex === -1) {
+            console.warn(`Nenhuma célula correspondente encontrada para o ponto do log: RPM=${logRpm}, Carga=${logLoad}`);
             return;
         }
         
+        // Determine the correct x, y index based on which axis is which
+        const yIndex = rpmMapAxis === yAxis ? rpmIndex : loadIndex;
+        const xIndex = rpmMapAxis === xAxis ? rpmIndex : loadIndex;
+
         const currentValue = newMap[yIndex]?.[xIndex];
         if (currentValue === null || currentValue === undefined) {
             console.warn(`Célula do mapa em [${yIndex}, ${xIndex}] está vazia, a ignorar.`);
@@ -737,10 +760,6 @@ export function calculateCorrections(
 
         const error = measuredLambda - targetLambda;
         const correctionFactor = measuredLambda / targetLambda;
-        
-        // We only want to add fuel if lean, or pull fuel if rich
-        // correctionFactor > 1 means lean, needs more fuel (increase value)
-        // correctionFactor < 1 means rich, needs less fuel (decrease value)
         
         let correctedValue = currentValue * correctionFactor;
         

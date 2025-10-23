@@ -37,7 +37,7 @@ const SuggestionCard = ({ suggestion, onApply }: { suggestion: AiFuelSuggestion,
                 <p className="text-xs text-muted-foreground mt-2 mb-2">
                     {suggestion.changes.length} célula(s) a ser(em) modificada(s).
                 </p>
-                <Button onClick={onApply} size="sm">Aplicar {suggestion.changes.length} Alterações</Button>
+                <Button onClick={onApply} size="sm" disabled={suggestion.changes.length === 0}>Aplicar {suggestion.changes.length > 0 ? `${suggestion.changes.length} Alterações` : 'Alterações'}</Button>
             </CardContent>
         </Card>
     );

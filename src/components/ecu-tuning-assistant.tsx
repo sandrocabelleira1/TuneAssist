@@ -1436,22 +1436,13 @@ const handleMapSelectionChange = (id: string) => {
                             </Card>
                         </div>
                         
-                        <Card className="flex flex-col">
-                           <CardHeader>
-                                <CardTitle>Co-piloto de Afinação IA</CardTitle>
-                                <CardDescription>Descreva o seu objetivo e a IA irá sugerir alterações ao mapa de combustível ativo.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex-1 flex flex-col min-h-0">
-                                <AiChatTuner
-                                  processedMap={processedMap}
-                                  logData={logData}
-                                  onSuggestion={handleAiSuggestion}
-                                  addLog={addLog}
-                                  isProcessing={isProcessing}
-                                  setIsProcessing={setIsProcessing}
-                                />
-                            </CardContent>
-                        </Card>
+                        <div className="flex flex-col">
+                           <div className="flex flex-col h-full items-center justify-center text-center text-muted-foreground p-4 border rounded-lg bg-card">
+                                <BrainCircuit className="h-10 w-10 text-muted-foreground mb-2" />
+                                <p className="font-semibold">Co-piloto de Afinação IA</p>
+                                <p className="text-sm">Esta funcionalidade está a ser retrabalhada para uma melhor performance. Use o "Ajuste Automático por Log" à esquerda para correções baseadas em Lambda.</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="flex-1 border rounded-lg min-h-[200px]">
