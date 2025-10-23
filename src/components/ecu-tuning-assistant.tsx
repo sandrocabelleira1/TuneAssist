@@ -1100,7 +1100,7 @@ export default function EcuTuningAssistant() {
 
                 if (mapId === activeMapId) {
                     setProcessedMap(newProcessedMap);
-                    setIsModified(true);
+setIsModified(true);
                     setAiModifiedCells(modifiedSet);
                 }
 
@@ -1443,13 +1443,13 @@ export default function EcuTuningAssistant() {
                         <Card className="flex flex-col">
                            <CardHeader>
                                 <CardTitle>Co-piloto de Afinação IA</CardTitle>
-                                <CardDescription>A funcionalidade do co-piloto está temporariamente desativada.</CardDescription>
+                                <CardDescription>A funcionalidade do co-piloto foi substituída por um ajuste automático mais direto.</CardDescription>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0 items-center justify-center text-center text-muted-foreground p-8">
                                  <div className="space-y-2">
                                     <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
-                                    <h3 className="font-semibold">Indisponível</h3>
-                                    <p className="text-sm">Estamos a trabalhar para resolver um problema com este componente.</p>
+                                    <h3 className="font-semibold">Funcionalidade Alterada</h3>
+                                    <p className="text-sm">Use o painel "Ajuste Automático por Log" à esquerda para aplicar correções baseadas nos seus dados de ensaio.</p>
                                 </div>
                             </CardContent>
                         </Card>
