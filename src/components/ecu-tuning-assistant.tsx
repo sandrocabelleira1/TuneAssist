@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud, Download, LineChart as LineChartIcon } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion } from '@/lib/types';
+import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion, ChatMessage } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -40,6 +40,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
 import DynoAnalyzer from '@/components/dyno-analyzer';
+import AiChatTuner from '@/components/ai-chat-tuner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1445,13 +1446,11 @@ export default function EcuTuningAssistant() {
                                 <CardDescription>Descreva o seu objetivo ou problema, e a IA irá sugerir alterações no mapa.</CardDescription>
                             </CardHeader>
                             <CardContent className="flex-1 flex flex-col min-h-0">
-                                <div className="flex-1 flex items-center justify-center text-center text-muted-foreground p-8">
-                                    <div className="space-y-2">
-                                        <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
-                                        <h3 className="font-semibold">Funcionalidade do Co-piloto Desativada</h3>
-                                        <p className="text-sm">Esta funcionalidade está temporariamente desativada para garantir a estabilidade da aplicação.</p>
-                                    </div>
-                                </div>
+                                <AiChatTuner 
+                                    processedMap={processedMap}
+                                    targetLambda={Number(targetLambda)}
+                                    onApplySuggestion={handleApplyAiChatSuggestion}
+                                />
                             </CardContent>
                         </Card>
                     </div>
