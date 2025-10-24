@@ -37,7 +37,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import DynoAnalyzer from '@/components/dyno-analyzer';
-import AiChatTuner from '@/components/ai-chat-tuner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1042,7 +1041,7 @@ export default function EcuTuningAssistant() {
         toast({ title: "Padrão Salvo", description: successMsg });
     };
 
-    const handleAiTune = async () => {
+    const handleAutoTune = async () => {
         if (selectedMapIds.length === 0 || logData.length === 0 || !targetLambda || !xdfFile || !binFile) {
             const msg = "Dados insuficientes. Selecione mapas, adicione dados de ensaio e defina um Lambda alvo.";
             addLog(msg, 'error');
@@ -1099,7 +1098,7 @@ export default function EcuTuningAssistant() {
 
                 if (mapId === activeMapId) {
                     setProcessedMap(newProcessedMap);
-setIsModified(true);
+                    setIsModified(true);
                     setAiModifiedCells(modifiedSet);
                 }
 
@@ -1118,39 +1117,6 @@ setIsModified(true);
         addLog(successMsg, 'success');
         toast({ title: 'Ajuste em Massa Aplicado', description: successMsg });
     };
-
-    const handleAiSuggestion = (suggestion: AiFuelSuggestion) => {
-        if (!processedMap || !processedMap.calculatedMap || !activeMapId) return;
-
-        addLog(`A aplicar ${suggestion.changes.length} sugestões da IA no mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
-        const newMap = processedMap.calculatedMap.map(row => [...row]);
-        const newAiModified = new Set<string>();
-        
-        suggestion.changes.forEach(change => {
-            if(newMap[change.y] && newMap[change.y][change.x] !== undefined) {
-                newMap[change.y][change.x] = change.newValue;
-                newAiModified.add(`${change.y}-${change.x}`);
-            }
-        });
-        
-        const newProcessedMap = { ...processedMap, calculatedMap: newMap };
-        setProcessedMap(newProcessedMap);
-        setAiModifiedCells(newAiModified);
-        
-        setIsModified(true);
-
-        const newCache = { ...aiModifiedCellsCache, [activeMapId]: newAiModified };
-        setAiModifiedCellsCache(newCache);
-        
-        setProcessedMapCache(prev => ({ ...prev, [activeMapId]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({...prev, [activeMapId]: true}));
-        
-        toast({
-            title: "Sugestões Aplicadas",
-            description: `${suggestion.changes.length} alterações da IA foram aplicadas ao mapa.`
-        })
-    };
-
 
     const togglePlotOrientation = () => {
         const newOrientation = plotOrientation === 'y-vs-x' ? 'x-vs-y' : 'y-vs-x';
@@ -1360,91 +1326,76 @@ const handleMapSelectionChange = (id: string) => {
                     </div>
                 </TabsContent>
                 <TabsContent value="fuel-analysis" className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto p-1">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        
-                        <div className="flex flex-col gap-4">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Ajuste Automático por Log</CardTitle>
-                                    <CardDescription>Carregue um ficheiro de log (.csv) para que a IA calcule as correções automaticamente.</CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="flex items-center gap-4">
-                                        <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
-                                            <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
-                                        </Button>
-                                        <input
-                                        ref={logInputRef}
-                                        type="file"
-                                        accept=".csv"
-                                        className="hidden"
-                                        onChange={handleLogFileChange}
-                                        />
-                                        <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={logData.length === 0}>
-                                            <Eraser className="h-4 w-4" />
-                                            <span className="sr-only">Limpar Dados de Ensaio</span>
-                                        </Button>
-                                    </div>
-                                    
-                                    <div className="space-y-2">
-                                        <Label htmlFor="target-lambda">Lambda Alvo</Label>
-                                        <Input 
-                                            id="target-lambda" 
-                                            type="number" 
-                                            step="0.01"
-                                            value={targetLambda}
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-                                                setTargetLambda(value === '' ? '' : parseFloat(value));
-                                            }}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
-                                        <Slider
-                                            id="aggressiveness"
-                                            min={0}
-                                            max={100}
-                                            step={1}
-                                            value={[aggressiveness]}
-                                            onValueChange={(value) => setAggressiveness(value[0])}
-                                        />
-                                    </div>
-                                    <Button className="w-full" onClick={handleAiTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing}>
-                                        <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
+                    <div className="grid grid-cols-1 gap-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Ajuste Automático por Log</CardTitle>
+                                <CardDescription>Carregue um ficheiro de log (.csv) para que o sistema calcule as correções automaticamente com base no Lambda Alvo.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex items-center gap-4">
+                                    <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
+                                        <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
                                     </Button>
+                                    <input
+                                    ref={logInputRef}
+                                    type="file"
+                                    accept=".csv"
+                                    className="hidden"
+                                    onChange={handleLogFileChange}
+                                    />
+                                    <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={logData.length === 0}>
+                                        <Eraser className="h-4 w-4" />
+                                        <span className="sr-only">Limpar Dados de Ensaio</span>
+                                    </Button>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <Label htmlFor="target-lambda">Lambda Alvo</Label>
+                                    <Input 
+                                        id="target-lambda" 
+                                        type="number" 
+                                        step="0.01"
+                                        value={targetLambda}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            setTargetLambda(value === '' ? '' : parseFloat(value));
+                                        }}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
+                                    <Slider
+                                        id="aggressiveness"
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        value={[aggressiveness]}
+                                        onValueChange={(value) => setAggressiveness(value[0])}
+                                    />
+                                </div>
+                                <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing}>
+                                    <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
+                                </Button>
 
-                                </CardContent>
-                            </Card>
-
-                             <Card>
-                                <CardHeader>
-                                    <CardTitle>Entrada Manual de Tabela (Lambda)</CardTitle>
-                                    <CardDescription>Adicione pontos de log manualmente se não tiver um ficheiro CSV.</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <Form {...dynoForm}>
-                                        <form onSubmit={dynoForm.handleSubmit(handleAddDynoLogData)} className="space-y-4">
-                                        <DynoEntryTable />
-                                        <Button type="submit" className="w-full" disabled={!processedMap || dynoForm.getValues('loadColumns').length === 0}>
-                                            <PlusCircle className="mr-2" /> Adicionar Pontos ao Ensaio
-                                        </Button>
-                                        </form>
-                                    </Form>
-                                </CardContent>
-                            </Card>
-                        </div>
-                        
-                        <div className="flex flex-col h-full border rounded-lg bg-card p-4">
-                            <AiChatTuner
-                                processedMap={processedMap}
-                                logData={logData}
-                                onSuggestion={handleAiSuggestion}
-                                addLog={addLog}
-                                isProcessing={isProcessing}
-                                setIsProcessing={setIsProcessing}
-                            />
-                        </div>
+                            </CardContent>
+                        </Card>
+                         <Card>
+                            <CardHeader>
+                                <CardTitle>Entrada Manual de Tabela (Lambda)</CardTitle>
+                                <CardDescription>Adicione pontos de log manualmente se não tiver um ficheiro CSV.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <Form {...dynoForm}>
+                                    <form onSubmit={dynoForm.handleSubmit(handleAddDynoLogData)} className="space-y-4">
+                                    <DynoEntryTable />
+                                    <Button type="submit" className="w-full" disabled={!processedMap || dynoForm.getValues('loadColumns').length === 0}>
+                                        <PlusCircle className="mr-2" /> Adicionar Pontos ao Ensaio
+                                    </Button>
+                                    </form>
+                                </Form>
+                            </CardContent>
+                        </Card>
                     </div>
 
                     <div className="flex-1 border rounded-lg min-h-[200px]">
