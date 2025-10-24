@@ -7,15 +7,66 @@ import { calculateCorrections } from '@/lib/ecu';
 // Mock AI object to avoid dependency issues for now.
 const ai = {
   definePrompt: (config: any) => {
-    return async (input: any): Promise<{ output: any }> => {
-      console.warn("AI prompt não está totalmente implementado. A usar lógica de fallback.");
-      // Fallback behavior for complex prompts when genkit is not fully wired
+    // This is a simplified mock. In a real scenario, this would interact with a GenAI model.
+    return async (input: SuggestFuelMapChangesInput): Promise<{ output: any }> => {
+      // 1. Handle datalog-based corrections if a target is specified.
+      const lambdaMatch = input.prompt.match(/(?:lambda|sonda|alvo de)\s*([\d\.,]+)/i);
+      if (input.logData.length > 0 && lambdaMatch) {
+          const targetLambda = parseFloat(lambdaMatch[1].replace(',', '.'));
+          if (!isNaN(targetLambda)) {
+              try {
+                  const { correctedMap, modifiedIndices } = calculateCorrections(input.map, input.logData, targetLambda, 100);
+                  const changes = modifiedIndices.map(mod => ({
+                      y: mod.y,
+                      x: mod.x,
+                      newValue: correctedMap[mod.y][mod.x] ?? input.map.calculatedMap[mod.y][mod.x],
+                  }));
+                  return {
+                      output: {
+                          reasoning: `Com base na sua análise de log e no Lambda alvo de ${targetLambda}, foram calculadas ${changes.length} correções.`,
+                          changes: changes,
+                      }
+                  };
+              } catch (error) {
+                  return {
+                      output: {
+                          reasoning: `Erro ao processar o ensaio: ${(error as Error).message}`,
+                          changes: [],
+                      }
+                  };
+              }
+          }
+      }
+
+      // 2. Handle generic percentage changes
+      const percentMatch = input.prompt.match(/(?:adicione|aumente|remova|diminua|mais|menos)\s*([\d\.,]+)%/i);
+      if (percentMatch) {
+          const percent = parseFloat(percentMatch[1].replace(',', '.'));
+          const isAdding = /adicione|aumente|mais/i.test(input.prompt);
+          const multiplier = isAdding ? (1 + percent / 100) : (1 - percent / 100);
+          
+          const changes = input.map.calculatedMap.flatMap((row: (number | null)[], y: number) => 
+            row.map((cell: number | null, x: number) => {
+              if (cell !== null) {
+                return { y, x, newValue: cell * multiplier };
+              }
+              return null;
+            })
+          ).filter(Boolean);
+          
+          return {
+              output: {
+                  reasoning: `A aplicar uma ${isAdding ? 'adição' : 'redução'} de ${percent}% a todas as ${changes.length} células do mapa.`,
+                  changes: changes,
+              }
+          };
+      }
+
+      // 3. Fallback for complex requests that we can't parse with simple logic.
       return {
         output: {
-          reasoning: "Este é um pedido complexo. Como a IA avançada está a ser integrada, aqui está um exemplo de modificação: um aumento de 2% na célula (10, 10). Para resultados precisos, por favor use pedidos diretos como 'adicionar 10% de combustível' ou use a funcionalidade de ajuste por log.",
-          changes: [
-            { y: 10, x: 10, newValue: (input.map.calculatedMap?.[10]?.[10] ?? 50) * 1.02 }
-          ].filter(() => input.map.calculatedMap?.[10]?.[10] !== undefined) // Filter if the cell doesn't exist
+          reasoning: "Desculpe, ocorreu um erro ao processar o seu pedido complexo. Por favor, tente um pedido mais simples como 'adicionar 10% de combustível' ou use a funcionalidade de ajuste por log com um alvo de lambda explícito.",
+          changes: [],
         }
       };
     };
@@ -24,7 +75,7 @@ const ai = {
 
 const SuggestFuelMapChangesInputSchema = z.object({
   prompt: z.string(),
-  map: z.any(), // Using any for simplicity, in real life should be a Zod schema for ProcessedMap
+  map: z.any(), // Using any for simplicity, should be a Zod schema for ProcessedMap
   logData: z.array(z.any()),
 });
 
@@ -73,67 +124,7 @@ Generate the JSON output.
 
 export async function suggestFuelMapChanges(input: SuggestFuelMapChangesInput): Promise<z.infer<typeof AiFuelSuggestionSchema>> {
 
-  const { prompt, map, logData } = input;
-  
-  // 1. Handle datalog-based corrections
-  if (logData.length > 0) {
-    const lambdaMatch = prompt.match(/(?:lambda|sonda|alvo de)\s*([\d\.,]+)/i);
-    const targetLambda = lambdaMatch ? parseFloat(lambdaMatch[1].replace(',', '.')) : null;
-
-    if (targetLambda) {
-      try {
-        const { correctedMap, modifiedIndices } = calculateCorrections(map, logData, targetLambda, 100);
-        
-        const changes = modifiedIndices.map(mod => ({
-          y: mod.y,
-          x: mod.x,
-          newValue: correctedMap[mod.y][mod.x] ?? map.calculatedMap[mod.y][mod.x],
-        }));
-
-        if (changes.length > 0) {
-          return {
-            reasoning: `Com base na sua análise de log e no Lambda alvo de ${targetLambda}, foram calculadas ${changes.length} correções para atingir o seu objetivo.`,
-            changes: changes,
-          };
-        } else {
-          return {
-            reasoning: `A sua análise de log foi processada, mas nenhuma célula necessitou de correção para atingir o Lambda alvo de ${targetLambda}. O mapa já parece estar otimizado para estas condições.`,
-            changes: [],
-          };
-        }
-      } catch (error) {
-         return {
-          reasoning: `Ocorreu um erro ao analisar os seus dados de ensaio: ${(error as Error).message}. Verifique os cabeçalhos do seu ficheiro .csv (precisa de 'RPM', 'Lambda'/'AFR' e uma coluna de carga correspondente ao seu mapa) e tente novamente.`,
-          changes: []
-        };
-      }
-    }
-  }
-
-  // 2. Handle generic percentage-based requests if no datalog logic was triggered
-  const percentMatch = prompt.match(/(?:adicione|aumente|remova|diminua|mais|menos)\s*([\d\.,]+)%/i);
-  if (percentMatch) {
-      const percent = parseFloat(percentMatch[1].replace(',', '.'));
-      const isAdding = /adicione|aumente|mais/i.test(prompt);
-      const multiplier = isAdding ? (1 + percent / 100) : (1 - percent / 100);
-      
-      const changes = map.calculatedMap.flatMap((row: (number | null)[], y: number) => 
-        row.map((cell: number | null, x: number) => {
-          if (cell !== null) {
-            return { y, x, newValue: cell * multiplier };
-          }
-          return null;
-        })
-      ).filter((c): c is { y: number; x: number; newValue: number; } => c !== null);
-      
-      return {
-        reasoning: `A aplicar uma ${isAdding ? 'adição' : 'redução'} de ${percent}% a todas as ${changes.length} células do mapa.`,
-        changes: changes,
-      };
-  }
-
-
-  // 3. Fallback to a mock AI for complex prompts or as a default
+  // The 'prompt' function is now our mock/hybrid AI logic from above.
   try {
      const { output } = await prompt(input);
      if (!output) {
@@ -143,7 +134,7 @@ export async function suggestFuelMapChanges(input: SuggestFuelMapChangesInput): 
   } catch (error) {
       console.error("Erro ao chamar o fluxo de IA:", error);
       return {
-        reasoning: "Desculpe, ocorreu um erro ao processar o seu pedido complexo. Por favor, tente um pedido mais simples como 'adicionar 10% de combustível' ou use a funcionalidade de ajuste por log.",
+        reasoning: "Desculpe, ocorreu um erro ao processar o seu pedido. Por favor, tente um pedido mais simples como 'adicionar 10% de combustível' ou use a funcionalidade de ajuste por log.",
         changes: [],
       };
   }
