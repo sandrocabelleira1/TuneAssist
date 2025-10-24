@@ -40,32 +40,33 @@ const prompt = ai.definePrompt(
 
 User's goal: "{{prompt}}"
 
-The current fuel map has ${'{{map.calculatedMap.length}}'} rows and ${'{{map.calculatedMap[0].length}}'} columns.
+The current fuel map has {{map.calculatedMap.length}} rows and {{map.calculatedMap[0].length}} columns.
 The axes are:
-Y-Axis (rows): ${'{{map.axes.y.label}}'}
-X-Axis (columns): ${'{{map.axes.x.label}}'}
+Y-Axis (rows): {{map.axes.y.label}} with values from {{map.axes.y.calculated[0]}} to {{map.axes.y.calculated[map.axes.y.calculated.length - 1]}}
+X-Axis (columns): {{map.axes.x.label}} with values from {{map.axes.x.calculated[0]}} to {{map.axes.x.calculated[map.axes.x.calculated.length - 1]}}
 
-${'{{#if logData.length}}'}
-The user has provided a datalog with ${'{{logData.length}}'} entries.
-The available data columns are: ${'{{Object.keys logData.[0]}}'}
+{{#if logData.length}}
+The user has provided a datalog with {{logData.length}} entries.
+The available data columns are: {{Object.keys logData.[0]}}
 
 Analyze the user's prompt. 
 - If the user provides a target Lambda or AFR, use the 'calculateCorrections' logic. Your reasoning should state the target and the number of corrections calculated.
 - If the user asks for a percentage change (e.g., "add 5% fuel"), calculate a percentage-based modification for all cells. Your reasoning should state the percentage applied.
-- If the prompt is complex (e.g., "add fuel only above 4000 RPM and 80% load"), identify the relevant cells and apply the change. Your reasoning should explain the conditions you used.
+- If the prompt is complex and refers to specific conditions (e.g., "add fuel only above 4000 RPM and 80% load"), identify the relevant cells based on the axis values and apply the change. Your reasoning should explain the conditions you used to select the cells.
 - If no datalog is provided and the prompt is ambiguous, provide a default example modification and explain how the user can be more specific.
 
 Always return a 'reasoning' text explaining your action and a 'changes' array.
 If no changes are needed, return an empty 'changes' array and explain why.
 If an error occurs, provide a helpful error message in the 'reasoning' and an empty 'changes' array.
 Generate the JSON output.
-${'{{/if}}'}
-${'{{#unless logData.length}}'}
+{{/if}}
+{{#unless logData.length}}
 The user has NOT provided a datalog. Base your suggestion solely on the user's prompt.
 - If the user asks for a percentage change (e.g., "add 10% fuel everywhere"), calculate that change for all cells in the map.
+- If the prompt is complex and refers to specific conditions (e.g., "add fuel only above 4000 RPM and 80% load"), identify the relevant cells based on the axis values and apply the change. Your reasoning should explain the conditions you used to select the cells.
 - If the prompt is ambiguous, provide a default example modification (e.g., a 2% increase to a specific cell) and explain in your 'reasoning' how the user can be more specific (e.g., "add 5% fuel above 4000 RPM and 80% load").
 Generate the JSON output.
-${'{{/unless}}'}
+{{/unless}}
 `,
     },
 );
