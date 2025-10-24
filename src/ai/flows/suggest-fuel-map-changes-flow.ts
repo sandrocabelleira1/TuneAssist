@@ -77,7 +77,7 @@ export async function suggestFuelMapChanges(input: SuggestFuelMapChangesInput): 
   
   // 1. Handle datalog-based corrections
   if (logData.length > 0) {
-    const lambdaMatch = prompt.match(/(?:lambda|alvo)\s+([\d\.]+)/i);
+    const lambdaMatch = prompt.match(/(?:lambda|alvo|sonda)\s+([\d\.]+)/i);
     const targetLambda = lambdaMatch ? parseFloat(lambdaMatch[1]) : null;
 
     if (targetLambda) {
