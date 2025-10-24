@@ -77,8 +77,8 @@ export async function suggestFuelMapChanges(input: SuggestFuelMapChangesInput): 
   
   // 1. Handle datalog-based corrections
   if (logData.length > 0) {
-    const lambdaMatch = prompt.match(/(?:lambda|alvo|sonda)\s+([\d\.]+)/i);
-    const targetLambda = lambdaMatch ? parseFloat(lambdaMatch[1]) : null;
+    const lambdaMatch = prompt.match(/(?:lambda|sonda|alvo de)\s*([\d\.,]+)/i);
+    const targetLambda = lambdaMatch ? parseFloat(lambdaMatch[1].replace(',', '.')) : null;
 
     if (targetLambda) {
       try {
@@ -111,9 +111,9 @@ export async function suggestFuelMapChanges(input: SuggestFuelMapChangesInput): 
   }
 
   // 2. Handle generic percentage-based requests if no datalog logic was triggered
-  const percentMatch = prompt.match(/(?:adicione|aumente|remova|diminua|mais|menos)\s*([\d\.]+)%/i);
+  const percentMatch = prompt.match(/(?:adicione|aumente|remova|diminua|mais|menos)\s*([\d\.,]+)%/i);
   if (percentMatch) {
-      const percent = parseFloat(percentMatch[1]);
+      const percent = parseFloat(percentMatch[1].replace(',', '.'));
       const isAdding = /adicione|aumente|mais/i.test(prompt);
       const multiplier = isAdding ? (1 + percent / 100) : (1 - percent / 100);
       
