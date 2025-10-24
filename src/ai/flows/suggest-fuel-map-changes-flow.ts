@@ -65,7 +65,7 @@ export async function suggestFuelMapChanges(
   }
   
   // 2. Análise de Pedidos Complexos com Condições
-  const complexMatch = prompt.match(/(aumente|adicione|retire|diminua|corte|defina)\s+(?:o combust.vel em\s+)?([\d\.,]+)%?\s*(?:para\s+|em\s+|acima de\s+|abaixo de\s+)?(rpm|carga|tps)?\s*(acima de|abaixo de|entre)?\s*([\d\.,]+)?\s*(?:e\s+)?(rpm|carga|tps)?\s*(acima de|abaixo de|entre)?\s*([\d\.,]+)?/i);
+  const complexMatch = prompt.match(/(aumente|adicione|retire|diminua|corte|defina)\s+(?:o combust.vel em\s+)?([\d\.,]+)%?\s*(?:para\s+|em\s+|acima de\s+|abaixo de\s+)?(rpm|carga|tps|map)?\s*(acima de|abaixo de|entre)?\s*([\d\.,]+)?\s*(?:e\s+)?(rpm|carga|tps|map)?\s*(acima de|abaixo de|entre)?\s*([\d\.,]+)?/i);
     if (complexMatch && currentMap && currentMap.axes) {
         try {
             const [_, action, valueStr, axis1_name, condition1, value1_str, axis2_name, condition2, value2_str] = complexMatch;
@@ -86,6 +86,7 @@ export async function suggestFuelMapChanges(
             const multiplier = isSubtraction ? 1 - percentage / 100 : 1 + percentage / 100;
             
             const getAxisByName = (name: string) => {
+                if (!name) return null;
                 const lowerName = name.toLowerCase();
                 if (axes.x.label.toLowerCase().includes(lowerName)) return { axis: axes.x, type: 'x' };
                 if (axes.y.label.toLowerCase().includes(lowerName)) return { axis: axes.y, type: 'y' };
@@ -108,21 +109,27 @@ export async function suggestFuelMapChanges(
 
             for (let y = 0; y < calculatedMap.length; y++) {
                 for (let x = 0; x < calculatedMap[y].length; x++) {
-                    const rpmValue = rpmAxisInfo?.type === 'x' ? axes.x.calculated[x] : axes.y.calculated[y];
-                    const loadValue = loadAxisInfo?.type === 'x' ? axes.x.calculated[x] : axes.y.calculated[y];
                     
                     let condition1Met = true;
                     if (axis1_name && condition1 && value1_str) {
                          const axis1Info = getAxisByName(axis1_name);
-                         const valueToCheck1 = axis1Info?.type === 'x' ? axes.x.calculated[x] : axes.y.calculated[y];
-                         condition1Met = checkCondition(Number(valueToCheck1), condition1, value1_str);
+                         if (axis1Info) {
+                            const valueToCheck1 = axis1Info.type === 'x' ? axes.x.calculated[x] : axes.y.calculated[y];
+                            condition1Met = checkCondition(Number(valueToCheck1), condition1, value1_str);
+                         } else {
+                             condition1Met = false; // Axis name provided but not found
+                         }
                     }
 
                      let condition2Met = true;
                      if (axis2_name && condition2 && value2_str) {
                          const axis2Info = getAxisByName(axis2_name);
-                         const valueToCheck2 = axis2Info?.type === 'x' ? axes.x.calculated[x] : axes.y.calculated[y];
-                         condition2Met = checkCondition(Number(valueToCheck2), condition2, value2_str);
+                         if (axis2Info) {
+                            const valueToCheck2 = axis2Info.type === 'x' ? axes.x.calculated[x] : axes.y.calculated[y];
+                            condition2Met = checkCondition(Number(valueToCheck2), condition2, value2_str);
+                         } else {
+                            condition2Met = false; // Axis name provided but not found
+                         }
                     }
 
                     if (condition1Met && condition2Met) {
