@@ -16,6 +16,8 @@ interface AiChatTunerProps {
     selectedMapDefinition: XDFinition | undefined;
     onSuggestion: (suggestion: AiFuelSuggestion) => void;
     addLog: (message: string, type?: 'info' | 'success' | 'error' | 'debug') => void;
+    messages: ChatMessage[];
+    setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }
 
 export default function AiChatTuner({ 
@@ -23,9 +25,10 @@ export default function AiChatTuner({
     logData, 
     selectedMapDefinition, 
     onSuggestion,
-    addLog 
+    addLog,
+    messages,
+    setMessages,
 }: AiChatTunerProps) {
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -62,7 +65,9 @@ export default function AiChatTuner({
             
             const newAssistantMessage: ChatMessage = { role: 'assistant', content: suggestion };
             setMessages(prev => [...prev, newAssistantMessage]);
-            addLog(`Co-piloto IA sugeriu ${suggestion.changes.length} alterações.`, 'info');
+            if (suggestion.changes.length > 0) {
+                addLog(`Co-piloto IA sugeriu ${suggestion.changes.length} alterações.`, 'info');
+            }
 
         } catch (error) {
             const errorMessage = `Erro ao comunicar com a IA: ${(error as Error).message}`;

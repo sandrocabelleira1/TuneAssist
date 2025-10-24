@@ -484,6 +484,7 @@ export default function EcuTuningAssistant() {
     const [isModified, setIsModified] = useState(false);
     const [aiModifiedCells, setAiModifiedCells] = useState<Set<string>>(new Set());
     const [aiModifiedCellsCache, setAiModifiedCellsCache] = useState<Record<string, Set<string>>>({});
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
     const [plotOrientation, setPlotOrientation] = useState<PlotOrientation>('y-vs-x');
@@ -577,6 +578,7 @@ export default function EcuTuningAssistant() {
         setProcessedMapCache({});
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
+        setChatMessages([]);
         addLog('Seleção de mapa e cache limpos.', 'info');
     }, [addLog]);
 
@@ -609,6 +611,7 @@ export default function EcuTuningAssistant() {
         setAggressiveness(100);
         setIgnitionRuns({ base: [], modified: [] });
         setDynoRuns([]);
+        setChatMessages([]);
         dynoForm.reset();
         
         if (binInputRef.current) binInputRef.current.value = '';
@@ -1044,6 +1047,7 @@ export default function EcuTuningAssistant() {
             
             setAiModifiedCells(new Set());
             setAiModifiedCellsCache({});
+            setChatMessages([]);
 
 
         } catch (error) {
@@ -1462,6 +1466,8 @@ const handleMapSelectionChange = (id: string) => {
                         selectedMapDefinition={selectedMapDefinition}
                         onSuggestion={applyAiSuggestion}
                         addLog={addLog}
+                        messages={chatMessages}
+                        setMessages={setChatMessages}
                     />
                 </TabsContent>
             </>
@@ -1958,6 +1964,8 @@ const handleMapSelectionChange = (id: string) => {
                                     selectedMapDefinition={selectedMapDefinition}
                                     onSuggestion={applyAiSuggestion}
                                     addLog={addLog}
+                                    messages={chatMessages}
+                                    setMessages={setChatMessages}
                                 />
                             </TabsContent>
                             <TabsContent value="ignition-analysis" className="flex-1 min-h-0 overflow-y-auto">
