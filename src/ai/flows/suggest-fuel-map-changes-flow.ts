@@ -17,16 +17,16 @@ export async function suggestFuelMapChanges(
 ): Promise<z.infer<typeof AiFuelSuggestionSchema>> {
   const { prompt, currentMap, mapDefinition, logData } = input;
 
-  if (!prompt) {
+  if (!prompt || typeof prompt !== 'string') {
       return {
-          reasoning: "Por favor, forneça um pedido.",
+          reasoning: "Por favor, forneça um pedido válido.",
           changes: [],
       };
   }
 
   const lambdaMatch = prompt.match(/lambda\s+de\s+([\d\.,]+)/i);
 
-  if (lambdaMatch && logData && logData.length > 0) {
+  if (lambdaMatch && lambdaMatch[1] && logData && logData.length > 0) {
     const targetLambda = parseFloat(lambdaMatch[1].replace(',', '.'));
     if (!isNaN(targetLambda)) {
       try {
@@ -64,7 +64,7 @@ export async function suggestFuelMapChanges(
   }
   
   const simplePercentageMatch = prompt.match(/aumente|adicione|retire|diminua|corte\s+em\s+([\d\.,]+)%?/i);
-  if (simplePercentageMatch) {
+  if (simplePercentageMatch && simplePercentageMatch[1]) {
         const percentage = parseFloat(simplePercentageMatch[1].replace(',', '.'));
         const isSubtraction = /retire|diminua|corte/i.test(prompt);
 
