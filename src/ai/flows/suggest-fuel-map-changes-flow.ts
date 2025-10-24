@@ -2,7 +2,6 @@
 import { z } from 'zod';
 import { calculateCorrections } from '@/lib/ecu';
 import { type ProcessedMap, AiFuelSuggestionSchema } from '@/lib/types';
-import { процент } from 'brc-masks';
 
 const SuggestFuelMapChangesInputSchema = z.object({
   prompt: z.string(),
@@ -18,7 +17,13 @@ export async function suggestFuelMapChanges(
 ): Promise<z.infer<typeof AiFuelSuggestionSchema>> {
   const { prompt, currentMap, mapDefinition, logData } = input;
 
-  const simplePercentageMatch = prompt.match(/aumente|adicione|retire|diminua|corte\s+em\s+([\d\.,]+)%?/i);
+  if (!prompt) {
+      return {
+          reasoning: "Por favor, forneça um pedido.",
+          changes: [],
+      };
+  }
+
   const lambdaMatch = prompt.match(/lambda\s+de\s+([\d\.,]+)/i);
 
   if (lambdaMatch && logData && logData.length > 0) {
@@ -58,6 +63,7 @@ export async function suggestFuelMapChanges(
     }
   }
   
+  const simplePercentageMatch = prompt.match(/aumente|adicione|retire|diminua|corte\s+em\s+([\d\.,]+)%?/i);
   if (simplePercentageMatch) {
         const percentage = parseFloat(simplePercentageMatch[1].replace(',', '.'));
         const isSubtraction = /retire|diminua|corte/i.test(prompt);
