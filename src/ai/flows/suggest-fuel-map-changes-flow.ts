@@ -90,20 +90,20 @@ export async function suggestFuelMapChanges(
                 const lowerName = name.toLowerCase();
                 if (axes.x.label.toLowerCase().includes(lowerName)) return { axis: axes.x, type: 'x' };
                 if (axes.y.label.toLowerCase().includes(lowerName)) return { axis: axes.y, type: 'y' };
+                if (lowerName === 'carga' || lowerName === 'tps' || lowerName === 'map') {
+                    if (axes.x.label.toLowerCase().includes('tps') || axes.x.label.toLowerCase().includes('map')) return { axis: axes.x, type: 'x' };
+                    if (axes.y.label.toLowerCase().includes('tps') || axes.y.label.toLowerCase().includes('map')) return { axis: axes.y, type: 'y' };
+                }
                 return null;
             }
-
-            const rpmAxisInfo = getAxisByName('rpm');
-            const loadAxisInfo = getAxisByName('tps') || getAxisByName('map') || getAxisByName('carga');
             
             const checkCondition = (axisValue: number, condition?: string, conditionValue?: string) => {
-                if (!condition || !conditionValue) return true; // No condition, always true
+                if (!condition || !conditionValue) return true;
                 const numCondValue = parseFloat(conditionValue.replace(',', '.'));
                 if(isNaN(numCondValue)) return true;
 
                 if (condition.includes('acima')) return axisValue > numCondValue;
                 if (condition.includes('abaixo')) return axisValue < numCondValue;
-                // "entre" não é tratado aqui, simplificação
                 return true;
             };
 
@@ -117,7 +117,7 @@ export async function suggestFuelMapChanges(
                             const valueToCheck1 = axis1Info.type === 'x' ? axes.x.calculated[x] : axes.y.calculated[y];
                             condition1Met = checkCondition(Number(valueToCheck1), condition1, value1_str);
                          } else {
-                             condition1Met = false; // Axis name provided but not found
+                             condition1Met = false; // Axis name provided but not found, so fail condition
                          }
                     }
 
@@ -128,9 +128,24 @@ export async function suggestFuelMapChanges(
                             const valueToCheck2 = axis2Info.type === 'x' ? axes.x.calculated[x] : axes.y.calculated[y];
                             condition2Met = checkCondition(Number(valueToCheck2), condition2, value2_str);
                          } else {
-                            condition2Met = false; // Axis name provided but not found
+                            condition2Met = false; // Axis name provided but not found, so fail condition
                          }
                     }
+                    
+                    // If any condition was specified but its axis was not found, we must not apply changes.
+                    const axis1RequestedButNotFound = (axis1_name && !getAxisByName(axis1_name));
+                    const axis2RequestedButNotFound = (axis2_name && !getAxisByName(axis2_name));
+
+                    if (axis1RequestedButNotFound || axis2RequestedButNotFound) {
+                        // This prevents the entire map from being changed if an axis is misspelled.
+                        // We must break out and give a specific error.
+                        const missingAxis = axis1RequestedButNotFound ? axis1_name : axis2_name;
+                        return {
+                            reasoning: `Não consegui encontrar o eixo "${missingAxis}" no seu mapa atual. Verifique se o nome está correto.`,
+                            changes: [],
+                        };
+                    }
+
 
                     if (condition1Met && condition2Met) {
                         const originalValue = calculatedMap[y][x];
