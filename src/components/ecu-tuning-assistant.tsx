@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud, Download, LineChart as LineChartIcon } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion } from '@/lib/types';
+import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion, ChatMessage } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -37,6 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import DynoAnalyzer from '@/components/dyno-analyzer';
+import AiChatTuner from '@/components/ai-chat-tuner';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -526,6 +527,32 @@ export default function EcuTuningAssistant() {
     const anyMapModified = useMemo(() => {
         return Object.values(modifiedStatusCache).some(status => status);
     }, [modifiedStatusCache]);
+    
+    const applyAiSuggestion = useCallback((suggestion: AiFuelSuggestion) => {
+        if (!processedMap || !processedMap.calculatedMap || !activeMapId) return;
+
+        addLog(`A aplicar ${suggestion.changes.length} alterações de IA ao mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
+        const newMap = processedMap.calculatedMap.map(row => [...row]);
+        const newAiModifiedCells = new Set<string>();
+
+        suggestion.changes.forEach(change => {
+            if (newMap[change.y] && newMap[change.y][change.x] !== undefined) {
+                newMap[change.y][change.x] = change.newValue;
+                newAiModifiedCells.add(`${change.y}-${change.x}`);
+            }
+        });
+        
+        const newProcessedMap = { ...processedMap, calculatedMap: newMap };
+        setProcessedMap(newProcessedMap);
+        setAiModifiedCells(newAiModifiedCells);
+        
+        setIsModified(true);
+        setAiModifiedCellsCache(prev => ({ ...prev, [activeMapId as string]: newAiModifiedCells }));
+        setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
+        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
+
+    }, [processedMap, activeMapId, addLog, selectedMapDefinition?.name]);
+
 
     const clearAiModifications = () => {
         if (activeMapId) {
@@ -1254,7 +1281,7 @@ const handleMapSelectionChange = (id: string) => {
             );
         }
 
-        if (!activeMapId && !['map-scanner', 'dyno-analysis'].includes(activeTab)) {
+        if (!activeMapId && !['map-scanner', 'dyno-analysis', 'ai-tuner'].includes(activeTab)) {
             return (
                 <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
                     <div>
@@ -1424,6 +1451,15 @@ const handleMapSelectionChange = (id: string) => {
                     <MapScanner
                         binFile={binFile}
                         onLoadMap={handleLoadPotentialMap}
+                        addLog={addLog}
+                    />
+                </TabsContent>
+                 <TabsContent value="ai-tuner" className="flex-1 min-h-0 flex flex-col">
+                    <AiChatTuner 
+                        processedMap={processedMap}
+                        logData={logData}
+                        selectedMapDefinition={selectedMapDefinition}
+                        onSuggestion={applyAiSuggestion}
                         addLog={addLog}
                     />
                 </TabsContent>
@@ -1888,6 +1924,10 @@ const handleMapSelectionChange = (id: string) => {
                         <BarChart3 className="mr-2" />
                         Gráfico 2D
                       </TabsTrigger>
+                       <TabsTrigger value="ai-tuner" disabled={!activeMapId}>
+                          <Wand2 className="mr-2" />
+                          Co-piloto IA
+                      </TabsTrigger>
                       <TabsTrigger value="fuel-analysis" disabled={!activeMapId}>
                           <ClipboardList className="mr-2" />
                           Análise de Combustível
@@ -1906,10 +1946,19 @@ const handleMapSelectionChange = (id: string) => {
                       </TabsTrigger>
                     </TabsList>
                     
-                    {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' && activeTab !== 'ignition-analysis' ? (
+                    {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' && activeTab !== 'ignition-analysis' && activeTab !== 'ai-tuner' ? (
                         renderContent()
                     ) : (
                         <>
+                             <TabsContent value="ai-tuner" className="flex-1 min-h-0 flex flex-col">
+                                <AiChatTuner 
+                                    processedMap={processedMap}
+                                    logData={logData}
+                                    selectedMapDefinition={selectedMapDefinition}
+                                    onSuggestion={applyAiSuggestion}
+                                    addLog={addLog}
+                                />
+                            </TabsContent>
                             <TabsContent value="ignition-analysis" className="flex-1 min-h-0 overflow-y-auto">
                                 <IgnitionTimingAnalyzer 
                                     runs={ignitionRuns} 
