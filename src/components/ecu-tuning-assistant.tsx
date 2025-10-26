@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, DownloadCloud, Download, LineChart as LineChartIcon } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion, ChatMessage } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -42,6 +42,7 @@ import DynoAnalyzer from '@/components/dyno-analyzer';
 import AiChatTuner from '@/components/ai-chat-tuner';
 import { storage } from '@/lib/firebase/client';
 import { ref, uploadBytes } from "firebase/storage";
+import BackupLibrary from '@/components/backup-library';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1374,7 +1375,7 @@ const handleMapSelectionChange = (id: string) => {
                         />
                     </div>
                 </TabsContent>
-                <TabsContent value="fuel-analysis" className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto p-1">
+                <TabsContent value="fuel-analysis" className="flex-1 min-h-0 overflow-y-auto p-1">
                     <div className="grid grid-cols-1 gap-4">
                         <Card>
                             <CardHeader>
@@ -1486,6 +1487,9 @@ const handleMapSelectionChange = (id: string) => {
                         messages={chatMessages}
                         setMessages={setChatMessages}
                     />
+                </TabsContent>
+                 <TabsContent value="backup-library" className="flex-1 min-h-0 flex flex-col">
+                    <BackupLibrary addLog={addLog} />
                 </TabsContent>
             </>
         );
@@ -1968,9 +1972,13 @@ const handleMapSelectionChange = (id: string) => {
                           <Search className="mr-2" />
                           Scanner de Mapas
                       </TabsTrigger>
+                      <TabsTrigger value="backup-library">
+                          <FolderClock className="mr-2" />
+                          Biblioteca de Backups
+                      </TabsTrigger>
                     </TabsList>
                     
-                    {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' && activeTab !== 'ignition-analysis' && activeTab !== 'ai-tuner' && activeTab !== 'fuel-analysis' ? (
+                    {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' && activeTab !== 'ignition-analysis' && activeTab !== 'ai-tuner' && activeTab !== 'fuel-analysis' && activeTab !== 'backup-library' ? (
                         <div className="flex-1 flex flex-col overflow-auto">{renderContent()}</div>
                     ) : (
                         <>
@@ -2087,6 +2095,9 @@ const handleMapSelectionChange = (id: string) => {
                                     addLog={addLog}
                                 />
                             </TabsContent>
+                             <TabsContent value="backup-library" className="flex-1 min-h-0 flex flex-col">
+                                <BackupLibrary addLog={addLog} />
+                            </TabsContent>
                         </>
                     )}
 
@@ -2099,5 +2110,3 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
-
-    
