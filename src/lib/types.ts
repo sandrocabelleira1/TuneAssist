@@ -1,5 +1,4 @@
 
-
 import { z } from 'zod';
 
 // This is a placeholder as the actual schema is gone.
@@ -168,4 +167,16 @@ export interface DynoRun {
   name: string;
   data: DynoRunDataPoint[];
   color: string;
+}
+
+export interface BackupFile {
+  id: string;
+  name: string;
+  storagePath: string;
+  size: number;
+  createdAt: {
+    seconds: number;
+    nanoseconds: number;
+  };
+  userId: string;
 }

@@ -41,7 +41,9 @@ import Image from 'next/image';
 import DynoAnalyzer from '@/components/dyno-analyzer';
 import AiChatTuner from '@/components/ai-chat-tuner';
 import { storage } from '@/lib/firebase/client';
-import { ref, uploadBytes } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useUser, useFirestore, addDocumentNonBlocking } from '@/firebase';
+import { collection, serverTimestamp } from 'firebase/firestore';
 import BackupLibrary from '@/components/backup-library';
 
 
@@ -179,10 +181,15 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         if (isSelecting) {
             setIsSelecting(false);
             if (selection.start && selection.end && mapData && hasDraggedRef.current) {
-                setMassEditPayload({ selection, currentMapData: mapData });
+                const isSingleCellSelection = selection.start.y === selection.end.y && selection.start.x === selection.end.x;
+                if (!isSingleCellSelection) {
+                    setMassEditPayload({ selection, currentMapData: mapData });
+                }
             }
+             hasDraggedRef.current = false;
         }
     }, [isSelecting, selection, mapData]);
+
 
     const handleMassEditAndClose = (
         editSelection: CellSelection, 
@@ -478,6 +485,9 @@ type StructureTemplate = {
 
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
+    const { user } = useUser();
+    const firestore = useFirestore();
+
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
     const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFinition[], allTables: Map<string, Element> } | null>(null);
     const [logFile, setLogFile] = useState<{ name: string; content: string } | null>(null);
@@ -1007,6 +1017,12 @@ export default function EcuTuningAssistant() {
             toast({ title: 'Erro ao Salvar', description: msg, variant: 'destructive' });
             return;
         }
+
+        if (!user || !firestore) {
+            addLog("Utilizador não autenticado. Impossível salvar no banco de dados.", 'error');
+            toast({ title: 'Erro de Autenticação', description: "Inicie a sessão para salvar backups.", variant: 'destructive' });
+            return;
+        }
         
         addLog("A preparar para salvar o ficheiro BIN...", 'info');
         
@@ -1036,7 +1052,7 @@ export default function EcuTuningAssistant() {
             const newFileName = `${originalName}_mod_${mapsToSave.length}map.bin`;
             a.download = newFileName;
             document.body.appendChild(a);
-            a.click();
+a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
@@ -1044,14 +1060,28 @@ export default function EcuTuningAssistant() {
             addLog(successMsg, 'success');
             toast({ title: 'Salvo com Sucesso', description: successMsg });
             
-            // Upload to Firebase Storage
+            // Upload to Firebase Storage and create Firestore entry
             try {
                 addLog(`A fazer backup de ${newFileName} para o armazenamento na nuvem...`, 'info');
                 const timestamp = new Date().toISOString();
-                const storageRef = ref(storage, `backups/${timestamp}_${newFileName}`);
-                await uploadBytes(storageRef, blob);
-                addLog('Backup na nuvem concluído com sucesso.', 'success');
-                toast({ title: 'Backup Concluído', description: 'Uma cópia do seu ficheiro .bin foi salva na nuvem.' });
+                const storagePath = `backups/${user.uid}/${timestamp}_${newFileName}`;
+                const storageRef = ref(storage, storagePath);
+                
+                const uploadResult = await uploadBytes(storageRef, blob);
+                
+                const backupDoc = {
+                    userId: user.uid,
+                    name: newFileName,
+                    storagePath: uploadResult.ref.fullPath,
+                    size: uploadResult.metadata.size,
+                    createdAt: serverTimestamp(),
+                };
+
+                const backupsCollection = collection(firestore, 'users', user.uid, 'backups');
+                addDocumentNonBlocking(backupsCollection, backupDoc);
+
+                addLog('Backup na nuvem e registo no banco de dados concluídos com sucesso.', 'success');
+                toast({ title: 'Backup Concluído', description: 'Uma cópia foi salva na sua biblioteca na nuvem.' });
             } catch (storageError) {
                 const errorMsg = `Falha ao salvar backup na nuvem: ${(storageError as Error).message}`;
                 addLog(errorMsg, 'error');
@@ -1069,7 +1099,10 @@ export default function EcuTuningAssistant() {
                  setIsModified(false);
             }
             
-            setChatMessages([]);
+            if (chatMessages.length > 0) {
+              addLog("A limpar histórico de chat após salvar.", "info");
+              setChatMessages([]);
+            }
 
 
         } catch (error) {
@@ -1327,7 +1360,7 @@ const handleMapSelectionChange = (id: string) => {
 
         return (
             <>
-                <TabsContent value="view-table" className="flex-1 overflow-auto">
+                <TabsContent value="view-table" className="overflow-auto">
                     <DataTable
                         key={activeMapId}
                         mapData={processedMap?.calculatedMap ?? null}
