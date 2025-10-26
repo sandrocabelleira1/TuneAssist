@@ -4,7 +4,7 @@
 import React, { useState, useCallback } from 'react';
 import { collection, doc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { ref, getDownloadURL, deleteObject } from 'firebase/storage';
-import { useFirestore, useCollection, useUser } from '@/firebase';
+import { useFirestore, useCollection, useUser, useMemoFirebase } from '@/firebase';
 import { storage } from '@/lib/firebase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,10 @@ export default function BackupLibrary({ addLog }: BackupLibraryProps) {
   const { user } = useUser();
   const firestore = useFirestore();
 
-  const backupsCollection = user ? collection(firestore, 'users', user.uid, 'backups') : null;
+  const backupsCollection = useMemoFirebase(() => 
+    user ? collection(firestore, 'users', user.uid, 'backups') : null
+  , [firestore, user]);
+  
   const { data: files, isLoading, error } = useCollection<BackupFile>(backupsCollection);
   
   const [isDeleting, setIsDeleting] = useState<BackupFile | null>(null);
