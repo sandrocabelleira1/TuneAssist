@@ -42,7 +42,7 @@ import DynoAnalyzer from '@/components/dyno-analyzer';
 import AiChatTuner from '@/components/ai-chat-tuner';
 import { storage } from '@/lib/firebase/client';
 import { ref, uploadBytes } from "firebase/storage";
-import { useUser, useFirestore, useAuth, addDocumentNonBlocking } from '@/firebase';
+import { useUser, useFirestore, useAuth, addDocumentNonBlocking, useMemoFirebase } from '@/firebase';
 import { collection, serverTimestamp } from 'firebase/firestore';
 import BackupLibrary from '@/components/backup-library';
 
@@ -1360,7 +1360,7 @@ const handleMapSelectionChange = (id: string) => {
 
         return (
             <>
-                <TabsContent value="view-table" className="overflow-auto">
+                <TabsContent value="view-table">
                     <DataTable
                         key={activeMapId}
                         mapData={processedMap?.calculatedMap ?? null}
@@ -2016,7 +2016,7 @@ const handleMapSelectionChange = (id: string) => {
                     </TabsList>
                     
                     {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' && activeTab !== 'ignition-analysis' && activeTab !== 'ai-tuner' && activeTab !== 'fuel-analysis' && activeTab !== 'backup-library' ? (
-                        <div className="flex-1 flex flex-col overflow-auto">{renderContent()}</div>
+                        <div className="flex-1 flex flex-col">{renderContent()}</div>
                     ) : (
                         <>
                              <TabsContent value="ai-tuner" className="flex-1 min-h-0 flex flex-col">
