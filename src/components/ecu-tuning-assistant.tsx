@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo } from 'react';
@@ -242,7 +243,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     };
     
     return (
-        <div className="overflow-auto h-full" ref={tableRef} onMouseUp={handleMouseUp}>
+        <div className="overflow-auto" ref={tableRef} onMouseUp={handleMouseUp}>
             <table className="w-full border-collapse text-xs select-none">
                 <thead>
                     <tr>
@@ -1305,7 +1306,7 @@ const handleMapSelectionChange = (id: string) => {
 
         return (
             <>
-                <TabsContent value="view-table" className="flex-1 min-h-0">
+                <TabsContent value="view-table" className="flex-1">
                     <DataTable
                         key={activeMapId}
                         mapData={processedMap?.calculatedMap ?? null}
