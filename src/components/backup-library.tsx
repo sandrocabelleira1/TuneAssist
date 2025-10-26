@@ -16,7 +16,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { BackupFile } from '@/lib/types';
-import { deleteDocumentNonBlocking } from '@/firebase';
 
 
 interface BackupLibraryProps {
@@ -64,7 +63,7 @@ export default function BackupLibrary({ addLog }: BackupLibraryProps) {
     try {
       // 1. Delete Firestore document
       const docRef = doc(firestore, 'users', user.uid, 'backups', fileToDelete.id);
-      deleteDocumentNonBlocking(docRef);
+      await deleteDoc(docRef);
 
       // 2. Delete file from Storage
       const storageRef = ref(storage, fileToDelete.storagePath);

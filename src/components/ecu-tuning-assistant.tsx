@@ -42,8 +42,8 @@ import DynoAnalyzer from '@/components/dyno-analyzer';
 import AiChatTuner from '@/components/ai-chat-tuner';
 import { storage } from '@/lib/firebase/client';
 import { ref, uploadBytes } from "firebase/storage";
-import { useUser, useFirestore, useAuth, addDocumentNonBlocking, useMemoFirebase } from '@/firebase';
-import { collection, serverTimestamp } from 'firebase/firestore';
+import { useUser, useFirestore, useAuth, useMemoFirebase } from '@/firebase';
+import { collection, serverTimestamp, addDoc } from 'firebase/firestore';
 import BackupLibrary from '@/components/backup-library';
 
 
@@ -257,7 +257,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     };
     
     return (
-        <div className="overflow-auto" ref={tableRef} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+        <div className="overflow-x-auto" ref={tableRef} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
             <table className="w-full border-collapse text-xs select-none">
                 <thead>
                     <tr>
@@ -1052,7 +1052,7 @@ export default function EcuTuningAssistant() {
             const newFileName = `${originalName}_mod_${mapsToSave.length}map.bin`;
             a.download = newFileName;
             document.body.appendChild(a);
-a.click();
+            a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
@@ -1078,7 +1078,7 @@ a.click();
                     createdAt: serverTimestamp() as any, // Let server generate timestamp
                 };
 
-                addDocumentNonBlocking(backupsCollectionRef, newBackupDoc);
+                await addDoc(backupsCollectionRef, newBackupDoc);
 
                 addLog('Backup na nuvem e registo no banco de dados concluídos com sucesso.', 'success');
                 toast({ title: 'Backup Concluído', description: 'Uma cópia foi salva na sua biblioteca na nuvem.' });
@@ -1372,7 +1372,7 @@ const handleMapSelectionChange = (id: string) => {
                         aiModifiedCells={aiModifiedCells}
                     />
                 </TabsContent>
-                <TabsContent value="view-3d">
+                <TabsContent value="view-3d" className="h-[70vh]">
                         <div className="h-full w-full">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                                 <SurfacePlot3D
@@ -1412,7 +1412,7 @@ const handleMapSelectionChange = (id: string) => {
                         />
                     </div>
                 </TabsContent>
-                <TabsContent value="fuel-analysis" className="p-1">
+                <TabsContent value="fuel-analysis">
                     <div className="grid grid-cols-1 gap-4">
                         <Card>
                             <CardHeader>
@@ -1485,7 +1485,7 @@ const handleMapSelectionChange = (id: string) => {
                         </Card>
                     </div>
 
-                    <div className="border rounded-lg mt-4">
+                    <div className="border rounded-lg mt-4 h-96">
                         {logData.length > 0 ? (
                             <LogDataTable data={logData} />
                         ) : (
@@ -2014,7 +2014,9 @@ const handleMapSelectionChange = (id: string) => {
                           Biblioteca de Backups
                       </TabsTrigger>
                     </TabsList>
-                    {renderContent()}
+                    <div className="mt-2 flex-1 min-h-0">
+                      {renderContent()}
+                    </div>
                   </Tabs>
                 </div>
               </main>
@@ -2024,3 +2026,4 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
+
