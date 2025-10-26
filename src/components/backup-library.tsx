@@ -66,7 +66,8 @@ export default function BackupLibrary({ addLog }: BackupLibraryProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [addLog, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     fetchFiles();
