@@ -1372,7 +1372,7 @@ const handleMapSelectionChange = (id: string) => {
                         aiModifiedCells={aiModifiedCells}
                     />
                 </TabsContent>
-                <TabsContent value="view-3d" className="flex-1 min-h-0">
+                <TabsContent value="view-3d">
                         <div className="h-full w-full">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                                 <SurfacePlot3D
@@ -1395,7 +1395,7 @@ const handleMapSelectionChange = (id: string) => {
                             )}
                     </div>
                 </TabsContent>
-                <TabsContent value="view-2d" className="flex-1 min-h-0">
+                <TabsContent value="view-2d">
                     <div className="h-full w-full">
                         <LinePlot2D
                             mapData={processedMap?.calculatedMap ?? null}
@@ -1485,7 +1485,7 @@ const handleMapSelectionChange = (id: string) => {
                         </Card>
                     </div>
 
-                    <div className="border rounded-lg min-h-[200px] mt-4">
+                    <div className="border rounded-lg mt-4">
                         {logData.length > 0 ? (
                             <LogDataTable data={logData} />
                         ) : (
@@ -1507,14 +1507,14 @@ const handleMapSelectionChange = (id: string) => {
                 <TabsContent value="dyno-analysis">
                     <DynoAnalyzer runs={dynoRuns} onRunsChange={setDynoRuns} />
                 </TabsContent>
-                <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
+                <TabsContent value="map-scanner" >
                     <MapScanner
                         binFile={binFile}
                         onLoadMap={handleLoadPotentialMap}
                         addLog={addLog}
                     />
                 </TabsContent>
-                 <TabsContent value="ai-tuner" className="flex-1 min-h-0 flex flex-col">
+                 <TabsContent value="ai-tuner">
                     <AiChatTuner 
                         processedMap={processedMap}
                         logData={logData}
@@ -1525,7 +1525,7 @@ const handleMapSelectionChange = (id: string) => {
                         setMessages={setChatMessages}
                     />
                 </TabsContent>
-                 <TabsContent value="backup-library" className="flex-1 min-h-0 flex flex-col">
+                 <TabsContent value="backup-library">
                     <BackupLibrary addLog={addLog} />
                 </TabsContent>
             </>
@@ -2014,130 +2014,7 @@ const handleMapSelectionChange = (id: string) => {
                           Biblioteca de Backups
                       </TabsTrigger>
                     </TabsList>
-                    
-                    {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' && activeTab !== 'ignition-analysis' && activeTab !== 'ai-tuner' && activeTab !== 'fuel-analysis' && activeTab !== 'backup-library' ? (
-                        <div className="flex-1 flex flex-col">{renderContent()}</div>
-                    ) : (
-                        <>
-                             <TabsContent value="ai-tuner">
-                                <AiChatTuner 
-                                    processedMap={processedMap}
-                                    logData={logData}
-                                    selectedMapDefinition={selectedMapDefinition}
-                                    onSuggestion={applyAiSuggestion}
-                                    addLog={addLog}
-                                    messages={chatMessages}
-                                    setMessages={setChatMessages}
-                                />
-                            </TabsContent>
-                            <TabsContent value="fuel-analysis" className="p-1">
-                                <div className="grid grid-cols-1 gap-4">
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle>Ajuste Automático por Log</CardTitle>
-                                            <CardDescription>Carregue um ficheiro de log (.csv) para que o sistema calcule as correções automaticamente com base no Lambda Alvo.</CardDescription>
-                                        </CardHeader>
-                                        <CardContent className="space-y-4">
-                                            <div className="flex items-center gap-4">
-                                                <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
-                                                    <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
-                                                </Button>
-                                                <input
-                                                ref={logInputRef}
-                                                type="file"
-                                                accept=".csv"
-                                                className="hidden"
-                                                onChange={handleLogFileChange}
-                                                />
-                                                <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={logData.length === 0}>
-                                                    <Eraser className="h-4 w-4" />
-                                                    <span className="sr-only">Limpar Dados de Ensaio</span>
-                                                </Button>
-                                            </div>
-                                            
-                                            <div className="space-y-2">
-                                                <Label htmlFor="target-lambda">Lambda Alvo</Label>
-                                                <Input 
-                                                    id="target-lambda" 
-                                                    type="number" 
-                                                    step="0.01"
-                                                    value={targetLambda}
-                                                    onChange={(e) => {
-                                                        const value = e.target.value;
-                                                        setTargetLambda(value === '' ? '' : parseFloat(value));
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
-                                                <Slider
-                                                    id="aggressiveness"
-                                                    min={0}
-                                                    max={100}
-                                                    step={1}
-                                                    value={[aggressiveness]}
-                                                    onValueChange={(value) => setAggressiveness(value[0])}
-                                                />
-                                            </div>
-                                            <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing}>
-                                                <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
-                                            </Button>
-
-                                        </CardContent>
-                                    </Card>
-                                    <Card>
-                                        <CardHeader>
-                                            <CardTitle>Entrada Manual de Tabela (Lambda)</CardTitle>
-                                            <CardDescription>Adicione pontos de log manualmente se não tiver um ficheiro CSV.</CardDescription>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <Form {...dynoForm}>
-                                                <form onSubmit={dynoForm.handleSubmit(handleAddDynoLogData)} className="space-y-4">
-                                                <DynoEntryTable />
-                                                <Button type="submit" className="w-full" disabled={!processedMap || dynoForm.getValues('loadColumns').length === 0}>
-                                                    <PlusCircle className="mr-2" /> Adicionar Pontos ao Ensaio
-                                                </Button>
-                                                </form>
-                                            </Form>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-
-                                <div className="border rounded-lg min-h-[200px] mt-4">
-                                    {logData.length > 0 ? (
-                                        <LogDataTable data={logData} />
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full text-muted-foreground">
-                                            <p>Aguardando dados do ensaio...</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </TabsContent>
-                            <TabsContent value="ignition-analysis">
-                                <IgnitionTimingAnalyzer 
-                                    runs={ignitionRuns} 
-                                    onRunsChange={setIgnitionRuns}
-                                    binFile={binFile}
-                                    processedMap={processedMap}
-                                    selectedMapDefinition={selectedMapDefinition}
-                                />
-                            </TabsContent>
-                            <TabsContent value="dyno-analysis">
-                                <DynoAnalyzer runs={dynoRuns} onRunsChange={setDynoRuns} />
-                            </TabsContent>
-                            <TabsContent value="map-scanner">
-                                <MapScanner
-                                    binFile={binFile}
-                                    onLoadMap={handleLoadPotentialMap}
-                                    addLog={addLog}
-                                />
-                            </TabsContent>
-                             <TabsContent value="backup-library">
-                                <BackupLibrary addLog={addLog} />
-                            </TabsContent>
-                        </>
-                    )}
-
+                    {renderContent()}
                   </Tabs>
                 </div>
               </main>
