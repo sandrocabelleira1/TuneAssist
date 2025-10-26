@@ -1,18 +1,11 @@
-
 'use client';
 
 import Link from 'next/link';
 import { Sparkles, User, Loader2, LogIn, LogOut } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,21 +13,24 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import AuthForm from './auth-form';
+import { useState } from 'react';
 
 
 export default function Header() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
+  const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
 
-  const handleSignIn = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Erro ao iniciar sessão com o Google", error);
-    }
-  };
 
   const handleSignOut = async () => {
     try {
@@ -73,10 +69,23 @@ export default function Header() {
     }
 
     return (
-        <Button onClick={handleSignIn} variant="outline" size="sm">
-            <LogIn className="mr-2 h-4 w-4" />
-            Iniciar Sessão com Google
-        </Button>
+      <Dialog open={isAuthDialogOpen} onOpenChange={setIsAuthDialogOpen}>
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+              <LogIn className="mr-2 h-4 w-4" />
+              Login / Registar
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Autenticação</DialogTitle>
+            <DialogDescription>
+              Inicie a sessão ou registe-se para salvar os seus backups na nuvem.
+            </DialogDescription>
+          </DialogHeader>
+          <AuthForm onAuthSuccess={() => setIsAuthDialogOpen(false)} />
+        </DialogContent>
+      </Dialog>
     )
   };
 
