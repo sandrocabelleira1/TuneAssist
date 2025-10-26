@@ -1412,7 +1412,7 @@ const handleMapSelectionChange = (id: string) => {
                         />
                     </div>
                 </TabsContent>
-                <TabsContent value="fuel-analysis" className="flex-1 min-h-0 overflow-y-auto p-1">
+                <TabsContent value="fuel-analysis" className="p-1">
                     <div className="grid grid-cols-1 gap-4">
                         <Card>
                             <CardHeader>
@@ -1485,7 +1485,7 @@ const handleMapSelectionChange = (id: string) => {
                         </Card>
                     </div>
 
-                    <div className="flex-1 border rounded-lg min-h-[200px]">
+                    <div className="border rounded-lg min-h-[200px] mt-4">
                         {logData.length > 0 ? (
                             <LogDataTable data={logData} />
                         ) : (
@@ -1495,7 +1495,7 @@ const handleMapSelectionChange = (id: string) => {
                         )}
                     </div>
                 </TabsContent>
-                <TabsContent value="ignition-analysis" className="flex-1 min-h-0 overflow-y-auto">
+                <TabsContent value="ignition-analysis">
                     <IgnitionTimingAnalyzer 
                         runs={ignitionRuns} 
                         onRunsChange={setIgnitionRuns}
@@ -1504,7 +1504,7 @@ const handleMapSelectionChange = (id: string) => {
                         selectedMapDefinition={selectedMapDefinition}
                     />
                 </TabsContent>
-                <TabsContent value="dyno-analysis" className="flex-1 min-h-0 overflow-y-auto">
+                <TabsContent value="dyno-analysis">
                     <DynoAnalyzer runs={dynoRuns} onRunsChange={setDynoRuns} />
                 </TabsContent>
                 <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
@@ -2019,7 +2019,7 @@ const handleMapSelectionChange = (id: string) => {
                         <div className="flex-1 flex flex-col">{renderContent()}</div>
                     ) : (
                         <>
-                             <TabsContent value="ai-tuner" className="flex-1 min-h-0 flex flex-col">
+                             <TabsContent value="ai-tuner">
                                 <AiChatTuner 
                                     processedMap={processedMap}
                                     logData={logData}
@@ -2030,7 +2030,7 @@ const handleMapSelectionChange = (id: string) => {
                                     setMessages={setChatMessages}
                                 />
                             </TabsContent>
-                            <TabsContent value="fuel-analysis" className="flex-1 min-h-0 overflow-y-auto p-1">
+                            <TabsContent value="fuel-analysis" className="p-1">
                                 <div className="grid grid-cols-1 gap-4">
                                     <Card>
                                         <CardHeader>
@@ -2103,7 +2103,7 @@ const handleMapSelectionChange = (id: string) => {
                                     </Card>
                                 </div>
 
-                                <div className="flex-1 border rounded-lg min-h-[200px] mt-4">
+                                <div className="border rounded-lg min-h-[200px] mt-4">
                                     {logData.length > 0 ? (
                                         <LogDataTable data={logData} />
                                     ) : (
@@ -2113,7 +2113,7 @@ const handleMapSelectionChange = (id: string) => {
                                     )}
                                 </div>
                             </TabsContent>
-                            <TabsContent value="ignition-analysis" className="flex-1 min-h-0 overflow-y-auto">
+                            <TabsContent value="ignition-analysis">
                                 <IgnitionTimingAnalyzer 
                                     runs={ignitionRuns} 
                                     onRunsChange={setIgnitionRuns}
@@ -2122,17 +2122,17 @@ const handleMapSelectionChange = (id: string) => {
                                     selectedMapDefinition={selectedMapDefinition}
                                 />
                             </TabsContent>
-                            <TabsContent value="dyno-analysis" className="flex-1 min-h-0 overflow-y-auto">
+                            <TabsContent value="dyno-analysis">
                                 <DynoAnalyzer runs={dynoRuns} onRunsChange={setDynoRuns} />
                             </TabsContent>
-                            <TabsContent value="map-scanner" className="flex-1 min-h-0 flex flex-col">
+                            <TabsContent value="map-scanner">
                                 <MapScanner
                                     binFile={binFile}
                                     onLoadMap={handleLoadPotentialMap}
                                     addLog={addLog}
                                 />
                             </TabsContent>
-                             <TabsContent value="backup-library" className="flex-1 min-h-0 flex flex-col">
+                             <TabsContent value="backup-library">
                                 <BackupLibrary addLog={addLog} />
                             </TabsContent>
                         </>
