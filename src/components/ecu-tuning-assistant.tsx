@@ -1971,7 +1971,7 @@ const handleMapSelectionChange = (id: string) => {
                     </TabsList>
                     
                     {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' && activeTab !== 'ignition-analysis' && activeTab !== 'ai-tuner' && activeTab !== 'fuel-analysis' ? (
-                        <div className="flex-1 flex flex-col min-h-0">{renderContent()}</div>
+                        <div className="flex-1 flex flex-col overflow-auto">{renderContent()}</div>
                     ) : (
                         <>
                              <TabsContent value="ai-tuner" className="flex-1 min-h-0 flex flex-col">
