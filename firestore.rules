@@ -1,0 +1,175 @@
+/**
+ * @fileoverview Firestore Security Rules for the application.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model. Only the authenticated user
+ * can read and write data under their respective user ID.
+ *
+ * Data Structure:
+ * All data is nested under /users/{userId}, creating a clear ownership hierarchy.
+ *  - /users/{userId}/binFiles/{binFileId}
+ *  - /users/{userId}/xdfFiles/{xdfFileId}
+ *  - /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}
+ *  - /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}
+ *  - /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/dynoTestLogs/{dynoTestLogId}
+ *  - /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/tunedEcuMapData
+ *
+ * Key Security Decisions:
+ * - User listing is implicitly denied as there is no top-level `match /users` rule.
+ * - All writes require a verified user identity (`request.auth != null`).
+ * - The rules explicitly deny all permissions that are not granted.
+ *
+ * Denormalization for Authorization:
+ * The data structure inherently denormalizes ownership via path-based access control,
+ * avoiding the need for additional `get()` calls to determine ownership.  The `userId`
+ * is directly embedded in the path.
+ *
+ * Structural Segregation:
+ * The application uses a user-scoping approach, with separate subcollections for each
+ * user's data. This is more secure and performant than using a single collection
+ * with a `userId` field.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Secure helper function to check if the request is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Secure helper function to check if the authenticated user ID matches the provided user ID.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Secure helper function to check if the authenticated user is the owner of an existing document.
+     */
+    function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Defines rules for documents in the /users/{userId}/binFiles/{binFileId} collection.
+     * @path /users/{userId}/binFiles/{binFileId}
+     * @allow (create) Authenticated user with matching userId and binFileId can create a new binFile.
+     * @deny (create) Unauthenticated user cannot create a new binFile.
+     * @deny (create) Authenticated user with mismatched userId cannot create a new binFile.
+     * @allow (get) Authenticated user with matching userId can read a binFile.
+     * @allow (list) Authenticated user with matching userId can list binFiles.
+     * @deny (update) Authenticated user with mismatched userId cannot update a binFile.
+     * @deny (delete) Authenticated user with mismatched userId cannot delete a binFile.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/binFiles/{binFileId} {
+      allow create: if isOwner(userId) && request.resource.data.id == binFileId;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Defines rules for documents in the /users/{userId}/xdfFiles/{xdfFileId} collection.
+     * @path /users/{userId}/xdfFiles/{xdfFileId}
+     * @allow (create) Authenticated user with matching userId can create a new xdfFile.
+     * @deny (create) Unauthenticated user cannot create a new xdfFile.
+     * @deny (create) Authenticated user with mismatched userId cannot create a new xdfFile.
+     * @allow (get) Authenticated user with matching userId can read a xdfFile.
+     * @allow (list) Authenticated user with matching userId can list xdfFiles.
+     * @deny (update) Authenticated user with mismatched userId cannot update a xdfFile.
+     * @deny (delete) Authenticated user with mismatched userId cannot delete a xdfFile.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/xdfFiles/{xdfFileId} {
+      allow create: if isOwner(userId) && request.resource.data.id == xdfFileId;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Defines rules for documents in the /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId} collection.
+     * @path /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}
+     * @allow (create) Authenticated user with matching userId can create a new ecuMap.
+     * @deny (create) Unauthenticated user cannot create a new ecuMap.
+     * @deny (create) Authenticated user with mismatched userId cannot create a new ecuMap.
+     * @allow (get) Authenticated user with matching userId can read a ecuMap.
+     * @allow (list) Authenticated user with matching userId can list ecuMaps.
+     * @deny (update) Authenticated user with mismatched userId cannot update a ecuMap.
+     * @deny (delete) Authenticated user with mismatched userId cannot delete a ecuMap.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId} {
+      allow create: if isOwner(userId) && request.resource.data.id == ecuMapId;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Defines rules for documents in the /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId} collection.
+     * @path /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}
+     * @allow (create) Authenticated user with matching userId can create a new ecuMapData.
+     * @deny (create) Unauthenticated user cannot create a new ecuMapData.
+     * @deny (create) Authenticated user with mismatched userId cannot create a new ecuMapData.
+     * @allow (get) Authenticated user with matching userId can read a ecuMapData.
+     * @allow (list) Authenticated user with matching userId can list ecuMapData.
+     * @deny (update) Authenticated user with mismatched userId cannot update a ecuMapData.
+     * @deny (delete) Authenticated user with mismatched userId cannot delete a ecuMapData.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId} {
+      allow create: if isOwner(userId) && request.resource.data.id == ecuMapDataId;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Defines rules for documents in the /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/dynoTestLogs/{dynoTestLogId} collection.
+     * @path /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/dynoTestLogs/{dynoTestLogId}
+     * @allow (create) Authenticated user with matching userId can create a new dynoTestLog.
+     * @deny (create) Unauthenticated user cannot create a new dynoTestLog.
+     * @allow (get) Authenticated user with matching userId can read a dynoTestLog.
+     * @allow (list) Authenticated user with matching userId can list dynoTestLogs.
+     * @deny (update) Authenticated user with mismatched userId cannot update a dynoTestLog.
+     * @deny (delete) Authenticated user with mismatched userId cannot delete a dynoTestLog.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/dynoTestLogs/{dynoTestLogId} {
+      allow create: if isOwner(userId) && request.resource.data.id == dynoTestLogId;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Defines rules for documents in the /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/tunedEcuMapData collection.
+     * @path /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/tunedEcuMapData
+     * @allow (create) Authenticated user with matching userId can create a new tunedEcuMapData.
+     * @deny (create) Unauthenticated user cannot create a new tunedEcuMapData.
+     * @allow (get) Authenticated user with matching userId can read a tunedEcuMapData.
+     * @allow (list) Authenticated user with matching userId can list tunedEcuMapData.
+     * @deny (update) Authenticated user with mismatched userId cannot update a tunedEcuMapData.
+     * @deny (delete) Authenticated user with mismatched userId cannot delete a tunedEcuMapData.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/tunedEcuMapData {
+      allow create: if isOwner(userId) && request.resource.data.id == ecuMapDataId;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+  }
+}

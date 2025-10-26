@@ -1,0 +1,393 @@
+{
+  "entities": {
+    "BinFile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "BinFile",
+      "type": "object",
+      "description": "Represents a BIN file uploaded by the user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the BinFile entity."
+        },
+        "fileName": {
+          "type": "string",
+          "description": "The name of the BIN file."
+        },
+        "fileData": {
+          "type": "string",
+          "description": "The data of the BIN file, stored as a base64 encoded string."
+        },
+        "checksum": {
+          "type": "string",
+          "description": "The checksum of the BIN file for integrity verification."
+        }
+      },
+      "required": [
+        "id",
+        "fileName",
+        "fileData",
+        "checksum"
+      ]
+    },
+    "XdfFile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "XdfFile",
+      "type": "object",
+      "description": "Represents an XDF file uploaded by the user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the XdfFile entity."
+        },
+        "fileName": {
+          "type": "string",
+          "description": "The name of the XDF file."
+        },
+        "fileData": {
+          "type": "string",
+          "description": "The data of the XDF file, stored as a string."
+        }
+      },
+      "required": [
+        "id",
+        "fileName",
+        "fileData"
+      ]
+    },
+    "EcuMap": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EcuMap",
+      "type": "object",
+      "description": "Represents an ECU map definition parsed from the XDF file.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the EcuMap entity."
+        },
+        "xdfFileId": {
+          "type": "string",
+          "description": "Reference to XdfFile. (Relationship: XdfFile 1:N EcuMap)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the ECU map."
+        },
+        "address": {
+          "type": "number",
+          "description": "The memory address of the map in the BIN file."
+        },
+        "rows": {
+          "type": "number",
+          "description": "The number of rows in the map."
+        },
+        "cols": {
+          "type": "number",
+          "description": "The number of columns in the map."
+        },
+        "dataSize": {
+          "type": "number",
+          "description": "The size of each data element in the map (in bytes)."
+        },
+        "isBigEndian": {
+          "type": "boolean",
+          "description": "Indicates if the data is stored in big-endian format."
+        },
+        "equation": {
+          "type": "string",
+          "description": "The equation used to convert raw data to real-world values."
+        },
+        "xAxisDefinition": {
+          "type": "string",
+          "description": "Definition of the X axis (e.g., load)."
+        },
+        "yAxisDefinition": {
+          "type": "string",
+          "description": "Definition of the Y axis (e.g., RPM)."
+        }
+      },
+      "required": [
+        "id",
+        "xdfFileId",
+        "name",
+        "address",
+        "rows",
+        "cols",
+        "dataSize",
+        "isBigEndian",
+        "equation"
+      ]
+    },
+    "EcuMapData": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EcuMapData",
+      "type": "object",
+      "description": "Represents the actual data of an ECU map, read from the BIN file.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the EcuMapData entity."
+        },
+        "binFileId": {
+          "type": "string",
+          "description": "Reference to BinFile. (Relationship: BinFile 1:N EcuMapData)"
+        },
+        "ecuMapId": {
+          "type": "string",
+          "description": "Reference to EcuMap. (Relationship: EcuMap 1:N EcuMapData)"
+        },
+        "xAxisValues": {
+          "type": "array",
+          "description": "The values for the X axis.",
+          "items": {
+            "type": "number"
+          }
+        },
+        "yAxisValues": {
+          "type": "array",
+          "description": "The values for the Y axis.",
+          "items": {
+            "type": "number"
+          }
+        },
+        "mapData": {
+          "type": "array",
+          "description": "The 2D array representing the map data.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "binFileId",
+        "ecuMapId",
+        "xAxisValues",
+        "yAxisValues",
+        "mapData"
+      ]
+    },
+    "DynoTestLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "DynoTestLog",
+      "type": "object",
+      "description": "Represents dyno test log data entered by the user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the DynoTestLog entity."
+        },
+        "ecuMapDataId": {
+          "type": "string",
+          "description": "Reference to EcuMapData. (Relationship: EcuMapData 1:N DynoTestLog)"
+        },
+        "rpm": {
+          "type": "number",
+          "description": "Engine speed in RPM."
+        },
+        "load": {
+          "type": "number",
+          "description": "Engine load as a percentage."
+        },
+        "afr": {
+          "type": "number",
+          "description": "Air-fuel ratio measured during the test."
+        }
+      },
+      "required": [
+        "id",
+        "ecuMapDataId",
+        "rpm",
+        "load",
+        "afr"
+      ]
+    },
+    "TunedEcuMapData": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TunedEcuMapData",
+      "type": "object",
+      "description": "Represents the modified ECU map data after tuning.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the TunedEcuMapData entity."
+        },
+        "ecuMapDataId": {
+          "type": "string",
+          "description": "Reference to EcuMapData. (Relationship: EcuMapData 1:1 TunedEcuMapData)"
+        },
+        "mapData": {
+          "type": "array",
+          "description": "The 2D array representing the tuned map data.",
+          "items": {
+            "type": "number"
+          }
+        },
+        "correctionMapData": {
+          "type": "array",
+          "description": "The 2D array representing percentage corrections applied to the original map data.",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "ecuMapDataId",
+        "mapData",
+        "correctionMapData"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}/binFiles/{binFileId}",
+        "definition": {
+          "entityName": "BinFile",
+          "schema": {
+            "$ref": "#/backend/entities/BinFile"
+          },
+          "description": "Stores BIN files uploaded by the user. Authorization is based on path ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the BIN file."
+            },
+            {
+              "name": "binFileId",
+              "description": "The ID of the BIN file."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/xdfFiles/{xdfFileId}",
+        "definition": {
+          "entityName": "XdfFile",
+          "schema": {
+            "$ref": "#/backend/entities/XdfFile"
+          },
+          "description": "Stores XDF files uploaded by the user. Authorization is based on path ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the XDF file."
+            },
+            {
+              "name": "xdfFileId",
+              "description": "The ID of the XDF file."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}",
+        "definition": {
+          "entityName": "EcuMap",
+          "schema": {
+            "$ref": "#/backend/entities/EcuMap"
+          },
+          "description": "Stores ECU map definitions parsed from the XDF file. Authorization is based on path ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the XDF file."
+            },
+            {
+              "name": "xdfFileId",
+              "description": "The ID of the XDF file."
+            },
+            {
+              "name": "ecuMapId",
+              "description": "The ID of the ECU map."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}",
+        "definition": {
+          "entityName": "EcuMapData",
+          "schema": {
+            "$ref": "#/backend/entities/EcuMapData"
+          },
+          "description": "Stores the actual data of an ECU map, read from the BIN file. Authorization is based on path ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the BIN file."
+            },
+            {
+              "name": "binFileId",
+              "description": "The ID of the BIN file."
+            },
+            {
+              "name": "ecuMapDataId",
+              "description": "The ID of the ECU map data."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/dynoTestLogs/{dynoTestLogId}",
+        "definition": {
+          "entityName": "DynoTestLog",
+          "schema": {
+            "$ref": "#/backend/entities/DynoTestLog"
+          },
+          "description": "Stores dyno test log data entered by the user. Authorization is based on path ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the BIN file."
+            },
+            {
+              "name": "binFileId",
+              "description": "The ID of the BIN file."
+            },
+            {
+              "name": "ecuMapDataId",
+              "description": "The ID of the ECU map data."
+            },
+            {
+              "name": "dynoTestLogId",
+              "description": "The ID of the dyno test log."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/binFiles/{binFileId}/ecuMapData/{ecuMapDataId}/tunedEcuMapData",
+        "definition": {
+          "entityName": "TunedEcuMapData",
+          "schema": {
+            "$ref": "#/backend/entities/TunedEcuMapData"
+          },
+          "description": "Stores the modified ECU map data after tuning. Authorization is based on path ownership.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the BIN file."
+            },
+            {
+              "name": "binFileId",
+              "description": "The ID of the BIN file."
+            },
+            {
+              "name": "ecuMapDataId",
+              "description": "The ID of the ECU map data."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The data structure prioritizes path-based ownership for user-specific data, ensuring authorization independence and simplifying security rules. Each file type (BinFile, XdfFile) and their related data (EcuMap, EcuMapData, DynoTestLog, TunedEcuMapData) are organized under the user's document, making it easy to implement security rules based on user ID. This approach eliminates the need for `get()` calls in security rules, improving performance and security.\n\nThe structure supports secure `list` operations (QAPs) by segregating user data into individual user documents, preventing unauthorized access to other users' data. By using hierarchical paths, we establish clear ownership and access control for each entity. This design ensures that only the authenticated user can access their own data."
+  }
+}
