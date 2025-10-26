@@ -191,7 +191,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
 
     if (!axes || !selectedMapDefinition || !mapData) {
         return (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
+            <div className="flex items-center justify-center text-muted-foreground">
                 <p>Carregue os ficheiros e selecione um mapa para ver a tabela de dados.</p>
             </div>
         );
@@ -1064,8 +1064,6 @@ export default function EcuTuningAssistant() {
                  setIsModified(false);
             }
             
-            setAiModifiedCells(new Set());
-            setAiModifiedCellsCache({});
             setChatMessages([]);
 
 
@@ -1282,7 +1280,7 @@ const handleMapSelectionChange = (id: string) => {
     const renderContent = () => {
         if (isProcessing && !processedMap) {
             return (
-                <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                <div className="flex flex-col items-center justify-center text-muted-foreground">
                     <Loader2 className="mr-2 h-8 w-8 animate-spin" />
                     <p>A processar o mapa...</p>
                 </div>
@@ -1291,7 +1289,7 @@ const handleMapSelectionChange = (id: string) => {
 
         if (!processedMap && activeMapId) {
             return (
-                <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
+                <div className="flex flex-col items-center justify-center text-muted-foreground text-center">
                     <div>
                         <AlertTriangle className="mx-auto h-12 w-12 text-destructive" />
                         <p className="mt-2 font-semibold">
@@ -1307,7 +1305,7 @@ const handleMapSelectionChange = (id: string) => {
 
         if (!activeMapId && !['map-scanner', 'dyno-analysis', 'ai-tuner'].includes(activeTab)) {
             return (
-                <div className="flex-1 flex items-center justify-center text-muted-foreground text-center h-full">
+                <div className="flex flex-col items-center justify-center text-muted-foreground text-center">
                     <div>
                         <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
                         <p className="mt-2 font-semibold">
@@ -1324,7 +1322,7 @@ const handleMapSelectionChange = (id: string) => {
 
         return (
             <>
-                <TabsContent value="view-table" className="flex-1">
+                <TabsContent value="view-table" className="flex-1 overflow-auto">
                     <DataTable
                         key={activeMapId}
                         mapData={processedMap?.calculatedMap ?? null}
@@ -1973,7 +1971,7 @@ const handleMapSelectionChange = (id: string) => {
                     </TabsList>
                     
                     {activeTab !== 'map-scanner' && activeTab !== 'dyno-analysis' && activeTab !== 'ignition-analysis' && activeTab !== 'ai-tuner' && activeTab !== 'fuel-analysis' ? (
-                        renderContent()
+                        <div className="flex-1 flex flex-col min-h-0">{renderContent()}</div>
                     ) : (
                         <>
                              <TabsContent value="ai-tuner" className="flex-1 min-h-0 flex flex-col">
