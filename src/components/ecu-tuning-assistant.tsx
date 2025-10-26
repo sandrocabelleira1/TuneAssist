@@ -152,23 +152,30 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     const [selection, setSelection] = useState<CellSelection>({ start: null, end: null });
     const [massEditPayload, setMassEditPayload] = useState<MassEditPayload | null>(null);
     const tableRef = useRef<HTMLDivElement>(null);
+    const hasDraggedRef = useRef(false);
 
     const handleMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, yi: number, xi: number) => {
         e.preventDefault();
         setIsSelecting(true);
         setSelection({ start: { y: yi, x: xi }, end: { y: yi, x: xi } });
+        hasDraggedRef.current = false;
     };
 
     const handleMouseMove = (yi: number, xi: number) => {
         if (isSelecting) {
-            setSelection(prev => ({ ...prev, end: { y: yi, x: xi } }));
+            setSelection(prev => {
+                if (prev.end?.y !== yi || prev.end?.x !== xi) {
+                    hasDraggedRef.current = true;
+                }
+                return { ...prev, end: { y: yi, x: xi } };
+            });
         }
     };
 
     const handleMouseUp = useCallback(() => {
         if (isSelecting) {
             setIsSelecting(false);
-            if (selection.start && selection.end && mapData) {
+            if (selection.start && selection.end && mapData && hasDraggedRef.current) {
                 const startY = Math.min(selection.start.y, selection.end.y);
                 const endY = Math.max(selection.start.y, selection.end.y);
                 const startX = Math.min(selection.start.x, selection.end.x);
@@ -178,6 +185,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                 }
             }
         }
+        hasDraggedRef.current = false; // Reset on every mouse up
     }, [isSelecting, selection, mapData]);
 
     const handleMassEditAndClose = (
@@ -246,7 +254,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     };
     
     return (
-        <div className="overflow-auto" ref={tableRef} onMouseUp={handleMouseUp}>
+        <div className="overflow-auto" ref={tableRef} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
             <table className="w-full border-collapse text-xs select-none">
                 <thead>
                     <tr>
