@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import Papa from 'papaparse';
 import { useForm, useFieldArray, useFormContext } from 'react-hook-form';
@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion, ChatMessage } from '@/lib/types';
+import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion, ChatMessage, BackupFile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -41,8 +41,8 @@ import Image from 'next/image';
 import DynoAnalyzer from '@/components/dyno-analyzer';
 import AiChatTuner from '@/components/ai-chat-tuner';
 import { storage } from '@/lib/firebase/client';
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { useUser, useFirestore, addDocumentNonBlocking } from '@/firebase';
+import { ref, uploadBytes } from "firebase/storage";
+import { useUser, useFirestore, useAuth, addDocumentNonBlocking, initiateAnonymousSignIn } from '@/firebase';
 import { collection, serverTimestamp } from 'firebase/firestore';
 import BackupLibrary from '@/components/backup-library';
 
@@ -485,7 +485,8 @@ type StructureTemplate = {
 
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
-    const { user } = useUser();
+    const { user, isUserLoading } = useUser();
+    const auth = useAuth();
     const firestore = useFirestore();
 
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
@@ -538,6 +539,13 @@ export default function EcuTuningAssistant() {
         const id = `${Date.now()}-${Math.random()}`;
         setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev].slice(0, 100));
     }, []);
+
+    useEffect(() => {
+        if (!isUserLoading && !user) {
+            addLog("Nenhuma sessão de utilizador ativa. A iniciar sessão anónima...", "info");
+            initiateAnonymousSignIn(auth);
+        }
+    }, [user, isUserLoading, auth, addLog]);
 
     const selectedMapDefinition = useMemo(() => {
         if (!activeMapId || !xdfFile) return undefined;
@@ -1069,16 +1077,16 @@ a.click();
                 
                 const uploadResult = await uploadBytes(storageRef, blob);
                 
-                const backupDoc = {
+                const backupsCollectionRef = collection(firestore, 'users', user.uid, 'backups');
+                const newBackupDoc: Omit<BackupFile, 'id'> = {
                     userId: user.uid,
                     name: newFileName,
                     storagePath: uploadResult.ref.fullPath,
                     size: uploadResult.metadata.size,
-                    createdAt: serverTimestamp(),
+                    createdAt: serverTimestamp() as any, // Let server generate timestamp
                 };
 
-                const backupsCollection = collection(firestore, 'users', user.uid, 'backups');
-                addDocumentNonBlocking(backupsCollection, backupDoc);
+                addDocumentNonBlocking(backupsCollectionRef, newBackupDoc);
 
                 addLog('Backup na nuvem e registo no banco de dados concluídos com sucesso.', 'success');
                 toast({ title: 'Backup Concluído', description: 'Uma cópia foi salva na sua biblioteca na nuvem.' });
