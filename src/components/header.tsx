@@ -1,8 +1,9 @@
+
 'use client';
 
 import Link from 'next/link';
-import { Sparkles, User, Loader2 } from 'lucide-react';
-import { useUser } from '@/firebase';
+import { Sparkles, User, Loader2, LogIn, LogOut } from 'lucide-react';
+import { useUser, useAuth } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Tooltip,
@@ -10,10 +11,38 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Button } from '@/components/ui/button';
+import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 
 export default function Header() {
   const { user, isUserLoading } = useUser();
+  const auth = useAuth();
+
+  const handleSignIn = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Erro ao iniciar sessão com o Google", error);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Erro ao terminar a sessão", error);
+    }
+  };
 
   const renderUserStatus = () => {
     if (isUserLoading) {
@@ -22,40 +51,32 @@ export default function Header() {
 
     if (user) {
       return (
-        <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger>
-                    <Avatar className="h-8 w-8">
-                        {user.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
-                        <AvatarFallback>
-                            <User className="h-5 w-5" />
-                        </AvatarFallback>
-                    </Avatar>
-                </TooltipTrigger>
-                <TooltipContent>
-                    <p>Sessão de utilizador ativa</p>
-                    <p className="text-xs text-muted-foreground">ID: {user.uid}</p>
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Avatar className="h-8 w-8 cursor-pointer">
+                    {user.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
+                    <AvatarFallback>
+                        <User className="h-5 w-5" />
+                    </AvatarFallback>
+                </Avatar>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuLabel>{user.displayName || user.email}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Terminar Sessão</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
       );
     }
 
     return (
-        <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger>
-                    <Avatar className="h-8 w-8 border-2 border-dashed border-muted-foreground">
-                        <AvatarFallback>
-                            <User className="h-5 w-5 text-muted-foreground" />
-                        </AvatarFallback>
-                    </Avatar>
-                </TooltipTrigger>
-                 <TooltipContent>
-                    <p>Sem sessão iniciada</p>
-                </TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
+        <Button onClick={handleSignIn} variant="outline" size="sm">
+            <LogIn className="mr-2 h-4 w-4" />
+            Iniciar Sessão com Google
+        </Button>
     )
   };
 
@@ -68,7 +89,7 @@ export default function Header() {
           <span className="font-bold sm:inline-block">TuneAssist AI</span>
         </Link>
         <div className="flex flex-1 items-center justify-end">
-            {/* User status will be added back later */}
+            {renderUserStatus()}
         </div>
       </div>
     </header>
