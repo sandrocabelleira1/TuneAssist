@@ -40,6 +40,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import Image from 'next/image';
 import DynoAnalyzer from '@/components/dyno-analyzer';
 import AiChatTuner from '@/components/ai-chat-tuner';
+import { storage } from '@/lib/firebase/client';
+import { ref, uploadBytes } from "firebase/storage";
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -531,7 +533,7 @@ export default function EcuTuningAssistant() {
         return Object.values(modifiedStatusCache).some(status => status);
     }, [modifiedStatusCache]);
     
-    const applyAiSuggestion = useCallback((suggestion: AiFuelSuggestion) => {
+    const applyAiSuggestion = (suggestion: AiFuelSuggestion) => {
         if (!processedMap || !processedMap.calculatedMap || !activeMapId) return;
 
         addLog(`A aplicar ${suggestion.changes.length} alterações de IA ao mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
@@ -554,7 +556,7 @@ export default function EcuTuningAssistant() {
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
 
-    }, [processedMap, activeMapId, addLog, selectedMapDefinition?.name]);
+    };
 
 
     const clearAiModifications = () => {
@@ -993,7 +995,7 @@ export default function EcuTuningAssistant() {
         addLog(`Operação em massa "${operation}" com valor ${value} aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
     };
     
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!binFile || !xdfFile || Object.keys(processedMapCache).length === 0) {
             const msg = "Faltam dados para salvar. Carregue os ficheiros e modifique um mapa primeiro.";
             addLog(msg, 'error');
@@ -1026,7 +1028,8 @@ export default function EcuTuningAssistant() {
             const a = document.createElement('a');
             a.href = url;
             const originalName = binFile.name.replace(/\.[^/.]+$/, "");
-            a.download = `${originalName}_mod_${mapsToSave.length}map.bin`;
+            const newFileName = `${originalName}_mod_${mapsToSave.length}map.bin`;
+            a.download = newFileName;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1036,6 +1039,21 @@ export default function EcuTuningAssistant() {
             addLog(successMsg, 'success');
             toast({ title: 'Salvo com Sucesso', description: successMsg });
             
+            // Upload to Firebase Storage
+            try {
+                addLog(`A fazer backup de ${newFileName} para o armazenamento na nuvem...`, 'info');
+                const timestamp = new Date().toISOString();
+                const storageRef = ref(storage, `backups/${timestamp}_${newFileName}`);
+                await uploadBytes(storageRef, blob);
+                addLog('Backup na nuvem concluído com sucesso.', 'success');
+                toast({ title: 'Backup Concluído', description: 'Uma cópia do seu ficheiro .bin foi salva na nuvem.' });
+            } catch (storageError) {
+                const errorMsg = `Falha ao salvar backup na nuvem: ${(storageError as Error).message}`;
+                addLog(errorMsg, 'error');
+                toast({ title: 'Erro no Backup', description: errorMsg, variant: 'destructive' });
+            }
+
+
             setBinFile({ name: a.download, buffer: newBinBuffer });
             
             mapsToSave.forEach(map => {
