@@ -12,6 +12,7 @@ import { Loader2, Trash2, Download, RefreshCw, AlertCircle, Inbox } from 'lucide
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface BackupFile {
   ref: StorageReference;
