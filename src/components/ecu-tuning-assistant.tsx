@@ -155,7 +155,10 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     const hasDraggedRef = useRef(false);
 
     const handleMouseDown = (e: React.MouseEvent<HTMLTableCellElement>, yi: number, xi: number) => {
-        e.preventDefault();
+        // Don't prevent default on the input itself
+        if ((e.target as HTMLElement).tagName.toLowerCase() !== 'input') {
+            e.preventDefault();
+        }
         setIsSelecting(true);
         setSelection({ start: { y: yi, x: xi }, end: { y: yi, x: xi } });
         hasDraggedRef.current = false;
@@ -176,16 +179,9 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         if (isSelecting) {
             setIsSelecting(false);
             if (selection.start && selection.end && mapData && hasDraggedRef.current) {
-                const startY = Math.min(selection.start.y, selection.end.y);
-                const endY = Math.max(selection.start.y, selection.end.y);
-                const startX = Math.min(selection.start.x, selection.end.x);
-                const endX = Math.max(selection.start.x, selection.end.x);
-                if (startY !== endY || startX !== endX) {
-                    setMassEditPayload({ selection, currentMapData: mapData });
-                }
+                setMassEditPayload({ selection, currentMapData: mapData });
             }
         }
-        hasDraggedRef.current = false; // Reset on every mouse up
     }, [isSelecting, selection, mapData]);
 
     const handleMassEditAndClose = (
