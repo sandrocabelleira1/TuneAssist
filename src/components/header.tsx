@@ -33,7 +33,7 @@ export default function Header() {
                     </Avatar>
                 </TooltipTrigger>
                 <TooltipContent>
-                    <p>Sessão anónima ativa</p>
+                    <p>Sessão de utilizador ativa</p>
                     <p className="text-xs text-muted-foreground">ID: {user.uid}</p>
                 </TooltipContent>
             </Tooltip>
@@ -68,7 +68,7 @@ export default function Header() {
           <span className="font-bold sm:inline-block">TuneAssist AI</span>
         </Link>
         <div className="flex flex-1 items-center justify-end">
-            {renderUserStatus()}
+            {/* User status will be added back later */}
         </div>
       </div>
     </header>

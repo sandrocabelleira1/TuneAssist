@@ -42,7 +42,7 @@ import DynoAnalyzer from '@/components/dyno-analyzer';
 import AiChatTuner from '@/components/ai-chat-tuner';
 import { storage } from '@/lib/firebase/client';
 import { ref, uploadBytes } from "firebase/storage";
-import { useUser, useFirestore, useAuth, addDocumentNonBlocking, initiateAnonymousSignIn } from '@/firebase';
+import { useUser, useFirestore, useAuth, addDocumentNonBlocking } from '@/firebase';
 import { collection, serverTimestamp } from 'firebase/firestore';
 import BackupLibrary from '@/components/backup-library';
 
@@ -488,6 +488,10 @@ export default function EcuTuningAssistant() {
     const { user, isUserLoading } = useUser();
     const auth = useAuth();
     const firestore = useFirestore();
+    const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
+        const id = `${Date.now()}-${Math.random()}`;
+        setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev].slice(0, 100));
+    }, []);
 
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
     const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFinition[], allTables: Map<string, Element> } | null>(null);
@@ -534,18 +538,6 @@ export default function EcuTuningAssistant() {
             logRows: []
         },
     });
-
-    const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
-        const id = `${Date.now()}-${Math.random()}`;
-        setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev].slice(0, 100));
-    }, []);
-
-    useEffect(() => {
-        if (!isUserLoading && !user) {
-            addLog("Nenhuma sessão de utilizador ativa. A iniciar sessão anónima...", "info");
-            initiateAnonymousSignIn(auth);
-        }
-    }, [user, isUserLoading, auth, addLog]);
 
     const selectedMapDefinition = useMemo(() => {
         if (!activeMapId || !xdfFile) return undefined;
