@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -98,7 +99,7 @@ export default function Header() {
       <div className="container mx-auto flex h-20 items-center justify-between px-4">
         <Link href="/" className="flex items-center">
             <Image 
-                src="https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/logo%20tuneassist%20(1200%20x%20300%20px).png?alt=media&token=4eb729fe-d760-4fa6-8987-d08e121c8138"
+                src="https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/logo%20tuneassistrasmpa%20(1200%20x%20300%20px).png?alt=media&token=9b1fde80-0469-43f9-b326-bffbc95e927e"
                 alt="TuneAssist AI Logo"
                 width={150}
                 height={37.5}
