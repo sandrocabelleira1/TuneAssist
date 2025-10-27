@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion, ChatMessage, BackupFile } from '@/lib/types';
+import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, PotentialMap, DynoRunDataPoint, DynoRun, AiFuelSuggestion, ChatMessage } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -40,7 +40,7 @@ import Image from 'next/image';
 import { storage } from '@/lib/firebase/client';
 import { ref, uploadBytes } from "firebase/storage";
 import { useUser, useFirestore, useAuth, useMemoFirebase } from '@/firebase';
-import { collection, serverTimestamp, addDoc } from 'firebase/firestore';
+import { collection, serverTimestamp, addDoc, deleteDoc } from 'firebase/firestore';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -975,102 +975,69 @@ export default function EcuTuningAssistant() {
         addLog(`Operação em massa "${operation}" com valor ${value} aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
     };
     
-    const handleSave = async () => {
-        if (!binFile || !xdfFile || Object.keys(processedMapCache).length === 0) {
-            const msg = "Faltam dados para salvar. Carregue os ficheiros e modifique um mapa primeiro.";
-            addLog(msg, 'error');
-            toast({ title: 'Erro ao Salvar', description: msg, variant: 'destructive' });
-            return;
+const handleSave = async () => {
+    if (!binFile || !xdfFile || Object.keys(processedMapCache).length === 0) {
+        const msg = "Faltam dados para salvar. Carregue os ficheiros e modifique um mapa primeiro.";
+        addLog(msg, 'error');
+        toast({ title: 'Erro ao Salvar', description: msg, variant: 'destructive' });
+        return;
+    }
+
+    if (!user) {
+        addLog("Utilizador não autenticado. Impossível iniciar pagamento.", 'error');
+        toast({ title: 'Erro de Autenticação', description: "Inicie a sessão para comprar o ficheiro.", variant: 'destructive' });
+        return;
+    }
+
+    addLog("A iniciar processo de pagamento...", 'info');
+    setIsProcessing(true);
+
+    try {
+        const response = await fetch('/api/create-payment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                title: `Download Ficheiro Modificado: ${binFile.name}`,
+                quantity: 1,
+                unit_price: 10.0, // Example price, you can make this dynamic
+                userId: user.uid,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Falha ao criar a preferência de pagamento.');
         }
 
-        if (!user || !firestore) {
-            addLog("Utilizador não autenticado. Impossível salvar no banco de dados.", 'error');
-            toast({ title: 'Erro de Autenticação', description: "Inicie a sessão para salvar backups.", variant: 'destructive' });
-            return;
-        }
+        const { init_point } = await response.json();
         
-        addLog("A preparar para salvar o ficheiro BIN...", 'info');
-        
+        // Save the modified file buffer to localStorage to retrieve it after payment
         const mapsToSave = Object.entries(processedMapCache)
             .filter(([mapId, _]) => modifiedStatusCache[mapId])
-            .map(([mapId, mapData]) => {
-                const definition = xdfFile.definitions.find(def => def.uniqueId === mapId);
-                if (!definition) return null;
-                return { definition, processedMap: mapData };
-            }).filter(item => item !== null) as { definition: XDFinition; processedMap: ProcessedMap }[];
-            
-        if (mapsToSave.length === 0) {
-            const msg = "Nenhuma modificação para salvar.";
-            addLog(msg, 'info');
-            toast({ title: 'Nada para Salvar', description: msg });
-            return;
+            .map(([mapId, mapData]) => ({
+                definition: xdfFile.definitions.find(def => def.uniqueId === mapId)!,
+                processedMap: mapData,
+            }));
+        
+        if (mapsToSave.length > 0) {
+            const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
+            const bufferArray = Array.from(new Uint8Array(newBinBuffer));
+            localStorage.setItem('pendingBinFile', JSON.stringify(bufferArray));
+            localStorage.setItem('pendingBinFileName', binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`);
         }
 
-        try {
-            const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave);
-            
-            const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            const originalName = binFile.name.replace(/\.[^/.]+$/, "");
-            const newFileName = `${originalName}_mod_${mapsToSave.length}map.bin`;
-            a.download = newFileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            const successMsg = `Ficheiro ${a.download} salvo com ${mapsToSave.length} mapas modificados.`;
-            addLog(successMsg, 'success');
-            toast({ title: 'Salvo com Sucesso', description: successMsg });
-            
-            // Upload to Firebase Storage and create Firestore entry
-            try {
-                addLog(`A fazer backup de ${newFileName} para o armazenamento na nuvem...`, 'info');
-                const timestamp = new Date().toISOString();
-                const storagePath = `backups/${user.uid}/${timestamp}_${newFileName}`;
-                const storageRef = ref(storage, storagePath);
-                
-                const uploadResult = await uploadBytes(storageRef, blob);
-                
-                const backupsCollectionRef = collection(firestore, 'users', user.uid, 'backups');
-                const newBackupDoc: Omit<BackupFile, 'id'> = {
-                    userId: user.uid,
-                    name: newFileName,
-                    storagePath: uploadResult.ref.fullPath,
-                    size: uploadResult.metadata.size,
-                    createdAt: serverTimestamp() as any, // Let server generate timestamp
-                };
+        addLog("Redirecionando para o checkout do Mercado Pago...", "success");
+        window.location.href = init_point;
 
-                await addDoc(backupsCollectionRef, newBackupDoc);
-
-                addLog('Backup na nuvem e registo no banco de dados concluídos com sucesso.', 'success');
-                toast({ title: 'Backup Concluído', description: 'Uma cópia foi salva na sua biblioteca na nuvem.' });
-            } catch (storageError) {
-                const errorMsg = `Falha ao salvar backup na nuvem: ${(storageError as Error).message}`;
-                addLog(errorMsg, 'error');
-                toast({ title: 'Erro no Backup', description: errorMsg, variant: 'destructive' });
-            }
-
-
-            setBinFile({ name: a.download, buffer: newBinBuffer });
-            
-            mapsToSave.forEach(map => {
-                setModifiedStatusCache(prev => ({...prev, [map.definition.uniqueId]: false}));
-            });
-
-            if (activeMapId && modifiedStatusCache[activeMapId] === false) {
-                 setIsModified(false);
-            }
-            
-
-        } catch (error) {
-            const errorMsg = `Falha ao salvar o ficheiro BIN: ${(error as Error).message}`;
-            addLog(errorMsg, 'error');
-            toast({ title: 'Erro ao Salvar', description: errorMsg, variant: 'destructive' });
-        }
+    } catch (error) {
+        const errorMsg = `Falha ao iniciar pagamento: ${(error as Error).message}`;
+        addLog(errorMsg, 'error');
+        toast({ title: 'Erro de Pagamento', description: errorMsg, variant: 'destructive' });
+    } finally {
+        setIsProcessing(false);
     }
+}
     
     const handleSetTemplate = () => {
         if (!selectedMapDefinition) {
@@ -1242,7 +1209,7 @@ const handleMapSelectionChange = (id: string) => {
             );
         }
 
-        if (!activeMapId && !['map-scanner', 'dyno-analysis', 'ai-tuner'].includes(activeTab)) {
+        if (!activeMapId ) {
             return (
                 <div className="flex flex-col items-center justify-center text-muted-foreground text-center">
                     <div>
@@ -1261,7 +1228,7 @@ const handleMapSelectionChange = (id: string) => {
 
         return (
             <>
-                <TabsContent value="view-table">
+                <TabsContent value="view-table" className="flex-1">
                     <DataTable
                         key={activeMapId}
                         mapData={processedMap?.calculatedMap ?? null}
@@ -1273,7 +1240,7 @@ const handleMapSelectionChange = (id: string) => {
                         aiModifiedCells={aiModifiedCells}
                     />
                 </TabsContent>
-                <TabsContent value="view-3d">
+                <TabsContent value="view-3d" className="w-full">
                         <div className="h-full w-full">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                                 <SurfacePlot3D
@@ -1296,7 +1263,7 @@ const handleMapSelectionChange = (id: string) => {
                             )}
                     </div>
                 </TabsContent>
-                <TabsContent value="view-2d">
+                <TabsContent value="view-2d" className="flex-1">
                     <div className="h-full w-full">
                         <LinePlot2D
                             mapData={processedMap?.calculatedMap ?? null}
@@ -1875,7 +1842,7 @@ const handleMapSelectionChange = (id: string) => {
                           Análise de Ignição
                       </TabsTrigger>
                     </TabsList>
-                    <div className="mt-2">
+                    <div className="mt-2 flex-1 flex flex-col">
                       {renderContent()}
                     </div>
                   </Tabs>

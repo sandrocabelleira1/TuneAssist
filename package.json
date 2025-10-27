@@ -37,6 +37,7 @@
     "date-fns": "^3.6.0",
     "firebase": "^12.3.0",
     "lucide-react": "^0.475.0",
+    "mercadopago": "^2.0.10",
     "next": "15.3.3",
     "papaparse": "^5.4.1",
     "patch-package": "^8.0.0",
