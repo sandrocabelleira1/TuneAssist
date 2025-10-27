@@ -33,7 +33,7 @@ export default function LandingPage() {
               A única ferramenta que utiliza IA para analisar, otimizar e visualizar os mapas da sua ECU, dando-lhe a performance que você procura com a precisão que você precisa.
             </p>
             <div className="mt-10">
-              <Button asChild size="lg" className="group shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-shadow">
+              <Button asChild size="lg" className="group hover:shadow-lg hover:shadow-primary/30 transition-shadow">
                 <Link href="/tuner">
                   Aceder ao TuneAssist AI <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </Link>
