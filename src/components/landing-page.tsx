@@ -4,7 +4,30 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import Header from '@/components/header';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, BrainCircuit, Cpu, BarChart3, Wand2 } from 'lucide-react';
+import Image from 'next/image';
+import placeholderImages from '@/app/lib/placeholder-images.json';
+
+const features = [
+  {
+    icon: <Wand2 className="h-8 w-8 text-primary" />,
+    title: 'Análise Potenciada por IA',
+    description: 'A nossa IA analisa os seus mapas e logs, identificando áreas para otimização de combustível e ignição que passariam despercebidas.',
+    image: placeholderImages.feature1,
+  },
+  {
+    icon: <Cpu className="h-8 w-8 text-primary" />,
+    title: 'Otimização de Mapas',
+    description: 'Receba sugestões de ajuste precisas ou deixe que a nossa IA aplique automaticamente as correções para atingir os seus alvos de performance.',
+    image: placeholderImages.feature2,
+  },
+  {
+    icon: <BarChart3 className="h-8 w-8 text-primary" />,
+    title: 'Visualização Avançada',
+    description: 'Explore os seus mapas em 2D e 3D. Compare o antes e o depois das alterações e analise dados de forma intuitiva.',
+    image: placeholderImages.feature3,
+  },
+];
 
 export default function LandingPage() {
   return (
@@ -31,6 +54,39 @@ export default function LandingPage() {
                   Aceder ao TuneAssist AI <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </Link>
               </Button>
+            </div>
+          </div>
+        </section>
+
+        <section id="features" className="py-20 sm:py-32">
+          <div className="container mx-auto px-4">
+            <div className="max-w-2xl mx-auto text-center">
+              <h2 className="text-3xl font-bold tracking-tight">Uma Ferramenta, Potencial Ilimitado</h2>
+              <p className="mt-4 text-lg text-muted-foreground">
+                Desde a análise de logs à otimização automática, o TuneAssist AI tem tudo o que precisa.
+              </p>
+            </div>
+
+            <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+              {features.map((feature) => (
+                <div key={feature.title} className="bg-accent/50 p-8 rounded-lg border border-border/20 shadow-sm hover:border-primary/50 hover:shadow-primary/10 transition-all">
+                  <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-6">
+                    {feature.icon}
+                  </div>
+                  <h3 className="text-xl font-semibold">{feature.title}</h3>
+                  <p className="mt-2 text-muted-foreground">{feature.description}</p>
+                   <div className="mt-6 aspect-video overflow-hidden rounded-md border border-border/20">
+                     <Image
+                        src={feature.image.src}
+                        alt={feature.title}
+                        width={600}
+                        height={400}
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                        {...feature.image['data-ai-hint'] && { 'data-ai-hint': feature.image['data-ai-hint'] }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>
