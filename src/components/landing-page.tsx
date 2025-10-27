@@ -13,13 +13,6 @@ export default function LandingPage() {
       <main className="flex-1 flex flex-col">
         <section className="flex-1 flex items-center justify-center text-center">
           <div className="relative px-4">
-            <div 
-              className="absolute -top-16 left-1/2 -translate-x-1/2 w-full max-w-xs h-24 bg-primary/30 rounded-full blur-[80px] -z-10"
-              style={{
-                boxShadow: '0 0 100px 50px hsl(var(--primary) / 0.4)',
-              }}
-            ></div>
-            
             <div className="mb-4 inline-block">
                 <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary ring-1 ring-inset ring-primary/20">
                     Potenciado por Inteligência Artificial
@@ -33,7 +26,7 @@ export default function LandingPage() {
               A única ferramenta que utiliza IA para analisar, otimizar e visualizar os mapas da sua ECU, dando-lhe a performance que você procura com a precisão que você precisa.
             </p>
             <div className="mt-10">
-              <Button asChild size="lg" className="group hover:shadow-lg hover:shadow-primary/30 transition-shadow">
+              <Button asChild size="lg" className="group transition-shadow duration-300 hover:neon-glow">
                 <Link href="/tuner">
                   Aceder ao TuneAssist AI <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </Link>
