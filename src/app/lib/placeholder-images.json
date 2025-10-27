@@ -1,0 +1,14 @@
+{
+    "feature1": {
+        "src": "https://picsum.photos/seed/ai-tuning/600/400",
+        "data-ai-hint": "neural network"
+    },
+    "feature2": {
+        "src": "https://picsum.photos/seed/map-analysis/600/400",
+        "data-ai-hint": "circuit board"
+    },
+    "feature3": {
+        "src": "https://picsum.photos/seed/ignition/600/400",
+        "data-ai-hint": "engine performance"
+    }
+}

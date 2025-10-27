@@ -1,5 +1,5 @@
-import EcuTuningAssistant from '@/components/ecu-tuning-assistant';
+import LandingPage from '@/components/landing-page';
 
-export default function TuningPage() {
-  return <EcuTuningAssistant />;
+export default function HomePage() {
+  return <LandingPage />;
 }

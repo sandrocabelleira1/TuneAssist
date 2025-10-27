@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Sparkles, User, Loader2, LogIn, LogOut } from 'lucide-react';
+import { Sparkles, User, Loader2, LogIn, LogOut, Wrench } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -24,11 +24,13 @@ import {
 } from "@/components/ui/dialog";
 import AuthForm from './auth-form';
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 
 
 export default function Header() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
+  const pathname = usePathname();
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
 
 
@@ -91,13 +93,22 @@ export default function Header() {
 
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center">
+    <header className="sticky top-0 z-50 w-full border-b border-border/20 bg-background/80 backdrop-blur-sm">
+      <div className="container mx-auto flex h-14 items-center">
         <Link href="/" className="mr-6 flex items-center space-x-2">
           <Sparkles className="h-6 w-6 text-primary" />
           <span className="font-bold sm:inline-block">TuneAssist AI</span>
         </Link>
-        <div className="flex flex-1 items-center justify-end">
+        
+        <div className="flex-1 flex items-center justify-end gap-4">
+             {pathname !== '/tuner' && (
+                <Button asChild variant="ghost" size="sm">
+                    <Link href="/tuner">
+                        <Wrench className="mr-2 h-4 w-4" />
+                        Ir para o Assistente
+                    </Link>
+                </Button>
+            )}
             {renderUserStatus()}
         </div>
       </div>
