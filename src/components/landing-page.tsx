@@ -67,9 +67,9 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {features.map((feature) => (
-                <div key={feature.title} className="bg-accent/50 p-8 rounded-lg border border-border/20 shadow-sm hover:border-primary/50 hover:shadow-primary/10 transition-all">
+                <div key={feature.title} className="bg-accent/50 p-8 rounded-lg border border-border/20 shadow-sm hover:border-primary/50 hover:shadow-primary/10 transition-all group">
                   <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-6">
                     {feature.icon}
                   </div>
@@ -92,7 +92,7 @@ export default function LandingPage() {
         </section>
 
         <footer className="py-8">
-            <div className="container mx-auto text-center">
+            <div className="container mx-auto text-center px-4">
                 <p className="text-muted-foreground">
                 Uma Ferramenta Completa para o Remapeador Moderno
                 </p>

@@ -94,13 +94,13 @@ export default function Header() {
 
   return (
     <header className="absolute top-0 z-50 w-full bg-transparent">
-      <div className="container mx-auto flex h-20 items-center justify-between">
+      <div className="container mx-auto flex h-20 items-center justify-between px-4">
         <Link href="/" className="flex items-center space-x-2">
           <Sparkles className="h-6 w-6 text-primary" />
-          <span className="font-bold sm:inline-block">TuneAssist AI</span>
+          <span className="font-bold hidden sm:inline-block">TuneAssist AI</span>
         </Link>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
             {pathname !== '/tuner' && (
                 <Button asChild variant="ghost" size="sm">
                     <Link href="/tuner">

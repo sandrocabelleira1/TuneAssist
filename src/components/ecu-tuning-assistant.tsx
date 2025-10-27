@@ -245,13 +245,13 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         if (!selection.start || !selection.end) return false;
         const minY = Math.min(selection.start.y, selection.end.y);
         const maxY = Math.max(selection.start.y, selection.end.y);
-        const minX = Math.min(selection.start.x, selection.end.x);
-        const maxX = Math.max(selection.start.x, selection.end.x);
+        const minX = Math.min(selection.start.x, end.x);
+        const maxX = Math.max(selection.start.x, end.x);
         return y >= minY && y <= maxY && x >= minX && x <= maxX;
     };
     
     return (
-        <div className="overflow-x-auto h-full" ref={tableRef} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+        <div className="overflow-auto h-full" ref={tableRef} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
             <table className="w-full border-collapse text-xs select-none">
                 <thead>
                     <tr>
@@ -380,8 +380,8 @@ function DynoEntryTable() {
 
     return (
         <div className="space-y-4">
-            <div className="flex gap-4 items-end">
-                <div className="flex-1 space-y-2">
+            <div className="flex flex-col sm:flex-row gap-4 items-end">
+                <div className="flex-1 w-full space-y-2">
                     <Label>Eixo de Carga ({loadAxis.label})</Label>
                     <Select value={selectedLoadToAdd} onValueChange={setSelectedLoadToAdd}>
                         <SelectTrigger>
@@ -396,56 +396,58 @@ function DynoEntryTable() {
                         </SelectContent>
                     </Select>
                 </div>
-                <Button type="button" onClick={handleAddLoadColumn} disabled={!selectedLoadToAdd}><PlusCircle className="mr-2 h-4 w-4" />Adicionar Coluna de Carga</Button>
+                <Button type="button" onClick={handleAddLoadColumn} disabled={!selectedLoadToAdd} className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" />Adicionar Coluna de Carga</Button>
             </div>
             
             {loadColumnFields.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[120px]">RPM</TableHead>
-                                {loadColumnFields.map((field, index) => (
-                                    <TableHead key={field.id}>
-                                        <div className="flex items-center justify-between">
-                                            <span>{field.value}</span>
-                                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeLoadColumn(index)}>
-                                                <X className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    </TableHead>
-                                ))}
-                                <TableHead className="w-[50px]"></TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {logRowFields.map((rowField, rowIndex) => (
-                                <TableRow key={rowField.id}>
-                                    <TableCell>
-                                        <FormField
-                                            control={control}
-                                            name={`logRows.${rowIndex}.rpm`}
-                                            render={({ field }) => <Input type="number" placeholder="Ex: 3000" {...field} />}
-                                        />
-                                    </TableCell>
-                                    {loadColumnFields.map((_, colIndex) => (
-                                        <TableCell key={`${rowField.id}-${colIndex}`}>
+                    <ScrollArea className="w-full">
+                        <Table className="min-w-max">
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[120px]">RPM</TableHead>
+                                    {loadColumnFields.map((field, index) => (
+                                        <TableHead key={field.id} className="min-w-[100px]">
+                                            <div className="flex items-center justify-between">
+                                                <span>{field.value}</span>
+                                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeLoadColumn(index)}>
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </TableHead>
+                                    ))}
+                                    <TableHead className="w-[50px]"></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {logRowFields.map((rowField, rowIndex) => (
+                                    <TableRow key={rowField.id}>
+                                        <TableCell>
                                             <FormField
                                                 control={control}
-                                                name={`logRows.${rowIndex}.lambdas.${colIndex}.value`}
-                                                render={({ field }) => <Input type="number" step="0.01" placeholder="Ex: 0.85" {...field} />}
+                                                name={`logRows.${rowIndex}.rpm`}
+                                                render={({ field }) => <Input type="number" placeholder="Ex: 3000" {...field} />}
                                             />
                                         </TableCell>
-                                    ))}
-                                    <TableCell>
-                                        <Button variant="ghost" size="icon" onClick={() => removeLogRow(rowIndex)}>
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                                        {loadColumnFields.map((_, colIndex) => (
+                                            <TableCell key={`${rowField.id}-${colIndex}`}>
+                                                <FormField
+                                                    control={control}
+                                                    name={`logRows.${rowIndex}.lambdas.${colIndex}.value`}
+                                                    render={({ field }) => <Input type="number" step="0.01" placeholder="Ex: 0.85" {...field} />}
+                                                />
+                                            </TableCell>
+                                        ))}
+                                        <TableCell>
+                                            <Button variant="ghost" size="icon" onClick={() => removeLogRow(rowIndex)}>
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </ScrollArea>
                     <div className="p-2 border-t">
                         <Button type="button" variant="secondary" size="sm" onClick={handleAddRpmRow}><Plus className="mr-2 h-4 w-4" />Adicionar Linha de RPM</Button>
                     </div>
@@ -1234,7 +1236,7 @@ const handleMapSelectionChange = (id: string) => {
 
         return (
             <>
-                <TabsContent value="view-table">
+                <TabsContent value="view-table" className="h-[70vh]">
                     <DataTable
                         key={activeMapId}
                         mapData={processedMap?.calculatedMap ?? null}
@@ -1398,7 +1400,7 @@ const handleMapSelectionChange = (id: string) => {
                             </h2>
                         </AccordionTrigger>
                         <AccordionContent>
-                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
                                 <Card>
                                     <CardHeader>
                                         <CardTitle className="text-base flex items-center gap-2">
@@ -1524,7 +1526,7 @@ const handleMapSelectionChange = (id: string) => {
                                         </CardTitle>
                                     </CardHeader>
                                      <CardContent className="flex flex-col gap-3">
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-col sm:flex-row gap-2">
                                             <Button
                                             variant="default"
                                             className="flex-1"
@@ -1535,6 +1537,7 @@ const handleMapSelectionChange = (id: string) => {
                                             </Button>
                                             <Button
                                                 variant="destructive"
+                                                size="icon"
                                                 onClick={handleResetAll}
                                             >
                                                 <Trash2 className="h-4 w-4" />
@@ -1602,7 +1605,7 @@ const handleMapSelectionChange = (id: string) => {
                             </h2>
                         </AccordionTrigger>
                         <AccordionContent>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
                                  <div className="space-y-2">
                                     <Label htmlFor="y-equation" className="font-semibold text-sm">Equação Y</Label>
                                     <Input id="y-equation" placeholder="x" value={manualConfig.y.equation} onChange={(e) => handleManualConfigChange('y', e.target.value, 'equation')} />
@@ -1632,7 +1635,7 @@ const handleMapSelectionChange = (id: string) => {
                                     <Input id="z-row-stride" type="number" placeholder="Automático (Cols * Passo Z)" value={manualConfig.z.rowStride ?? ''} onChange={(e) => handleManualConfigChange('z', e.target.value === '' ? undefined : parseInt(e.target.value), 'rowStride')} />
                                 </div>
                                 <div className="flex items-end gap-2">
-                                     <div className="flex items-center space-x-4 pt-4">
+                                     <div className="flex flex-wrap items-center space-x-4 pt-4">
                                         <div className="flex items-center space-x-2">
                                             <Switch id="sort-x" checked={manualConfig.sortX ?? false} onCheckedChange={(checked) => handleManualConfigChange('sortX', checked)} />
                                             <Label htmlFor="sort-x">Ordenar Eixo X</Label>
@@ -1666,7 +1669,7 @@ const handleMapSelectionChange = (id: string) => {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <Card>
                         <CardHeader>
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                 <div>
                                 <CardTitle>{selectedMapDefinition?.name || (!xdfFile ? 'Carregue um .XDF' : 'Nenhum Mapa Selecionado')}</CardTitle>
                                 {isModified && (
@@ -1675,7 +1678,7 @@ const handleMapSelectionChange = (id: string) => {
                                     </span>
                                 )}
                                 </div>
-                                <TabsList>
+                                <TabsList className="h-auto flex-wrap justify-start sm:justify-center">
                                 <TabsTrigger value="view-table" disabled={!activeMapId}>
                                     <Table2 className="mr-2" />
                                     Tabela de Dados
