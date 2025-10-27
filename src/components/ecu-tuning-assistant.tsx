@@ -1246,7 +1246,7 @@ const handleMapSelectionChange = (id: string) => {
                         aiModifiedCells={aiModifiedCells}
                     />
                 </TabsContent>
-                <TabsContent value="view-3d">
+                <TabsContent value="view-3d" className="h-[70vh]">
                         <div className="h-full w-full">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                                 <SurfacePlot3D
@@ -1269,22 +1269,22 @@ const handleMapSelectionChange = (id: string) => {
                             )}
                     </div>
                 </TabsContent>
-                <TabsContent value="view-2d">
-                    <div className="h-full w-full">
-                        <LinePlot2D
-                            mapData={processedMap?.calculatedMap ?? null}
-                            xAxis={processedMap?.axes?.x ?? null}
-                            yAxis={processedMap?.axes?.y ?? null}
-                            mapName={
-                            selectedMapDefinition?.name || 'Mapa Principal'
-                            }
-                            selectedLineIndex={selectedLine}
-                            onLineSelect={setSelectedLine}
-                            onPointChange={handlePointChange}
-                            orientation={plotOrientation}
-                            togglePlotOrientation={togglePlotOrientation}
-                        />
-                    </div>
+                <TabsContent value="view-2d" className="h-[70vh]">
+                        <div className="h-full w-full">
+                            <LinePlot2D
+                                mapData={processedMap?.calculatedMap ?? null}
+                                xAxis={processedMap?.axes?.x ?? null}
+                                yAxis={processedMap?.axes?.y ?? null}
+                                mapName={
+                                selectedMapDefinition?.name || 'Mapa Principal'
+                                }
+                                selectedLineIndex={selectedLine}
+                                onLineSelect={setSelectedLine}
+                                onPointChange={handlePointChange}
+                                orientation={plotOrientation}
+                                togglePlotOrientation={togglePlotOrientation}
+                            />
+                        </div>
                 </TabsContent>
                 <TabsContent value="fuel-analysis">
                    <div className="space-y-4 p-1">
@@ -1359,7 +1359,7 @@ const handleMapSelectionChange = (id: string) => {
                         </Card>
                         <Card>
                             <CardHeader><CardTitle>Dados de Ensaio Atuais</CardTitle></CardHeader>
-                            <CardContent className="h-96">
+                            <CardContent>
                                 {logData.length > 0 ? (
                                     <LogDataTable data={logData} />
                                 ) : (
@@ -1372,7 +1372,6 @@ const handleMapSelectionChange = (id: string) => {
                     </div>
                 </TabsContent>
                 <TabsContent value="ignition-analysis">
-                    <ScrollArea>
                         <IgnitionTimingAnalyzer 
                             runs={ignitionRuns} 
                             onRunsChange={setIgnitionRuns}
@@ -1380,7 +1379,6 @@ const handleMapSelectionChange = (id: string) => {
                             processedMap={processedMap}
                             selectedMapDefinition={selectedMapDefinition}
                         />
-                    </ScrollArea>
                 </TabsContent>
             </>
         );
@@ -1702,7 +1700,9 @@ const handleMapSelectionChange = (id: string) => {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            {renderContent()}
+                            <div className="min-h-0">
+                                {renderContent()}
+                            </div>
                         </CardContent>
                     </Card>
                 </Tabs>
