@@ -6,17 +6,7 @@ import * as TabsPrimitive from "@radix-ui/react-tabs"
 
 import { cn } from "@/lib/utils"
 
-const Tabs = React.forwardRef<
-  React.ElementRef<typeof TabsPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Root
-    ref={ref}
-    className={cn("flex flex-col", className)}
-    {...props}
-  />
-));
-Tabs.displayName = TabsPrimitive.Root.displayName;
+const Tabs = TabsPrimitive.Root
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
@@ -25,7 +15,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-auto flex-wrap items-center justify-start rounded-md bg-muted p-1 text-muted-foreground",
+      "inline-flex h-auto items-center justify-start rounded-md bg-muted p-1 text-muted-foreground",
       className
     )}
     {...props}
@@ -56,7 +46,6 @@ const TabsContent = React.forwardRef<
     ref={ref}
     className={cn(
       "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-      "flex-1 min-h-0", // Allow content to grow and have its own scroll
       className
     )}
     {...props}
@@ -65,5 +54,3 @@ const TabsContent = React.forwardRef<
 TabsContent.displayName = TabsPrimitive.Content.displayName
 
 export { Tabs, TabsList, TabsTrigger, TabsContent }
-
-    

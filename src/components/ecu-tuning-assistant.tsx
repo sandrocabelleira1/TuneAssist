@@ -40,7 +40,7 @@ import Image from 'next/image';
 import { storage } from '@/lib/firebase/client';
 import { ref, uploadBytes } from "firebase/storage";
 import { useUser, useFirestore, useAuth, useMemoFirebase } from '@/firebase';
-import { collection, serverTimestamp, addDoc, deleteDoc } from 'firebase/firestore';
+import { collection, serverTimestamp, addDoc, deleteDoc, doc } from 'firebase/firestore';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -199,7 +199,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
 
     if (!axes || !selectedMapDefinition || !mapData) {
         return (
-            <div className="flex items-center justify-center text-muted-foreground">
+            <div className="flex items-center justify-center text-muted-foreground h-full">
                 <p>Carregue os ficheiros e selecione um mapa para ver a tabela de dados.</p>
             </div>
         );
@@ -253,11 +253,11 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     };
     
     return (
-        <div className="overflow-x-auto" ref={tableRef} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+        <div className="overflow-x-auto h-full" ref={tableRef} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
             <table className="w-full border-collapse text-xs select-none">
                 <thead>
                     <tr>
-                        <th className="sticky top-0 left-0 z-20 bg-muted p-2 border border-border text-left font-semibold">
+                        <th className="sticky top-0 left-0 z-20 bg-background/80 backdrop-blur-sm p-2 border-b border-border text-left font-semibold">
                             <div className="flex items-center justify-between">
                                 <span>{yAxisLabel}</span>
                                 <span className="mx-2">\</span>
@@ -265,7 +265,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                             </div>
                         </th>
                         {axes.x.calculated.map((x: any, i: number) => (
-                            <th key={i} className="sticky top-0 z-10 bg-muted p-2 border border-border font-semibold">
+                            <th key={i} className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm p-2 border-b border-border font-semibold">
                                 {typeof x === 'number' && xAxisDecimalPlaces !== -1 ? x.toFixed(xAxisDecimalPlaces) : x}
                             </th>
                         ))}
@@ -274,19 +274,19 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                 <tbody>
                     {axes.y.calculated.map((y: any, yi: number) => (
                         <tr key={yi}>
-                            <td className="sticky left-0 z-10 bg-muted p-2 border border-border font-bold text-right">
+                            <td className="sticky left-0 z-10 bg-background/80 backdrop-blur-sm p-2 border-r border-border font-bold text-right">
                                 {typeof y === 'number' && yAxisDecimalPlaces !== -1 ? y.toFixed(yAxisDecimalPlaces) : y}
                             </td>
                             {mapData[yi]?.map((cell, xi) => {
                                 const selected = isCellSelected(yi, xi);
                                 const isAiModified = aiModifiedCells.has(`${yi}-${xi}`);
-                                const bgColor = selected ? 'hsl(var(--primary) / 0.8)' : getHeatmapColor(cell, minVal, maxVal);
+                                const bgColor = selected ? 'hsl(var(--primary))' : getHeatmapColor(cell, minVal, maxVal);
                                 const textColor = selected ? 'hsl(var(--primary-foreground))' : getTextColorForBackground(bgColor);
                                 const address = addresses?.[yi]?.[xi];
                                 return (
                                     <td
                                         key={xi}
-                                        className={cn("p-0 border border-border text-center h-10 transition-colors relative", {
+                                        className={cn("p-0 border border-border/50 text-center h-10 transition-colors relative", {
                                             'outline outline-2 outline-offset-[-2px] outline-primary': selected,
                                             'ring-2 ring-amber-400 ring-inset z-10': isAiModified,
                                         })}
@@ -976,7 +976,7 @@ export default function EcuTuningAssistant() {
     };
     
 const handleSave = async () => {
-    if (!binFile || !xdfFile || Object.keys(processedMapCache).length === 0) {
+    if (!binFile || !xdfFile || !anyMapModified) {
         const msg = "Faltam dados para salvar. Carregue os ficheiros e modifique um mapa primeiro.";
         addLog(msg, 'error');
         toast({ title: 'Erro ao Salvar', description: msg, variant: 'destructive' });
@@ -993,15 +993,43 @@ const handleSave = async () => {
     setIsProcessing(true);
 
     try {
+        // First, save the file to cloud storage
+        const mapsToSave = Object.entries(processedMapCache)
+            .filter(([mapId, _]) => modifiedStatusCache[mapId])
+            .map(([mapId, mapData]) => ({
+                definition: xdfFile.definitions.find(def => def.uniqueId === mapId)!,
+                processedMap: mapData,
+            }));
+        
+        let newBinBuffer: ArrayBuffer;
+        let modifiedFileName: string;
+
+        if (mapsToSave.length > 0) {
+            newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
+            modifiedFileName = binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`;
+        } else {
+             // This case should be caught by `anyMapModified` check, but as a fallback
+            addLog("Nenhuma modificação para salvar.", "info");
+            toast({ title: "Nenhuma Alteração", description: "Não há modificações para salvar."});
+            setIsProcessing(false);
+            return;
+        }
+
+        const storagePath = `users/${user.uid}/backups/${Date.now()}_${modifiedFileName}`;
+        const storageRef = ref(storage, storagePath);
+        const uploadResult = await uploadBytes(storageRef, newBinBuffer, { contentType: 'application/octet-stream' });
+        addLog(`Ficheiro modificado carregado para: ${storagePath}`, 'success');
+        
+        // Then, create the payment preference
         const response = await fetch('/api/create-payment', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                title: `Download Ficheiro Modificado: ${binFile.name}`,
+                title: `Ficheiro Modificado: ${modifiedFileName}`,
                 quantity: 1,
-                unit_price: 10.0, // Example price, you can make this dynamic
+                unit_price: 10.00, // Example price
                 userId: user.uid,
             }),
         });
@@ -1012,28 +1040,22 @@ const handleSave = async () => {
 
         const { init_point } = await response.json();
         
-        // Save the modified file buffer to localStorage to retrieve it after payment
-        const mapsToSave = Object.entries(processedMapCache)
-            .filter(([mapId, _]) => modifiedStatusCache[mapId])
-            .map(([mapId, mapData]) => ({
-                definition: xdfFile.definitions.find(def => def.uniqueId === mapId)!,
-                processedMap: mapData,
-            }));
-        
-        if (mapsToSave.length > 0) {
-            const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
-            const bufferArray = Array.from(new Uint8Array(newBinBuffer));
-            localStorage.setItem('pendingBinFile', JSON.stringify(bufferArray));
-            localStorage.setItem('pendingBinFileName', binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`);
-        }
+        // Save metadata to local storage to create the DB entry on success
+        localStorage.setItem('pendingBinFile', JSON.stringify(Array.from(new Uint8Array(newBinBuffer))));
+        localStorage.setItem('pendingBinFileName', modifiedFileName);
+        localStorage.setItem('pendingBackupInfo', JSON.stringify({
+            name: modifiedFileName,
+            storagePath: uploadResult.metadata.fullPath,
+            size: newBinBuffer.byteLength,
+        }));
 
         addLog("Redirecionando para o checkout do Mercado Pago...", "success");
         window.location.href = init_point;
 
     } catch (error) {
-        const errorMsg = `Falha ao iniciar pagamento: ${(error as Error).message}`;
+        const errorMsg = `Falha ao salvar ou iniciar pagamento: ${(error as Error).message}`;
         addLog(errorMsg, 'error');
-        toast({ title: 'Erro de Pagamento', description: errorMsg, variant: 'destructive' });
+        toast({ title: 'Erro Crítico', description: errorMsg, variant: 'destructive' });
     } finally {
         setIsProcessing(false);
     }
@@ -1186,7 +1208,7 @@ const handleMapSelectionChange = (id: string) => {
     const renderContent = () => {
         if (isProcessing && !processedMap) {
             return (
-                <div className="flex flex-col items-center justify-center text-muted-foreground">
+                <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
                     <Loader2 className="mr-2 h-8 w-8 animate-spin" />
                     <p>A processar o mapa...</p>
                 </div>
@@ -1195,7 +1217,7 @@ const handleMapSelectionChange = (id: string) => {
 
         if (!processedMap && activeMapId) {
             return (
-                <div className="flex flex-col items-center justify-center text-muted-foreground text-center">
+                <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
                     <div>
                         <AlertTriangle className="mx-auto h-12 w-12 text-destructive" />
                         <p className="mt-2 font-semibold">
@@ -1211,7 +1233,7 @@ const handleMapSelectionChange = (id: string) => {
 
         if (!activeMapId ) {
             return (
-                <div className="flex flex-col items-center justify-center text-muted-foreground text-center">
+                <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
                     <div>
                         <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
                         <p className="mt-2 font-semibold">
@@ -1228,7 +1250,7 @@ const handleMapSelectionChange = (id: string) => {
 
         return (
             <>
-                <TabsContent value="view-table" className="flex-1">
+                <TabsContent value="view-table" className="h-full">
                     <DataTable
                         key={activeMapId}
                         mapData={processedMap?.calculatedMap ?? null}
@@ -1240,7 +1262,7 @@ const handleMapSelectionChange = (id: string) => {
                         aiModifiedCells={aiModifiedCells}
                     />
                 </TabsContent>
-                <TabsContent value="view-3d" className="w-full">
+                <TabsContent value="view-3d" className="h-full">
                         <div className="h-full w-full">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                                 <SurfacePlot3D
@@ -1254,7 +1276,7 @@ const handleMapSelectionChange = (id: string) => {
                                     }
                                 />
                             ) : (
-                            <div className="flex items-center justify-center h-full text-muted-foreground">
+                            <div className="flex h-full items-center justify-center text-muted-foreground">
                                 <p>
                                 A aguardar dados completos do mapa para o gráfico
                                 3D.
@@ -1263,7 +1285,7 @@ const handleMapSelectionChange = (id: string) => {
                             )}
                     </div>
                 </TabsContent>
-                <TabsContent value="view-2d" className="flex-1">
+                <TabsContent value="view-2d" className="h-full">
                     <div className="h-full w-full">
                         <LinePlot2D
                             mapData={processedMap?.calculatedMap ?? null}
@@ -1281,7 +1303,8 @@ const handleMapSelectionChange = (id: string) => {
                     </div>
                 </TabsContent>
                 <TabsContent value="fuel-analysis">
-                    <div className="grid grid-cols-1 gap-4">
+                   <ScrollArea className="h-full">
+                    <div className="space-y-4 p-1">
                         <Card>
                             <CardHeader>
                                 <CardTitle>Ajuste Automático por Log</CardTitle>
@@ -1351,26 +1374,31 @@ const handleMapSelectionChange = (id: string) => {
                                 </Form>
                             </CardContent>
                         </Card>
+                        <Card>
+                            <CardHeader><CardTitle>Dados de Ensaio Atuais</CardTitle></CardHeader>
+                            <CardContent className="h-96">
+                                {logData.length > 0 ? (
+                                    <LogDataTable data={logData} />
+                                ) : (
+                                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                                        <p>Aguardando dados do ensaio...</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
                     </div>
-
-                    <div className="border rounded-lg mt-4 h-96">
-                        {logData.length > 0 ? (
-                            <LogDataTable data={logData} />
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-muted-foreground">
-                                <p>Aguardando dados do ensaio...</p>
-                            </div>
-                        )}
-                    </div>
+                   </ScrollArea>
                 </TabsContent>
-                <TabsContent value="ignition-analysis">
-                    <IgnitionTimingAnalyzer 
-                        runs={ignitionRuns} 
-                        onRunsChange={setIgnitionRuns}
-                        binFile={binFile}
-                        processedMap={processedMap}
-                        selectedMapDefinition={selectedMapDefinition}
-                    />
+                <TabsContent value="ignition-analysis" className="h-full">
+                    <ScrollArea className="h-full">
+                        <IgnitionTimingAnalyzer 
+                            runs={ignitionRuns} 
+                            onRunsChange={setIgnitionRuns}
+                            binFile={binFile}
+                            processedMap={processedMap}
+                            selectedMapDefinition={selectedMapDefinition}
+                        />
+                    </ScrollArea>
                 </TabsContent>
             </>
         );
@@ -1380,21 +1408,21 @@ const handleMapSelectionChange = (id: string) => {
       <EcuTuningStateContext.Provider value={{ processedMap }}>
         <div className="h-full w-full bg-background">
           <SidebarProvider>
-            <Sidebar side="left" className="border-r">
+            <Sidebar side="left" className="border-r !bg-card" collapsible='icon'>
               
-              <SidebarHeader>
+              <SidebarHeader className="p-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
                   <Cpu size={20} /> Painel de Controlo
                 </h2>
               </SidebarHeader>
               <SidebarContent className="p-2 flex flex-col gap-4">
-                <Card>
-                  <CardHeader className="p-4">
+                <Card className="bg-transparent border-none shadow-none">
+                  <CardHeader className="p-2">
                     <CardTitle className="text-base flex items-center gap-2">
                       <UploadCloud size={18} /> Ficheiros
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-4 pt-0 flex flex-col gap-3">
+                  <CardContent className="p-2 pt-0 flex flex-col gap-3">
                     <Button
                       variant="outline"
                       size="sm"
@@ -1429,13 +1457,13 @@ const handleMapSelectionChange = (id: string) => {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader className="p-4">
+                <Card className="bg-transparent border-none shadow-none">
+                  <CardHeader className="p-2">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Table2 size={18} /> Seleção de Mapa
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-4 pt-0">
+                  <CardContent className="p-2 pt-0">
                     <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                       <PopoverTrigger asChild>
                           <Button
@@ -1506,8 +1534,8 @@ const handleMapSelectionChange = (id: string) => {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader className="p-4">
+                <Card className="bg-transparent border-none shadow-none">
+                  <CardHeader className="p-2">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Settings2 size={18} /> Substituir Manualmente
                     </CardTitle>
@@ -1516,7 +1544,7 @@ const handleMapSelectionChange = (id: string) => {
                       depuração.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-4 pt-0 space-y-4">
+                  <CardContent className="p-2 pt-0 space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label
@@ -1720,13 +1748,13 @@ const handleMapSelectionChange = (id: string) => {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader className="p-4">
+                <Card className="bg-transparent border-none shadow-none">
+                  <CardHeader className="p-2">
                     <CardTitle className="text-base flex items-center gap-2">
                       <BrainCircuit size={18} /> Ações
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-4 pt-0 flex flex-col gap-3">
+                  <CardContent className="p-2 pt-0 flex flex-col gap-3">
                     <Button
                       variant="default"
                       size="sm"
@@ -1805,7 +1833,7 @@ const handleMapSelectionChange = (id: string) => {
                       {selectedMapDefinition?.name || (!xdfFile ? 'Carregue um .XDF' : 'Nenhum Mapa Selecionado')}
                     </h1>
                     {isModified && (
-                      <span className="ml-2 text-xs font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+                      <span className="ml-2 text-xs font-semibold text-primary/80 bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
                         Modificado
                       </span>
                     )}
@@ -1830,7 +1858,7 @@ const handleMapSelectionChange = (id: string) => {
                         Gráfico 3D
                       </TabsTrigger>
                       <TabsTrigger value="view-2d" disabled={!activeMapId}>
-                        <BarChart3 className="mr-2" />
+                        <LineChartIcon className="mr-2" />
                         Gráfico 2D
                       </TabsTrigger>
                       <TabsTrigger value="fuel-analysis">
@@ -1842,7 +1870,7 @@ const handleMapSelectionChange = (id: string) => {
                           Análise de Ignição
                       </TabsTrigger>
                     </TabsList>
-                    <div className="mt-2 flex-1 flex flex-col">
+                    <div className="mt-2 flex-1 flex flex-col min-h-0">
                       {renderContent()}
                     </div>
                   </Tabs>

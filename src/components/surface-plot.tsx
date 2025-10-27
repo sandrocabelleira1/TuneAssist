@@ -82,9 +82,9 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
         plot_bgcolor: 'transparent',
         font: { color: 'hsl(var(--foreground))' },
         scene: {
-          xaxis: { title: xAxisLabel ?? 'Eixo X', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
-          yaxis: { title: yAxisLabel ?? 'Eixo Y', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
-          zaxis: { title: zAxisLabel ?? 'Valor', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--card))' },
+          xaxis: { title: xAxisLabel ?? 'Eixo X', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--background))' },
+          yaxis: { title: yAxisLabel ?? 'Eixo Y', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--background))' },
+          zaxis: { title: zAxisLabel ?? 'Valor', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--background))' },
           camera: { eye: {x: 1.8, y: -1.8, z: 1.2} }
         },
         margin: { l: 0, r: 0, b: 0, t: 0 },
@@ -114,7 +114,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
 
   if (!isPlotlyLoaded) {
     return (
-        <div className="flex h-full w-full items-center justify-center text-muted-foreground bg-card rounded-lg border p-4">
+        <div className="flex h-full w-full items-center justify-center text-muted-foreground bg-card rounded-lg p-4">
             <Loader2 className="h-8 w-8 animate-spin" />
         </div>
     );
@@ -122,7 +122,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
 
   if (!plotData) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-muted-foreground bg-card rounded-lg border p-4">
+      <div className="flex h-full w-full items-center justify-center text-muted-foreground bg-card rounded-lg p-4">
         <div className="text-center p-4">
             <AlertCircle className="mx-auto h-12 w-12" />
             <p className="mt-4 font-semibold">Não é possível apresentar o gráfico 3D</p>
@@ -133,7 +133,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
   }
 
   return (
-    <div className={cn("h-full w-full bg-card rounded-lg border", className)} {...props}>
+    <div className={cn("h-full w-full", className)} {...props}>
       <div ref={plotRef} className="h-full w-full" />
     </div>
   );
