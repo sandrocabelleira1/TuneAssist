@@ -1,29 +1,8 @@
 
 {
-  "entities": {
-    "BackupFile": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "BackupFile",
-      "type": "object",
-      "description": "Metadata for a modified .bin file backup.",
-      "properties": {
-        "id": { "type": "string", "description": "Unique identifier for the backup entry." },
-        "userId": { "type": "string", "description": "The ID of the user who owns the backup." },
-        "name": { "type": "string", "description": "The name of the backed-up .bin file." },
-        "storagePath": { "type": "string", "description": "The full path to the file in Firebase Storage." },
-        "size": { "type": "number", "description": "The size of the file in bytes." },
-        "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the backup was created." }
-      },
-      "required": ["id", "userId", "name", "storagePath", "size", "createdAt"]
-    }
-  },
+  "entities": {},
   "auth": {
     "providers": ["password"]
   },
-  "firestore": {
-    "/users/{userId}/backups/{backupId}": {
-      "schema": { "$ref": "#/entities/BackupFile" },
-      "description": "Stores metadata for user-specific file backups. Authorization is based on the userId in the path."
-    }
-  }
+  "firestore": {}
 }

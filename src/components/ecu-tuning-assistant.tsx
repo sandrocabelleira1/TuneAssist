@@ -34,17 +34,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import IgnitionTimingAnalyzer from '@/components/ignition-timing-analyzer';
-import MapScanner from '@/components/map-scanner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
-import DynoAnalyzer from '@/components/dyno-analyzer';
-import AiChatTuner from '@/components/ai-chat-tuner';
 import { storage } from '@/lib/firebase/client';
 import { ref, uploadBytes } from "firebase/storage";
 import { useUser, useFirestore, useAuth, useMemoFirebase } from '@/firebase';
 import { collection, serverTimestamp, addDoc } from 'firebase/firestore';
-import BackupLibrary from '@/components/backup-library';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -507,7 +503,6 @@ export default function EcuTuningAssistant() {
     const [isModified, setIsModified] = useState(false);
     const [aiModifiedCells, setAiModifiedCells] = useState<Set<string>>(new Set());
     const [aiModifiedCellsCache, setAiModifiedCellsCache] = useState<Record<string, Set<string>>>({});
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     
     const [selectedLine, setSelectedLine] = useState<number | null>(null);
     const [plotOrientation, setPlotOrientation] = useState<PlotOrientation>('y-vs-x');
@@ -524,8 +519,6 @@ export default function EcuTuningAssistant() {
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     
-    const [dynoRuns, setDynoRuns] = useState<DynoRun[]>([]);
-
 
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
@@ -548,31 +541,6 @@ export default function EcuTuningAssistant() {
         return Object.values(modifiedStatusCache).some(status => status);
     }, [modifiedStatusCache]);
     
-    const applyAiSuggestion = (suggestion: AiFuelSuggestion) => {
-        if (!processedMap || !processedMap.calculatedMap || !activeMapId) return;
-
-        addLog(`A aplicar ${suggestion.changes.length} alterações de IA ao mapa "${selectedMapDefinition?.name ?? activeMapId}".`, 'info');
-        const newMap = processedMap.calculatedMap.map(row => [...row]);
-        const newAiModifiedCells = new Set<string>();
-
-        suggestion.changes.forEach(change => {
-            if (newMap[change.y] && newMap[change.y][change.x] !== undefined) {
-                newMap[change.y][change.x] = change.newValue;
-                newAiModifiedCells.add(`${change.y}-${change.x}`);
-            }
-        });
-        
-        const newProcessedMap = { ...processedMap, calculatedMap: newMap };
-        setProcessedMap(newProcessedMap);
-        setAiModifiedCells(newAiModifiedCells);
-        
-        setIsModified(true);
-        setAiModifiedCellsCache(prev => ({ ...prev, [activeMapId as string]: newAiModifiedCells }));
-        setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
-
-    };
-
 
     const clearAiModifications = () => {
         if (activeMapId) {
@@ -596,7 +564,6 @@ export default function EcuTuningAssistant() {
         setProcessedMapCache({});
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
-        setChatMessages([]);
         addLog('Seleção de mapa e cache limpos.', 'info');
     }, [addLog]);
 
@@ -628,8 +595,6 @@ export default function EcuTuningAssistant() {
         setTargetLambda(0.87);
         setAggressiveness(100);
         setIgnitionRuns({ base: [], modified: [] });
-        setDynoRuns([]);
-        setChatMessages([]);
         dynoForm.reset();
         
         if (binInputRef.current) binInputRef.current.value = '';
@@ -1099,11 +1064,6 @@ export default function EcuTuningAssistant() {
                  setIsModified(false);
             }
             
-            if (chatMessages.length > 0) {
-              addLog("A limpar histórico de chat após salvar.", "info");
-              setChatMessages([]);
-            }
-
 
         } catch (error) {
             const errorMsg = `Falha ao salvar o ficheiro BIN: ${(error as Error).message}`;
@@ -1229,65 +1189,6 @@ const handleMapSelectionChange = (id: string) => {
     }
 };
 
-    const handleLoadPotentialMap = useCallback((map: PotentialMap) => {
-        addLog(`A carregar mapa potencial em 0x${map.address.toString(16).toUpperCase()}.`, 'info');
-        
-        if (!binFile) {
-            addLog('Ficheiro BIN não está carregado. Impossível ler os dados do eixo.', 'error');
-            return;
-        }
-
-        const tempId = `potential_${map.address}_${map.rows}x${map.cols}`;
-        
-        const tempDef: XDFinition = {
-            uniqueId: tempId,
-            name: map.name ?? `Mapa Potencial @ 0x${map.address.toString(16).toUpperCase()}`,
-            address: map.address,
-            rows: map.rows,
-            cols: map.cols,
-            dataSize: map.dataSize,
-            isBigEndian: map.isBigEndian,
-            isRowMajor: true, 
-            equation: map.equation || 'x',
-            decimalpl: 2,
-            xAxisDef: {
-                label: map.xAxisAddress ? `Eixo X (0x${map.xAxisAddress.toString(16).toUpperCase()})` : `Eixo X (scan)`,
-                count: map.cols,
-                requiresSort: false,
-                address: map.xAxisAddress,
-                dataSize: map.dataSize,
-                isBigEndian: map.isBigEndian,
-                equation: 'x'
-            },
-            yAxisDef: {
-                label: map.yAxisAddress ? `Eixo Y (0x${map.yAxisAddress.toString(16).toUpperCase()})` : `Eixo Y (scan)`,
-                count: map.rows,
-                requiresSort: false,
-                address: map.yAxisAddress,
-                dataSize: map.dataSize,
-                isBigEndian: map.isBigEndian,
-                equation: 'x'
-            },
-            rowStride: map.rowStride
-        };
-        
-        const currentXdfDefs = xdfFile ? xdfFile.definitions.filter(d => d.uniqueId !== tempId) : [];
-        const newDefs = [...currentXdfDefs, tempDef];
-
-        setXdfFile(prev => ({
-            name: prev?.name || "Manualmente Criado",
-            content: prev?.content || "",
-            definitions: newDefs,
-            allTables: prev?.allTables || new Map()
-        }));
-
-        const newSelectedIds = [...new Set([...selectedMapIds, tempId])];
-        setSelectedMapIds(newSelectedIds);
-        setActiveMap(tempId);
-        
-        setActiveTab('view-table');
-        toast({ title: "Mapa Potencial Carregado", description: "Dados preenchidos no painel de substituição. Ajuste e recalcule se necessário." });
-    }, [addLog, binFile, xdfFile, selectedMapIds, toast, setActiveMap]);
     
     const handleDownloadLog = () => {
         if (logs.length === 0) {
@@ -1372,7 +1273,7 @@ const handleMapSelectionChange = (id: string) => {
                         aiModifiedCells={aiModifiedCells}
                     />
                 </TabsContent>
-                <TabsContent value="view-3d" className="h-[70vh]">
+                <TabsContent value="view-3d">
                         <div className="h-full w-full">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                                 <SurfacePlot3D
@@ -1503,30 +1404,6 @@ const handleMapSelectionChange = (id: string) => {
                         processedMap={processedMap}
                         selectedMapDefinition={selectedMapDefinition}
                     />
-                </TabsContent>
-                <TabsContent value="dyno-analysis">
-                    <DynoAnalyzer runs={dynoRuns} onRunsChange={setDynoRuns} />
-                </TabsContent>
-                <TabsContent value="map-scanner" >
-                    <MapScanner
-                        binFile={binFile}
-                        onLoadMap={handleLoadPotentialMap}
-                        addLog={addLog}
-                    />
-                </TabsContent>
-                 <TabsContent value="ai-tuner">
-                    <AiChatTuner 
-                        processedMap={processedMap}
-                        logData={logData}
-                        selectedMapDefinition={selectedMapDefinition}
-                        onSuggestion={applyAiSuggestion}
-                        addLog={addLog}
-                        messages={chatMessages}
-                        setMessages={setChatMessages}
-                    />
-                </TabsContent>
-                 <TabsContent value="backup-library">
-                    <BackupLibrary addLog={addLog} />
                 </TabsContent>
             </>
         );
@@ -1958,7 +1835,7 @@ const handleMapSelectionChange = (id: string) => {
                   <SidebarTrigger />
                   <div className="flex items-center ml-2">
                     <h1 className="text-lg font-semibold">
-                      {selectedMapDefinition?.name || (!xdfFile ? 'Carregue um .XDF ou use o Scanner' : 'Nenhum Mapa Selecionado')}
+                      {selectedMapDefinition?.name || (!xdfFile ? 'Carregue um .XDF' : 'Nenhum Mapa Selecionado')}
                     </h1>
                     {isModified && (
                       <span className="ml-2 text-xs font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
@@ -1989,10 +1866,6 @@ const handleMapSelectionChange = (id: string) => {
                         <BarChart3 className="mr-2" />
                         Gráfico 2D
                       </TabsTrigger>
-                       <TabsTrigger value="ai-tuner" disabled={!activeMapId}>
-                          <Wand2 className="mr-2" />
-                          Co-piloto IA
-                      </TabsTrigger>
                       <TabsTrigger value="fuel-analysis">
                           <ClipboardList className="mr-2" />
                           Análise de Combustível
@@ -2001,20 +1874,8 @@ const handleMapSelectionChange = (id: string) => {
                           <Flame className="mr-2" />
                           Análise de Ignição
                       </TabsTrigger>
-                      <TabsTrigger value="dyno-analysis">
-                        <LineChartIcon className="mr-2" />
-                        Análise de Dinamómetro
-                      </TabsTrigger>
-                      <TabsTrigger value="map-scanner">
-                          <Search className="mr-2" />
-                          Scanner de Mapas
-                      </TabsTrigger>
-                      <TabsTrigger value="backup-library">
-                          <FolderClock className="mr-2" />
-                          Biblioteca de Backups
-                      </TabsTrigger>
                     </TabsList>
-                    <div className="mt-2 flex-1 min-h-0">
+                    <div className="mt-2">
                       {renderContent()}
                     </div>
                   </Tabs>
@@ -2026,4 +1887,3 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
-
