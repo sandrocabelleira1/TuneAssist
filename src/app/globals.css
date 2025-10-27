@@ -4,25 +4,25 @@
  
 @layer base {
   :root {
-    --background: 240 10% 3.9%;
+    --background: 0 0% 0%;
     --foreground: 210 20% 98%;
  
-    --card: 240 10% 3.9%;
+    --card: 0 0% 0%;
     --card-foreground: 210 20% 98%;
  
-    --popover: 240 10% 3.9%;
+    --popover: 0 0% 0%;
     --popover-foreground: 210 20% 98%;
  
     --primary: 210 90% 58%;
     --primary-foreground: 210 100% 10%;
  
-    --secondary: 240 10% 3.9%;
+    --secondary: 0 0% 0%;
     --secondary-foreground: 210 20% 98%;
  
-    --muted: 240 10% 3.9%;
+    --muted: 0 0% 0%;
     --muted-foreground: 220 9.8% 43.9%;
  
-    --accent: 220 13% 18%;
+    --accent: 220 13% 10%;
     --accent-foreground: 210 20% 98%;
  
     --destructive: 0 62.8% 30.6%;
@@ -45,25 +45,25 @@
   }
  
   .dark {
-    --background: 240 10% 3.9%;
+    --background: 0 0% 0%;
     --foreground: 210 20% 98%;
  
-    --card: 240 10% 3.9%;
+    --card: 0 0% 0%;
     --card-foreground: 210 20% 98%;
  
-    --popover: 240 10% 3.9%;
+    --popover: 0 0% 0%;
     --popover-foreground: 210 20% 98%;
  
     --primary: 210 90% 58%;
     --primary-foreground: 210 100% 10%;
  
-    --secondary: 240 10% 3.9%;
+    --secondary: 0 0% 0%;
     --secondary-foreground: 210 20% 98%;
  
-    --muted: 240 10% 3.9%;
+    --muted: 0 0% 0%;
     --muted-foreground: 220 9.8% 43.9%;
  
-    --accent: 220 13% 18%;
+    --accent: 220 13% 10%;
     --accent-foreground: 210 20% 98%;
  
     --destructive: 0 62.8% 30.6%;
@@ -90,10 +90,6 @@
   }
   body {
     @apply bg-background text-foreground;
-  }
-  .bg-grid-pattern {
-    background-image: linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
-    background-size: 40px 40px;
   }
 }
 

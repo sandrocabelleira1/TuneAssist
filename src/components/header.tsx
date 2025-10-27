@@ -73,9 +73,9 @@ export default function Header() {
     return (
       <Dialog open={isAuthDialogOpen} onOpenChange={setIsAuthDialogOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button variant="ghost" size="sm">
               <LogIn className="mr-2 h-4 w-4" />
-              Login / Registar
+              Login
           </Button>
         </DialogTrigger>
         <DialogContent className="sm:max-w-[425px]">
@@ -93,19 +93,18 @@ export default function Header() {
 
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/20 bg-background/80 backdrop-blur-sm">
-      <div className="container mx-auto flex h-14 items-center">
-        <Link href="/" className="mr-6 flex items-center space-x-2">
+    <header className="absolute top-0 z-50 w-full bg-transparent">
+      <div className="container mx-auto flex h-20 items-center justify-between">
+        <Link href="/" className="flex items-center space-x-2">
           <Sparkles className="h-6 w-6 text-primary" />
           <span className="font-bold sm:inline-block">TuneAssist AI</span>
         </Link>
         
-        <div className="flex-1 flex items-center justify-end gap-4">
-             {pathname !== '/tuner' && (
+        <div className="flex items-center gap-4">
+            {pathname !== '/tuner' && (
                 <Button asChild variant="ghost" size="sm">
                     <Link href="/tuner">
-                        <Wrench className="mr-2 h-4 w-4" />
-                        Ir para o Assistente
+                        Ferramenta de Afinação
                     </Link>
                 </Button>
             )}
