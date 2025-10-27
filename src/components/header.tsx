@@ -25,6 +25,7 @@ import {
 import AuthForm from './auth-form';
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
+import Image from 'next/image';
 
 
 export default function Header() {
@@ -95,9 +96,14 @@ export default function Header() {
   return (
     <header className="absolute top-0 z-50 w-full bg-transparent">
       <div className="container mx-auto flex h-20 items-center justify-between px-4">
-        <Link href="/" className="flex items-center space-x-2">
-          <Sparkles className="h-6 w-6 text-primary" />
-          <span className="font-bold hidden sm:inline-block">TuneAssist AI</span>
+        <Link href="/" className="flex items-center">
+            <Image 
+                src="https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/logo%20tuneassist%20(1200%20x%20300%20px).png?alt=media&token=4eb729fe-d760-4fa6-8987-d08e121c8138"
+                alt="TuneAssist AI Logo"
+                width={150}
+                height={37.5}
+                priority
+            />
         </Link>
         
         <div className="flex items-center gap-2 sm:gap-4">
