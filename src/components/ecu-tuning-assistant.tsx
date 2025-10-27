@@ -1246,7 +1246,7 @@ const handleMapSelectionChange = (id: string) => {
                         aiModifiedCells={aiModifiedCells}
                     />
                 </TabsContent>
-                <TabsContent value="view-3d" className="h-[70vh]">
+                <TabsContent value="view-3d">
                         <div className="h-full w-full">
                             {processedMap?.axes && processedMap?.calculatedMap ? (
                                 <SurfacePlot3D
@@ -1665,22 +1665,18 @@ const handleMapSelectionChange = (id: string) => {
                 </Accordion>
 
 
-                <Card>
-                    <CardHeader>
-                         <div className="flex items-center justify-between">
-                            <div>
-                               <CardTitle>{selectedMapDefinition?.name || (!xdfFile ? 'Carregue um .XDF' : 'Nenhum Mapa Selecionado')}</CardTitle>
-                               {isModified && (
-                                <span className="text-xs font-semibold text-primary/80 bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
-                                    Modificado
-                                </span>
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                <CardTitle>{selectedMapDefinition?.name || (!xdfFile ? 'Carregue um .XDF' : 'Nenhum Mapa Selecionado')}</CardTitle>
+                                {isModified && (
+                                    <span className="text-xs font-semibold text-primary/80 bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+                                        Modificado
+                                    </span>
                                 )}
-                            </div>
-                            <Tabs
-                                value={activeTab}
-                                onValueChange={setActiveTab}
-                                className="w-full max-w-max"
-                            >
+                                </div>
                                 <TabsList>
                                 <TabsTrigger value="view-table" disabled={!activeMapId}>
                                     <Table2 className="mr-2" />
@@ -1703,16 +1699,15 @@ const handleMapSelectionChange = (id: string) => {
                                     Análise de Ignição
                                 </TabsTrigger>
                                 </TabsList>
-                            </Tabs>
-                         </div>
-                    </CardHeader>
-                    <CardContent>
-                         {renderContent()}
-                    </CardContent>
-                </Card>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {renderContent()}
+                        </CardContent>
+                    </Card>
+                </Tabs>
             </main>
         </div>
       </EcuTuningStateContext.Provider>
     );
 }
-
