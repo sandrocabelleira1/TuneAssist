@@ -57,7 +57,7 @@ export default function LandingPage() {
             <div className="mt-10">
               <Button asChild size="lg" className="group transition-shadow duration-300 neon-glow">
                 <Link href="/tuner">
-                  Aceder ao TuneAssist AI <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
+                  Experimentar o TuneAssist AI <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </Link>
               </Button>
             </div>
@@ -67,7 +67,7 @@ export default function LandingPage() {
         <section id="features" className="py-20 sm:py-32">
           <div className="container mx-auto px-4">
             <div className="max-w-2xl mx-auto text-center">
-              <h2 className="text-3xl font-bold tracking-tight">Uma Ferramenta, Potencial Ilimitado</h2>
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Uma Ferramenta, Potencial Ilimitado</h2>
               <p className="mt-4 text-lg text-muted-foreground">
                 Desde a análise de logs à otimização automática, o TuneAssist AI tem tudo o que precisa.
               </p>
