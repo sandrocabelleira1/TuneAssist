@@ -1,3 +1,4 @@
+
 {
     "feature1": {
         "src": "https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/Captura%20de%20tela%202025-10-27%20161007.png?alt=media&token=8eb2f8d1-da4a-4dad-81ca-4c5d9e7d9b65",
@@ -10,5 +11,9 @@
     "feature3": {
         "src": "https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/Captura%20de%20tela%202025-10-27%20155903.png?alt=media&token=82063be0-bf01-4325-8a58-4354552d0933",
         "data-ai-hint": "data visualization"
+    },
+    "feature4": {
+        "src": "https://picsum.photos/seed/feature4/600/400",
+        "data-ai-hint": "time saving"
     }
 }

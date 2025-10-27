@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import Header from '@/components/header';
-import { ArrowRight, BrainCircuit, Cpu, BarChart3, Wand2 } from 'lucide-react';
+import { ArrowRight, Cpu, BarChart3, Wand2, FolderClock } from 'lucide-react';
 import Image from 'next/image';
 import placeholderImages from '@/app/lib/placeholder-images.json';
 
@@ -27,6 +27,12 @@ const features = [
     description: 'Explore os seus mapas em 2D e 3D. Compare o antes e o depois das alterações e analise dados de forma intuitiva.',
     image: placeholderImages.feature3,
   },
+  {
+    icon: <FolderClock className="h-8 w-8 text-primary" />,
+    title: 'Remapeamento Acelerado',
+    description: 'Reduza horas de trabalho manual a minutos. O TuneAssist AI automatiza a análise e correção de dados, permitindo-lhe entregar mais projetos em menos tempo.',
+    image: placeholderImages.feature4,
+  },
 ];
 
 export default function LandingPage() {
@@ -35,7 +41,7 @@ export default function LandingPage() {
       <Header />
       <main className="flex-1 flex flex-col">
         <section className="flex-1 flex items-center justify-center text-center pt-20">
-          <div className="relative px-4">
+          <div className="relative px-4 pt-16">
             <div className="mb-4 inline-block">
                 <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary ring-1 ring-inset ring-primary/20">
                     Potenciado por Inteligência Artificial
@@ -67,7 +73,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-8">
               {features.map((feature) => (
                 <div key={feature.title} className="bg-accent/50 p-8 rounded-lg border border-border/20 shadow-sm hover:border-primary/50 hover:shadow-primary/10 transition-all group">
                   <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-6">
