@@ -63,7 +63,7 @@ export default function LandingPage() {
             </div>
              <div className="mt-16 mb-8">
                 <Image
-                    src="https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/logo%20tune%20transparente.png?alt=media&token=03ef77f1-2492-481d-ba2a-b8e64df2945a"
+                    src="https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/logo%20tune%20transparente1.png?alt=media&token=f3dfc6f4-bc1e-4b9d-a28a-1be56950ff55"
                     alt="TuneAssist AI Logo"
                     width={200}
                     height={200}
@@ -83,7 +83,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-8">
+            <div className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-8">
               {features.map((feature) => (
                 <div key={feature.title} className="bg-accent/50 p-8 rounded-lg border border-border/20 shadow-sm hover:border-primary/50 hover:shadow-primary/10 transition-all group">
                   <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-6">
