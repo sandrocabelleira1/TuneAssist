@@ -245,8 +245,8 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
         if (!selection.start || !selection.end) return false;
         const minY = Math.min(selection.start.y, selection.end.y);
         const maxY = Math.max(selection.start.y, selection.end.y);
-        const minX = Math.min(selection.start.x, end.x);
-        const maxX = Math.max(selection.start.x, end.x);
+        const minX = Math.min(selection.start.x, selection.end.x);
+        const maxX = Math.max(selection.start.x, selection.end.x);
         return y >= minY && y <= maxY && x >= minX && x <= maxX;
     };
     
