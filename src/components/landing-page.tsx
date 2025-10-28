@@ -40,7 +40,7 @@ export default function LandingPage() {
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <Header />
       <main className="flex-1 flex flex-col">
-        <section className="flex-1 flex items-center justify-center text-center pt-32">
+        <section className="flex-1 flex items-center justify-center text-center pt-12 md:pt-20">
           <div className="relative px-4">
             <div className="mb-4 inline-block">
                 <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary ring-1 ring-inset ring-primary/20">

@@ -95,7 +95,7 @@ export default function Header() {
 
 
   return (
-    <header className="absolute top-0 z-50 w-full bg-transparent">
+    <header className="relative w-full border-b border-border">
       <div className="container mx-auto flex h-20 items-center justify-between px-4">
         <Link href="/" className="flex items-center">
             <Image 
