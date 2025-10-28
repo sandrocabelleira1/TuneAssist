@@ -40,8 +40,8 @@ export default function LandingPage() {
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <Header />
       <main className="flex-1 flex flex-col">
-        <section className="flex-1 flex items-center justify-center text-center pt-20">
-          <div className="relative px-4 pt-16">
+        <section className="flex-1 flex items-center justify-center text-center pt-32">
+          <div className="relative px-4">
             <div className="mb-4 inline-block">
                 <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary ring-1 ring-inset ring-primary/20">
                     Potenciado por Inteligência Artificial
@@ -60,6 +60,16 @@ export default function LandingPage() {
                   Experimentar o TuneAssist AI <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </Link>
               </Button>
+            </div>
+             <div className="mt-16 mb-8">
+                <Image
+                    src="https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/logo%20tune%20transparente.png?alt=media&token=03ef77f1-2492-481d-ba2a-b8e64df2945a"
+                    alt="TuneAssist AI Logo"
+                    width={200}
+                    height={200}
+                    className="mx-auto"
+                    priority
+                />
             </div>
           </div>
         </section>
