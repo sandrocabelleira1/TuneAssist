@@ -65,8 +65,8 @@ export default function LandingPage() {
                 <Image
                     src="https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/logo%20tune%20transparente1.png?alt=media&token=f3dfc6f4-bc1e-4b9d-a28a-1be56950ff55"
                     alt="TuneAssist AI Logo"
-                    width={200}
-                    height={200}
+                    width={300}
+                    height={300}
                     className="mx-auto"
                     priority
                 />
