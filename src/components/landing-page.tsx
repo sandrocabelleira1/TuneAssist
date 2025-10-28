@@ -85,7 +85,7 @@ export default function LandingPage() {
 
             <div className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-8">
               {features.map((feature) => (
-                <div key={feature.title} className="bg-accent/50 p-6 rounded-lg border border-border/20 shadow-sm hover:border-primary/50 hover:shadow-primary/10 transition-all group">
+                <div key={feature.title} className="bg-accent/50 p-4 rounded-lg border border-border/20 shadow-sm hover:border-primary/50 hover:shadow-primary/10 transition-all group">
                   <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-6">
                     {feature.icon}
                   </div>
