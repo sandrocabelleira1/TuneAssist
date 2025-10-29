@@ -339,14 +339,15 @@ function DynoEntryTable() {
 
     const { processedMap } = useEcuTuningState();
     
-    const loadAxis = useMemo(() => {
+    const loadAxis = useMemo<AxisData | null>(() => {
         if (!processedMap?.axes) return null;
         const { x, y } = processedMap.axes;
-        const loadRegex = /tps|map|carga|load|throttle/i;
-        if (x.label && loadRegex.test(x.label)) return x;
-        if (y.label && loadRegex.test(y.label)) return y;
-        // Default to Y if no match, a common convention
-        return y; 
+        const rpmRegex = /rpm/i;
+        if(x.label && rpmRegex.test(x.label)) return y;
+        if(y.label && rpmRegex.test(y.label)) return x;
+        // Default assumption: if one axis is not explicitly RPM, it's the load axis.
+        // Assume Y is load if no RPM is found.
+        return y;
     }, [processedMap]);
 
     const [selectedLoadToAdd, setSelectedLoadToAdd] = useState('');
