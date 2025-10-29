@@ -1078,7 +1078,7 @@ const handleSave = async () => {
     };
 
     const handleAutoTune = async () => {
-        const logSource = logFile ? 'ficheiro de log' : (logData.length > 0 ? 'dados manuais' : null);
+        const logSource = logFile || logData.length > 0;
         
         if (selectedMapIds.length === 0 || !logSource || !targetLambda || !xdfFile || !binFile || (!selectedLogLoadColumn && !selectedLogLoadValue)) {
             let msg = "Dados insuficientes para o ajuste. ";
@@ -1343,9 +1343,9 @@ const handleMapSelectionChange = (id: string) => {
                                 <div className="space-y-2">
                                     <Label htmlFor="log-load-axis">Condição de Carga do Log</Label>
                                     <Select
-                                        value={logHeaders.length > 0 ? selectedLogLoadColumn : selectedLogLoadValue}
+                                        value={logFile ? selectedLogLoadColumn : selectedLogLoadValue}
                                         onValueChange={(value) => {
-                                            if (logHeaders.length > 0) {
+                                            if (logFile) {
                                                 setSelectedLogLoadColumn(value);
                                                 setSelectedLogLoadValue('');
                                             } else {
@@ -1359,7 +1359,7 @@ const handleMapSelectionChange = (id: string) => {
                                             <SelectValue placeholder="Selecione a condição de carga..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {logHeaders.length > 0 ? (
+                                            {logFile && logHeaders.length > 0 ? (
                                                 logHeaders.map((header) => (
                                                     <SelectItem key={header} value={header}>
                                                         Coluna do Log: {header}
