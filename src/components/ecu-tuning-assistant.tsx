@@ -337,19 +337,8 @@ function DynoEntryTable() {
     const { fields: logRowFields, append: appendLogRow, remove: removeLogRow } = useFieldArray({ control, name: "logRows" });
     const { toast } = useToast();
 
-    const { processedMap } = useEcuTuningState();
+    const { processedMap, loadAxis } = useEcuTuningState();
     
-    const loadAxis = useMemo<AxisData | null>(() => {
-        if (!processedMap?.axes) return null;
-        const { x, y } = processedMap.axes;
-        const rpmRegex = /rpm/i;
-        if(x.label && rpmRegex.test(x.label)) return y;
-        if(y.label && rpmRegex.test(y.label)) return x;
-        // Default assumption: if one axis is not explicitly RPM, it's the load axis.
-        // Assume Y is load if no RPM is found.
-        return y;
-    }, [processedMap]);
-
     const [selectedLoadToAdd, setSelectedLoadToAdd] = useState('');
 
     const currentLoadColumnValues = watch('loadColumns').map(c => c.value);
@@ -460,7 +449,8 @@ function DynoEntryTable() {
 
 const EcuTuningStateContext = React.createContext<{
     processedMap: ProcessedMap | null;
-}>({ processedMap: null });
+    loadAxis: AxisData | null;
+}>({ processedMap: null, loadAxis: null });
 
 const useEcuTuningState = () => React.useContext(EcuTuningStateContext);
 
@@ -496,7 +486,8 @@ export default function EcuTuningAssistant() {
     const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
     const [logHeaders, setLogHeaders] = useState<string[]>([]);
-    const [selectedLogLoadAxis, setSelectedLogLoadAxis] = useState<string>('');
+    const [selectedLogLoadColumn, setSelectedLogLoadColumn] = useState<string>('');
+    const [selectedLogLoadValue, setSelectedLogLoadValue] = useState<string>('');
     
     const [selectedMapIds, setSelectedMapIds] = useState<string[]>([]);
     const [activeMapId, setActiveMapId] = useState<string | null>(null);
@@ -543,6 +534,21 @@ export default function EcuTuningAssistant() {
     const anyMapModified = useMemo(() => {
         return Object.values(modifiedStatusCache).some(status => status);
     }, [modifiedStatusCache]);
+
+    const { rpmAxis, loadAxis } = useMemo(() => {
+        if (!processedMap?.axes) return { rpmAxis: null, loadAxis: null };
+        const { x, y } = processedMap.axes;
+        const rpmRegex = /rpm/i;
+    
+        if (x.label && rpmRegex.test(x.label)) {
+            return { rpmAxis: x, loadAxis: y };
+        }
+        if (y.label && rpmRegex.test(y.label)) {
+            return { rpmAxis: y, loadAxis: x };
+        }
+        // Default assumption if no clear "rpm" label
+        return { rpmAxis: x, loadAxis: y };
+    }, [processedMap]);
     
 
     const clearAiModifications = () => {
@@ -574,7 +580,7 @@ export default function EcuTuningAssistant() {
         setLogFile(null);
         setLogData([]);
         setLogHeaders([]);
-        setSelectedLogLoadAxis('');
+        setSelectedLogLoadColumn('');
         dynoForm.reset({ loadColumns: [], logRows: [] });
         if (logInputRef.current) logInputRef.current.value = '';
         addLog('Dados de ensaio limpos.', 'success');
@@ -588,7 +594,8 @@ export default function EcuTuningAssistant() {
         setLogData([]);
         setLogs([]);
         setLogHeaders([]);
-        setSelectedLogLoadAxis('');
+        setSelectedLogLoadColumn('');
+        setSelectedLogLoadValue('');
         setSelectedMapIds([]);
         setActiveMapId(null);
         setProcessedMap(null);
@@ -691,6 +698,11 @@ export default function EcuTuningAssistant() {
             complete: (results) => {
                 if (results.meta.fields) {
                     setLogHeaders(results.meta.fields);
+                    // Auto-select load column if possible, but don't fail if not found
+                    const loadHeader = results.meta.fields.find(h => /tps|map|load|carga/i.test(h));
+                    if (loadHeader) {
+                        setSelectedLogLoadColumn(loadHeader);
+                    }
                 }
                 setLogFile({ name: file.name, content: Papa.unparse(results.data) });
                 setLogData(results.data);
@@ -711,25 +723,11 @@ export default function EcuTuningAssistant() {
     };
 
     const handleAddDynoLogData = (data: DynoFormValues) => {
-        if (!processedMap?.axes) {
+        if (!processedMap?.axes || !rpmAxis || !loadAxis) {
             toast({ title: "Mapa não carregado", description: "Carregue um mapa para adicionar dados.", variant: "destructive" });
             return;
         }
-
-        const { x: xAxis, y: yAxis } = processedMap.axes;
         
-        const rpmRegex = /rpm/i;
-        const loadRegex = /tps|map|carga|load|throttle/i;
-
-        const getAxisByRegex = (regex: RegExp) => {
-            if (xAxis.label && regex.test(xAxis.label)) return xAxis;
-            if (yAxis.label && regex.test(yAxis.label)) return yAxis;
-            return null;
-        }
-
-        const rpmAxis = getAxisByRegex(rpmRegex) || xAxis; // Default to X if no clear RPM
-        const loadAxis = getAxisByRegex(loadRegex) || yAxis; // Default to Y if no clear load
-
         const loadAxisLabel = loadAxis.label || 'Carga';
         const rpmAxisLabel = rpmAxis.label || 'RPM';
         
@@ -756,6 +754,9 @@ export default function EcuTuningAssistant() {
         }
 
         setLogData(prev => [...prev, ...newEntries]);
+        const newHeaders = [...new Set([...logHeaders, ...Object.keys(newEntries[0])])];
+        setLogHeaders(newHeaders);
+
         addLog(`${newEntries.length} ponto(s) de ensaio adicionados a partir da tabela.`, 'success');
         
         // Clear only the values, not the structure
@@ -851,6 +852,8 @@ export default function EcuTuningAssistant() {
             setProcessedMap(result);
             // Check cache for modified status, otherwise it's false
             setIsModified(modifiedStatusCache[mapId] ?? false);
+            // Reset log load value when map changes
+            setSelectedLogLoadValue('');
         } else {
             setProcessedMap(null);
             setIsModified(false);
@@ -1075,11 +1078,13 @@ const handleSave = async () => {
     };
 
     const handleAutoTune = async () => {
-        if (selectedMapIds.length === 0 || logData.length === 0 || !targetLambda || !xdfFile || !binFile || !selectedLogLoadAxis) {
+        const logSource = logFile ? 'ficheiro de log' : (logData.length > 0 ? 'dados manuais' : null);
+        
+        if (selectedMapIds.length === 0 || !logSource || !targetLambda || !xdfFile || !binFile || (!selectedLogLoadColumn && !selectedLogLoadValue)) {
             let msg = "Dados insuficientes para o ajuste. ";
             if (selectedMapIds.length === 0) msg += "Selecione pelo menos um mapa. ";
-            if (logData.length === 0) msg += "Carregue um ficheiro de log ou insira dados manualmente. ";
-            if (!selectedLogLoadAxis) msg += "Selecione o eixo de carga do log. ";
+            if (!logSource) msg += "Carregue um ficheiro de log ou insira dados manualmente. ";
+            if (!selectedLogLoadColumn && !selectedLogLoadValue) msg += "Selecione a condição de carga do log. ";
             if (!targetLambda) msg += "Defina um Lambda alvo. ";
         
             addLog(msg, 'error');
@@ -1123,7 +1128,14 @@ const handleSave = async () => {
             }
 
             try {
-                const { correctedMap, modifiedIndices } = calculateCorrections(mapToProcess, logData, numericTargetLambda, aggressiveness, selectedLogLoadAxis);
+                const { correctedMap, modifiedIndices } = calculateCorrections(
+                    mapToProcess, 
+                    logData, 
+                    numericTargetLambda, 
+                    aggressiveness,
+                    selectedLogLoadColumn, // For logs with load column
+                    selectedLogLoadValue ? parseFloat(selectedLogLoadValue) : undefined // For logs at a specific load
+                );
                 
                 const newProcessedMap = { ...mapToProcess, calculatedMap: correctedMap };
                 
@@ -1323,29 +1335,48 @@ const handleMapSelectionChange = (id: string) => {
                                     className="hidden"
                                     onChange={handleLogFileChange}
                                     />
-                                    <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={logData.length === 0}>
+                                    <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={!logFile && logData.length === 0}>
                                         <Eraser className="h-4 w-4" />
                                         <span className="sr-only">Limpar Dados de Ensaio</span>
                                     </Button>
                                 </div>
-                                 <div className="space-y-2">
-                                    <Label htmlFor="log-load-axis">Coluna de Carga do Log (TPS/MAP)</Label>
+                                <div className="space-y-2">
+                                    <Label htmlFor="log-load-axis">Condição de Carga do Log</Label>
                                     <Select
-                                        value={selectedLogLoadAxis}
-                                        onValueChange={setSelectedLogLoadAxis}
-                                        disabled={logHeaders.length === 0}
+                                        value={logHeaders.length > 0 ? selectedLogLoadColumn : selectedLogLoadValue}
+                                        onValueChange={(value) => {
+                                            if (logHeaders.length > 0) {
+                                                setSelectedLogLoadColumn(value);
+                                                setSelectedLogLoadValue('');
+                                            } else {
+                                                setSelectedLogLoadValue(value);
+                                                setSelectedLogLoadColumn('');
+                                            }
+                                        }}
+                                        disabled={logData.length === 0 || !loadAxis}
                                     >
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Selecione o eixo de carga..." />
+                                            <SelectValue placeholder="Selecione a condição de carga..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {logHeaders.map((header) => (
-                                                <SelectItem key={header} value={header}>
-                                                    {header}
-                                                </SelectItem>
-                                            ))}
+                                            {logHeaders.length > 0 ? (
+                                                logHeaders.map((header) => (
+                                                    <SelectItem key={header} value={header}>
+                                                        Coluna do Log: {header}
+                                                    </SelectItem>
+                                                ))
+                                            ) : (
+                                                loadAxis?.calculated.map((val, index) => (
+                                                    <SelectItem key={index} value={String(val)}>
+                                                        Carga do Mapa: {typeof val === 'number' ? val.toFixed(2) : val}
+                                                    </SelectItem>
+                                                ))
+                                            )}
                                         </SelectContent>
                                     </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        Se o seu log tiver uma coluna de carga (TPS/MAP), selecione-a. Caso contrário, selecione o valor de carga do mapa que corresponde ao seu ensaio (ex: 100% para WOT).
+                                    </p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="target-lambda">Lambda Alvo</Label>
@@ -1371,7 +1402,7 @@ const handleMapSelectionChange = (id: string) => {
                                         onValueChange={(value) => setAggressiveness(value[0])}
                                     />
                                 </div>
-                                <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing || !selectedLogLoadAxis}>
+                                <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing || (!selectedLogLoadColumn && !selectedLogLoadValue)}>
                                     <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
                                 </Button>
 
@@ -1421,7 +1452,7 @@ const handleMapSelectionChange = (id: string) => {
     };
 
     return (
-      <EcuTuningStateContext.Provider value={{ processedMap }}>
+      <EcuTuningStateContext.Provider value={{ processedMap, loadAxis }}>
          <div className="flex h-full w-full flex-col bg-background">
             <Header />
             <main className="flex-1 overflow-auto p-4 md:p-6">
