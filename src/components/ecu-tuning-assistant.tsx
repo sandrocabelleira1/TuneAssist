@@ -494,6 +494,8 @@ export default function EcuTuningAssistant() {
     const [logFile, setLogFile] = useState<{ name: string; content: string } | null>(null);
     const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
+    const [logHeaders, setLogHeaders] = useState<string[]>([]);
+    const [selectedLogLoadAxis, setSelectedLogLoadAxis] = useState<string>('');
     
     const [selectedMapIds, setSelectedMapIds] = useState<string[]>([]);
     const [activeMapId, setActiveMapId] = useState<string | null>(null);
@@ -570,6 +572,8 @@ export default function EcuTuningAssistant() {
     const handleClearLogData = useCallback(() => {
         setLogFile(null);
         setLogData([]);
+        setLogHeaders([]);
+        setSelectedLogLoadAxis('');
         dynoForm.reset({ loadColumns: [], logRows: [] });
         if (logInputRef.current) logInputRef.current.value = '';
         addLog('Dados de ensaio limpos.', 'success');
@@ -582,6 +586,8 @@ export default function EcuTuningAssistant() {
         setLogFile(null);
         setLogData([]);
         setLogs([]);
+        setLogHeaders([]);
+        setSelectedLogLoadAxis('');
         setSelectedMapIds([]);
         setActiveMapId(null);
         setProcessedMap(null);
@@ -682,6 +688,9 @@ export default function EcuTuningAssistant() {
             skipEmptyLines: true,
             dynamicTyping: true,
             complete: (results) => {
+                if (results.meta.fields) {
+                    setLogHeaders(results.meta.fields);
+                }
                 setLogFile({ name: file.name, content: Papa.unparse(results.data) });
                 setLogData(results.data);
                 const successMessage = `Ficheiro de log "${file.name}" carregado e processado com ${results.data.length} linhas.`;
@@ -693,6 +702,7 @@ export default function EcuTuningAssistant() {
                 addLog(errorMessage, 'error');
                 toast({ title: 'Erro de CSV', description: errorMessage, variant: 'destructive' });
                 setLogData([]);
+                setLogHeaders([]);
             }
         });
 
@@ -1064,8 +1074,13 @@ const handleSave = async () => {
     };
 
     const handleAutoTune = async () => {
-        if (selectedMapIds.length === 0 || logData.length === 0 || !targetLambda || !xdfFile || !binFile) {
-            const msg = "Dados insuficientes. Selecione mapas, adicione dados de ensaio e defina um Lambda alvo.";
+        if (selectedMapIds.length === 0 || logData.length === 0 || !targetLambda || !xdfFile || !binFile || !selectedLogLoadAxis) {
+            let msg = "Dados insuficientes para o ajuste. ";
+            if (selectedMapIds.length === 0) msg += "Selecione pelo menos um mapa. ";
+            if (logData.length === 0) msg += "Carregue um ficheiro de log. ";
+            if (!selectedLogLoadAxis) msg += "Selecione o eixo de carga do log. ";
+            if (!targetLambda) msg += "Defina um Lambda alvo. ";
+        
             addLog(msg, 'error');
             toast({ title: 'Ajuste Falhou', description: msg, variant: 'destructive' });
             return;
@@ -1107,7 +1122,7 @@ const handleSave = async () => {
             }
 
             try {
-                const { correctedMap, modifiedIndices } = calculateCorrections(mapToProcess, logData, numericTargetLambda, aggressiveness);
+                const { correctedMap, modifiedIndices } = calculateCorrections(mapToProcess, logData, numericTargetLambda, aggressiveness, selectedLogLoadAxis);
                 
                 const newProcessedMap = { ...mapToProcess, calculatedMap: correctedMap };
                 
@@ -1312,7 +1327,25 @@ const handleMapSelectionChange = (id: string) => {
                                         <span className="sr-only">Limpar Dados de Ensaio</span>
                                     </Button>
                                 </div>
-                                
+                                 <div className="space-y-2">
+                                    <Label htmlFor="log-load-axis">Coluna de Carga do Log (TPS/MAP)</Label>
+                                    <Select
+                                        value={selectedLogLoadAxis}
+                                        onValueChange={setSelectedLogLoadAxis}
+                                        disabled={logHeaders.length === 0}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Selecione o eixo de carga..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {logHeaders.map((header) => (
+                                                <SelectItem key={header} value={header}>
+                                                    {header}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="target-lambda">Lambda Alvo</Label>
                                     <Input 
@@ -1337,7 +1370,7 @@ const handleMapSelectionChange = (id: string) => {
                                         onValueChange={(value) => setAggressiveness(value[0])}
                                     />
                                 </div>
-                                <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing}>
+                                <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing || !selectedLogLoadAxis}>
                                     <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
                                 </Button>
 

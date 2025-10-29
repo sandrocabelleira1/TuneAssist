@@ -657,7 +657,11 @@ function findClosestIndex(arr: (number | string)[], target: number): number {
 }
 
 // Find a key in the log data headers that matches a target label
-function findKeyInHeader(header: string[], targetLabels: string[]): string | undefined {
+function findKeyInHeader(header: string[], targetLabels: string[], manualSelection?: string): string | undefined {
+    if (manualSelection && header.includes(manualSelection)) {
+        return manualSelection;
+    }
+    
     for (const targetLabel of targetLabels) {
         const cleanTargetLabel = targetLabel.trim().toLowerCase();
         
@@ -682,7 +686,8 @@ export function calculateCorrections(
     processedMap: ProcessedMap,
     logData: any[],
     targetLambda: number,
-    aggressiveness: number // 0-100
+    aggressiveness: number, // 0-100
+    manualLoadAxis?: string,
 ): { correctedMap: MapData, modifiedIndices: ModifiedCell[] } {
     if (!processedMap || !processedMap.calculatedMap || !processedMap.axes) {
         throw new Error("Mapa processado inválido fornecido para correção.");
@@ -716,7 +721,7 @@ export function calculateCorrections(
     }
 
     const rpmLogKey = findKeyInHeader(header, ['rpm', rpmMapAxis.label]);
-    const loadLogKey = findKeyInHeader(header, ['tps', 'map', 'load', 'carga', loadMapAxis.label]);
+    const loadLogKey = findKeyInHeader(header, ['tps', 'map', 'load', 'carga', loadMapAxis.label], manualLoadAxis);
     const lambdaLogKey = findKeyInHeader(header, ['lambda', 'afr']);
 
 
@@ -724,7 +729,7 @@ export function calculateCorrections(
         throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos disponíveis: ${header.join(', ')}`);
     }
     if (!loadLogKey) {
-        throw new Error(`Não foi possível encontrar a coluna de Carga ('${loadMapAxis.label}') nos dados do ensaio. Cabeçalhos disponíveis: ${header.join(', ')}`);
+        throw new Error(`Não foi possível encontrar a coluna de Carga ('${manualLoadAxis || loadMapAxis.label}') nos dados do ensaio. Cabeçalhos disponíveis: ${header.join(', ')}`);
     }
      if (!lambdaLogKey) {
         throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'AFR' nos dados do ensaio. Cabeçalhos disponíveis: ${header.join(', ')}`);
