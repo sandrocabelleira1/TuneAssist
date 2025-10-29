@@ -1077,7 +1077,7 @@ const handleSave = async () => {
         if (selectedMapIds.length === 0 || logData.length === 0 || !targetLambda || !xdfFile || !binFile || !selectedLogLoadAxis) {
             let msg = "Dados insuficientes para o ajuste. ";
             if (selectedMapIds.length === 0) msg += "Selecione pelo menos um mapa. ";
-            if (logData.length === 0) msg += "Carregue um ficheiro de log. ";
+            if (logData.length === 0) msg += "Carregue um ficheiro de log ou insira dados manualmente. ";
             if (!selectedLogLoadAxis) msg += "Selecione o eixo de carga do log. ";
             if (!targetLambda) msg += "Defina um Lambda alvo. ";
         
@@ -1308,7 +1308,7 @@ const handleMapSelectionChange = (id: string) => {
                         <Card>
                             <CardHeader>
                                 <CardTitle>Ajuste Automático por Log</CardTitle>
-                                <CardDescription>Carregue um ficheiro de log (.csv) para que o sistema calcule as correções automaticamente com base no Lambda Alvo.</CardDescription>
+                                <CardDescription>Carregue um ficheiro de log (.csv) ou insira os dados manualmente para que o sistema calcule as correções automaticamente com base no Lambda Alvo.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="flex items-center gap-4">
@@ -1379,7 +1379,7 @@ const handleMapSelectionChange = (id: string) => {
                          <Card>
                             <CardHeader>
                                 <CardTitle>Entrada Manual de Tabela (Lambda)</CardTitle>
-                                <CardDescription>Adicione pontos de log manualmente se não tiver um ficheiro CSV.</CardDescription>
+                                <CardDescription>Adicione pontos de log manualmente se não tiver um ficheiro CSV ou se o seu log não tiver uma coluna de carga.</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <Form {...dynoForm}>
@@ -1747,3 +1747,4 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
+
