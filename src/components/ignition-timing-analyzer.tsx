@@ -30,6 +30,8 @@ interface TimingSegment {
     modifiedTime: number | null;
     baseTorque: number | null;
     modifiedTorque: number | null;
+    baseAdvance: number | null;
+    modifiedAdvance: number | null;
     delta: number | null;
     gainPercent: number | null;
     suggestion: string;
@@ -58,15 +60,16 @@ const AnalysisResultsTable = ({ results }: { results: TimingSegment[] }) => {
                                 <>
                                     <TableHead>Tempo Base (s)</TableHead>
                                     <TableHead>Tempo Modificado (s)</TableHead>
-                                    <TableHead>Diferença (s)</TableHead>
                                 </>
                             ) : (
                                 <>
                                     <TableHead>Torque Base</TableHead>
                                     <TableHead>Torque Modificado</TableHead>
-                                    <TableHead>Diferença</TableHead>
                                 </>
                             )}
+                            <TableHead>Avanço Base (°)</TableHead>
+                            <TableHead>Avanço Modificado (°)</TableHead>
+                            <TableHead>Diferença</TableHead>
                             <TableHead>Ganho/Perda (%)</TableHead>
                             <TableHead>Sugestão de IA</TableHead>
                         </TableRow>
@@ -86,6 +89,8 @@ const AnalysisResultsTable = ({ results }: { results: TimingSegment[] }) => {
                                         <TableCell>{res.modifiedTorque?.toFixed(1) ?? '-'}</TableCell>
                                     </>
                                 )}
+                                <TableCell>{res.baseAdvance?.toFixed(1) ?? '-'}</TableCell>
+                                <TableCell>{res.modifiedAdvance?.toFixed(1) ?? '-'}</TableCell>
                                 <TableCell className={cn({
                                     'text-green-500 font-semibold': res.delta && (isTimeMode ? res.delta < 0 : res.delta > 0),
                                     'text-destructive font-semibold': res.delta && (isTimeMode ? res.delta > 0 : res.delta < 0),
@@ -167,7 +172,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                     torque: parseFloat(p.torque),
                     advance: parseFloat(p.advance)
                 }))
-                .filter(p => !isNaN(p.rpm) && p.rpm > 0 && !isNaN(p.advance) && (mode === 'time' ? !isNaN(p.time) && p.time >= 0 : !isNaN(p.torque) && p.torque > 0))
+                .filter(p => !isNaN(p.rpm) && p.rpm > 0 && (mode === 'time' ? !isNaN(p.time) && p.time >= 0 : !isNaN(p.torque) && p.torque > 0))
                 .sort((a,b) => a.rpm - b.rpm);
         };
 
@@ -189,6 +194,8 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
             let modifiedTime: number | null = null;
             let baseTorque: number | null = null;
             let modifiedTorque: number | null = null;
+            let baseAdvance: number | null = null;
+            let modifiedAdvance: number | null = null;
             let delta: number | null = null;
             let gainPercent: number | null = null;
             let suggestion: string = '-';
@@ -199,6 +206,21 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
             const baseEndPoint = findPoint(basePoints, endRpm);
             const modifiedStartPoint = findPoint(modifiedPoints, startRpm);
             const modifiedEndPoint = findPoint(modifiedPoints, endRpm);
+            
+            const findAvg = (points: ValidPoint[], start: number, end: number, key: 'torque' | 'advance'): number | null => {
+                const relevantPoints = points.filter(p => p.rpm >= start && p.rpm <= end);
+                if (relevantPoints.length === 0) return null;
+                const sum = relevantPoints.reduce((acc, p) => {
+                    const value = p[key];
+                    return !isNaN(value) ? acc + value : acc;
+                }, 0);
+                 const count = relevantPoints.filter(p => !isNaN(p[key])).length;
+                return count > 0 ? sum / count : null;
+            };
+
+            baseAdvance = findAvg(basePoints, startRpm, endRpm, 'advance');
+            modifiedAdvance = findAvg(modifiedPoints, startRpm, endRpm, 'advance');
+
 
             if (mode === 'time') {
                 baseTime = (baseStartPoint && baseEndPoint) ? baseEndPoint.time - baseStartPoint.time : null;
@@ -208,15 +230,8 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                 gainPercent = (baseTime !== null && delta !== null && baseTime > 0) ? (-delta / baseTime) * 100 : null;
 
             } else { // Torque mode
-                const findAvgTorque = (points: ValidPoint[], start: number, end: number) => {
-                    const relevantPoints = points.filter(p => p.rpm >= start && p.rpm <= end);
-                    if (relevantPoints.length === 0) return null;
-                    const sum = relevantPoints.reduce((acc, p) => acc + p.torque, 0);
-                    return sum / relevantPoints.length;
-                };
-
-                baseTorque = findAvgTorque(basePoints, startRpm, endRpm);
-                modifiedTorque = findAvgTorque(modifiedPoints, startRpm, endRpm);
+                baseTorque = findAvg(basePoints, startRpm, endRpm, 'torque');
+                modifiedTorque = findAvg(modifiedPoints, startRpm, endRpm, 'torque');
                 
                 delta = (baseTorque !== null && modifiedTorque !== null) ? modifiedTorque - baseTorque : null;
                 gainPercent = (baseTorque !== null && delta !== null && baseTorque > 0) ? (delta / baseTorque) * 100 : null;
@@ -226,9 +241,9 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                 if (Math.abs(gainPercent) < 0.1) { // Threshold for no significant change
                     suggestion = "Manter (MBT Provável)";
                 } else if (gainPercent > 0) {
-                     const baseAdvance = baseEndPoint?.advance;
-                     const modifiedAdvance = modifiedEndPoint?.advance;
-                     if (typeof baseAdvance === 'number' && typeof modifiedAdvance === 'number' && modifiedAdvance > baseAdvance) {
+                     const baseAvgAdvance = baseAdvance;
+                     const modifiedAvgAdvance = modifiedAdvance;
+                     if (typeof baseAvgAdvance === 'number' && typeof modifiedAvgAdvance === 'number' && modifiedAvgAdvance > baseAvgAdvance) {
                          suggestion = "Continuar a avançar";
                      } else {
                          suggestion = "Ganho positivo, manter";
@@ -245,6 +260,8 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                 modifiedTime,
                 baseTorque,
                 modifiedTorque,
+                baseAdvance,
+                modifiedAdvance,
                 delta,
                 gainPercent,
                 suggestion,
@@ -300,31 +317,21 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                 if (isNaN(rpmValue)) return point;
     
                 const rpmIsYAxis = rpmAxis === processedMap.axes.y;
-                const rpmIndex = processedMap.axes[rpmIsYAxis ? 'y' : 'x'].calculated.findIndex(val => Number(val) === rpmValue);
-    
-                if (rpmIndex === -1) {
-                     // Try finding closest if exact match fails
-                    const closestRpmIndex = rpmAxis.calculated.reduce((closest, current, idx) => {
-                        const currentDiff = Math.abs(Number(current) - rpmValue);
-                        const closestDiff = Math.abs(Number(rpmAxis.calculated[closest]) - rpmValue);
-                        return currentDiff < closestDiff ? idx : closest;
-                    }, 0);
+                
+                // Find closest RPM index in the map's axis
+                const closestRpmIndex = rpmAxis.calculated.reduce((closest, current, idx) => {
+                    const currentDiff = Math.abs(Number(current) - rpmValue);
+                    const closestDiff = Math.abs(Number(rpmAxis.calculated[closest]) - rpmValue);
+                    return currentDiff < closestDiff ? idx : closest;
+                }, 0);
 
-                     if (closestRpmIndex !== -1) {
-                         const yIndex = rpmIsYAxis ? closestRpmIndex : loadIndex;
-                         const xIndex = rpmIsYAxis ? loadIndex : closestRpmIndex;
-                         const advance = processedMap.calculatedMap?.[yIndex]?.[xIndex];
-                          return { ...point, advance: advance !== null && advance !== undefined ? String(advance) : point.advance };
-                     }
-                    return point;
-                }
-    
-                const yIndex = rpmIsYAxis ? rpmIndex : loadIndex;
-                const xIndex = rpmIsYAxis ? loadIndex : rpmIndex;
-    
-                const advance = processedMap.calculatedMap?.[yIndex]?.[xIndex];
-    
-                return { ...point, advance: advance !== null && advance !== undefined ? String(advance) : point.advance };
+                 if (closestRpmIndex !== -1) {
+                     const yIndex = rpmIsYAxis ? closestRpmIndex : loadIndex;
+                     const xIndex = rpmIsYAxis ? loadIndex : closestRpmIndex;
+                     const advance = processedMap.calculatedMap?.[yIndex]?.[xIndex];
+                      return { ...point, advance: advance !== null && advance !== undefined ? String(advance) : point.advance };
+                 }
+                return point;
             });
     
             onRunsChange({ ...runs, base: newBaseRun });
