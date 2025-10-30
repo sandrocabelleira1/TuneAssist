@@ -712,8 +712,8 @@ export function calculateCorrections(
         throw new Error("Não foi possível identificar o eixo de RPM no mapa. Verifique as etiquetas dos eixos (deve incluir 'rpm').");
     }
 
-    const rpmLogKey = findKeyInHeader(header, ['rpm', 'rotacao', rpmMapAxis.label]);
-    const lambdaLogKey = findKeyInHeader(header, ['lambda', 'sonda', 'afr']);
+    const rpmLogKey = findKeyInHeader(header, ['rpm', 'rotacao']);
+    const lambdaLogKey = findKeyInHeader(header, ['lambda', 'sonda']);
     
     if (!rpmLogKey) throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
     if (!lambdaLogKey) throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'Sonda' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
@@ -750,8 +750,13 @@ export function calculateCorrections(
         const currentValue = newMap[yIndex]?.[xIndex];
         if (currentValue === null || currentValue === undefined) return;
 
+        // Corrected Logic: If mixture is lean (measured > target), we need to add fuel (increase map value).
         const correctionFactor = measuredLambda / targetLambda;
-        const fullyCorrectedValue = currentValue / correctionFactor;
+        
+        // The value that would theoretically yield the target lambda.
+        // If measured is lean (1.1) and target is rich (0.9), factor is > 1.
+        // We need to multiply the current value by this factor to increase fuel.
+        const fullyCorrectedValue = currentValue * correctionFactor;
         
         const difference = fullyCorrectedValue - currentValue;
         const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
