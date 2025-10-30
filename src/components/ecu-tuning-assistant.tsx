@@ -690,37 +690,60 @@ export default function EcuTuningAssistant() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        addLog(`A ler o ficheiro de log ${file.name}...`, 'info');
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            let fileContent = event.target?.result as string;
+            if (!fileContent) return;
 
-        Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            dynamicTyping: true,
-            complete: (results) => {
-                if (results.meta.fields) {
-                    setLogHeaders(results.meta.fields);
-                    // Auto-select load column if possible, but don't fail if not found
-                    const loadHeader = results.meta.fields.find(h => /tps|map|load|carga/i.test(h));
-                    if (loadHeader) {
-                        setSelectedLogLoadColumn(loadHeader);
-                        setSelectedLogLoadValue(''); // Clear fixed value if column is found
+            addLog(`A ler o ficheiro de log ${file.name}...`, 'info');
+
+            // Pre-process to replace comma decimals with dots
+            fileContent = fileContent.replace(/(\d+),(\d+)/g, '$1.$2');
+            
+            Papa.parse(fileContent, {
+                header: true,
+                skipEmptyLines: true,
+                dynamicTyping: true,
+                delimiter: (fileContent.includes(';') ? ';' : ','), // Auto-detect delimiter
+                complete: (results) => {
+                    if (results.errors.length > 0) {
+                        addLog(`Erros de análise no log: ${results.errors.map(e => e.message).join(', ')}`, 'error');
                     }
-                }
-                setLogFile({ name: file.name, content: Papa.unparse(results.data) });
-                setLogData(results.data);
-                const successMessage = `Ficheiro de log "${file.name}" carregado e processado com ${results.data.length} linhas.`;
-                addLog(successMessage, 'success');
-                toast({ title: 'Log Carregado', description: successMessage });
-            },
-            error: (error) => {
-                const errorMessage = `Erro ao processar CSV: ${error.message}`;
-                addLog(errorMessage, 'error');
-                toast({ title: 'Erro de CSV', description: errorMessage, variant: 'destructive' });
-                setLogData([]);
-                setLogHeaders([]);
-            }
-        });
+                    if (results.meta.fields) {
+                        const cleanHeaders = results.meta.fields.map(h => h.trim());
+                        setLogHeaders(cleanHeaders);
+                        const loadHeader = cleanHeaders.find(h => /tps|map|load|carga/i.test(h));
+                        if (loadHeader) {
+                            setSelectedLogLoadColumn(loadHeader);
+                            setSelectedLogLoadValue('');
+                        }
+                    }
+                    // Clean up data keys
+                    const cleanedData = results.data.map((row: any) => {
+                        const newRow: any = {};
+                        for (const key in row) {
+                            newRow[key.trim()] = row[key];
+                        }
+                        return newRow;
+    
+                    });
 
+                    setLogFile({ name: file.name, content: Papa.unparse(cleanedData) });
+                    setLogData(cleanedData);
+                    const successMessage = `Ficheiro de log "${file.name}" carregado e processado com ${cleanedData.length} linhas.`;
+                    addLog(successMessage, 'success');
+                    toast({ title: 'Log Carregado', description: successMessage });
+                },
+                error: (error) => {
+                    const errorMessage = `Erro ao processar CSV: ${error.message}`;
+                    addLog(errorMessage, 'error');
+                    toast({ title: 'Erro de CSV', description: errorMessage, variant: 'destructive' });
+                    setLogData([]);
+                    setLogHeaders([]);
+                }
+            });
+        };
+        reader.readAsText(file, 'ISO-8859-1'); // Try a different encoding if default fails
         if (logInputRef.current) logInputRef.current.value = '';
     };
 
@@ -1345,7 +1368,7 @@ const handleMapSelectionChange = (id: string) => {
                                 <div className="space-y-2">
                                     <Label htmlFor="log-load-condition">Condição de Carga do Log</Label>
                                     <Select
-                                        value={logFile ? selectedLogLoadColumn : selectedLogLoadValue}
+                                        value={selectedLogLoadColumn || selectedLogLoadValue}
                                         onValueChange={(value) => {
                                             const isHeader = logHeaders.includes(value);
                                             if (isHeader) {
@@ -1779,4 +1802,3 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
-
