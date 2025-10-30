@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -129,13 +130,13 @@ const AnalysisResultsTable = ({ results }: { results: TimingSegment[] }) => {
     );
 };
 
-const ColumnMapper = ({ logHeaders, onMappingConfirm, runType }: {
+const ColumnMapper = ({ logHeaders, onMappingConfirm, runType, rawData }: {
     logHeaders: string[],
     onMappingConfirm: (mapping: ColumnMapping, parsedData: IgnitionTimingPoint[]) => void,
     runType: RunType,
+    rawData: any[],
 }) => {
     const { toast } = useToast();
-    const [rawParsedData, setRawParsedData] = useState<any[]>([]);
     const [mapping, setMapping] = useState<ColumnMapping>({
         rpm: '',
         time: '',
@@ -164,7 +165,7 @@ const ColumnMapper = ({ logHeaders, onMappingConfirm, runType }: {
             return;
         }
 
-        const parsedData: IgnitionTimingPoint[] = rawParsedData.map((row: any, index: number) => ({
+        const parsedData: IgnitionTimingPoint[] = rawData.map((row: any, index: number) => ({
             id: `${runType}_${index}`,
             rpm: row[mapping.rpm] ? String(row[mapping.rpm]) : '',
             time: mapping.time && row[mapping.time] !== undefined ? String(row[mapping.time]) : '',
@@ -182,18 +183,18 @@ const ColumnMapper = ({ logHeaders, onMappingConfirm, runType }: {
                 Selecione as colunas do seu ficheiro de log que correspondem a cada métrica necessária.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {['rpm', 'time', 'torque', 'advance'].map(key => (
+                {Object.keys(mapping).map(key => (
                     <div key={key} className="space-y-1.5">
                         <Label>Coluna de {key.charAt(0).toUpperCase() + key.slice(1)}</Label>
                         <Select
                             value={mapping[key as keyof ColumnMapping]}
-                            onValueChange={(value) => setMapping(prev => ({...prev, [key]: value}))}
+                            onValueChange={(value) => setMapping(prev => ({...prev, [key]: value === 'none' ? '' : value}))}
                         >
                             <SelectTrigger>
                                 <SelectValue placeholder={`Selecione a coluna de ${key}...`} />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="">Nenhuma</SelectItem>
+                                <SelectItem value="none">Nenhuma</SelectItem>
                                 {logHeaders.map(header => (
                                     <SelectItem key={header} value={header}>{header}</SelectItem>
                                 ))}
@@ -578,6 +579,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                     logHeaders={logFiles.base.headers}
                                     onMappingConfirm={(mapping, parsedData) => handleMappingConfirm('base', mapping, parsedData)}
                                     runType="base"
+                                    rawData={logFiles.base.rawData}
                                 />
                             )}
                         </div>
@@ -608,6 +610,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                     logHeaders={logFiles.modified.headers}
                                     onMappingConfirm={(mapping, parsedData) => handleMappingConfirm('modified', mapping, parsedData)}
                                     runType="modified"
+                                    rawData={logFiles.modified.rawData}
                                 />
                             )}
                         </div>
@@ -652,3 +655,5 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         </div>
     );
 }
+
+    
