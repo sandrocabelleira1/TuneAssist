@@ -143,17 +143,19 @@ const ColumnMapper = ({ logHeaders, onMappingConfirm, runType, rawData }: {
         torque: '',
         advance: '',
     });
+    
+    const uniqueLogHeaders = useMemo(() => [...new Set(logHeaders)].filter(h => h), [logHeaders]);
 
     useEffect(() => {
         // Automatically suggest mapping based on common keywords
-        const getColumn = (keywords: string[]) => logHeaders.find(h => keywords.some(kw => h.toLowerCase().includes(kw))) || '';
+        const getColumn = (keywords: string[]) => uniqueLogHeaders.find(h => keywords.some(kw => h.toLowerCase().includes(kw))) || '';
         setMapping({
             rpm: getColumn(['rotacao', 'rpm']),
             time: getColumn(['momento', 'tempo', 'time']),
             torque: getColumn(['torque']),
             advance: getColumn(['avanco', 'avanço', 'advance', 'ign']),
         });
-    }, [logHeaders]);
+    }, [uniqueLogHeaders]);
 
     const handleConfirm = () => {
         if (!mapping.rpm || (!mapping.time && !mapping.torque)) {
@@ -195,7 +197,7 @@ const ColumnMapper = ({ logHeaders, onMappingConfirm, runType, rawData }: {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="none">Nenhuma</SelectItem>
-                                {logHeaders.map(header => (
+                                {uniqueLogHeaders.map(header => (
                                     <SelectItem key={header} value={header}>{header}</SelectItem>
                                 ))}
                             </SelectContent>
@@ -453,6 +455,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                 header: false,
                 skipEmptyLines: true,
                 delimiter: ';',
+                preview: 20, // Preview first 20 lines to find header
                 complete: (previewResults) => {
                     let headerRowIndex = -1;
                     let detectedHeaders: string[] = [];
@@ -480,9 +483,10 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                     }
 
                     const dataContent = fileContent.split('\n').slice(headerRowIndex + 1).join('\n');
+                    const finalCsv = detectedHeaders.join(';') + '\n' + dataContent;
                     
-                    Papa.parse(dataContent, {
-                        header: detectedHeaders,
+                    Papa.parse(finalCsv, {
+                        header: true,
                         skipEmptyLines: true,
                         dynamicTyping: true,
                         delimiter: ';',
@@ -495,12 +499,23 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                 return;
                             }
                             
-                            const finalHeaders = results.meta.fields.map(h => h.trim());
-                            
+                             const cleanedData = results.data.map((row: any) => {
+                                const newRow: any = {};
+                                for (const key in row) {
+                                    const trimmedKey = key.trim();
+                                    if(trimmedKey) { // Ensure key is not empty
+                                        newRow[trimmedKey] = row[key];
+                                    }
+                                }
+                                return newRow;
+                            });
+
+                            const finalHeaders = Object.keys(cleanedData[0] || {});
+
                             setLogFiles(prev => ({...prev, [runType]: {
                                 name: file.name,
                                 headers: finalHeaders,
-                                rawData: results.data,
+                                rawData: cleanedData,
                             }}));
                             
                         },
@@ -655,5 +670,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         </div>
     );
 }
+
+    
 
     
