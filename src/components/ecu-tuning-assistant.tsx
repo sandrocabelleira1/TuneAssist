@@ -166,7 +166,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
                 if (prev.end?.y !== yi || prev.end?.x !== xi) {
                     hasDraggedRef.current = true;
                 }
-                return { ...prev, end: { y: yi, x: xi } };
+                return { ...prev, end: { ...prev.end, y: yi, x: xi } };
             });
         }
     };
