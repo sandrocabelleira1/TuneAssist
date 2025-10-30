@@ -90,11 +90,11 @@ function MassEditDialog({
 
     const handleAction = (operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate') => {
         const numericValue = parseFloat(value);
-        if (isNaN(numericValue) && operation !== 'interpolate') { // Interpolate might not need a value
-            toast({ title: "Valor Inválido", description: "Por favor, insira um número válido.", variant: "destructive"});
+        if (operation !== 'interpolate' && isNaN(numericValue)) {
+            toast({ title: "Valor Inválido", description: "Por favor, insira um número válido para esta operação.", variant: "destructive"});
             return;
         }
-        onMassEdit(payload.selection, operation, numericValue);
+        onMassEdit(payload.selection, operation, numericValue); // Pass NaN for interpolate, it won't be used
         onClose();
     };
 
@@ -104,7 +104,7 @@ function MassEditDialog({
                 <DialogHeader>
                     <DialogTitle>Edição em Massa</DialogTitle>
                     <DialogDescription>
-                        Aplique uma operação a todas as células selecionadas.
+                        Aplique uma operação a todas as células selecionadas. A interpolação usa os cantos da seleção.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -118,7 +118,7 @@ function MassEditDialog({
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
                             className="col-span-3"
-                            placeholder="Ex: 10 para 10% ou um valor absoluto"
+                            placeholder="Ex: 10 para 10%, ou um valor absoluto"
                             autoFocus
                         />
                     </div>
@@ -998,47 +998,53 @@ export default function EcuTuningAssistant() {
         value: number
     ) => {
         if (!processedMap || !processedMap.calculatedMap || !selection.start || !selection.end || !activeMapId) return;
-
+    
         const newMap = processedMap.calculatedMap.map(row => [...row]);
         const { start, end } = selection;
         const minY = Math.min(start.y, end.y);
         const maxY = Math.max(start.y, end.y);
         const minX = Math.min(start.x, end.x);
         const maxX = Math.max(start.x, end.x);
-
+    
         for (let y = minY; y <= maxY; y++) {
             for (let x = minX; x <= maxX; x++) {
                 const currentValue = newMap[y][x];
-                if (currentValue !== null && currentValue !== undefined) {
-                    let newValue = currentValue;
-                    switch (operation) {
-                        case 'add_percent':
-                            newValue = currentValue * (1 + value / 100);
-                            break;
-                        case 'sub_percent':
-                            newValue = currentValue * (1 - value / 100);
-                            break;
-                        case 'set_value':
-                             newValue = value;
-                             break;
-                        case 'interpolate': {
-                            const topLeft = newMap[minY][minX]!;
-                            const topRight = newMap[minY][maxX]!;
-                            const bottomLeft = newMap[maxY][minX]!;
-                            const bottomRight = newMap[maxY][maxX]!;
-                            
-                            const xRatio = (maxX - minX === 0) ? 0 : (x - minX) / (maxX - minX);
-                            const yRatio = (maxY - minY === 0) ? 0 : (y - minY) / (maxY - minY);
-
-                            const topInterpolation = topLeft + (topRight - topLeft) * xRatio;
-                            const bottomInterpolation = bottomLeft + (bottomRight - topInterpolation) * yRatio;
-
-                            newValue = topInterpolation + (bottomInterpolation - topInterpolation) * yRatio;
-                            break;
+                if (currentValue === null || currentValue === undefined) continue;
+    
+                let newValue = currentValue;
+                switch (operation) {
+                    case 'add_percent':
+                        newValue = currentValue * (1 + value / 100);
+                        break;
+                    case 'sub_percent':
+                        newValue = currentValue * (1 - value / 100);
+                        break;
+                    case 'set_value':
+                        newValue = value;
+                        break;
+                    case 'interpolate': {
+                        if (minY === maxY || minX === maxX) { 
+                            // Handle 1D interpolation if needed, or just skip
+                            continue;
                         }
+                        const topLeft = newMap[minY][minX]!;
+                        const topRight = newMap[minY][maxX]!;
+                        const bottomLeft = newMap[maxY][minX]!;
+                        const bottomRight = newMap[maxY][maxX]!;
+    
+                        if (topLeft === null || topRight === null || bottomLeft === null || bottomRight === null) continue;
+                        
+                        const xRatio = (x - minX) / (maxX - minX);
+                        const yRatio = (y - minY) / (maxY - minY);
+                        
+                        // Bilinear interpolation
+                        const topInterpolation = topLeft * (1 - xRatio) + topRight * xRatio;
+                        const bottomInterpolation = bottomLeft * (1 - xRatio) + bottomRight * xRatio;
+                        newValue = topInterpolation * (1 - yRatio) + bottomInterpolation * yRatio;
+                        break;
                     }
-                     newMap[y][x] = newValue;
                 }
+                newMap[y][x] = newValue;
             }
         }
         
@@ -1049,7 +1055,7 @@ export default function EcuTuningAssistant() {
         clearAiModifications();
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
-        addLog(`Operação em massa "${operation}" com valor ${value} aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
+        addLog(`Operação em massa "${operation}" aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
     };
     
 const handleSave = async () => {
@@ -1406,7 +1412,7 @@ const handleMapSelectionChange = (id: string) => {
                                 <div className="space-y-2">
                                     <Label htmlFor="log-load-condition">Condição de Carga do Log</Label>
                                     <Select
-                                        value={selectedLogLoadColumn || selectedLogLoadValue || undefined}
+                                        value={selectedLogLoadColumn || selectedLogLoadValue || ''}
                                         onValueChange={(value) => {
                                             if (!value) {
                                                 setSelectedLogLoadColumn('');
@@ -1466,7 +1472,7 @@ const handleMapSelectionChange = (id: string) => {
                                                     <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                                                 </TooltipTrigger>
                                                 <TooltipContent className="max-w-xs">
-                                                    <p>Controla a intensidade da correção aplicada. 100% aplica a correção total calculada. 50% aplica metade da correção. Valores mais baixos são mais seguros e graduais.</p>
+                                                    <p>Controla a intensidade da correção. 100% aplica a correção total calculada (valorAtual * (sondaLida/sondaAlvo)). 50% aplica metade da diferença entre o valor atual e o valor totalmente corrigido. Valores mais baixos são mais seguros.</p>
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
