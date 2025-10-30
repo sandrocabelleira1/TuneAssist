@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -81,20 +81,20 @@ function MassEditDialog({
 }: {
     payload: MassEditPayload;
     onClose: () => void;
-    onMassEdit: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', value: number) => void;
+    onMassEdit: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate' | 'revert', value: number) => void;
 }) {
     const [value, setValue] = useState('');
     const { toast } = useToast();
 
     if (!payload.selection.start || !payload.selection.end) return null;
 
-    const handleAction = (operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate') => {
+    const handleAction = (operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate' | 'revert') => {
         const numericValue = parseFloat(value);
-        if (operation !== 'interpolate' && isNaN(numericValue)) {
+        if (operation !== 'interpolate' && operation !== 'revert' && isNaN(numericValue)) {
             toast({ title: "Valor Inválido", description: "Por favor, insira um número válido para esta operação.", variant: "destructive"});
             return;
         }
-        onMassEdit(payload.selection, operation, numericValue); // Pass NaN for interpolate, it won't be used
+        onMassEdit(payload.selection, operation, numericValue);
         onClose();
     };
 
@@ -123,11 +123,12 @@ function MassEditDialog({
                         />
                     </div>
                 </div>
-                <DialogFooter className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-1">
+                <DialogFooter className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                      <Button size="sm" onClick={() => handleAction('add_percent')}><Plus className="mr-1 h-4 w-4" /> Add %</Button>
                      <Button size="sm" onClick={() => handleAction('sub_percent')}><Minus className="mr-1 h-4 w-4" /> Sub %</Button>
                      <Button size="sm" variant="secondary" onClick={() => handleAction('set_value')}><Edit className="mr-1 h-4 w-4" /> Definir</Button>
                      <Button size="sm" variant="secondary" onClick={() => handleAction('interpolate')}><Blend className="mr-1 h-4 w-4"/> Interpolar</Button>
+                     <Button size="sm" variant="outline" onClick={() => handleAction('revert')}><RotateCcw className="mr-1 h-4 w-4" />Bin Original</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -140,7 +141,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
     axes: { x: AxisData, y: AxisData } | null;
     selectedMapDefinition: XDFinition | undefined;
     onCellChange: (y: number, x: number, value: number) => void;
-    onMassUpdate: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', value: number) => void;
+    onMassUpdate: (selection: CellSelection, operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate' | 'revert', value: number) => void;
     aiModifiedCells: Set<string>;
 }) {
     const { toast } = useToast();
@@ -187,7 +188,7 @@ function DataTable({ mapData, addresses, axes, selectedMapDefinition, onCellChan
 
     const handleMassEditAndClose = (
         editSelection: CellSelection, 
-        operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate', 
+        operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate' | 'revert', 
         value: number
     ) => {
         onMassUpdate(editSelection, operation, value);
@@ -510,6 +511,7 @@ export default function EcuTuningAssistant() {
     const [ignitionRuns, setIgnitionRuns] = useState<IgnitionTimingRun>({ base: [], modified: [] });
 
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
+    const [originalMapCache, setOriginalMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
     const [isPopoverOpen, setIsPopoverOpen] = useState(false);
     
@@ -571,6 +573,7 @@ export default function EcuTuningAssistant() {
         setAiModifiedCells(new Set());
         setAiModifiedCellsCache({});
         setProcessedMapCache({});
+        setOriginalMapCache({});
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
         addLog('Seleção de mapa e cache limpos.', 'info');
@@ -604,6 +607,7 @@ export default function EcuTuningAssistant() {
         setAiModifiedCells(new Set());
         setAiModifiedCellsCache({});
         setProcessedMapCache({});
+        setOriginalMapCache({});
         setModifiedStatusCache({});
         setManualConfig(initialManualConfig);
         setTemplateConfig(null);
@@ -710,7 +714,7 @@ export default function EcuTuningAssistant() {
                     let detectedHeaders: string[] = [];
                     
                     const rpmKeywords = ['rpm', 'rotacao'];
-                    const lambdaKeywords = ['lambda', 'sonda', 'afr'];
+                    const lambdaKeywords = ['lambda', 'sonda'];
 
                     for (let i = 0; i < previewResults.data.length; i++) {
                         const row = previewResults.data[i] as string[];
@@ -846,6 +850,12 @@ export default function EcuTuningAssistant() {
             addLog("A processar com as definições atuais (XDF/Manual)...", 'info');
             const result = readAndCalculateMapFromBinManual(binFile.buffer, def, configToProcess);
             
+            // Only cache in originalMapCache if it doesn't exist yet for this mapId
+            if (!originalMapCache[mapId]) {
+                setOriginalMapCache(prev => ({...prev, [mapId]: result}));
+                addLog(`Estado original do mapa "${def.name}" salvo na cache.`, 'info');
+            }
+
             setProcessedMapCache(prev => ({...prev, [mapId]: result}));
             addLog(`Mapa "${def.name}" processado com sucesso e colocado na cache.`, 'success');
             return result;
@@ -857,7 +867,7 @@ export default function EcuTuningAssistant() {
         } finally {
             setIsProcessing(false);
         }
-    }, [binFile, xdfFile, addLog, toast]);
+    }, [binFile, xdfFile, addLog, toast, originalMapCache]);
 
     const setActiveMap = useCallback(async (mapId: string | null) => {
         if (activeMapId === mapId) return;
@@ -994,7 +1004,7 @@ export default function EcuTuningAssistant() {
 
     const handleMassUpdate = (
         selection: CellSelection,
-        operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate',
+        operation: 'add_percent' | 'sub_percent' | 'set_value' | 'interpolate' | 'revert',
         value: number
     ) => {
         if (!processedMap || !processedMap.calculatedMap || !selection.start || !selection.end || !activeMapId) return;
@@ -1005,44 +1015,52 @@ export default function EcuTuningAssistant() {
         const maxY = Math.max(start.y, end.y);
         const minX = Math.min(start.x, end.x);
         const maxX = Math.max(start.x, end.x);
+        
+        const originalMap = originalMapCache[activeMapId];
+        if (operation === 'revert' && (!originalMap || !originalMap.calculatedMap)) {
+            toast({ title: "Erro", description: "Cache do mapa original não encontrado. Recarregue o mapa.", variant: "destructive" });
+            return;
+        }
     
         for (let y = minY; y <= maxY; y++) {
             for (let x = minX; x <= maxX; x++) {
-                const currentValue = newMap[y][x];
-                if (currentValue === null || currentValue === undefined) continue;
-    
-                let newValue = currentValue;
+                let newValue: number | null;
                 switch (operation) {
                     case 'add_percent':
-                        newValue = currentValue * (1 + value / 100);
+                        newValue = (newMap[y][x] ?? 0) * (1 + value / 100);
                         break;
                     case 'sub_percent':
-                        newValue = currentValue * (1 - value / 100);
+                        newValue = (newMap[y][x] ?? 0) * (1 - value / 100);
                         break;
                     case 'set_value':
                         newValue = value;
                         break;
                     case 'interpolate': {
                         if (minY === maxY || minX === maxX) { 
-                            // Handle 1D interpolation if needed, or just skip
-                            continue;
+                             newValue = newMap[y][x]; // Skip 1D interpolation
+                        } else {
+                            const topLeft = newMap[minY][minX]!;
+                            const topRight = newMap[minY][maxX]!;
+                            const bottomLeft = newMap[maxY][minX]!;
+                            const bottomRight = newMap[maxY][maxX]!;
+        
+                            if (topLeft === null || topRight === null || bottomLeft === null || bottomRight === null) {
+                               newValue = newMap[y][x]; // Skip if corners are not valid
+                            } else {
+                                const xRatio = (x - minX) / (maxX - minX);
+                                const yRatio = (y - minY) / (maxY - minY);
+                                const topInterpolation = topLeft * (1 - xRatio) + topRight * xRatio;
+                                const bottomInterpolation = bottomLeft * (1 - xRatio) + bottomRight * xRatio;
+                                newValue = topInterpolation * (1 - yRatio) + bottomInterpolation * yRatio;
+                            }
                         }
-                        const topLeft = newMap[minY][minX]!;
-                        const topRight = newMap[minY][maxX]!;
-                        const bottomLeft = newMap[maxY][minX]!;
-                        const bottomRight = newMap[maxY][maxX]!;
-    
-                        if (topLeft === null || topRight === null || bottomLeft === null || bottomRight === null) continue;
-                        
-                        const xRatio = (x - minX) / (maxX - minX);
-                        const yRatio = (y - minY) / (maxY - minY);
-                        
-                        // Bilinear interpolation
-                        const topInterpolation = topLeft * (1 - xRatio) + topRight * xRatio;
-                        const bottomInterpolation = bottomLeft * (1 - xRatio) + bottomRight * xRatio;
-                        newValue = topInterpolation * (1 - yRatio) + bottomInterpolation * yRatio;
                         break;
                     }
+                    case 'revert':
+                        newValue = originalMap!.calculatedMap![y][x];
+                        break;
+                    default:
+                        newValue = newMap[y][x];
                 }
                 newMap[y][x] = newValue;
             }
@@ -1052,7 +1070,7 @@ export default function EcuTuningAssistant() {
         setProcessedMap(newProcessedMap);
         
         setIsModified(true);
-        clearAiModifications();
+        if(operation !== 'revert') clearAiModifications();
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
         setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
         addLog(`Operação em massa "${operation}" aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
