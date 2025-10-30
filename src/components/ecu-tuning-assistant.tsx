@@ -1547,6 +1547,7 @@ const handleMapSelectionChange = (id: string) => {
                             binFile={binFile}
                             processedMap={processedMap}
                             selectedMapDefinition={selectedMapDefinition}
+                            addLog={addLog}
                         />
                 </TabsContent>
             </>
