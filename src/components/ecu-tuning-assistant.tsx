@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -689,88 +689,99 @@ export default function EcuTuningAssistant() {
     const handleLogFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
+    
         const reader = new FileReader();
         reader.onload = (event) => {
             let fileContent = event.target?.result as string;
             if (!fileContent) return;
-
-            addLog(`A ler o ficheiro de log ${file.name}...`, 'info');
-            
-            // Pre-process to replace comma decimals with dots
-            fileContent = fileContent.replace(/(\d+),(\d+)/g, '$1.$2');
-            
-            const delimiter = fileContent.includes(';') ? ';' : ',';
-
-            // Find header row by searching for RPM/Lambda keywords
-            const lines = fileContent.split('\n');
-            let headerRowIndex = -1;
-            let detectedHeaders: string[] = [];
-            for (let i = 0; i < Math.min(lines.length, 20); i++) {
-                const line = lines[i].trim();
-                const potentialHeaders = line.split(delimiter).map(h => h.trim());
-                const rpmFound = potentialHeaders.some(h => /rpm|rota/i.test(h));
-                const lambdaFound = potentialHeaders.some(h => /lambda|sonda|afr/i.test(h));
-                if (rpmFound && lambdaFound) {
-                    headerRowIndex = i;
-                    detectedHeaders = potentialHeaders;
-                    break;
-                }
-            }
-
-            if (headerRowIndex === -1) {
-                addLog('Não foi possível encontrar a linha de cabeçalho (com RPM e Lambda/Sonda) no ficheiro de log.', 'error');
-                toast({title: 'Erro no Log', description: 'Não foi possível detetar o cabeçalho no ficheiro de log.', variant: 'destructive'});
-                return;
-            }
-
-            const dataContent = lines.slice(headerRowIndex + 1).join('\n');
-            const finalCsv = detectedHeaders.join(delimiter) + '\n' + dataContent;
-
-            Papa.parse(finalCsv, {
-                header: true,
-                skipEmptyLines: true,
-                dynamicTyping: true,
-                delimiter: delimiter,
-                complete: (results) => {
-                    if (results.errors.length > 0) {
-                        addLog(`Erros de análise no log: ${results.errors.map(e => e.message).join(', ')}`, 'error');
-                    }
-                    if (results.meta.fields) {
-                        const cleanHeaders = results.meta.fields.map(h => h.trim());
-                        setLogHeaders(cleanHeaders);
-                        const loadHeader = cleanHeaders.find(h => /tps|map|load|carga/i.test(h));
-                        if (loadHeader) {
-                            setSelectedLogLoadColumn(loadHeader);
-                            setSelectedLogLoadValue('');
-                        }
-                    }
-                    // Clean up data keys
-                    const cleanedData = results.data.map((row: any) => {
-                        const newRow: any = {};
-                        for (const key in row) {
-                            newRow[key.trim()] = row[key];
-                        }
-                        return newRow;
     
-                    });
+            addLog(`A ler o ficheiro de log ${file.name}...`, 'info');
+    
+            // Pre-process to replace comma decimals with dots BEFORE parsing
+            fileContent = fileContent.replace(/(\d+),(\d+)/g, '$1.$2');
+    
+            Papa.parse(fileContent, {
+                header: false,
+                skipEmptyLines: true,
+                delimiter: ';', // Try semicolon first
+                preview: 20, // Preview first 20 lines to find header
+                complete: (previewResults) => {
+                    let headerRowIndex = -1;
+                    let detectedHeaders: string[] = [];
+                    
+                    const rpmKeywords = ['rpm', 'rotacao'];
+                    const lambdaKeywords = ['lambda', 'sonda', 'afr'];
 
-                    setLogFile({ name: file.name, content: Papa.unparse(cleanedData) });
-                    setLogData(cleanedData);
-                    const successMessage = `Ficheiro de log "${file.name}" carregado e processado com ${cleanedData.length} linhas.`;
-                    addLog(successMessage, 'success');
-                    toast({ title: 'Log Carregado', description: successMessage });
-                },
-                error: (error) => {
-                    const errorMessage = `Erro ao processar CSV: ${error.message}`;
-                    addLog(errorMessage, 'error');
-                    toast({ title: 'Erro de CSV', description: errorMessage, variant: 'destructive' });
-                    setLogData([]);
-                    setLogHeaders([]);
+                    for (let i = 0; i < previewResults.data.length; i++) {
+                        const row = previewResults.data[i] as string[];
+                        const potentialHeaders = row.map(h => h.trim().toLowerCase());
+                        
+                        const rpmFound = potentialHeaders.some(h => rpmKeywords.some(kw => h.includes(kw)));
+                        const lambdaFound = potentialHeaders.some(h => lambdaKeywords.some(kw => h.includes(kw)));
+    
+                        if (rpmFound && lambdaFound) {
+                            headerRowIndex = i;
+                            // Use the original cased headers, not the lowercased ones
+                            detectedHeaders = (previewResults.data[i] as string[]).map(h => h.trim());
+                            break;
+                        }
+                    }
+    
+                    if (headerRowIndex === -1) {
+                        addLog('Não foi possível encontrar a linha de cabeçalho (com RPM e Lambda/Sonda) no ficheiro de log.', 'error');
+                        toast({ title: 'Erro no Log', description: 'Não foi possível detetar o cabeçalho no ficheiro de log.', variant: 'destructive' });
+                        return;
+                    }
+    
+                    const dataContent = fileContent.split('\n').slice(headerRowIndex + 1).join('\n');
+                    const finalCsv = detectedHeaders.join(';') + '\n' + dataContent;
+    
+                    Papa.parse(finalCsv, {
+                        header: true,
+                        skipEmptyLines: true,
+                        dynamicTyping: true,
+                        delimiter: ';',
+                        complete: (results) => {
+                            if (results.errors.length > 0) {
+                                addLog(`Erros de análise no log: ${results.errors.map(e => e.message).join(', ')}`, 'error');
+                            }
+                            if (results.meta.fields) {
+                                const cleanHeaders = results.meta.fields.map(h => h.trim()).filter(Boolean); // Filter out empty headers
+                                setLogHeaders(cleanHeaders);
+                                const loadHeader = cleanHeaders.find(h => /tps|map|load|carga/i.test(h));
+                                if (loadHeader) {
+                                    setSelectedLogLoadColumn(loadHeader);
+                                    setSelectedLogLoadValue('');
+                                }
+                            }
+                            
+                            const cleanedData = results.data.map((row: any) => {
+                                const newRow: any = {};
+                                for (const key in row) {
+                                    const trimmedKey = key.trim();
+                                    if(trimmedKey) { // Ensure key is not empty
+                                        newRow[trimmedKey] = row[key];
+                                    }
+                                }
+                                return newRow;
+                            });
+    
+                            setLogFile({ name: file.name, content: Papa.unparse(cleanedData) });
+                            setLogData(cleanedData);
+                            const successMessage = `Ficheiro de log "${file.name}" carregado e processado com ${cleanedData.length} linhas.`;
+                            addLog(successMessage, 'success');
+                            toast({ title: 'Log Carregado', description: successMessage });
+                        },
+                        error: (error) => {
+                             const errorMessage = `Erro ao processar CSV: ${error.message}`;
+                             addLog(errorMessage, 'error');
+                             toast({ title: 'Erro de CSV', description: errorMessage, variant: 'destructive' });
+                        }
+                    });
                 }
             });
         };
-        reader.readAsText(file, 'ISO-8859-1'); // Try a different encoding if default fails
+        reader.readAsText(file, 'ISO-8859-1');
         if (logInputRef.current) logInputRef.current.value = '';
     };
 
@@ -1395,7 +1406,7 @@ const handleMapSelectionChange = (id: string) => {
                                 <div className="space-y-2">
                                     <Label htmlFor="log-load-condition">Condição de Carga do Log</Label>
                                     <Select
-                                        value={selectedLogLoadColumn || selectedLogLoadValue || ''}
+                                        value={selectedLogLoadColumn || selectedLogLoadValue || undefined}
                                         onValueChange={(value) => {
                                             if (!value) {
                                                 setSelectedLogLoadColumn('');
@@ -1447,7 +1458,19 @@ const handleMapSelectionChange = (id: string) => {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
+                                    <div className="flex items-center gap-2">
+                                        <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
+                                         <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                                                </TooltipTrigger>
+                                                <TooltipContent className="max-w-xs">
+                                                    <p>Controla a intensidade da correção aplicada. 100% aplica a correção total calculada. 50% aplica metade da correção. Valores mais baixos são mais seguros e graduais.</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    </div>
                                     <Slider
                                         id="aggressiveness"
                                         min={0}

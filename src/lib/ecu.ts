@@ -662,7 +662,8 @@ function findKeyInHeader(header: string[], targetLabels: string[]): string | und
         const cleanTargetLabel = targetLabel.trim().toLowerCase();
         
         for (const key of header) {
-            if (key.trim().toLowerCase().includes(cleanTargetLabel)) {
+            const cleanKey = key.trim().toLowerCase();
+            if (cleanKey.includes(cleanTargetLabel)) {
                 return key;
             }
         }
@@ -751,6 +752,7 @@ export function calculateCorrections(
         if (currentValue === null || currentValue === undefined) return;
 
         // Corrected Logic: If mixture is lean (measured > target), we need to add fuel (increase map value).
+        // The correction factor should be > 1 to increase the value.
         const correctionFactor = measuredLambda / targetLambda;
         
         // The value that would theoretically yield the target lambda.
