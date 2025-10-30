@@ -279,36 +279,58 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
             toast({ title: "Dados insuficientes", description: "Mapa de ignição e linha de carga devem ser selecionados.", variant: "destructive" });
             return;
         }
-
+        if (runs.base.length === 0) {
+            toast({ title: "Log de Base Vazio", description: "Carregue primeiro o log do ensaio de base. O avanço do mapa será fundido com os dados do log.", variant: "destructive"});
+            return;
+        }
+    
         setIsLoadingMap(true);
-        addLog('A pré-carregar avanço do mapa...', 'info');
-
+        addLog('A fundir avanço do mapa com o ensaio de base...', 'info');
+    
         try {
-            const loadIndex = loadAxis.calculated.findIndex(val => String(val) === selectedLoadValue);
+            const loadIsYAxis = loadAxis === processedMap.axes.y;
+            const loadIndex = processedMap.axes[loadIsYAxis ? 'y' : 'x'].calculated.findIndex(val => String(val) === selectedLoadValue);
+            
             if (loadIndex === -1) {
                 throw new Error("Valor de carga selecionado não encontrado no eixo.");
             }
+    
+            const newBaseRun = runs.base.map(point => {
+                const rpmValue = parseFloat(point.rpm);
+                if (isNaN(rpmValue)) return point;
+    
+                const rpmIsYAxis = rpmAxis === processedMap.axes.y;
+                const rpmIndex = processedMap.axes[rpmIsYAxis ? 'y' : 'x'].calculated.findIndex(val => Number(val) === rpmValue);
+    
+                if (rpmIndex === -1) {
+                     // Try finding closest if exact match fails
+                    const closestRpmIndex = rpmAxis.calculated.reduce((closest, current, idx) => {
+                        const currentDiff = Math.abs(Number(current) - rpmValue);
+                        const closestDiff = Math.abs(Number(rpmAxis.calculated[closest]) - rpmValue);
+                        return currentDiff < closestDiff ? idx : closest;
+                    }, 0);
 
-            const newBaseRun: IgnitionTimingPoint[] = [];
-
-            // Get advance from the map
-            rpmAxis.calculated.forEach((rpm, rpmIndex) => {
-                const advance = processedMap.calculatedMap?.[loadIndex]?.[rpmIndex] ??
-                                processedMap.calculatedMap?.[rpmIndex]?.[loadIndex]; // Check both orientations
-                
-                newBaseRun.push({
-                    id: `base_map_${rpm}`,
-                    rpm: String(rpm),
-                    advance: advance !== null && advance !== undefined ? String(advance) : '',
-                    time: '',
-                    torque: ''
-                });
+                     if (closestRpmIndex !== -1) {
+                         const yIndex = rpmIsYAxis ? closestRpmIndex : loadIndex;
+                         const xIndex = rpmIsYAxis ? loadIndex : closestRpmIndex;
+                         const advance = processedMap.calculatedMap?.[yIndex]?.[xIndex];
+                          return { ...point, advance: advance !== null && advance !== undefined ? String(advance) : point.advance };
+                     }
+                    return point;
+                }
+    
+                const yIndex = rpmIsYAxis ? rpmIndex : loadIndex;
+                const xIndex = rpmIsYAxis ? loadIndex : rpmIndex;
+    
+                const advance = processedMap.calculatedMap?.[yIndex]?.[xIndex];
+    
+                return { ...point, advance: advance !== null && advance !== undefined ? String(advance) : point.advance };
             });
-
+    
             onRunsChange({ ...runs, base: newBaseRun });
-            toast({ title: "Avanço Pré-carregado", description: "Valores de avanço do mapa carregados para o ensaio de base." });
-            addLog('Valores de avanço do mapa de ignição carregados com sucesso.', 'success');
-
+            toast({ title: "Avanço do Mapa Fundido", description: "Valores de avanço do mapa foram adicionados aos pontos do ensaio de base." });
+            addLog('Avanço do mapa fundido com sucesso com os dados do log.', 'success');
+    
         } catch (error) {
             const msg = `Falha ao carregar do mapa: ${(error as Error).message}`;
             toast({ title: "Erro", description: msg, variant: "destructive" });
