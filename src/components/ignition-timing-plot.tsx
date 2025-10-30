@@ -176,8 +176,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
         const sortedRpmTicks = Array.from(allRpms).filter(r => !isNaN(r)).sort((a, b) => a - b);
         
         const dataMap = new Map<number, any>();
-        sortedRpmTicks.forEach(rpm => dataMap.set(rpm, { rpm }));
-
+        
         const hasTorqueData = runs.base.some(p => p.torque && !isNaN(parseFloat(p.torque))) || 
                               runs.modified.some(p => p.torque && !isNaN(parseFloat(p.torque)));
 
@@ -185,25 +184,35 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
         const perfLabel = hasTorqueData ? 'Torque (Nm)' : 'Tempo (s)';
 
 
-        const addRunDataToMap = (run: IgnitionTimingPoint[], prefix: string) => {
-            run.forEach(p => {
+        const processRunPoints = (runPoints: IgnitionTimingPoint[], prefix: 'base' | 'modified') => {
+             runPoints.forEach(p => {
                 const rpmValue = parseFloat(p.rpm);
-                if(isNaN(rpmValue)) return;
-                
-                const pointData = dataMap.get(rpmValue);
-                if (pointData) {
-                    pointData[`${prefix}_advance`] = p.advance !== '' && !isNaN(parseFloat(p.advance)) ? parseFloat(p.advance) : null;
-                    pointData[`${prefix}_torque`] = p.torque !== '' && !isNaN(parseFloat(p.torque)) ? parseFloat(p.torque) : null;
-                    pointData[`${prefix}_time`] = p.time !== '' && !isNaN(parseFloat(p.time)) ? parseFloat(p.time) : null;
+                if (isNaN(rpmValue)) return;
+
+                let entry = dataMap.get(rpmValue)
+                if (!entry) {
+                    entry = { 
+                        rpm: rpmValue,
+                        base_time: null, base_torque: null, base_advance: null,
+                        modified_time: null, modified_torque: null, modified_advance: null,
+                    };
+                    dataMap.set(rpmValue, entry);
                 }
+
+                entry[`${prefix}_time`] = p.time !== '' && !isNaN(parseFloat(p.time)) ? parseFloat(p.time) : null;
+                entry[`${prefix}_torque`] = p.torque !== '' && !isNaN(parseFloat(p.torque)) ? parseFloat(p.torque) : null;
+                entry[`${prefix}_advance`] = p.advance !== '' && !isNaN(parseFloat(p.advance)) ? parseFloat(p.advance) : null;
             });
-        };
+        }
         
-        addRunDataToMap(runs.base, 'base');
-        addRunDataToMap(runs.modified, 'modified');
+        processRunPoints(runs.base, 'base');
+        processRunPoints(runs.modified, 'modified');
+
+        const finalChartData = sortedRpmTicks.map(rpm => dataMap.get(rpm) || { rpm });
+
 
         return { 
-            chartData: Array.from(dataMap.values()), 
+            chartData: finalChartData,
             rpmTicks: sortedRpmTicks,
             yAxisLabel: perfLabel,
             performanceDataKey: perfKey
