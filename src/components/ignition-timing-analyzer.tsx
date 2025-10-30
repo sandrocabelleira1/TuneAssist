@@ -6,12 +6,13 @@ import Papa from 'papaparse';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Wand2, Download, AlertTriangle, Upload, Eraser } from 'lucide-react';
+import { Wand2, Download, AlertTriangle, Upload, Eraser, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { IgnitionTimingRun, IgnitionTimingPoint, ProcessedMap, AxisData, XDFinition, LogMessage } from '@/lib/types';
 import IgnitionTimingPlot from '@/components/ignition-timing-plot';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { Label } from '@/components/ui/label';
 
 type RunType = 'base' | 'modified';
 
@@ -124,12 +125,30 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     const baseLogInputRef = useRef<HTMLInputElement>(null);
     const modifiedLogInputRef = useRef<HTMLInputElement>(null);
     const [logFiles, setLogFiles] = useState<{base: {name: string} | null, modified: {name: string} | null}>({base: null, modified: null});
+    const [isLoadingMap, setIsLoadingMap] = useState(false);
 
     const isCurrentMapIgnition = useMemo(() => {
         if (!selectedMapDefinition) return false;
         const keywords = ['ignition', 'spark', 'advance', 'timing', 'ignição', 'avanço', 'ign'];
         return keywords.some(kw => selectedMapDefinition.name.toLowerCase().includes(kw));
     }, [selectedMapDefinition]);
+
+    const { rpmAxis, loadAxis } = useMemo(() => {
+        if (!processedMap?.axes) return { rpmAxis: null, loadAxis: null };
+        const { x, y } = processedMap.axes;
+        const rpmRegex = /rpm/i;
+    
+        if (x.label && rpmRegex.test(x.label)) {
+            return { rpmAxis: x, loadAxis: y };
+        }
+        if (y.label && rpmRegex.test(y.label)) {
+            return { rpmAxis: y, loadAxis: x };
+        }
+        // Default assumption if no clear "rpm" label
+        return { rpmAxis: x, loadAxis: y };
+    }, [processedMap]);
+
+    const [selectedLoadValue, setSelectedLoadValue] = useState('');
 
 
     const { analysisResults, analysisMode } = useMemo(() => {
@@ -256,6 +275,49 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
 
     }, [runs, onRunsChange, toast]);
 
+    const handleLoadFromMap = () => {
+        if (!processedMap || !rpmAxis || !loadAxis || !selectedLoadValue) {
+            toast({ title: "Dados insuficientes", description: "Mapa de ignição e linha de carga devem ser selecionados.", variant: "destructive" });
+            return;
+        }
+
+        setIsLoadingMap(true);
+        addLog('A pré-carregar avanço do mapa e dados de log...', 'info');
+
+        try {
+            const loadIndex = loadAxis.calculated.findIndex(val => String(val) === selectedLoadValue);
+            if (loadIndex === -1) {
+                throw new Error("Valor de carga selecionado não encontrado no eixo.");
+            }
+
+            const newBaseRun: IgnitionTimingPoint[] = [];
+
+            // Get advance from the map
+            rpmAxis.calculated.forEach((rpm, rpmIndex) => {
+                const advance = processedMap.calculatedMap?.[loadIndex]?.[rpmIndex] ??
+                                processedMap.calculatedMap?.[rpmIndex]?.[loadIndex]; // Check both orientations
+                
+                newBaseRun.push({
+                    id: `base_map_${rpm}`,
+                    rpm: String(rpm),
+                    advance: advance !== null && advance !== undefined ? String(advance) : '',
+                    time: '',
+                    torque: ''
+                });
+            });
+
+            onRunsChange({ ...runs, base: newBaseRun });
+            toast({ title: "Avanço Pré-carregado", description: "Valores de avanço do mapa carregados para o ensaio de base." });
+            addLog('Valores de avanço do mapa de ignição carregados com sucesso.', 'success');
+
+        } catch (error) {
+            const msg = `Falha ao carregar do mapa: ${(error as Error).message}`;
+            toast({ title: "Erro", description: msg, variant: "destructive" });
+            addLog(msg, 'error');
+        } finally {
+            setIsLoadingMap(false);
+        }
+    };
     
     const handleLogFileChange = (e: React.ChangeEvent<HTMLInputElement>, runType: RunType) => {
         const file = e.target.files?.[0];
@@ -268,50 +330,99 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
             let fileContent = event.target?.result as string;
             if (!fileContent) return;
 
-            fileContent = fileContent.replace(/(\\d+),(\\d+)/g, '$1.$2');
+            // Pre-process to handle comma decimals
+            fileContent = fileContent.replace(/(\d+),(\d+)/g, '$1.$2');
 
-            Papa.parse(fileContent, {
-                header: true,
+             // Find header row intelligently
+             Papa.parse(fileContent, {
+                header: false,
                 skipEmptyLines: true,
-                dynamicTyping: true,
                 delimiter: ';',
-                complete: (results) => {
-                    if (results.errors.length > 0) {
-                        addLog(`Erros de análise no log de ignição: ${results.errors.map(e => e.message).join(', ')}`, 'error');
+                preview: 20, // Preview first 20 lines to find header
+                complete: (previewResults) => {
+                    let headerRowIndex = -1;
+                    let detectedHeaders: string[] = [];
+
+                    const rpmKeywords = ['rpm', 'rotacao', 'rotação'];
+                    const timeKeywords = ['time', 'tempo'];
+                    const torqueKeywords = ['torque'];
+                    
+                    for (let i = 0; i < previewResults.data.length; i++) {
+                        const row = previewResults.data[i] as string[];
+                        if (!Array.isArray(row)) continue;
+                        const potentialHeaders = row.map(h => String(h || '').trim().toLowerCase());
+                        
+                        const rpmFound = potentialHeaders.some(h => rpmKeywords.some(kw => h.includes(kw)));
+                        const timeOrTorqueFound = potentialHeaders.some(h => [...timeKeywords, ...torqueKeywords].some(kw => h.includes(kw)));
+
+                        if (rpmFound && timeOrTorqueFound) {
+                            headerRowIndex = i;
+                            detectedHeaders = (previewResults.data[i] as string[]).map(h => h.trim());
+                            break;
+                        }
                     }
-                    if (!results.meta.fields) {
-                        toast({ title: "Erro no Log", description: "Não foi possível detetar cabeçalhos.", variant: "destructive"});
+
+                    if (headerRowIndex === -1) {
+                        const msg = "Não foi possível encontrar a linha de cabeçalho (com RPM e Tempo/Torque) no ficheiro de log.";
+                        addLog(msg, 'error');
+                        toast({ title: 'Erro no Log', description: msg, variant: 'destructive' });
                         return;
                     }
 
-                    const headers = results.meta.fields.map(h => h.trim().toLowerCase());
-                    const rpmKey = headers.find(h => h.includes('rpm') || h.includes('rotacao'));
-                    const timeKey = headers.find(h => h.includes('time') || h.includes('tempo'));
-                    const torqueKey = headers.find(h => h.includes('torque'));
-                    const advanceKey = headers.find(h => h.includes('ign') || h.includes('avanco') || h.includes('advance'));
+                    const dataContent = fileContent.split('\n').slice(headerRowIndex + 1).join('\n');
+                    const finalCsv = detectedHeaders.join(';') + '\n' + dataContent;
 
-                    if (!rpmKey || (!timeKey && !torqueKey)) {
-                         toast({ title: "Colunas em Falta", description: "O log deve conter RPM e Tempo ou Torque.", variant: "destructive"});
-                         addLog(`Log de ignição inválido: falta RPM e/ou Tempo/Torque. Cabeçalhos: ${headers.join(', ')}`, 'error');
-                         return;
-                    }
+                    Papa.parse(finalCsv, {
+                        header: true,
+                        skipEmptyLines: true,
+                        dynamicTyping: true,
+                        delimiter: ';',
+                        complete: (results) => {
+                            if (results.errors.length > 0) {
+                                addLog(`Erros de análise no log de ignição: ${results.errors.map(e => e.message).join(', ')}`, 'error');
+                            }
+                            if (!results.meta.fields) {
+                                toast({ title: "Erro no Log", description: "Não foi possível detetar cabeçalhos.", variant: "destructive"});
+                                return;
+                            }
 
-                    const runPoints: IgnitionTimingPoint[] = results.data.map((row: any, index: number) => ({
-                        id: `${runType}_${index}`,
-                        rpm: row[rpmKey] ? String(row[rpmKey]) : '',
-                        time: timeKey && row[timeKey] ? String(row[timeKey]) : '',
-                        torque: torqueKey && row[torqueKey] ? String(row[torqueKey]) : '',
-                        advance: advanceKey && row[advanceKey] ? String(row[advanceKey]) : '',
-                    }));
+                            const headers = results.meta.fields.map(h => h.trim().toLowerCase());
+                            const rpmKey = headers.find(h => rpmKeywords.some(kw => h.includes(kw)));
+                            const timeKey = headers.find(h => timeKeywords.some(kw => h.includes(kw)));
+                            const torqueKey = headers.find(h => torqueKeywords.some(kw => h.includes(kw)));
+                            const advanceKey = headers.find(h => ['ign', 'avanco', 'avanço', 'advance'].some(kw => h.includes(kw)));
 
-                    onRunsChange({ ...runs, [runType]: runPoints });
-                    setLogFiles(prev => ({...prev, [runType]: {name: file.name}}))
-                    addLog(`${runPoints.length} pontos carregados do log de ${runType}.`, 'success');
-                    toast({ title: `Log de ${runType} Carregado`, description: `${runPoints.length} pontos foram extraídos.`});
-                },
-                error: (error) => {
-                    toast({ title: 'Erro de Leitura de Log', description: error.message, variant: "destructive" });
-                    addLog(`Erro ao ler log de ignição: ${error.message}`, 'error');
+                            if (!rpmKey || (!timeKey && !torqueKey)) {
+                                toast({ title: "Colunas em Falta", description: "O log deve conter RPM e Tempo ou Torque.", variant: "destructive"});
+                                addLog(`Log de ignição inválido: falta RPM e/ou Tempo/Torque. Cabeçalhos: ${headers.join(', ')}`, 'error');
+                                return;
+                            }
+
+                            // Find original-cased keys for data access
+                            const originalFields = results.meta.fields || [];
+                            const originalRpmKey = originalFields.find(f => f.trim().toLowerCase() === rpmKey) || rpmKey;
+                            const originalTimeKey = timeKey ? originalFields.find(f => f.trim().toLowerCase() === timeKey) : undefined;
+                            const originalTorqueKey = torqueKey ? originalFields.find(f => f.trim().toLowerCase() === torqueKey) : undefined;
+                            const originalAdvanceKey = advanceKey ? originalFields.find(f => f.trim().toLowerCase() === advanceKey) : undefined;
+
+                            const runPoints: IgnitionTimingPoint[] = results.data.map((row: any, index: number) => ({
+                                id: `${runType}_${index}`,
+                                rpm: row[originalRpmKey] ? String(row[originalRpmKey]) : '',
+                                time: originalTimeKey && row[originalTimeKey] ? String(row[originalTimeKey]) : '',
+                                torque: originalTorqueKey && row[originalTorqueKey] ? String(row[originalTorqueKey]) : '',
+                                advance: originalAdvanceKey && row[originalAdvanceKey] ? String(row[originalAdvanceKey]) : '',
+                            }));
+
+                            onRunsChange({ ...runs, [runType]: runPoints });
+                            setLogFiles(prev => ({...prev, [runType]: {name: file.name}}))
+                            addLog(`${runPoints.length} pontos carregados do log de ${runType}.`, 'success');
+                            toast({ title: `Log de ${runType} Carregado`, description: `${runPoints.length} pontos foram extraídos.`});
+                        },
+                        error: (error) => {
+                            toast({ title: 'Erro de Leitura de Log', description: error.message, variant: "destructive" });
+                            addLog(`Erro ao ler log de ignição: ${error.message}`, 'error');
+                        }
+                    });
                 }
             });
         };
@@ -340,7 +451,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     }
 
     return (
-        <div className="space-y-4 p-4">
+        <div className="space-y-4 p-1">
             <Card>
                 <CardHeader>
                     <CardTitle>Análise e Otimização de Ignição</CardTitle>
@@ -348,51 +459,79 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                         Compare dois ensaios de dinamómetro (um de base e um modificado) para encontrar o ponto de ignição ideal (MBT - Maximum Brake Torque).
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     <div className="space-y-4">
-                        <h4 className="font-semibold">Passo 1: Carregar Ensaio de Base</h4>
-                        <p className="text-sm text-muted-foreground">
-                           Carregue o ficheiro de log (.csv) do seu ensaio de dinamómetro inicial, antes de fazer alterações ao avanço de ignição.
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" className="flex-1" onClick={() => baseLogInputRef.current?.click()}>
-                                <Upload className="mr-2 h-4 w-4" />
-                                {logFiles.base ? logFiles.base.name : 'Carregar Log do Ensaio de Base'}
-                            </Button>
-                             <input
-                                ref={baseLogInputRef}
-                                type="file"
-                                accept=".csv"
-                                className="hidden"
-                                onChange={(e) => handleLogFileChange(e, 'base')}
-                            />
-                             <Button variant="ghost" size="icon" onClick={() => handleClearRun('base')} disabled={!logFiles.base && runs.base.length === 0}>
-                                <Eraser className="h-4 w-4" />
-                            </Button>
+                <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4 rounded-lg border p-4">
+                            <h4 className="font-semibold">Passo 1: Carregar Ensaio de Base</h4>
+                            <p className="text-sm text-muted-foreground">
+                               Carregue o ficheiro de log (.csv) do seu ensaio de dinamómetro inicial, antes de fazer alterações ao avanço de ignição.
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" className="flex-1" onClick={() => baseLogInputRef.current?.click()}>
+                                    <Upload className="mr-2 h-4 w-4" />
+                                    {logFiles.base ? logFiles.base.name : 'Carregar Log do Ensaio de Base'}
+                                </Button>
+                                 <input
+                                    ref={baseLogInputRef}
+                                    type="file"
+                                    accept=".csv"
+                                    className="hidden"
+                                    onChange={(e) => handleLogFileChange(e, 'base')}
+                                />
+                                 <Button variant="ghost" size="icon" onClick={() => handleClearRun('base')} disabled={!logFiles.base && runs.base.length === 0}>
+                                    <Eraser className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+
+                         <div className="space-y-4 rounded-lg border p-4">
+                            <h4 className="font-semibold">Passo 2: Carregar Ensaio Modificado</h4>
+                             <p className="text-sm text-muted-foreground">
+                               Após ajustar o avanço no mapa e fazer um novo ensaio, carregue o ficheiro de log (.csv) correspondente.
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" className="flex-1" onClick={() => modifiedLogInputRef.current?.click()}>
+                                    <Upload className="mr-2 h-4 w-4" />
+                                    {logFiles.modified ? logFiles.modified.name : 'Carregar Log do Ensaio Modificado'}
+                                </Button>
+                                 <input
+                                    ref={modifiedLogInputRef}
+                                    type="file"
+                                    accept=".csv"
+                                    className="hidden"
+                                    onChange={(e) => handleLogFileChange(e, 'modified')}
+                                />
+                                 <Button variant="ghost" size="icon" onClick={() => handleClearRun('modified')} disabled={!logFiles.modified && runs.modified.length === 0}>
+                                    <Eraser className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                     </div>
-                     <div className="space-y-4">
-                        <h4 className="font-semibold">Passo 2: Carregar Ensaio Modificado</h4>
-                         <p className="text-sm text-muted-foreground">
-                           Após ajustar o avanço no mapa e fazer um novo ensaio, carregue o ficheiro de log (.csv) correspondente a essa passagem.
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <Button variant="outline" className="flex-1" onClick={() => modifiedLogInputRef.current?.click()}>
-                                <Upload className="mr-2 h-4 w-4" />
-                                {logFiles.modified ? logFiles.modified.name : 'Carregar Log do Ensaio Modificado'}
+                     <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">Alternativa: Pré-carregar Avanço do Mapa</CardTitle>
+                            <CardDescription>Se não tiver uma coluna de avanço no seu log, pode pré-carregar os valores do mapa de ignição atual para o ensaio de base.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-col sm:flex-row gap-4 items-end">
+                            <div className="flex-1 w-full space-y-2">
+                                <Label>Selecione a Linha de Carga do Mapa</Label>
+                                <Select value={selectedLoadValue} onValueChange={setSelectedLoadValue} disabled={!loadAxis}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione um valor de carga..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {loadAxis?.calculated.map((val, idx) => (
+                                            <SelectItem key={idx} value={String(val)}>{val}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button onClick={handleLoadFromMap} disabled={!selectedLoadValue || isLoadingMap} className="w-full sm:w-auto">
+                                {isLoadingMap && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Carregar Dados do Mapa
                             </Button>
-                             <input
-                                ref={modifiedLogInputRef}
-                                type="file"
-                                accept=".csv"
-                                className="hidden"
-                                onChange={(e) => handleLogFileChange(e, 'modified')}
-                            />
-                             <Button variant="ghost" size="icon" onClick={() => handleClearRun('modified')} disabled={!logFiles.modified && runs.modified.length === 0}>
-                                <Eraser className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    </div>
+                        </CardContent>
+                    </Card>
                 </CardContent>
             </Card>
             
@@ -409,6 +548,8 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         </div>
     );
 }
+
+    
 
     
 

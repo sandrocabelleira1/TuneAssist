@@ -712,12 +712,13 @@ export default function EcuTuningAssistant() {
                     let headerRowIndex = -1;
                     let detectedHeaders: string[] = [];
                     
-                    const rpmKeywords = ['rpm', 'rotacao'];
+                    const rpmKeywords = ['rpm', 'rotacao', 'rotação'];
                     const lambdaKeywords = ['lambda', 'sonda'];
 
                     for (let i = 0; i < previewResults.data.length; i++) {
                         const row = previewResults.data[i] as string[];
-                        const potentialHeaders = row.map(h => h.trim().toLowerCase());
+                        if (!Array.isArray(row)) continue;
+                        const potentialHeaders = row.map(h => String(h || '').trim().toLowerCase());
                         
                         const rpmFound = potentialHeaders.some(h => rpmKeywords.some(kw => h.includes(kw)));
                         const lambdaFound = potentialHeaders.some(h => lambdaKeywords.some(kw => h.includes(kw)));
@@ -731,8 +732,9 @@ export default function EcuTuningAssistant() {
                     }
     
                     if (headerRowIndex === -1) {
-                        addLog('Não foi possível encontrar a linha de cabeçalho (com RPM e Lambda/Sonda) no ficheiro de log.', 'error');
-                        toast({ title: 'Erro no Log', description: 'Não foi possível detetar o cabeçalho no ficheiro de log.', variant: 'destructive' });
+                        const msg = 'Não foi possível encontrar a linha de cabeçalho (com RPM e Lambda/Sonda) no ficheiro de log.';
+                        addLog(msg, 'error');
+                        toast({ title: 'Erro no Log', description: msg, variant: 'destructive' });
                         return;
                     }
     
@@ -1015,8 +1017,8 @@ export default function EcuTuningAssistant() {
         const minX = Math.min(start.x, end.x);
         const maxX = Math.max(start.x, end.x);
         
-        const originalMap = originalMapCache[activeMapId];
-        if (operation === 'revert' && (!originalMap || !originalMap.calculatedMap)) {
+        const originalMapData = originalMapCache[activeMapId];
+        if (operation === 'revert' && (!originalMapData || !originalMapData.calculatedMap)) {
             toast({ title: "Erro", description: "Cache do mapa original não encontrado. Recarregue o mapa.", variant: "destructive" });
             return;
         }
@@ -1056,7 +1058,7 @@ export default function EcuTuningAssistant() {
                         break;
                     }
                     case 'revert':
-                        newValue = originalMap!.calculatedMap![y][x];
+                        newValue = originalMapData!.calculatedMap![y][x];
                         break;
                     default:
                         newValue = newMap[y][x];
@@ -1881,6 +1883,8 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
+
+    
 
     
 
