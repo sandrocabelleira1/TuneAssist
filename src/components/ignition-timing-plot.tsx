@@ -175,7 +175,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                 onClick={() => handlePointClick({ payload }, runType)} 
                 className="cursor-pointer group"
             >
-                <circle cx={cx} cy={cy} r={8} fill={hasData ? "currentColor" : "transparent"} className="opacity-30 group-hover:opacity-50 transition-opacity" />
+                <circle cx={cx} cy={cy} r={8} fill="currentColor" className="opacity-30 group-hover:opacity-50 transition-opacity" />
                 <circle cx={cx} cy={cy} r={4} fill={hasData ? "currentColor" : "hsl(var(--muted-foreground))"} stroke="hsl(var(--background))" strokeWidth={1.5} />
             </g>
         );
@@ -251,9 +251,9 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                                 type="monotone"
                                 dataKey="base_advance"
                                 name="Avanço Base"
-                                stroke={'hsl(var(--primary))'}
+                                stroke={'hsl(142.1 70.6% 45.3%)'} // Green
                                 strokeDasharray="5 5"
-                                strokeOpacity={0.8}
+                                strokeOpacity={0.9}
                                 strokeWidth={2}
                                 dot={<CustomDot runType={'base'} dataKey="base_advance" />}
                                 connectNulls
@@ -263,9 +263,9 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                                 type="monotone"
                                 dataKey="modified_advance"
                                 name="Avanço Modificado"
-                                stroke={'hsl(var(--destructive))'}
+                                stroke={'hsl(38.9 98.4% 50.4%)'} // Yellow/Orange
                                 strokeDasharray="5 5"
-                                strokeOpacity={0.8}
+                                strokeOpacity={0.9}
                                 strokeWidth={2}
                                 dot={<CustomDot runType={'modified'} dataKey="modified_advance" />}
                                 connectNulls
@@ -284,3 +284,4 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
         </Card>
     );
 }
+
