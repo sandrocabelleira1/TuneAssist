@@ -657,22 +657,11 @@ function findClosestIndex(arr: (number | string)[], target: number): number {
 }
 
 // Find a key in the log data headers that matches a target label
-function findKeyInHeader(header: string[], targetLabels: string[], manualSelection?: string): string | undefined {
-    // Prioritize manual selection if it's valid
-    if (manualSelection && header.includes(manualSelection)) {
-        return manualSelection;
-    }
-    
+function findKeyInHeader(header: string[], targetLabels: string[]): string | undefined {
     for (const targetLabel of targetLabels) {
         const cleanTargetLabel = targetLabel.trim().toLowerCase();
         
         // Exact match first
-        for (const key of header) {
-            if (key.trim().toLowerCase() === cleanTargetLabel) {
-                return key;
-            }
-        }
-        // Fallback for partial match
         for (const key of header) {
             if (key.trim().toLowerCase().includes(cleanTargetLabel)) {
                 return key;
@@ -726,9 +715,9 @@ export function calculateCorrections(
         throw new Error("Não foi possível identificar o eixo de RPM no mapa. Verifique as etiquetas dos eixos (deve incluir 'rpm').");
     }
 
-    const rpmLogKey = findKeyInHeader(header, ['rpm', rpmMapAxis.label]);
+    const rpmLogKey = findKeyInHeader(header, ['rpm', 'rotacao', rpmMapAxis.label]);
     const lambdaLogKey = findKeyInHeader(header, ['lambda', 'sonda', 'afr']);
-
+    
     if (!rpmLogKey) throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
     if (!lambdaLogKey) throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'AFR' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
 
@@ -751,7 +740,7 @@ export function calculateCorrections(
         let currentLoadIndex = fixedLoadIndex;
         
         // If we have a load column in the log, find the closest index for each log entry
-        if (loadLogColumn) {
+        if (loadLogColumn && fixedLoadIndex === undefined) {
             const logLoad = logEntry[loadLogColumn];
             if (logLoad === undefined || isNaN(logLoad)) return;
             currentLoadIndex = findClosestIndex(loadMapAxis.calculated, logLoad);
@@ -766,7 +755,7 @@ export function calculateCorrections(
         if (currentValue === null || currentValue === undefined) return;
 
         const correctionFactor = measuredLambda / targetLambda;
-        const fullyCorrectedValue = currentValue * correctionFactor;
+        const fullyCorrectedValue = currentValue / correctionFactor; // Divide to correct fuel
         
         const difference = fullyCorrectedValue - currentValue;
         const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
