@@ -18,7 +18,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eraser } from 'lucide-react';
 import type { IgnitionTimingPoint, IgnitionTimingRun } from '@/lib/types';
 
@@ -111,7 +110,9 @@ interface IgnitionTimingPlotProps {
 
 export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, analysisMode }: IgnitionTimingPlotProps) {
     const [editingPoint, setEditingPoint] = useState<{ runType: RunType; point: IgnitionTimingPoint } | null>(null);
-    const [activeTab, setActiveTab] = useState("advance");
+    const performanceDataKey = analysisMode === 'torque' ? 'torque' : 'time';
+    const performanceYAxisLabel = analysisMode === 'torque' ? 'Torque (Nm)' : 'Tempo (s)';
+
 
     const { chartData, rpmTicks } = useMemo(() => {
         const allRpms = new Set<number>();
@@ -180,55 +181,16 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
         );
     };
 
-    const renderChart = (title: string, dataKey: string, yAxisLabel: string) => (
-        <ChartContainer config={{}} className="min-h-[250px] w-full">
-            <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="rpm" type="number" ticks={rpmTicks} domain={['dataMin', 'dataMax']} />
-                    <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} domain={['auto', 'auto']} allowDecimals={false} />
-                    <Tooltip content={<ChartTooltipContent indicator="dot" />} />
-                    <Legend />
-                    <Line
-                        type="monotone"
-                        dataKey={`base_${dataKey}`}
-                        name={'Base'}
-                        stroke={'hsl(var(--primary))'}
-                        strokeWidth={2}
-                        dot={<CustomDot runType={'base'} dataKey={`base_${dataKey}`} />}
-                        connectNulls
-                    />
-                     <Line
-                        type="monotone"
-                        dataKey={`modified_${dataKey}`}
-                        name={'Modificado'}
-                        stroke={'hsl(var(--destructive))'}
-                        strokeWidth={2}
-                        dot={<CustomDot runType={'modified'} dataKey={`modified_${dataKey}`} />}
-                        connectNulls
-                    />
-                </LineChart>
-            </ResponsiveContainer>
-        </ChartContainer>
-    );
-
     return (
         <Card>
             <CardHeader className="space-y-4">
-                <div>
-                    <CardTitle>Gráfico de Análise de Ignição</CardTitle>
-                    <CardDescription>
-                        Clique nos pontos do gráfico para adicionar ou editar os dados de cada ensaio.
-                    </CardDescription>
-                </div>
-                 <div className="flex justify-between items-center">
-                    <Tabs value={activeTab} onValueChange={setActiveTab}>
-                        <TabsList>
-                            <TabsTrigger value="advance">Avanço</TabsTrigger>
-                            <TabsTrigger value="time">Tempo</TabsTrigger>
-                            <TabsTrigger value="torque">Torque</TabsTrigger>
-                        </TabsList>
-                    </Tabs>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <CardTitle>Gráfico de Análise de Ignição</CardTitle>
+                        <CardDescription>
+                            Clique nos pontos do gráfico para adicionar ou editar os dados de cada ensaio.
+                        </CardDescription>
+                    </div>
                      <div className="flex gap-2">
                          <Button variant="outline" size="sm" onClick={() => onClearRun('base')}>
                             <Eraser className="mr-2 h-4 w-4" /> Limpar Base
@@ -240,17 +202,77 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                 </div>
             </CardHeader>
             <CardContent>
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsContent value="advance" className="mt-0">
-                        {renderChart('Avanço Ignição', 'advance', 'Avanço (°)')}
-                    </TabsContent>
-                    <TabsContent value='time' className="mt-0">
-                        {renderChart('Tempo Acumulado', 'time', 'Tempo (s)')}
-                    </TabsContent>
-                    <TabsContent value='torque' className="mt-0">
-                        {renderChart('Torque', 'torque', 'Torque (Nm)')}
-                    </TabsContent>
-                </Tabs>
+                 <ChartContainer config={{}} className="min-h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="rpm" type="number" ticks={rpmTicks} domain={['dataMin', 'dataMax']} />
+                            <YAxis 
+                                yAxisId="left" 
+                                label={{ value: performanceYAxisLabel, angle: -90, position: 'insideLeft' }} 
+                                domain={['auto', 'auto']} 
+                                allowDecimals={false} 
+                            />
+                            <YAxis 
+                                yAxisId="right" 
+                                orientation="right" 
+                                label={{ value: 'Avanço (°)', angle: 90, position: 'insideRight' }} 
+                                domain={['auto', 'auto']} 
+                                allowDecimals={false}
+                            />
+                            <Tooltip content={<ChartTooltipContent indicator="dot" />} />
+                            <Legend />
+                            
+                            {/* Performance Lines (Torque/Time) */}
+                            <Line
+                                yAxisId="left"
+                                type="monotone"
+                                dataKey={`base_${performanceDataKey}`}
+                                name={`Base ${performanceYAxisLabel}`}
+                                stroke={'hsl(var(--primary))'}
+                                strokeWidth={2}
+                                dot={<CustomDot runType={'base'} dataKey={`base_${performanceDataKey}`} />}
+                                connectNulls
+                            />
+                             <Line
+                                yAxisId="left"
+                                type="monotone"
+                                dataKey={`modified_${performanceDataKey}`}
+                                name={`Mod. ${performanceYAxisLabel}`}
+                                stroke={'hsl(var(--destructive))'}
+                                strokeWidth={2}
+                                dot={<CustomDot runType={'modified'} dataKey={`modified_${performanceDataKey}`} />}
+                                connectNulls
+                            />
+
+                             {/* Advance Lines */}
+                             <Line
+                                yAxisId="right"
+                                type="monotone"
+                                dataKey="base_advance"
+                                name="Avanço Base"
+                                stroke={'hsl(var(--primary))'}
+                                strokeDasharray="5 5"
+                                strokeOpacity={0.8}
+                                strokeWidth={2}
+                                dot={<CustomDot runType={'base'} dataKey="base_advance" />}
+                                connectNulls
+                            />
+                             <Line
+                                yAxisId="right"
+                                type="monotone"
+                                dataKey="modified_advance"
+                                name="Avanço Modificado"
+                                stroke={'hsl(var(--destructive))'}
+                                strokeDasharray="5 5"
+                                strokeOpacity={0.8}
+                                strokeWidth={2}
+                                dot={<CustomDot runType={'modified'} dataKey="modified_advance" />}
+                                connectNulls
+                            />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </ChartContainer>
                 {editingPoint && (
                     <EditPointDialog
                         point={editingPoint.point}
