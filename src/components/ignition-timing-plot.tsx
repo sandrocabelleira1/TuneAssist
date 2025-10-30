@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Eraser } from 'lucide-react';
 import type { IgnitionTimingPoint, IgnitionTimingRun } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 type RunType = 'base' | 'modified';
 type AnalysisMode = 'time' | 'torque';
@@ -100,6 +101,51 @@ function EditPointDialog({ point, onSave, onClose }: EditPointDialogProps) {
     );
 }
 
+interface CustomTooltipProps {
+    active?: boolean;
+    payload?: any[];
+    label?: string;
+    analysisMode: AnalysisMode;
+}
+
+
+const CustomTooltipContent = ({ active, payload, label, analysisMode }: CustomTooltipProps) => {
+    if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        const performanceLabel = analysisMode === 'torque' ? 'Torque' : 'Tempo';
+
+        return (
+            <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
+                <p className="font-bold mb-2">RPM: {label}</p>
+                <table className="w-full text-left">
+                    <thead>
+                        <tr>
+                            <th className="pr-2">Métrica</th>
+                            <th className="pr-2 text-center">Base</th>
+                            <th className="text-center">Modificado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{performanceLabel}</td>
+                            <td className="text-center text-primary">{data.base_torque?.toFixed(2) ?? data.base_time?.toFixed(3) ?? '-'}</td>
+                            <td className="text-center text-destructive">{data.modified_torque?.toFixed(2) ?? data.modified_time?.toFixed(3) ?? '-'}</td>
+                        </tr>
+                        <tr>
+                            <td>Avanço</td>
+                            <td className="text-center text-green-500">{data.base_advance?.toFixed(2) ?? '-'}</td>
+                            <td className="text-center text-yellow-500">{data.modified_advance?.toFixed(2) ?? '-'}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        );
+    }
+
+    return null;
+};
+
+
 interface IgnitionTimingPlotProps {
     runs: IgnitionTimingRun;
     onPointUpdate: (runType: RunType, point: IgnitionTimingPoint) => void;
@@ -141,9 +187,9 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                 
                 const pointData = dataMap.get(rpmValue);
                 if (pointData) {
-                    pointData[`${prefix}_advance`] = p.advance !== '' ? parseFloat(p.advance) : null;
-                    pointData[`${prefix}_torque`] = p.torque !== '' ? parseFloat(p.torque) : null;
-                    pointData[`${prefix}_time`] = p.time !== '' ? parseFloat(p.time) : null;
+                    pointData[`${prefix}_advance`] = p.advance !== '' && !isNaN(parseFloat(p.advance)) ? parseFloat(p.advance) : null;
+                    pointData[`${prefix}_torque`] = p.torque !== '' && !isNaN(parseFloat(p.torque)) ? parseFloat(p.torque) : null;
+                    pointData[`${prefix}_time`] = p.time !== '' && !isNaN(parseFloat(p.time)) ? parseFloat(p.time) : null;
                 }
             });
         };
@@ -219,7 +265,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                                 domain={['auto', 'auto']} 
                                 allowDecimals={false}
                             />
-                            <Tooltip content={<ChartTooltipContent indicator="dot" />} />
+                            <Tooltip content={<CustomTooltipContent analysisMode={analysisMode} />} />
                             <Legend />
                             
                             {/* Performance Lines (Torque/Time) */}
