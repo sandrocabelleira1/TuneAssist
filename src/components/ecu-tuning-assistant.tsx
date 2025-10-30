@@ -581,6 +581,7 @@ export default function EcuTuningAssistant() {
         setLogData([]);
         setLogHeaders([]);
         setSelectedLogLoadColumn('');
+        setSelectedLogLoadValue('');
         dynoForm.reset({ loadColumns: [], logRows: [] });
         if (logInputRef.current) logInputRef.current.value = '';
         addLog('Dados de ensaio limpos.', 'success');
@@ -702,6 +703,7 @@ export default function EcuTuningAssistant() {
                     const loadHeader = results.meta.fields.find(h => /tps|map|load|carga/i.test(h));
                     if (loadHeader) {
                         setSelectedLogLoadColumn(loadHeader);
+                        setSelectedLogLoadValue(''); // Clear fixed value if column is found
                     }
                 }
                 setLogFile({ name: file.name, content: Papa.unparse(results.data) });
@@ -1341,11 +1343,12 @@ const handleMapSelectionChange = (id: string) => {
                                     </Button>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="log-load-axis">Condição de Carga do Log</Label>
+                                    <Label htmlFor="log-load-condition">Condição de Carga do Log</Label>
                                     <Select
                                         value={logFile ? selectedLogLoadColumn : selectedLogLoadValue}
                                         onValueChange={(value) => {
-                                            if (logFile) {
+                                            const isHeader = logHeaders.includes(value);
+                                            if (isHeader) {
                                                 setSelectedLogLoadColumn(value);
                                                 setSelectedLogLoadValue('');
                                             } else {
@@ -1359,23 +1362,20 @@ const handleMapSelectionChange = (id: string) => {
                                             <SelectValue placeholder="Selecione a condição de carga..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {logFile && logHeaders.length > 0 ? (
-                                                logHeaders.map((header) => (
-                                                    <SelectItem key={header} value={header}>
-                                                        Coluna do Log: {header}
-                                                    </SelectItem>
-                                                ))
-                                            ) : (
-                                                loadAxis?.calculated.map((val, index) => (
-                                                    <SelectItem key={index} value={String(val)}>
-                                                        Carga do Mapa: {typeof val === 'number' ? val.toFixed(2) : val}
-                                                    </SelectItem>
-                                                ))
-                                            )}
+                                            {logFile && logHeaders.length > 0 && logHeaders.map((header) => (
+                                                <SelectItem key={header} value={header}>
+                                                    Coluna do Log: {header}
+                                                </SelectItem>
+                                            ))}
+                                            {loadAxis?.calculated.map((val, index) => (
+                                                <SelectItem key={index} value={String(val)}>
+                                                    Carga do Mapa: {typeof val === 'number' ? val.toFixed(2) : val}
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                     <p className="text-xs text-muted-foreground">
-                                        Se o seu log tiver uma coluna de carga (TPS/MAP), selecione-a. Caso contrário, selecione o valor de carga do mapa que corresponde ao seu ensaio (ex: 100% para WOT).
+                                        Se o seu log tiver uma coluna de carga (TPS/MAP), selecione-a. Caso contrário, selecione o valor de carga do mapa que corresponde ao seu ensaio (ex: 100 para WOT).
                                     </p>
                                 </div>
                                 <div className="space-y-2">
