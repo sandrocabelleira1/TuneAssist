@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
@@ -1548,6 +1547,7 @@ const handleMapSelectionChange = (id: string) => {
                             processedMap={processedMap}
                             selectedMapDefinition={selectedMapDefinition}
                             addLog={addLog}
+                            mainLogData={logData}
                         />
                 </TabsContent>
             </>
@@ -1882,3 +1882,5 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
+
+    
