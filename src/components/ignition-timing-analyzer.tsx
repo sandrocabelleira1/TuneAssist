@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -36,8 +35,8 @@ interface TimingSegment {
     suggestion: string;
 }
 
-const AnalysisResultsTable = ({ results, analysisMode }: { results: TimingSegment[], analysisMode: 'time' | 'torque' }) => {
-    const isTimeMode = analysisMode === 'time';
+const AnalysisResultsTable = ({ results }: { results: TimingSegment[] }) => {
+    const isTimeMode = results.some(r => r.baseTime !== null || r.modifiedTime !== null);
     
     return (
         <Card>
@@ -151,7 +150,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     const [selectedLoadValue, setSelectedLoadValue] = useState('');
 
 
-    const { analysisResults, analysisMode } = useMemo(() => {
+    const analysisResults = useMemo(() => {
         const results: TimingSegment[] = [];
         
         const hasTorqueData = runs.base.some(p => p.torque !== '') || runs.modified.some(p => p.torque !== '');
@@ -176,7 +175,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         const modifiedPoints = processRun(runs.modified);
 
         if (basePoints.length < 2 && modifiedPoints.length < 2) {
-             return { analysisResults: [], analysisMode: mode };
+             return [];
         }
 
         const allRpms = new Set([...basePoints.map(p => p.rpm), ...modifiedPoints.map(p => p.rpm)]);
@@ -252,7 +251,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
             });
         }
 
-        return { analysisResults: results, analysisMode: mode };
+        return results;
 
     }, [runs]);
     
@@ -282,7 +281,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         }
 
         setIsLoadingMap(true);
-        addLog('A pré-carregar avanço do mapa e dados de log...', 'info');
+        addLog('A pré-carregar avanço do mapa...', 'info');
 
         try {
             const loadIndex = loadAxis.calculated.findIndex(val => String(val) === selectedLoadValue);
@@ -344,7 +343,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                     let detectedHeaders: string[] = [];
 
                     const rpmKeywords = ['rpm', 'rotacao', 'rotação'];
-                    const timeKeywords = ['time', 'tempo'];
+                    const timeKeywords = ['time', 'tempo', 'momento'];
                     const torqueKeywords = ['torque'];
                     
                     for (let i = 0; i < previewResults.data.length; i++) {
@@ -408,9 +407,9 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                             const runPoints: IgnitionTimingPoint[] = results.data.map((row: any, index: number) => ({
                                 id: `${runType}_${index}`,
                                 rpm: row[originalRpmKey] ? String(row[originalRpmKey]) : '',
-                                time: originalTimeKey && row[originalTimeKey] ? String(row[originalTimeKey]) : '',
-                                torque: originalTorqueKey && row[originalTorqueKey] ? String(row[originalTorqueKey]) : '',
-                                advance: originalAdvanceKey && row[originalAdvanceKey] ? String(row[originalAdvanceKey]) : '',
+                                time: originalTimeKey && row[originalTimeKey] !== null ? String(row[originalTimeKey]) : '',
+                                torque: originalTorqueKey && row[originalTorqueKey] !== null ? String(row[originalTorqueKey]) : '',
+                                advance: originalAdvanceKey && row[originalAdvanceKey] !== null ? String(row[originalAdvanceKey]) : '',
                             }));
 
                             onRunsChange({ ...runs, [runType]: runPoints });
@@ -539,20 +538,11 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                 runs={runs} 
                 onPointUpdate={handlePointUpdate} 
                 onClearRun={handleClearRun}
-                analysisMode={analysisMode}
             />
 
              {analysisResults.length > 0 && (
-                <AnalysisResultsTable results={analysisResults} analysisMode={analysisMode} />
+                <AnalysisResultsTable results={analysisResults} />
              )}
         </div>
     );
 }
-
-    
-
-    
-
-    
-
-    

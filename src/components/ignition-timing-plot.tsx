@@ -22,8 +22,6 @@ import type { IgnitionTimingPoint, IgnitionTimingRun } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 type RunType = 'base' | 'modified';
-type AnalysisMode = 'time' | 'torque';
-
 
 const createNewPoint = (rpm: string): IgnitionTimingPoint => ({
     id: `point_${rpm}_${Date.now()}`,
@@ -105,14 +103,19 @@ interface CustomTooltipProps {
     active?: boolean;
     payload?: any[];
     label?: string;
-    analysisMode: AnalysisMode;
 }
 
 
-const CustomTooltipContent = ({ active, payload, label, analysisMode }: CustomTooltipProps) => {
+const CustomTooltipContent = ({ active, payload, label }: CustomTooltipProps) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
-        const performanceLabel = analysisMode === 'torque' ? 'Torque' : 'Tempo';
+        
+        const hasTorque = data.base_torque !== null || data.modified_torque !== null;
+        const performanceLabel = hasTorque ? 'Torque' : 'Tempo';
+        const performanceUnit = hasTorque ? 'Nm' : 's';
+
+        const basePerformance = hasTorque ? data.base_torque : data.base_time;
+        const modifiedPerformance = hasTorque ? data.modified_torque : data.modified_time;
 
         return (
             <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
@@ -127,12 +130,12 @@ const CustomTooltipContent = ({ active, payload, label, analysisMode }: CustomTo
                     </thead>
                     <tbody>
                         <tr>
-                            <td>{performanceLabel}</td>
-                            <td className="text-center text-primary">{data.base_torque?.toFixed(2) ?? data.base_time?.toFixed(3) ?? '-'}</td>
-                            <td className="text-center text-destructive">{data.modified_torque?.toFixed(2) ?? data.modified_time?.toFixed(3) ?? '-'}</td>
+                            <td>{performanceLabel} ({performanceUnit})</td>
+                            <td className="text-center text-primary">{basePerformance?.toFixed(2) ?? '-'}</td>
+                            <td className="text-center text-destructive">{modifiedPerformance?.toFixed(2) ?? '-'}</td>
                         </tr>
                         <tr>
-                            <td>Avanço</td>
+                            <td>Avanço (°)</td>
                             <td className="text-center text-green-500">{data.base_advance?.toFixed(2) ?? '-'}</td>
                             <td className="text-center text-yellow-500">{data.modified_advance?.toFixed(2) ?? '-'}</td>
                         </tr>
@@ -150,16 +153,12 @@ interface IgnitionTimingPlotProps {
     runs: IgnitionTimingRun;
     onPointUpdate: (runType: RunType, point: IgnitionTimingPoint) => void;
     onClearRun: (runType: RunType) => void;
-    analysisMode: AnalysisMode;
 }
 
-export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, analysisMode }: IgnitionTimingPlotProps) {
+export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: IgnitionTimingPlotProps) {
     const [editingPoint, setEditingPoint] = useState<{ runType: RunType; point: IgnitionTimingPoint } | null>(null);
-    const performanceDataKey = analysisMode === 'torque' ? 'torque' : 'time';
-    const performanceYAxisLabel = analysisMode === 'torque' ? 'Torque (Nm)' : 'Tempo (s)';
 
-
-    const { chartData, rpmTicks } = useMemo(() => {
+    const { chartData, rpmTicks, yAxisLabel, performanceDataKey } = useMemo(() => {
         const allRpms = new Set<number>();
         runs.base.forEach(p => {
              const rpm = parseFloat(p.rpm);
@@ -171,7 +170,6 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
         });
 
         if (allRpms.size === 0) {
-            // Add default axis if no data exists, for manual entry
             for (let i = 1; i <= 8; i++) allRpms.add(i * 1000);
         }
 
@@ -179,6 +177,13 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
         
         const dataMap = new Map<number, any>();
         sortedRpmTicks.forEach(rpm => dataMap.set(rpm, { rpm }));
+
+        const hasTorqueData = runs.base.some(p => p.torque && !isNaN(parseFloat(p.torque))) || 
+                              runs.modified.some(p => p.torque && !isNaN(parseFloat(p.torque)));
+
+        const perfKey = hasTorqueData ? 'torque' : 'time';
+        const perfLabel = hasTorqueData ? 'Torque (Nm)' : 'Tempo (s)';
+
 
         const addRunDataToMap = (run: IgnitionTimingPoint[], prefix: string) => {
             run.forEach(p => {
@@ -197,7 +202,12 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
         addRunDataToMap(runs.base, 'base');
         addRunDataToMap(runs.modified, 'modified');
 
-        return { chartData: Array.from(dataMap.values()), rpmTicks: sortedRpmTicks };
+        return { 
+            chartData: Array.from(dataMap.values()), 
+            rpmTicks: sortedRpmTicks,
+            yAxisLabel: perfLabel,
+            performanceDataKey: perfKey
+        };
     }, [runs]);
 
     const handlePointClick = (dotProps: any, runType: RunType) => {
@@ -214,7 +224,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
     };
 
     const CustomDot = ({ cx, cy, payload, dataKey, runType }: any) => {
-        const hasData = payload[dataKey] !== undefined && payload[dataKey] !== null && payload[dataKey] !== '';
+        const hasData = payload[dataKey] !== undefined && payload[dataKey] !== null;
         return (
             <g 
                 onClick={() => handlePointClick({ payload }, runType)} 
@@ -254,7 +264,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                             <XAxis dataKey="rpm" type="number" ticks={rpmTicks} domain={['dataMin', 'dataMax']} />
                             <YAxis 
                                 yAxisId="left" 
-                                label={{ value: performanceYAxisLabel, angle: -90, position: 'insideLeft' }} 
+                                label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} 
                                 domain={['auto', 'auto']} 
                                 allowDecimals={false} 
                             />
@@ -265,7 +275,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                                 domain={['auto', 'auto']} 
                                 allowDecimals={false}
                             />
-                            <Tooltip content={<CustomTooltipContent analysisMode={analysisMode} />} />
+                            <Tooltip content={<CustomTooltipContent />} />
                             <Legend />
                             
                             {/* Performance Lines (Torque/Time) */}
@@ -273,7 +283,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                                 yAxisId="left"
                                 type="monotone"
                                 dataKey={`base_${performanceDataKey}`}
-                                name={`Base ${performanceYAxisLabel}`}
+                                name={`Base ${yAxisLabel}`}
                                 stroke={'hsl(var(--primary))'}
                                 strokeWidth={2}
                                 dot={<CustomDot runType={'base'} dataKey={`base_${performanceDataKey}`} />}
@@ -283,7 +293,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
                                 yAxisId="left"
                                 type="monotone"
                                 dataKey={`modified_${performanceDataKey}`}
-                                name={`Mod. ${performanceYAxisLabel}`}
+                                name={`Mod. ${yAxisLabel}`}
                                 stroke={'hsl(var(--destructive))'}
                                 strokeWidth={2}
                                 dot={<CustomDot runType={'modified'} dataKey={`modified_${performanceDataKey}`} />}
