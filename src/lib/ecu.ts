@@ -443,7 +443,7 @@ function processMap(
                 sortedRow.push(null);
             } else {
                 const calculatedValue = evaluateEquation(mapDef.equation, rawValue);
-                sortedRow.push(isNaN(calculatedValue) ? rawValue : calculatedValue); // Fallback to raw if calc fails
+                sortedRow.push(isNaN(calculatedValue) ? null : calculatedValue); // Use null if calc fails
             }
         }
         calculatedMap.push(sortedRow);
@@ -661,7 +661,6 @@ function findKeyInHeader(header: string[], targetLabels: string[]): string | und
     for (const targetLabel of targetLabels) {
         const cleanTargetLabel = targetLabel.trim().toLowerCase();
         
-        // Exact match first
         for (const key of header) {
             if (key.trim().toLowerCase().includes(cleanTargetLabel)) {
                 return key;
@@ -695,10 +694,8 @@ export function calculateCorrections(
     const newMap = calculatedMap.map(row => [...row]); // Create a mutable copy
     const modifiedIndices: ModifiedCell[] = [];
 
-    // Dynamically find the keys for X, Y, and Lambda from the log data headers
     const header = Object.keys(logData[0] || {});
     
-    // Identify which map axis is RPM and which is Load
     const rpmRegex = /rpm/i;
     let rpmMapAxis: AxisData, loadMapAxis: AxisData;
     let rpmIsYAxis: boolean;
@@ -719,7 +716,7 @@ export function calculateCorrections(
     const lambdaLogKey = findKeyInHeader(header, ['lambda', 'sonda', 'afr']);
     
     if (!rpmLogKey) throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
-    if (!lambdaLogKey) throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'AFR' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
+    if (!lambdaLogKey) throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'Sonda' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
 
     let fixedLoadIndex: number | undefined = undefined;
     if (loadMapValue !== undefined) {
@@ -739,7 +736,6 @@ export function calculateCorrections(
         
         let currentLoadIndex = fixedLoadIndex;
         
-        // If we have a load column in the log, find the closest index for each log entry
         if (loadLogColumn && fixedLoadIndex === undefined) {
             const logLoad = logEntry[loadLogColumn];
             if (logLoad === undefined || isNaN(logLoad)) return;
@@ -755,7 +751,7 @@ export function calculateCorrections(
         if (currentValue === null || currentValue === undefined) return;
 
         const correctionFactor = measuredLambda / targetLambda;
-        const fullyCorrectedValue = currentValue / correctionFactor; // Divide to correct fuel
+        const fullyCorrectedValue = currentValue / correctionFactor;
         
         const difference = fullyCorrectedValue - currentValue;
         const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
