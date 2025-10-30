@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -284,4 +283,3 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun, an
         </Card>
     );
 }
-
