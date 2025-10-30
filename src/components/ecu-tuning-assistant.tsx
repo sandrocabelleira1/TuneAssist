@@ -127,7 +127,7 @@ function MassEditDialog({
                      <Button size="sm" onClick={() => handleAction('sub_percent')}><Minus className="mr-1 h-4 w-4" /> Sub %</Button>
                      <Button size="sm" variant="secondary" onClick={() => handleAction('set_value')}><Edit className="mr-1 h-4 w-4" /> Definir</Button>
                      <Button size="sm" variant="secondary" onClick={() => handleAction('interpolate')}><Blend className="mr-1 h-4 w-4"/> Interpolar</Button>
-                     <Button size="sm" variant="outline" onClick={() => handleAction('revert')}><RotateCcw className="mr-1 h-4 w-4" />Bin Original</Button>
+                     <Button size="sm" variant="outline" onClick={() => handleAction('revert')}>Bin Original</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -1547,7 +1547,6 @@ const handleMapSelectionChange = (id: string) => {
                             processedMap={processedMap}
                             selectedMapDefinition={selectedMapDefinition}
                             addLog={addLog}
-                            mainLogData={logData}
                         />
                 </TabsContent>
             </>
@@ -1882,5 +1881,7 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
+
+    
 
     
