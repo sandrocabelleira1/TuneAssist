@@ -696,15 +696,42 @@ export default function EcuTuningAssistant() {
             if (!fileContent) return;
 
             addLog(`A ler o ficheiro de log ${file.name}...`, 'info');
-
+            
             // Pre-process to replace comma decimals with dots
             fileContent = fileContent.replace(/(\d+),(\d+)/g, '$1.$2');
             
-            Papa.parse(fileContent, {
+            const delimiter = fileContent.includes(';') ? ';' : ',';
+
+            // Find header row by searching for RPM/Lambda keywords
+            const lines = fileContent.split('\n');
+            let headerRowIndex = -1;
+            let detectedHeaders: string[] = [];
+            for (let i = 0; i < Math.min(lines.length, 20); i++) {
+                const line = lines[i].trim();
+                const potentialHeaders = line.split(delimiter).map(h => h.trim());
+                const rpmFound = potentialHeaders.some(h => /rpm|rota/i.test(h));
+                const lambdaFound = potentialHeaders.some(h => /lambda|sonda|afr/i.test(h));
+                if (rpmFound && lambdaFound) {
+                    headerRowIndex = i;
+                    detectedHeaders = potentialHeaders;
+                    break;
+                }
+            }
+
+            if (headerRowIndex === -1) {
+                addLog('Não foi possível encontrar a linha de cabeçalho (com RPM e Lambda/Sonda) no ficheiro de log.', 'error');
+                toast({title: 'Erro no Log', description: 'Não foi possível detetar o cabeçalho no ficheiro de log.', variant: 'destructive'});
+                return;
+            }
+
+            const dataContent = lines.slice(headerRowIndex + 1).join('\n');
+            const finalCsv = detectedHeaders.join(delimiter) + '\n' + dataContent;
+
+            Papa.parse(finalCsv, {
                 header: true,
                 skipEmptyLines: true,
                 dynamicTyping: true,
-                delimiter: (fileContent.includes(';') ? ';' : ','), // Auto-detect delimiter
+                delimiter: delimiter,
                 complete: (results) => {
                     if (results.errors.length > 0) {
                         addLog(`Erros de análise no log: ${results.errors.map(e => e.message).join(', ')}`, 'error');
@@ -1368,8 +1395,13 @@ const handleMapSelectionChange = (id: string) => {
                                 <div className="space-y-2">
                                     <Label htmlFor="log-load-condition">Condição de Carga do Log</Label>
                                     <Select
-                                        value={selectedLogLoadColumn || selectedLogLoadValue}
+                                        value={selectedLogLoadColumn || selectedLogLoadValue || ''}
                                         onValueChange={(value) => {
+                                            if (!value) {
+                                                setSelectedLogLoadColumn('');
+                                                setSelectedLogLoadValue('');
+                                                return;
+                                            }
                                             const isHeader = logHeaders.includes(value);
                                             if (isHeader) {
                                                 setSelectedLogLoadColumn(value);
@@ -1385,7 +1417,7 @@ const handleMapSelectionChange = (id: string) => {
                                             <SelectValue placeholder="Selecione a condição de carga..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {logFile && logHeaders.length > 0 && logHeaders.map((header) => (
+                                            {logFile && logHeaders.length > 0 && logHeaders.filter(h => h).map((header) => (
                                                 <SelectItem key={header} value={header}>
                                                     Coluna do Log: {header}
                                                 </SelectItem>
