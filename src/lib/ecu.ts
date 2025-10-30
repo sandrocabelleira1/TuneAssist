@@ -712,58 +712,66 @@ export function calculateCorrections(
     // Identify which map axis is RPM and which is Load
     const rpmRegex = /rpm/i;
     let rpmMapAxis: AxisData, loadMapAxis: AxisData;
+    let rpmIsYAxis: boolean;
+
     if (xAxis.label && rpmRegex.test(xAxis.label)) {
         rpmMapAxis = xAxis;
         loadMapAxis = yAxis;
+        rpmIsYAxis = false;
     } else if (yAxis.label && rpmRegex.test(yAxis.label)) {
         rpmMapAxis = yAxis;
         loadMapAxis = xAxis;
+        rpmIsYAxis = true;
     } else {
         throw new Error("Não foi possível identificar o eixo de RPM no mapa. Verifique as etiquetas dos eixos (deve incluir 'rpm').");
     }
 
     const rpmLogKey = findKeyInHeader(header, ['rpm', rpmMapAxis.label]);
-    const lambdaLogKey = findKeyInHeader(header, ['lambda', 'afr']);
+    const lambdaLogKey = findKeyInHeader(header, ['lambda', 'sonda', 'afr']);
 
     if (!rpmLogKey) throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
     if (!lambdaLogKey) throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'AFR' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
 
-    let loadIndex: number | undefined = undefined;
+    let fixedLoadIndex: number | undefined = undefined;
     if (loadMapValue !== undefined) {
-        loadIndex = findClosestIndex(loadMapAxis.calculated, loadMapValue);
+        fixedLoadIndex = findClosestIndex(loadMapAxis.calculated, loadMapValue);
+        if (fixedLoadIndex === -1) {
+            throw new Error(`O valor de carga do mapa "${loadMapValue}" não foi encontrado no eixo de carga.`);
+        }
     }
     
     logData.forEach(logEntry => {
         const logRpm = logEntry[rpmLogKey];
         const measuredLambda = logEntry[lambdaLogKey];
 
-        if (logRpm === undefined || measuredLambda === undefined) return;
+        if (logRpm === undefined || measuredLambda === undefined || isNaN(logRpm) || isNaN(measuredLambda)) return;
 
         const rpmIndex = findClosestIndex(rpmMapAxis.calculated, logRpm);
         
-        let currentLoadIndex = loadIndex;
+        let currentLoadIndex = fixedLoadIndex;
+        
         // If we have a load column in the log, find the closest index for each log entry
         if (loadLogColumn) {
             const logLoad = logEntry[loadLogColumn];
-            if (logLoad === undefined) return;
+            if (logLoad === undefined || isNaN(logLoad)) return;
             currentLoadIndex = findClosestIndex(loadMapAxis.calculated, logLoad);
         }
 
         if (rpmIndex === -1 || currentLoadIndex === -1 || currentLoadIndex === undefined) return;
         
-        const yIndex = rpmMapAxis === yAxis ? rpmIndex : currentLoadIndex;
-        const xIndex = rpmMapAxis === xAxis ? rpmIndex : currentLoadIndex;
+        const yIndex = rpmIsYAxis ? rpmIndex : currentLoadIndex;
+        const xIndex = rpmIsYAxis ? currentLoadIndex : rpmIndex;
 
         const currentValue = newMap[yIndex]?.[xIndex];
         if (currentValue === null || currentValue === undefined) return;
 
         const correctionFactor = measuredLambda / targetLambda;
-        let correctedValue = currentValue * correctionFactor;
+        const fullyCorrectedValue = currentValue * correctionFactor;
         
-        const diff = correctedValue - currentValue;
-        correctedValue = currentValue + (diff * (aggressiveness / 100));
+        const difference = fullyCorrectedValue - currentValue;
+        const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
 
-        newMap[yIndex][xIndex] = correctedValue;
+        newMap[yIndex][xIndex] = finalCorrectedValue;
         modifiedIndices.push({ y: yIndex, x: xIndex });
     });
 
