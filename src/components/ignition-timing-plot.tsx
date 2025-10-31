@@ -368,3 +368,5 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
         </Card>
     );
 }
+
+    
