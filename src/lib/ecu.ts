@@ -637,142 +637,6 @@ export function writeMultipleMapsToBin(
 // #endregion
 
 
-// #region AI Tuning Logic
-
-function findClosestIndex(arr: (number | string)[], target: number): number {
-    let closestIndex = -1;
-    let minDiff = Infinity;
-
-    for (let i = 0; i < arr.length; i++) {
-        const val = Number(arr[i]);
-        if (isNaN(val)) continue;
-
-        const diff = Math.abs(val - target);
-        if (diff < minDiff) {
-            minDiff = diff;
-            closestIndex = i;
-        }
-    }
-    return closestIndex;
-}
-
-// Find a key in the log data headers that matches a target label
-function findKeyInHeader(header: string[], targetLabels: string[]): string | undefined {
-    for (const targetLabel of targetLabels) {
-        const cleanTargetLabel = targetLabel.trim().toLowerCase();
-        
-        for (const key of header) {
-            const cleanKey = key.trim().toLowerCase();
-            if (cleanKey.includes(cleanTargetLabel)) {
-                return key;
-            }
-        }
-    }
-    return undefined;
-}
-
-
-export function calculateCorrections(
-    processedMap: ProcessedMap,
-    logData: any[],
-    targetLambda: number,
-    aggressiveness: number, // 0-100
-    loadLogColumn?: string, // The name of the load column in the log file
-    loadMapValue?: number, // The specific load value from the map axis, if log has no load column
-): { correctedMap: MapData, modifiedIndices: ModifiedCell[] } {
-    if (!processedMap || !processedMap.calculatedMap || !processedMap.axes) {
-        throw new Error("Mapa processado inválido fornecido para correção.");
-    }
-     if (!logData || logData.length === 0) {
-        throw new Error("Dados de ensaio estão vazios ou são inválidos.");
-    }
-     if (!loadLogColumn && loadMapValue === undefined) {
-        throw new Error("É necessário fornecer uma coluna de carga do log ou um valor de carga do mapa.");
-    }
-
-    const { calculatedMap, axes } = processedMap;
-    const { x: xAxis, y: yAxis } = axes;
-    const newMap = calculatedMap.map(row => [...row]); // Create a mutable copy
-    const modifiedIndices: ModifiedCell[] = [];
-
-    const header = Object.keys(logData[0] || {});
-    
-    const rpmRegex = /rpm/i;
-    let rpmMapAxis: AxisData, loadMapAxis: AxisData;
-    let rpmIsYAxis: boolean;
-
-    if (xAxis.label && rpmRegex.test(xAxis.label)) {
-        rpmMapAxis = xAxis;
-        loadMapAxis = yAxis;
-        rpmIsYAxis = false;
-    } else if (yAxis.label && rpmRegex.test(yAxis.label)) {
-        rpmMapAxis = yAxis;
-        loadMapAxis = xAxis;
-        rpmIsYAxis = true;
-    } else {
-        throw new Error("Não foi possível identificar o eixo de RPM no mapa. Verifique as etiquetas dos eixos (deve incluir 'rpm').");
-    }
-
-    const rpmLogKey = findKeyInHeader(header, ['rpm', 'rotacao']);
-    const lambdaLogKey = findKeyInHeader(header, ['lambda', 'sonda']);
-    
-    if (!rpmLogKey) throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
-    if (!lambdaLogKey) throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'Sonda' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
-
-    let fixedLoadIndex: number | undefined = undefined;
-    if (loadMapValue !== undefined) {
-        fixedLoadIndex = findClosestIndex(loadMapAxis.calculated, loadMapValue);
-        if (fixedLoadIndex === -1) {
-            throw new Error(`O valor de carga do mapa "${loadMapValue}" não foi encontrado no eixo de carga.`);
-        }
-    }
-    
-    logData.forEach(logEntry => {
-        const logRpm = logEntry[rpmLogKey];
-        const measuredLambda = logEntry[lambdaLogKey];
-
-        if (logRpm === undefined || measuredLambda === undefined || isNaN(logRpm) || isNaN(measuredLambda)) return;
-
-        const rpmIndex = findClosestIndex(rpmMapAxis.calculated, logRpm);
-        
-        let currentLoadIndex = fixedLoadIndex;
-        
-        if (loadLogColumn && fixedLoadIndex === undefined) {
-            const logLoad = logEntry[loadLogColumn];
-            if (logLoad === undefined || isNaN(logLoad)) return;
-            currentLoadIndex = findClosestIndex(loadMapAxis.calculated, logLoad);
-        }
-
-        if (rpmIndex === -1 || currentLoadIndex === -1 || currentLoadIndex === undefined) return;
-        
-        const yIndex = rpmIsYAxis ? rpmIndex : currentLoadIndex;
-        const xIndex = rpmIsYAxis ? currentLoadIndex : rpmIndex;
-
-        const currentValue = newMap[yIndex]?.[xIndex];
-        if (currentValue === null || currentValue === undefined) return;
-
-        // Corrected Logic: If mixture is lean (measured > target), we need to add fuel (increase map value).
-        // The correction factor should be > 1 to increase the value.
-        const correctionFactor = measuredLambda / targetLambda;
-        
-        // The value that would theoretically yield the target lambda.
-        // If measured is lean (1.1) and target is rich (0.9), factor is > 1.
-        // We need to multiply the current value by this factor to increase fuel.
-        const fullyCorrectedValue = currentValue * correctionFactor;
-        
-        const difference = fullyCorrectedValue - currentValue;
-        const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
-
-        newMap[yIndex][xIndex] = finalCorrectedValue;
-        modifiedIndices.push({ y: yIndex, x: xIndex });
-    });
-
-    return { correctedMap: newMap, modifiedIndices };
-}
-
-
-// #endregion
-
 // #region Intelligent Map Scanner
 
 // Helper to read a sequence of numbers from a given address.
@@ -997,6 +861,8 @@ export async function findPotentialMaps(
                                 suggestion,
                                 dataType: dataTypeString,
                                 equation,
+                                rowStride: mapCols * dataSize,
+                                previewData: mapDataBlock.slice(0, 5).map(row => row.slice(0, 10)), // smaller preview
                                 xAxisAddress: xAxis.address,
                                 yAxisAddress: yAxis.address,
                                 xAxisType: xAxis.type,
@@ -1012,5 +878,142 @@ export async function findPotentialMaps(
     onProgress(100, "Análise concluída.");
     return potentialMaps;
 }
+
+// #endregion
+
+
+// #region AI Tuning Logic
+
+function findClosestIndex(arr: (number | string)[], target: number): number {
+    let closestIndex = -1;
+    let minDiff = Infinity;
+
+    for (let i = 0; i < arr.length; i++) {
+        const val = Number(arr[i]);
+        if (isNaN(val)) continue;
+
+        const diff = Math.abs(val - target);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closestIndex = i;
+        }
+    }
+    return closestIndex;
+}
+
+// Find a key in the log data headers that matches a target label
+function findKeyInHeader(header: string[], targetLabels: string[]): string | undefined {
+    for (const targetLabel of targetLabels) {
+        const cleanTargetLabel = targetLabel.trim().toLowerCase();
+        
+        for (const key of header) {
+            const cleanKey = key.trim().toLowerCase();
+            if (cleanKey.includes(cleanTargetLabel)) {
+                return key;
+            }
+        }
+    }
+    return undefined;
+}
+
+
+export function calculateCorrections(
+    processedMap: ProcessedMap,
+    logData: any[],
+    targetLambda: number,
+    aggressiveness: number, // 0-100
+    loadLogColumn?: string, // The name of the load column in the log file
+    loadMapValue?: number, // The specific load value from the map axis, if log has no load column
+): { correctedMap: MapData, modifiedIndices: ModifiedCell[] } {
+    if (!processedMap || !processedMap.calculatedMap || !processedMap.axes) {
+        throw new Error("Mapa processado inválido fornecido para correção.");
+    }
+     if (!logData || logData.length === 0) {
+        throw new Error("Dados de ensaio estão vazios ou são inválidos.");
+    }
+     if (!loadLogColumn && loadMapValue === undefined) {
+        throw new Error("É necessário fornecer uma coluna de carga do log ou um valor de carga do mapa.");
+    }
+
+    const { calculatedMap, axes } = processedMap;
+    const { x: xAxis, y: yAxis } = axes;
+    const newMap = calculatedMap.map(row => [...row]); // Create a mutable copy
+    const modifiedIndices: ModifiedCell[] = [];
+
+    const header = Object.keys(logData[0] || {});
+    
+    const rpmRegex = /rpm/i;
+    let rpmMapAxis: AxisData, loadMapAxis: AxisData;
+    let rpmIsYAxis: boolean;
+
+    if (xAxis.label && rpmRegex.test(xAxis.label)) {
+        rpmMapAxis = xAxis;
+        loadMapAxis = yAxis;
+        rpmIsYAxis = false;
+    } else if (yAxis.label && rpmRegex.test(yAxis.label)) {
+        rpmMapAxis = yAxis;
+        loadMapAxis = xAxis;
+        rpmIsYAxis = true;
+    } else {
+        throw new Error("Não foi possível identificar o eixo de RPM no mapa. Verifique as etiquetas dos eixos (deve incluir 'rpm').");
+    }
+
+    const rpmLogKey = findKeyInHeader(header, ['rpm', 'rotacao']);
+    const lambdaLogKey = findKeyInHeader(header, ['lambda', 'sonda']);
+    
+    if (!rpmLogKey) throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
+    if (!lambdaLogKey) throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'Sonda' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
+
+    let fixedLoadIndex: number | undefined = undefined;
+    if (loadMapValue !== undefined) {
+        fixedLoadIndex = findClosestIndex(loadMapAxis.calculated, loadMapValue);
+        if (fixedLoadIndex === -1) {
+            throw new Error(`O valor de carga do mapa "${loadMapValue}" não foi encontrado no eixo de carga.`);
+        }
+    }
+    
+    logData.forEach(logEntry => {
+        const logRpm = logEntry[rpmLogKey];
+        const measuredLambda = logEntry[lambdaLogKey];
+
+        if (logRpm === undefined || measuredLambda === undefined || isNaN(logRpm) || isNaN(measuredLambda)) return;
+
+        const rpmIndex = findClosestIndex(rpmMapAxis.calculated, logRpm);
+        
+        let currentLoadIndex = fixedLoadIndex;
+        
+        if (loadLogColumn && fixedLoadIndex === undefined) {
+            const logLoad = logEntry[loadLogColumn];
+            if (logLoad === undefined || isNaN(logLoad)) return;
+            currentLoadIndex = findClosestIndex(loadMapAxis.calculated, logLoad);
+        }
+
+        if (rpmIndex === -1 || currentLoadIndex === -1 || currentLoadIndex === undefined) return;
+        
+        const yIndex = rpmIsYAxis ? rpmIndex : currentLoadIndex;
+        const xIndex = rpmIsYAxis ? currentLoadIndex : rpmIndex;
+
+        const currentValue = newMap[yIndex]?.[xIndex];
+        if (currentValue === null || currentValue === undefined) return;
+
+        // Corrected Logic: If mixture is lean (measured > target), we need to add fuel (increase map value).
+        // The correction factor should be > 1 to increase the value.
+        const correctionFactor = measuredLambda / targetLambda;
+        
+        // The value that would theoretically yield the target lambda.
+        // If measured is lean (1.1) and target is rich (0.9), factor is > 1.
+        // We need to multiply the current value by this factor to increase fuel.
+        const fullyCorrectedValue = currentValue * correctionFactor;
+        
+        const difference = fullyCorrectedValue - currentValue;
+        const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
+
+        newMap[yIndex][xIndex] = finalCorrectedValue;
+        modifiedIndices.push({ y: yIndex, x: xIndex });
+    });
+
+    return { correctedMap: newMap, modifiedIndices };
+}
+
 
 // #endregion

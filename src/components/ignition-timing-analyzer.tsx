@@ -220,6 +220,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     const [loadedFileNames, setLoadedFileNames] = useState<{base: string | null, modified: string | null}>({base: null, modified: null});
     
     const [isLoadingMap, setIsLoadingMap] = useState(false);
+    const [isApplyingSuggestion, setIsApplyingSuggestion] = useState(false);
 
     const isCurrentMapIgnition = useMemo(() => {
         if (!selectedMapDefinition) return false;
@@ -540,6 +541,26 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         toast({ title: `Log de ${runType} Carregado`, description: `${parsedData.length} pontos foram extraídos e mapeados.` });
     };
 
+    const handleApplyIgnitionSuggestion = () => {
+        // Placeholder for the actual logic
+        setIsApplyingSuggestion(true);
+        addLog("A iniciar a otimização automática do mapa de ignição...", "info");
+        console.log("Applying suggestions from analysis:", analysisResults);
+
+        // TODO: Implement the logic to iterate through analysisResults
+        // and apply small, incremental changes to the processedMap.
+        // This will involve dispatching an update to the EcuTuningAssistant component's state.
+        
+        setTimeout(() => {
+            toast({
+                title: "Otimização Aplicada (Simulação)",
+                description: "A lógica real de otimização será implementada aqui."
+            });
+            addLog("Otimização do mapa de ignição concluída (simulação).", "success");
+            setIsApplyingSuggestion(false);
+        }, 1500);
+    };
+
     if (!binFile) {
          return (
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground p-4">
@@ -676,12 +697,37 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
             />
 
              {analysisResults.length > 0 && (
-                <AnalysisResultsTable results={analysisResults} />
+                <div className="space-y-4">
+                    <AnalysisResultsTable results={analysisResults} />
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Otimizador de Avanço de Ignição</CardTitle>
+                            <CardDescription>
+                                Com base na análise de ganhos, a IA pode aplicar pequenas correções incrementais ao seu mapa de ignição para o ajudar a encontrar o MBT de forma segura e iterativa.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                             <Button 
+                                className="w-full"
+                                onClick={handleApplyIgnitionSuggestion}
+                                disabled={isApplyingSuggestion || !selectedLoadValue}
+                            >
+                                {isApplyingSuggestion ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Wand2 className="mr-2 h-4 w-4" />
+                                )}
+                                Otimizar Mapa com Base no Ensaio
+                            </Button>
+                            {!selectedLoadValue && (
+                                <p className="text-xs text-destructive text-center mt-2">
+                                    Por favor, selecione a linha de carga do mapa que corresponde ao ensaio antes de otimizar.
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
              )}
         </div>
     );
 }
-
-    
-
-    
