@@ -15,5 +15,13 @@
     "feature4": {
         "src": "https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/Captura%20de%20tela%202025-10-27%20165017.png?alt=media&token=530e403a-1dbe-4576-ac12-bb897b3bcec0",
         "data-ai-hint": "time saving"
+    },
+    "ignition-analysis": {
+        "src": "https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/Captura%20de%20tela%202025-10-27%20170044.png?alt=media&token=e91c781d-f8d2-430c-99d8-967f6c382f7a",
+        "data-ai-hint": "ignition analysis"
+    },
+    "manual-editing": {
+        "src": "https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/Captura%20de%20tela%202025-10-27%20170425.png?alt=media&token=c1995e86-353d-4c33-87a3-e29124430c44",
+        "data-ai-hint": "manual editing"
     }
 }
