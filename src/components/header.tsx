@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Sparkles, User, Loader2, LogIn, LogOut, Wrench } from 'lucide-react';
+import { Sparkles, User, Loader2, LogIn, LogOut, Wrench, BookOpen } from 'lucide-react';
 import { useUser, useAuth } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -111,7 +111,16 @@ export default function Header() {
             {pathname !== '/tuner' && (
                 <Button asChild variant="ghost" size="sm">
                     <Link href="/tuner">
-                        Ferramenta de Afinação
+                        <Wrench className="mr-2 h-4 w-4" />
+                        Ferramenta
+                    </Link>
+                </Button>
+            )}
+             {pathname !== '/guide' && (
+                <Button asChild variant="ghost" size="sm">
+                    <Link href="/guide">
+                        <BookOpen className="mr-2 h-4 w-4" />
+                        Guia
                     </Link>
                 </Button>
             )}
