@@ -23,6 +23,7 @@ interface IgnitionTimingAnalyzerProps {
     processedMap: ProcessedMap | null;
     selectedMapDefinition: XDFinition | undefined;
     addLog: (message: string, type?: LogMessage['type']) => void;
+    onMapUpdate: (mapId: string, newMap: ProcessedMap) => void;
 }
 
 interface TimingSegment {
@@ -210,7 +211,7 @@ const ColumnMapper = ({ logHeaders, onMappingConfirm, runType, rawData }: {
     );
 };
 
-export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, processedMap, selectedMapDefinition, addLog }: IgnitionTimingAnalyzerProps) {
+export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, processedMap, selectedMapDefinition, addLog, onMapUpdate }: IgnitionTimingAnalyzerProps) {
 
     const { toast } = useToast();
     const baseLogInputRef = useRef<HTMLInputElement>(null);
@@ -542,23 +543,69 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     };
 
     const handleApplyIgnitionSuggestion = () => {
-        // Placeholder for the actual logic
         setIsApplyingSuggestion(true);
         addLog("A iniciar a otimização automática do mapa de ignição...", "info");
-        console.log("Applying suggestions from analysis:", analysisResults);
-
-        // TODO: Implement the logic to iterate through analysisResults
-        // and apply small, incremental changes to the processedMap.
-        // This will involve dispatching an update to the EcuTuningAssistant component's state.
-        
-        setTimeout(() => {
-            toast({
-                title: "Otimização Aplicada (Simulação)",
-                description: "A lógica real de otimização será implementada aqui."
-            });
-            addLog("Otimização do mapa de ignição concluída (simulação).", "success");
+    
+        if (!processedMap || !rpmAxis || !loadAxis || !selectedLoadValue || !selectedMapDefinition) {
+            toast({ title: "Dados Incompletos", description: "Otimização falhou. Mapa ativo, eixos e linha de carga são necessários.", variant: "destructive" });
             setIsApplyingSuggestion(false);
-        }, 1500);
+            return;
+        }
+    
+        const newCalculatedMap = processedMap.calculatedMap.map(row => [...row]);
+        const loadIsYAxis = loadAxis === processedMap.axes.y;
+        const loadIndex = processedMap.axes[loadIsYAxis ? 'y' : 'x'].calculated.findIndex(val => String(val) === selectedLoadValue);
+    
+        let changesMade = 0;
+    
+        analysisResults.forEach(result => {
+            if (!result.gainPercent) return;
+    
+            const [startRpmStr, endRpmStr] = result.range.split(' -> ');
+            const startRpm = parseFloat(startRpmStr);
+            const endRpm = parseFloat(endRpmStr);
+    
+            let advanceChange = 0;
+            if (result.gainPercent > 0.3) {
+                advanceChange = 0.5; // Continue advancing
+            } else if (result.gainPercent < -0.2) {
+                advanceChange = -0.5; // Pull back timing
+            }
+            
+            if (advanceChange === 0) return;
+    
+            // Find all RPM indices within this segment
+            const rpmIndicesToChange: number[] = [];
+            rpmAxis.calculated.forEach((rpmVal, index) => {
+                const numericRpm = Number(rpmVal);
+                if (!isNaN(numericRpm) && numericRpm >= startRpm && numericRpm < endRpm) {
+                    rpmIndicesToChange.push(index);
+                }
+            });
+    
+            rpmIndicesToChange.forEach(rpmIndex => {
+                const y = loadIsYAxis ? loadIndex : rpmIndex;
+                const x = loadIsYAxis ? rpmIndex : loadIndex;
+    
+                if (newCalculatedMap[y] && newCalculatedMap[y][x] !== null) {
+                    const currentValue = newCalculatedMap[y][x];
+                    newCalculatedMap[y][x] = (currentValue || 0) + advanceChange;
+                    changesMade++;
+                }
+            });
+        });
+        
+        const newMapState: ProcessedMap = {
+            ...processedMap,
+            calculatedMap: newCalculatedMap
+        };
+
+        onMapUpdate(selectedMapDefinition.uniqueId, newMapState);
+
+        const successMsg = `Otimização do mapa de ignição concluída. ${changesMade} células foram ajustadas.`;
+        toast({ title: "Otimização Aplicada", description: successMsg });
+        addLog(successMsg, "success");
+        setIsApplyingSuggestion(false);
     };
 
     if (!binFile) {

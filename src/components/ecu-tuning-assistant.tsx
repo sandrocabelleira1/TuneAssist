@@ -551,6 +551,14 @@ export default function EcuTuningAssistant() {
         return { rpmAxis: x, loadAxis: y };
     }, [processedMap]);
     
+    const handleMapUpdate = (mapId: string, newMap: ProcessedMap) => {
+        if (mapId === activeMapId) {
+            setProcessedMap(newMap);
+        }
+        setProcessedMapCache(prev => ({...prev, [mapId]: newMap}));
+        setModifiedStatusCache(prev => ({...prev, [mapId]: true}));
+        setIsModified(true); // Ensure global modified state is also true
+    };
 
     const clearAiModifications = () => {
         if (activeMapId) {
@@ -1548,6 +1556,7 @@ const handleMapSelectionChange = (id: string) => {
                             binFile={binFile}
                             processedMap={processedMap}
                             selectedMapDefinition={selectedMapDefinition}
+                            onMapUpdate={(mapId, newMap) => handleMapUpdate(mapId, newMap)}
                             addLog={addLog}
                         />
                 </TabsContent>
