@@ -217,6 +217,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     const modifiedLogInputRef = useRef<HTMLInputElement>(null);
     
     const [logFiles, setLogFiles] = useState<{base: {name: string, headers: string[], rawData: any[]} | null, modified: {name: string, headers: string[], rawData: any[]} | null}>({base: null, modified: null});
+    const [loadedFileNames, setLoadedFileNames] = useState<{base: string | null, modified: string | null}>({base: null, modified: null});
     
     const [isLoadingMap, setIsLoadingMap] = useState(false);
 
@@ -374,6 +375,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     const handleClearRun = useCallback((runType: RunType) => {
         onRunsChange({ ...runs, [runType]: [] });
         setLogFiles(prev => ({...prev, [runType]: null}));
+        setLoadedFileNames(prev => ({...prev, [runType]: null}));
         if(runType === 'base' && baseLogInputRef.current) baseLogInputRef.current.value = '';
         if(runType === 'modified' && modifiedLogInputRef.current) modifiedLogInputRef.current.value = '';
         toast({ title: `Ensaio ${runType === 'base' ? 'de Base' : 'Modificado'} Limpo`, description: "Os dados foram removidos."});
@@ -443,6 +445,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         if (!file) return;
 
         addLog(`A ler o ficheiro de log de ignição (${runType}) ${file.name}...`, 'info');
+        setLoadedFileNames(prev => ({...prev, [runType]: file.name}));
         
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -557,6 +560,14 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         );
     }
 
+    const baseButtonText = loadedFileNames.base 
+        ? `Carregado: ${loadedFileNames.base} (${runs.base.length} pontos)` 
+        : 'Carregar Log do Ensaio de Base';
+
+    const modifiedButtonText = loadedFileNames.modified
+        ? `Carregado: ${loadedFileNames.modified} (${runs.modified.length} pontos)`
+        : 'Carregar Log do Ensaio Modificado';
+
     return (
         <div className="space-y-4 p-1">
             <Card>
@@ -574,9 +585,9 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                Carregue o ficheiro de log (.csv) do seu ensaio de dinamómetro inicial, antes de fazer alterações ao avanço de ignição.
                             </p>
                             <div className="flex items-center gap-2">
-                                <Button variant="outline" className="flex-1" onClick={() => baseLogInputRef.current?.click()}>
-                                    <Upload className="mr-2 h-4 w-4" />
-                                    {runs.base.length > 0 ? `Ensaio de Base Carregado (${runs.base.length} pontos)` : 'Carregar Log do Ensaio de Base'}
+                                <Button variant="outline" className="flex-1 truncate" onClick={() => baseLogInputRef.current?.click()}>
+                                    <Upload className="mr-2 h-4 w-4 flex-shrink-0" />
+                                    <span className="truncate" title={baseButtonText}>{baseButtonText}</span>
                                 </Button>
                                  <input
                                     ref={baseLogInputRef}
@@ -605,9 +616,9 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                Após ajustar o avanço no mapa e fazer um novo ensaio, carregue o ficheiro de log (.csv) correspondente.
                             </p>
                             <div className="flex items-center gap-2">
-                                <Button variant="outline" className="flex-1" onClick={() => modifiedLogInputRef.current?.click()}>
-                                    <Upload className="mr-2 h-4 w-4" />
-                                    {runs.modified.length > 0 ? `Ensaio Modificado Carregado (${runs.modified.length} pontos)` : 'Carregar Log do Ensaio Modificado'}
+                                <Button variant="outline" className="flex-1 truncate" onClick={() => modifiedLogInputRef.current?.click()}>
+                                    <Upload className="mr-2 h-4 w-4 flex-shrink-0" />
+                                    <span className="truncate" title={modifiedButtonText}>{modifiedButtonText}</span>
                                 </Button>
                                  <input
                                     ref={modifiedLogInputRef}
@@ -670,3 +681,5 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         </div>
     );
 }
+
+    
