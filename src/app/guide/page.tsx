@@ -2,7 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Header from '@/components/header';
-import { UploadCloud, Table2, Wand2, Flame, Edit, Save, ArrowLeft } from 'lucide-react';
+import { UploadCloud, Table2, Wand2, Flame, Edit, Save, ArrowLeft, Download } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import placeholderImages from '@/app/lib/placeholder-images.json';
@@ -47,9 +47,13 @@ const steps = [
 ];
 
 export default function GuidePage() {
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
-      <Header />
+      <Header className="print:hidden" />
       <main className="flex-1 flex flex-col items-center py-12 px-4">
         <div className="text-center max-w-3xl mx-auto">
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-400">
@@ -58,11 +62,15 @@ export default function GuidePage() {
             <p className="mt-4 text-lg text-muted-foreground">
                 Aprenda a utilizar todas as funcionalidades do TuneAssist AI, desde o básico até às análises mais avançadas, para extrair a máxima performance da sua ECU.
             </p>
+            <Button onClick={handlePrint} className="mt-6 print:hidden">
+              <Download className="mr-2 h-4 w-4" />
+              Descarregar Guia (PDF)
+            </Button>
         </div>
 
         <div className="mt-16 w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-8">
             {steps.map((step) => (
-                <Card key={step.title} className="flex flex-col bg-accent/50 hover:border-primary/50 hover:shadow-primary/10 transition-all group">
+                <Card key={step.title} className="flex flex-col bg-accent/50 hover:border-primary/50 hover:shadow-primary/10 transition-all group break-inside-avoid">
                     <CardHeader className="flex flex-row items-start gap-4 space-y-0">
                         <div className="flex items-center justify-center h-14 w-14 rounded-lg bg-primary/10 flex-shrink-0">
                             {step.icon}
@@ -88,7 +96,7 @@ export default function GuidePage() {
             ))}
         </div>
         
-        <div className="mt-16">
+        <div className="mt-16 print:hidden">
             <Button asChild size="lg" className="group">
                 <Link href="/tuner">
                     <ArrowLeft className="mr-2 h-5 w-5 transition-transform group-hover:-translate-x-1" />

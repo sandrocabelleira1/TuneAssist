@@ -27,9 +27,10 @@ import AuthForm from './auth-form';
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
+import { cn } from '@/lib/utils';
 
 
-export default function Header() {
+export default function Header({ className }: { className?: string }) {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
   const pathname = usePathname();
@@ -95,7 +96,7 @@ export default function Header() {
 
 
   return (
-    <header className="relative w-full border-b border-border">
+    <header className={cn("relative w-full border-b border-border", className)}>
       <div className="container mx-auto flex h-20 items-center justify-between px-4">
         <Link href="/" className="flex items-center">
             <Image 
