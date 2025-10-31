@@ -48,10 +48,6 @@ const steps = [
 ];
 
 export default function GuidePage() {
-  const handlePrint = () => {
-    window.print();
-  };
-
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <Header className="print:hidden" />
@@ -63,7 +59,7 @@ export default function GuidePage() {
             <p className="mt-4 text-lg text-muted-foreground">
                 Aprenda a utilizar todas as funcionalidades do TuneAssist AI, desde o básico até às análises mais avançadas, para extrair a máxima performance da sua ECU.
             </p>
-            <Button onClick={handlePrint} className="mt-6 print:hidden">
+            <Button onClick={() => window.print()} className="mt-6 print:hidden">
               <Download className="mr-2 h-4 w-4" />
               Descarregar Guia (PDF)
             </Button>
