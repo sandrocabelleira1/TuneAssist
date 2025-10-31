@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -159,22 +160,6 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
     const [editingPoint, setEditingPoint] = useState<{ runType: RunType; point: IgnitionTimingPoint } | null>(null);
 
     const { chartData, rpmTicks, yAxisLabel, performanceDataKey } = useMemo(() => {
-        const allRpms = new Set<number>();
-        runs.base.forEach(p => {
-             const rpm = parseFloat(p.rpm);
-             if(!isNaN(rpm)) allRpms.add(rpm);
-        });
-        runs.modified.forEach(p => {
-            const rpm = parseFloat(p.rpm);
-            if(!isNaN(rpm)) allRpms.add(rpm);
-        });
-
-        if (allRpms.size === 0) {
-            for (let i = 1; i <= 8; i++) allRpms.add(i * 1000);
-        }
-
-        const sortedRpmTicks = Array.from(allRpms).filter(r => !isNaN(r)).sort((a, b) => a - b);
-        
         const dataMap = new Map<number, any>();
         
         const hasTorqueData = runs.base.some(p => p.torque && !isNaN(parseFloat(p.torque))) || 
@@ -208,12 +193,13 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
         processRunPoints(runs.base, 'base');
         processRunPoints(runs.modified, 'modified');
 
-        const finalChartData = sortedRpmTicks.map(rpm => dataMap.get(rpm) || { rpm });
+        const finalChartData = Array.from(dataMap.values()).sort((a,b) => a.rpm - b.rpm);
 
+        const rpmTicks = finalChartData.map(d => d.rpm).filter(r => !isNaN(r));
 
         return { 
             chartData: finalChartData,
-            rpmTicks: sortedRpmTicks,
+            rpmTicks: [...new Set(rpmTicks)].sort((a,b) => a - b),
             yAxisLabel: perfLabel,
             performanceDataKey: perfKey
         };
@@ -244,6 +230,9 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
             </g>
         );
     };
+    
+    const timeDataKey = runs.base.length > 0 ? 'base_time' : 'modified_time';
+
 
     return (
         <Card>
@@ -268,9 +257,25 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
             <CardContent>
                  <ChartContainer config={{}} className="min-h-[300px] w-full">
                     <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                        <LineChart data={chartData} margin={{ top: 20, right: 20, left: 10, bottom: 20 }}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="rpm" type="number" ticks={rpmTicks} domain={['dataMin', 'dataMax']} />
+                            <XAxis 
+                                dataKey="rpm" 
+                                type="number" 
+                                ticks={rpmTicks} 
+                                domain={['dataMin', 'dataMax']}
+                                label={{ value: "RPM", position: 'insideBottom', offset: -15 }}
+                                allowDuplicatedCategory={false}
+                            />
+                            <XAxis 
+                                xAxisId="top"
+                                dataKey={timeDataKey}
+                                orientation="top"
+                                type="number"
+                                domain={['dataMin', 'dataMax']}
+                                label={{ value: "Tempo do Ensaio (s)", position: 'insideTop', offset: -15 }}
+                                allowDuplicatedCategory={false}
+                            />
                             <YAxis 
                                 yAxisId="left" 
                                 label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} 
@@ -285,7 +290,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
                                 allowDecimals={false}
                             />
                             <Tooltip content={<CustomTooltipContent />} />
-                            <Legend />
+                            <Legend verticalAlign="bottom" />
                             
                             {/* Performance Lines (Torque/Time) */}
                             <Line
