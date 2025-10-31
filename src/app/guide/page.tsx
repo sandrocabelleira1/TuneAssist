@@ -30,13 +30,13 @@ const steps = [
     icon: <Flame className="h-8 w-8 text-primary" />,
     title: 'Passo 4: Análise de Ignição (Busca pelo MBT)',
     description: 'Na aba "Análise de Ignição", carregue dois logs: um do seu ensaio "Base" e outro de um ensaio "Modificado" (com mais avanço). A ferramenta irá comparar os dois, mostrar o ganho/perda de torque e permitir que a IA otimize o mapa com pequenos incrementos para encontrar o ponto de ignição ideal (MBT) de forma segura.',
-    image: { src: "https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/Captura%20de%20tela%202025-10-27%20170044.png?alt=media&token=e91c781d-f8d2-430c-99d8-967f6c382f7a", "data-ai-hint": "ignition analysis" }
+    image: placeholderImages['ignition-analysis'],
   },
   {
     icon: <Edit className="h-8 w-8 text-primary" />,
     title: 'Passo 5: Edição Manual e Ajustes Finos',
     description: 'Para um controlo total, pode editar qualquer valor diretamente na "Tabela de Dados". Também pode selecionar múltiplas células para fazer edições em massa (adicionar/subtrair percentagem, definir valor fixo ou interpolar). Se a leitura do mapa estiver incorreta, use as opções de "Substituir Manualmente" para corrigir as equações ou strides.',
-     image: { src: "https://firebasestorage.googleapis.com/v0/b/tuneassist-ai-3-32994972-ce581.firebasestorage.app/o/Captura%20de%20tela%202025-10-27%20170425.png?alt=media&token=c1995e86-353d-4c33-87a3-e29124430c44", "data-ai-hint": "manual editing" }
+     image: placeholderImages['manual-editing'],
   },
   {
     icon: <Save className="h-8 w-8 text-primary" />,
