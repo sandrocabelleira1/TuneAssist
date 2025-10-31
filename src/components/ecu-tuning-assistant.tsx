@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw, Cloud, CloudUpload, Clock, HardDriveDownload } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -36,7 +36,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import { useUser, useFirestore, useAuth, useMemoFirebase } from '@/firebase';
-import { collection, serverTimestamp, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, serverTimestamp, addDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { useCollection } from '@/firebase';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 
@@ -469,6 +471,14 @@ type StructureTemplate = {
     config: ManualAxisConfig;
 };
 
+const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
 
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
@@ -486,7 +496,7 @@ export default function EcuTuningAssistant() {
     const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
     const [logHeaders, setLogHeaders] = useState<string[]>([]);
-    const [selectedLogLoadColumn, setSelectedLogLoadColumn] = useState<string>('');
+    const [selectedLogLoadColumn, setSelectedLogLogLoadColumn] = useState<string>('');
     const [selectedLogLoadValue, setSelectedLogLoadValue] = useState<string>('');
     
     const [selectedMapIds, setSelectedMapIds] = useState<string[]>([]);
@@ -518,6 +528,16 @@ export default function EcuTuningAssistant() {
     const binInputRef = useRef<HTMLInputElement>(null);
     const xdfInputRef = useRef<HTMLInputElement>(null);
     const logInputRef = useRef<HTMLInputElement>(null);
+
+    const backupsQuery = useMemoFirebase(() => {
+        if (!firestore || !user?.uid) return null;
+        return query(
+            collection(firestore, `users/${user.uid}/backups`),
+            orderBy('createdAt', 'desc')
+        );
+    }, [firestore, user?.uid]);
+    const { data: cloudBackups, isLoading: backupsLoading, error: backupsError } = useCollection<BackupFile>(backupsQuery);
+
 
     const dynoForm = useForm<DynoFormValues>({
         resolver: zodResolver(dynoFormSchema),
@@ -598,7 +618,7 @@ export default function EcuTuningAssistant() {
         setLogFile(null);
         setLogData([]);
         setLogHeaders([]);
-        setSelectedLogLoadColumn('');
+        setSelectedLogLogLoadColumn('');
         setSelectedLogLoadValue('');
         dynoForm.reset({ loadColumns: [], logRows: [] });
         if (logInputRef.current) logInputRef.current.value = '';
@@ -613,7 +633,7 @@ export default function EcuTuningAssistant() {
         setLogData([]);
         setLogs([]);
         setLogHeaders([]);
-        setSelectedLogLoadColumn('');
+        setSelectedLogLogLoadColumn('');
         setSelectedLogLoadValue('');
         setSelectedMapIds([]);
         setActiveMapId(null);
@@ -771,7 +791,7 @@ export default function EcuTuningAssistant() {
                                 setLogHeaders(cleanHeaders);
                                 const loadHeader = cleanHeaders.find(h => /tps|map|load|carga/i.test(h));
                                 if (loadHeader) {
-                                    setSelectedLogLoadColumn(loadHeader);
+                                    setSelectedLogLogLoadColumn(loadHeader);
                                     setSelectedLogLoadValue('');
                                 }
                             }
@@ -949,7 +969,7 @@ export default function EcuTuningAssistant() {
             setIsModified(false);
         }
     
-    }, [activeMapId, xdfFile, binFile, isModified, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap, aiModifiedCellsCache]);
+    }, [activeMapId, xdfFile, binFile, isModified, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap]);
 
 
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
@@ -1184,11 +1204,11 @@ const handleSave = async () => {
     const handleAutoTune = async () => {
         const logSource = logFile || logData.length > 0;
         
-        if (selectedMapIds.length === 0 || !logSource || !targetLambda || !xdfFile || !binFile || (!selectedLogLoadColumn && !selectedLogLoadValue)) {
+        if (selectedMapIds.length === 0 || !logSource || !targetLambda || !xdfFile || !binFile || (!selectedLogLogLoadColumn && !selectedLogLoadValue)) {
             let msg = "Dados insuficientes para o ajuste. ";
             if (selectedMapIds.length === 0) msg += "Selecione pelo menos um mapa. ";
             if (!logSource) msg += "Carregue um ficheiro de log ou insira dados manualmente. ";
-            if (!selectedLogLoadColumn && !selectedLogLoadValue) msg += "Selecione a condição de carga do log. ";
+            if (!selectedLogLogLoadColumn && !selectedLogLoadValue) msg += "Selecione a condição de carga do log. ";
             if (!targetLambda) msg += "Defina um Lambda alvo. ";
         
             addLog(msg, 'error');
@@ -1237,7 +1257,7 @@ const handleSave = async () => {
                     logData, 
                     numericTargetLambda, 
                     aggressiveness,
-                    selectedLogLoadColumn, // For logs with load column
+                    selectedLogLogLoadColumn, // For logs with load column
                     selectedLogLoadValue ? parseFloat(selectedLogLoadValue) : undefined // For logs at a specific load
                 );
                 
@@ -1320,6 +1340,125 @@ const handleMapSelectionChange = (id: string) => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         addLog('Log descarregado com sucesso.', 'success');
+    };
+
+    const handleSaveBackup = async () => {
+        if (!binFile || !anyMapModified) {
+            toast({ title: 'Nada para Salvar', description: 'Modifique um mapa antes de guardar um backup.', variant: 'default' });
+            return;
+        }
+        if (!user || !firestore) {
+            toast({ title: 'Autenticação Necessária', description: 'Faça login para guardar backups na nuvem.', variant: 'destructive' });
+            return;
+        }
+    
+        setIsProcessing(true);
+        addLog('A preparar para salvar backup na nuvem...', 'info');
+    
+        try {
+            const mapsToSave = Object.entries(processedMapCache)
+                .filter(([mapId, _]) => modifiedStatusCache[mapId])
+                .map(([mapId, mapData]) => ({
+                    definition: xdfFile.definitions.find(def => def.uniqueId === mapId)!,
+                    processedMap: mapData,
+                }));
+    
+            if (mapsToSave.length === 0) {
+                toast({ title: 'Nenhuma Alteração', description: 'Não há modificações para salvar no backup.' });
+                setIsProcessing(false);
+                return;
+            }
+    
+            const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const modifiedFileName = binFile.name.replace(/\.[^/.]+$/, "") + `_backup_${timestamp}.bin`;
+            
+            const storage = getStorage();
+            const storagePath = `users/${user.uid}/backups/${modifiedFileName}`;
+            const storageRef = ref(storage, storagePath);
+    
+            addLog(`A enviar ficheiro para ${storagePath}...`, 'info');
+            await uploadBytes(storageRef, newBinBuffer);
+    
+            addLog('A guardar metadados do backup...', 'info');
+            await addDoc(collection(firestore, `users/${user.uid}/backups`), {
+                name: modifiedFileName,
+                storagePath: storagePath,
+                createdAt: serverTimestamp(),
+                size: newBinBuffer.byteLength,
+                userId: user.uid,
+            });
+    
+            toast({ title: 'Backup Salvo!', description: 'O seu ficheiro modificado foi guardado na nuvem com sucesso.' });
+            addLog('Backup guardado na nuvem com sucesso!', 'success');
+    
+        } catch (error) {
+            const errorMessage = `Falha ao salvar backup: ${(error as Error).message}`;
+            addLog(errorMessage, 'error');
+            toast({ title: 'Erro no Backup', description: errorMessage, variant: 'destructive' });
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+    
+    const handleLoadBackup = async (backup: BackupFile) => {
+        if (!user) return;
+        setIsProcessing(true);
+        addLog(`A carregar backup "${backup.name}"...`, 'info');
+        try {
+            const storage = getStorage();
+            const storageRef = ref(storage, backup.storagePath);
+            const url = await getDownloadURL(storageRef);
+    
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Falha ao descarregar o ficheiro do backup.');
+    
+            const buffer = await response.arrayBuffer();
+            setBinFile({ name: backup.name, buffer });
+            
+            // Clear all caches and modifications as we are loading a new base file
+            clearMapState();
+            addLog(`Ficheiro de backup "${backup.name}" carregado. Pode agora processar os mapas.`, 'success');
+            toast({ title: 'Backup Carregado', description: `Ficheiro "${backup.name}" está pronto a ser usado.` });
+    
+        } catch (error) {
+            const msg = `Falha ao carregar backup: ${(error as Error).message}`;
+            addLog(msg, 'error');
+            toast({ title: 'Erro ao Carregar', description: msg, variant: 'destructive' });
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+    
+    const handleDeleteBackup = async (backup: BackupFile) => {
+        if (!user || !firestore) return;
+        
+        const confirmation = window.confirm(`Tem a certeza que quer apagar o backup "${backup.name}"? Esta ação é irreversível.`);
+        if (!confirmation) return;
+
+        setIsProcessing(true);
+        addLog(`A apagar backup "${backup.name}"...`, 'info');
+        try {
+            const storage = getStorage();
+            const storageRef = ref(storage, backup.storagePath);
+            
+            // Delete from Firestore
+            await deleteDoc(doc(firestore, `users/${user.uid}/backups`, backup.id));
+            addLog('Metadados do backup apagados.', 'info');
+            
+            // Delete from Storage
+            await deleteObject(storageRef);
+            addLog('Ficheiro do backup apagado do armazenamento.', 'info');
+    
+            toast({ title: 'Backup Apagado', description: `"${backup.name}" foi removido com sucesso.` });
+            addLog('Backup apagado com sucesso.', 'success');
+        } catch (error) {
+             const msg = `Falha ao apagar backup: ${(error as Error).message}`;
+             addLog(msg, 'error');
+             toast({ title: 'Erro ao Apagar', description: msg, variant: 'destructive' });
+        } finally {
+             setIsProcessing(false);
+        }
     };
 
 
@@ -1447,20 +1586,20 @@ const handleMapSelectionChange = (id: string) => {
                                 <div className="space-y-2">
                                     <Label htmlFor="log-load-condition">Condição de Carga do Log</Label>
                                     <Select
-                                        value={selectedLogLoadColumn || selectedLogLoadValue || ''}
+                                        value={selectedLogLogLoadColumn || selectedLogLoadValue || ''}
                                         onValueChange={(value) => {
                                             if (!value) {
-                                                setSelectedLogLoadColumn('');
+                                                setSelectedLogLogLoadColumn('');
                                                 setSelectedLogLoadValue('');
                                                 return;
                                             }
                                             const isHeader = logHeaders.includes(value);
                                             if (isHeader) {
-                                                setSelectedLogLoadColumn(value);
+                                                setSelectedLogLogLoadColumn(value);
                                                 setSelectedLogLoadValue('');
                                             } else {
                                                 setSelectedLogLoadValue(value);
-                                                setSelectedLogLoadColumn('');
+                                                setSelectedLogLogLoadColumn('');
                                             }
                                         }}
                                         disabled={logData.length === 0 || !loadAxis}
@@ -1521,7 +1660,7 @@ const handleMapSelectionChange = (id: string) => {
                                         onValueChange={(value) => setAggressiveness(value[0])}
                                     />
                                 </div>
-                                <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing || (!selectedLogLoadColumn && !selectedLogLoadValue)}>
+                                <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing || (!selectedLogLogLoadColumn && !selectedLogLoadValue)}>
                                     <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
                                 </Button>
 
@@ -1572,215 +1711,273 @@ const handleMapSelectionChange = (id: string) => {
         );
     };
 
+    const ControlPanelAccordion = (
+        <Accordion type="single" collapsible className="w-full mb-6" defaultValue="item-1">
+            <AccordionItem value="item-1">
+                <AccordionTrigger>
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                        <Cpu size={20} /> Painel de Controlo
+                    </h2>
+                </AccordionTrigger>
+                <AccordionContent>
+                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 pt-4">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <UploadCloud size={18} /> Ficheiros
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="flex flex-col gap-3">
+                                <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => binInputRef.current?.click()}
+                                >
+                                <Binary className="mr-2" />{' '}
+                                {binFile?.name ? 'Trocar BIN' : 'Carregar .BIN'}
+                                </Button>
+                                <input
+                                ref={binInputRef}
+                                type="file"
+                                accept=".bin"
+                                className="hidden"
+                                onChange={(e) => handleFileChange(e, 'bin')}
+                                />
+
+                                <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => xdfInputRef.current?.click()}
+                                >
+                                <FileCog className="mr-2" />{' '}
+                                {xdfFile?.name ? 'Trocar XDF' : 'Carregar .XDF'}
+                                </Button>
+                                <input
+                                ref={xdfInputRef}
+                                type="file"
+                                accept=".xdf"
+                                className="hidden"
+                                onChange={(e) => handleFileChange(e, 'xdf')}
+                                />
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <Table2 size={18} /> Seleção de Mapa
+                                </CardTitle>
+                            </CardHeader>
+                             <CardContent>
+                                <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full justify-between"
+                                        disabled={!binFile || !xdfFile}
+                                    >
+                                        <span className="truncate">
+                                            {selectedMapIds.length === 0 && "Selecione mapas"}
+                                            {selectedMapIds.length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds[0])?.name}
+                                            {selectedMapIds.length > 1 && `${selectedMapIds.length} mapas selecionados`}
+                                        </span>
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                                    {binFile && xdfFile && (
+                                        <ScrollArea className="h-72">
+                                            <div className="p-4 space-y-2">
+                                                {xdfFile?.definitions.filter(d => !d.uniqueId.startsWith('potential_')).sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
+                                                    <div key={def.uniqueId} className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id={def.uniqueId}
+                                                        checked={selectedMapIds.includes(def.uniqueId)}
+                                                        onCheckedChange={() => handleMapSelectionChange(def.uniqueId)}
+                                                    />
+                                                    <label
+                                                        htmlFor={def.uniqueId}
+                                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
+                                                        onClick={() => handleMapSelectionChange(def.uniqueId)}
+                                                    >
+                                                        {def.name}
+                                                    </label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </ScrollArea>
+                                    )}
+                                </PopoverContent>
+                                </Popover>
+
+                                {selectedMapIds.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                    {selectedMapIds.map(id => {
+                                        const def = xdfFile?.definitions.find(d => d.uniqueId === id);
+                                        if (!def) return null;
+                                        const isPotential = id.startsWith('potential_');
+                                        return (
+                                            <Badge 
+                                                key={id} 
+                                                variant={id === activeMapId ? "default" : (isPotential ? "destructive" : "secondary")}
+                                                className="cursor-pointer hover:ring-2 hover:ring-ring"
+                                                onClick={() => setActiveMap(id)}
+                                            >
+                                                {def.name}
+                                                <X 
+                                                    className="ml-1 h-3 w-3 rounded-full hover:bg-muted/50"
+                                                    onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleMapSelectionChange(id);
+                                                    }}
+                                                />
+                                            </Badge>
+                                        )
+                                    })}
+                                </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <Cloud size={18} /> Backups na Nuvem
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Button
+                                    variant="outline"
+                                    className="w-full mb-3"
+                                    disabled={isProcessing || !anyMapModified || !user || isUserLoading}
+                                    onClick={handleSaveBackup}
+                                >
+                                    <CloudUpload className="mr-2" /> Salvar Backup na Nuvem
+                                </Button>
+                                <ScrollArea className="h-36 w-full rounded-md border">
+                                    <div className="p-2 text-sm">
+                                        {backupsLoading && <div className="flex items-center justify-center p-4 text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />A carregar...</div>}
+                                        {backupsError && <div className="p-4 text-destructive">Erro ao carregar backups.</div>}
+                                        {!backupsLoading && cloudBackups && cloudBackups.length === 0 && <p className="text-center text-muted-foreground p-4">Nenhum backup encontrado.</p>}
+                                        {cloudBackups?.map(backup => (
+                                            <div key={backup.id} className="flex items-center justify-between p-2 rounded-md hover:bg-accent">
+                                                <div className="truncate">
+                                                    <p className="font-medium truncate" title={backup.name}>{backup.name}</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        <Clock className="inline h-3 w-3 mr-1" />
+                                                        {new Date(backup.createdAt.seconds * 1000).toLocaleString()}
+                                                        <span className="mx-2">|</span>
+                                                        {formatFileSize(backup.size)}
+                                                    </p>
+                                                </div>
+                                                <div className="flex gap-1">
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleLoadBackup(backup)} disabled={isProcessing}><HardDriveDownload className="h-4 w-4" /></Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent><p>Carregar este Backup</p></TooltipContent>
+                                                        </Tooltip>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeleteBackup(backup)} disabled={isProcessing}><Trash2 className="h-4 w-4" /></Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent><p>Apagar este Backup</p></TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </ScrollArea>
+                            </CardContent>
+                        </Card>
+
+                       <Card>
+                             <CardHeader>
+                                <CardTitle className="text-base flex items-center gap-2">
+                                    <BrainCircuit size={18} /> Ações e Logs
+                                </CardTitle>
+                            </CardHeader>
+                             <CardContent className="flex flex-col gap-3">
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <Button
+                                    variant="default"
+                                    className="flex-1"
+                                    disabled={!anyMapModified || isProcessing}
+                                    onClick={handleSave}
+                                    >
+                                        <Save className="mr-2 h-4 w-4" /> Salvar .BIN Modificado
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        size="icon"
+                                        onClick={handleResetAll}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                        <span className="sr-only">Resetar Tudo</span>
+                                    </Button>
+                                </div>
+                                <div className="space-y-1 pt-2">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="font-semibold text-sm">Log de Processamento</h3>
+                                         <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleDownloadLog}>
+                                                        <Download size={16} />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Descarregar Log</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    </div>
+                                    <ScrollArea className="h-24 w-full rounded-md border p-2 font-mono text-xs">
+                                        {logs.length > 0 ? (
+                                        logs.map((log) => (
+                                            <div key={log.id} className="flex items-start">
+                                            <span className="text-muted-foreground/60 mr-2 shrink-0">
+                                                {log.timestamp}
+                                            </span>
+                                            <span
+                                                className={`break-words ${
+                                                log.type === 'error'
+                                                    ? 'text-destructive font-semibold'
+                                                    : log.type === 'success'
+                                                    ? 'text-green-500 font-semibold'
+                                                    : log.type === 'debug'
+                                                    ? 'text-amber-500'
+                                                    : 'text-foreground/80'
+                                                }`}
+                                            >
+                                                {log.message}
+                                            </span>
+                                            </div>
+                                        ))
+                                        ) : (
+                                        <div className="text-muted-foreground/60 text-center py-4">
+                                            Aguardando ações...
+                                        </div>
+                                        )}
+                                    </ScrollArea>
+                                </div>
+                            </CardContent>
+                       </Card>
+                   </div>
+                </AccordionContent>
+            </AccordionItem>
+        </Accordion>
+    );
+
     return (
       <EcuTuningStateContext.Provider value={{ processedMap, loadAxis }}>
          <div className="flex h-full w-full flex-col bg-background">
             <Header />
             <main className="flex-1 overflow-auto p-4 md:p-6">
 
-                 <Accordion type="single" collapsible className="w-full mb-6" defaultValue="item-1">
-                    <AccordionItem value="item-1">
-                        <AccordionTrigger>
-                            <h2 className="text-lg font-semibold flex items-center gap-2">
-                                <Cpu size={20} /> Painel de Controlo
-                            </h2>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="text-base flex items-center gap-2">
-                                            <UploadCloud size={18} /> Ficheiros
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="flex flex-col gap-3">
-                                        <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => binInputRef.current?.click()}
-                                        >
-                                        <Binary className="mr-2" />{' '}
-                                        {binFile?.name ? 'Trocar BIN' : 'Carregar .BIN'}
-                                        </Button>
-                                        <input
-                                        ref={binInputRef}
-                                        type="file"
-                                        accept=".bin"
-                                        className="hidden"
-                                        onChange={(e) => handleFileChange(e, 'bin')}
-                                        />
-
-                                        <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => xdfInputRef.current?.click()}
-                                        >
-                                        <FileCog className="mr-2" />{' '}
-                                        {xdfFile?.name ? 'Trocar XDF' : 'Carregar .XDF'}
-                                        </Button>
-                                        <input
-                                        ref={xdfInputRef}
-                                        type="file"
-                                        accept=".xdf"
-                                        className="hidden"
-                                        onChange={(e) => handleFileChange(e, 'xdf')}
-                                        />
-                                    </CardContent>
-                                </Card>
-
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="text-base flex items-center gap-2">
-                                            <Table2 size={18} /> Seleção de Mapa
-                                        </CardTitle>
-                                    </CardHeader>
-                                     <CardContent>
-                                        <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-                                        <PopoverTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                className="w-full justify-between"
-                                                disabled={!binFile || !xdfFile}
-                                            >
-                                                <span className="truncate">
-                                                    {selectedMapIds.length === 0 && "Selecione mapas"}
-                                                    {selectedMapIds.length === 1 && xdfFile?.definitions.find(d => d.uniqueId === selectedMapIds[0])?.name}
-                                                    {selectedMapIds.length > 1 && `${selectedMapIds.length} mapas selecionados`}
-                                                </span>
-                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                                            {binFile && xdfFile && (
-                                                <ScrollArea className="h-72">
-                                                    <div className="p-4 space-y-2">
-                                                        {xdfFile?.definitions.filter(d => !d.uniqueId.startsWith('potential_')).sort((a,b) => a.name.localeCompare(b.name)).map((def) => (
-                                                            <div key={def.uniqueId} className="flex items-center space-x-2">
-                                                            <Checkbox
-                                                                id={def.uniqueId}
-                                                                checked={selectedMapIds.includes(def.uniqueId)}
-                                                                onCheckedChange={() => handleMapSelectionChange(def.uniqueId)}
-                                                            />
-                                                            <label
-                                                                htmlFor={def.uniqueId}
-                                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
-                                                                onClick={() => handleMapSelectionChange(def.uniqueId)}
-                                                            >
-                                                                {def.name}
-                                                            </label>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </ScrollArea>
-                                            )}
-                                        </PopoverContent>
-                                        </Popover>
-
-                                        {selectedMapIds.length > 0 && (
-                                        <div className="mt-2 flex flex-wrap gap-1">
-                                            {selectedMapIds.map(id => {
-                                                const def = xdfFile?.definitions.find(d => d.uniqueId === id);
-                                                if (!def) return null;
-                                                const isPotential = id.startsWith('potential_');
-                                                return (
-                                                    <Badge 
-                                                        key={id} 
-                                                        variant={id === activeMapId ? "default" : (isPotential ? "destructive" : "secondary")}
-                                                        className="cursor-pointer hover:ring-2 hover:ring-ring"
-                                                        onClick={() => setActiveMap(id)}
-                                                    >
-                                                        {def.name}
-                                                        <X 
-                                                            className="ml-1 h-3 w-3 rounded-full hover:bg-muted/50"
-                                                            onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleMapSelectionChange(id);
-                                                            }}
-                                                        />
-                                                    </Badge>
-                                                )
-                                            })}
-                                        </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-
-                               <Card>
-                                     <CardHeader>
-                                        <CardTitle className="text-base flex items-center gap-2">
-                                            <BrainCircuit size={18} /> Ações
-                                        </CardTitle>
-                                    </CardHeader>
-                                     <CardContent className="flex flex-col gap-3">
-                                        <div className="flex flex-col sm:flex-row gap-2">
-                                            <Button
-                                            variant="default"
-                                            className="flex-1"
-                                            disabled={!anyMapModified || isProcessing}
-                                            onClick={handleSave}
-                                            >
-                                                <Save className="mr-2 h-4 w-4" /> Salvar .BIN Modificado
-                                            </Button>
-                                            <Button
-                                                variant="destructive"
-                                                size="icon"
-                                                onClick={handleResetAll}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                                <span className="sr-only">Resetar Tudo</span>
-                                            </Button>
-                                        </div>
-                                        <div className="space-y-1 pt-2">
-                                            <div className="flex items-center justify-between">
-                                                <h3 className="font-semibold text-sm">Log de Processamento</h3>
-                                                 <TooltipProvider>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleDownloadLog}>
-                                                                <Download size={16} />
-                                                            </Button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            <p>Descarregar Log</p>
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                </TooltipProvider>
-                                            </div>
-                                            <ScrollArea className="h-24 w-full rounded-md border p-2 font-mono text-xs">
-                                                {logs.length > 0 ? (
-                                                logs.map((log) => (
-                                                    <div key={log.id} className="flex items-start">
-                                                    <span className="text-muted-foreground/60 mr-2 shrink-0">
-                                                        {log.timestamp}
-                                                    </span>
-                                                    <span
-                                                        className={`break-words ${
-                                                        log.type === 'error'
-                                                            ? 'text-destructive font-semibold'
-                                                            : log.type === 'success'
-                                                            ? 'text-green-500 font-semibold'
-                                                            : log.type === 'debug'
-                                                            ? 'text-amber-500'
-                                                            : 'text-foreground/80'
-                                                        }`}
-                                                    >
-                                                        {log.message}
-                                                    </span>
-                                                    </div>
-                                                ))
-                                                ) : (
-                                                <div className="text-muted-foreground/60 text-center py-4">
-                                                    Aguardando ações...
-                                                </div>
-                                                )}
-                                            </ScrollArea>
-                                        </div>
-                                    </CardContent>
-                               </Card>
-                           </div>
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
+                {ControlPanelAccordion}
                 
                 <Accordion type="single" collapsible className="w-full mb-6">
                      <AccordionItem value="item-1">
@@ -1900,9 +2097,5 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
-
-    
-
-    
 
     
