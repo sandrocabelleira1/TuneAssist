@@ -1121,13 +1121,7 @@ const handleSave = async () => {
         return;
     }
 
-    if (!user) {
-        addLog("Utilizador não autenticado. Impossível iniciar pagamento.", 'error');
-        toast({ title: 'Erro de Autenticação', description: "Inicie a sessão para comprar o ficheiro.", variant: 'destructive' });
-        return;
-    }
-
-    addLog("A iniciar processo de pagamento...", 'info');
+    addLog("A gerar o ficheiro .bin modificado...", 'info');
     setIsProcessing(true);
 
     try {
@@ -1138,46 +1132,32 @@ const handleSave = async () => {
                 processedMap: mapData,
             }));
         
-        let newBinBuffer: ArrayBuffer;
-        let modifiedFileName: string;
-
-        if (mapsToSave.length > 0) {
-            newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
-            modifiedFileName = binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`;
-        } else {
+        if (mapsToSave.length === 0) {
             addLog("Nenhuma modificação para salvar.", "info");
             toast({ title: "Nenhuma Alteração", description: "Não há modificações para salvar."});
             setIsProcessing(false);
             return;
         }
-        
-        const response = await fetch('/api/create-payment', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                title: `Ficheiro Modificado: ${modifiedFileName}`,
-                quantity: 1,
-                unit_price: 10.00, // Example price
-                userId: user.uid,
-            }),
-        });
 
-        if (!response.ok) {
-            throw new Error('Falha ao criar a preferência de pagamento.');
-        }
+        const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
+        const modifiedFileName = binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`;
 
-        const { init_point } = await response.json();
+        // Trigger direct download
+        const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = modifiedFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
         
-        localStorage.setItem('pendingBinFile', JSON.stringify(Array.from(new Uint8Array(newBinBuffer))));
-        localStorage.setItem('pendingBinFileName', modifiedFileName);
-        
-        addLog("Redirecionando para o checkout do Mercado Pago...", "success");
-        window.location.href = init_point;
+        addLog(`Ficheiro "${modifiedFileName}" descarregado com sucesso.`, "success");
+        toast({ title: 'Download Iniciado', description: `O seu ficheiro ${modifiedFileName} está a ser descarregado.` });
 
     } catch (error) {
-        const errorMsg = `Falha ao salvar ou iniciar pagamento: ${(error as Error).message}`;
+        const errorMsg = `Falha ao salvar: ${(error as Error).message}`;
         addLog(errorMsg, 'error');
         toast({ title: 'Erro Crítico', description: errorMsg, variant: 'destructive' });
     } finally {
