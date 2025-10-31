@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
@@ -1683,8 +1684,8 @@ const handleMapSelectionChange = (id: string) => {
                             binFile={binFile}
                             processedMap={processedMap}
                             selectedMapDefinition={selectedMapDefinition}
-                            onMapUpdate={handleMapUpdate}
                             addLog={addLog}
+                            onMapUpdate={handleMapUpdate}
                         />
                 </TabsContent>
             </>
