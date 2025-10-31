@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -23,7 +22,7 @@ interface IgnitionTimingAnalyzerProps {
     processedMap: ProcessedMap | null;
     selectedMapDefinition: XDFinition | undefined;
     addLog: (message: string, type?: LogMessage['type']) => void;
-    onMapUpdate: (mapId: string, newMap: ProcessedMap) => void;
+    onMapUpdate: (mapId: string, newMap: ProcessedMap, modifiedCells: Set<string>) => void;
 }
 
 interface TimingSegment {
@@ -546,35 +545,36 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         setIsApplyingSuggestion(true);
         addLog("A iniciar a otimização automática do mapa de ignição...", "info");
     
-        if (!processedMap || !rpmAxis || !loadAxis || !selectedLoadValue || !selectedMapDefinition) {
+        if (!processedMap || !processedMap.calculatedMap || !rpmAxis || !loadAxis || !selectedLoadValue || !selectedMapDefinition) {
             toast({ title: "Dados Incompletos", description: "Otimização falhou. Mapa ativo, eixos e linha de carga são necessários.", variant: "destructive" });
             setIsApplyingSuggestion(false);
             return;
         }
     
         const newCalculatedMap = processedMap.calculatedMap.map(row => [...row]);
+        const modifiedCells = new Set<string>();
         const loadIsYAxis = loadAxis === processedMap.axes.y;
         const loadIndex = processedMap.axes[loadIsYAxis ? 'y' : 'x'].calculated.findIndex(val => String(val) === selectedLoadValue);
     
         let changesMade = 0;
     
         analysisResults.forEach(result => {
-            if (!result.gainPercent) return;
+            if (result.gainPercent === null || result.gainPercent === undefined) return;
     
             const [startRpmStr, endRpmStr] = result.range.split(' -> ');
             const startRpm = parseFloat(startRpmStr);
             const endRpm = parseFloat(endRpmStr);
     
             let advanceChange = 0;
-            if (result.gainPercent > 0.3) {
-                advanceChange = 0.5; // Continue advancing
-            } else if (result.gainPercent < -0.2) {
-                advanceChange = -0.5; // Pull back timing
+            // More sensitive threshold for making changes
+            if (result.gainPercent > 0.2) {
+                advanceChange = 0.5; // Continue advancing on noticeable gains
+            } else if (result.gainPercent < -0.1) {
+                advanceChange = -0.5; // Pull back timing on any noticeable loss
             }
             
             if (advanceChange === 0) return;
     
-            // Find all RPM indices within this segment
             const rpmIndicesToChange: number[] = [];
             rpmAxis.calculated.forEach((rpmVal, index) => {
                 const numericRpm = Number(rpmVal);
@@ -587,20 +587,28 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                 const y = loadIsYAxis ? loadIndex : rpmIndex;
                 const x = loadIsYAxis ? rpmIndex : loadIndex;
     
-                if (newCalculatedMap[y] && newCalculatedMap[y][x] !== null) {
-                    const currentValue = newCalculatedMap[y][x];
-                    newCalculatedMap[y][x] = (currentValue || 0) + advanceChange;
+                if (newCalculatedMap[y]?.[x] !== undefined && newCalculatedMap[y]?.[x] !== null) {
+                    const currentValue = newCalculatedMap[y][x]!;
+                    newCalculatedMap[y][x] = currentValue + advanceChange;
+                    modifiedCells.add(`${y}-${x}`);
                     changesMade++;
                 }
             });
         });
         
+        if (changesMade === 0) {
+            toast({ title: "Nenhuma Otimização Necessária", description: "Nenhuma alteração foi aplicada com base nos resultados atuais." });
+            addLog("Otimizador de ignição executado, mas nenhuma alteração foi necessária.", "info");
+            setIsApplyingSuggestion(false);
+            return;
+        }
+
         const newMapState: ProcessedMap = {
             ...processedMap,
             calculatedMap: newCalculatedMap
         };
 
-        onMapUpdate(selectedMapDefinition.uniqueId, newMapState);
+        onMapUpdate(selectedMapDefinition.uniqueId, newMapState, modifiedCells);
 
         const successMsg = `Otimização do mapa de ignição concluída. ${changesMade} células foram ajustadas.`;
         toast({ title: "Otimização Aplicada", description: successMsg });
