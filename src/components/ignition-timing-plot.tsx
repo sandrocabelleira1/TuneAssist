@@ -112,12 +112,7 @@ const CustomTooltipContent = ({ active, payload, label }: CustomTooltipProps) =>
         const data = payload[0].payload;
         
         const hasTorque = data.base_torque !== null || data.modified_torque !== null;
-        const performanceLabel = hasTorque ? 'Torque' : 'Tempo';
-        const performanceUnit = hasTorque ? 'Nm' : 's';
-
-        const basePerformance = hasTorque ? data.base_torque : data.base_time;
-        const modifiedPerformance = hasTorque ? data.modified_torque : data.modified_time;
-
+        
         return (
             <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
                 <p className="font-bold mb-2">RPM: {label}</p>
@@ -130,15 +125,28 @@ const CustomTooltipContent = ({ active, payload, label }: CustomTooltipProps) =>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr>
-                            <td>{performanceLabel} ({performanceUnit})</td>
-                            <td className="text-center text-primary">{basePerformance?.toFixed(2) ?? '-'}</td>
-                            <td className="text-center text-destructive">{modifiedPerformance?.toFixed(2) ?? '-'}</td>
-                        </tr>
+                        {hasTorque ? (
+                            <tr>
+                                <td>Torque (Nm)</td>
+                                <td className="text-center text-primary">{data.base_torque?.toFixed(2) ?? '-'}</td>
+                                <td className="text-center text-destructive">{data.modified_torque?.toFixed(2) ?? '-'}</td>
+                            </tr>
+                        ) : (
+                             <tr>
+                                <td>Tempo (s)</td>
+                                <td className="text-center text-primary">{data.base_time?.toFixed(3) ?? '-'}</td>
+                                <td className="text-center text-destructive">{data.modified_time?.toFixed(3) ?? '-'}</td>
+                            </tr>
+                        )}
                         <tr>
                             <td>Avanço (°)</td>
-                            <td className="text-center text-green-500">{data.base_advance?.toFixed(2) ?? '-'}</td>
-                            <td className="text-center text-yellow-500">{data.modified_advance?.toFixed(2) ?? '-'}</td>
+                            <td className="text-center text-green-500">{data.base_advance?.toFixed(1) ?? '-'}</td>
+                            <td className="text-center text-yellow-500">{data.modified_advance?.toFixed(1) ?? '-'}</td>
+                        </tr>
+                         <tr>
+                            <td>Tempo (s)</td>
+                            <td className="text-center text-muted-foreground">{data.base_time?.toFixed(3) ?? '-'}</td>
+                            <td className="text-center text-muted-foreground">{data.modified_time?.toFixed(3) ?? '-'}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -231,7 +239,13 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
         );
     };
     
-    const timeDataKey = runs.base.length > 0 ? 'base_time' : 'modified_time';
+    const timeDataKey = useMemo(() => {
+        const baseHasTime = runs.base.some(p => p.time !== '' && !isNaN(parseFloat(p.time)));
+        const modifiedHasTime = runs.modified.some(p => p.time !== '' && !isNaN(parseFloat(p.time)));
+        if (baseHasTime) return 'base_time';
+        if (modifiedHasTime) return 'modified_time';
+        return 'base_time'; // fallback
+    }, [runs]);
 
 
     return (
@@ -275,6 +289,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
                                 domain={['dataMin', 'dataMax']}
                                 label={{ value: "Tempo do Ensaio (s)", position: 'insideTop', offset: -15 }}
                                 allowDuplicatedCategory={false}
+                                stroke="transparent"
                             />
                             <YAxis 
                                 yAxisId="left" 
