@@ -1700,7 +1700,7 @@ const handleMapSelectionChange = (id: string) => {
                     </h2>
                 </AccordionTrigger>
                 <AccordionContent>
-                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 pt-4">
+                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 pt-4">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="text-base flex items-center gap-2">
@@ -1816,60 +1816,6 @@ const handleMapSelectionChange = (id: string) => {
                                     })}
                                 </div>
                                 )}
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base flex items-center gap-2">
-                                    <Cloud size={18} /> Backups na Nuvem
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <Button
-                                    variant="outline"
-                                    className="w-full mb-3"
-                                    disabled={isProcessing || !anyMapModified || !user || isUserLoading}
-                                    onClick={handleSaveBackup}
-                                >
-                                    <CloudUpload className="mr-2" /> Salvar Backup na Nuvem
-                                </Button>
-                                <ScrollArea className="h-36 w-full rounded-md border">
-                                    <div className="p-2 text-sm">
-                                        {backupsLoading && <div className="flex items-center justify-center p-4 text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />A carregar...</div>}
-                                        {backupsError && <div className="p-4 text-destructive">Erro ao carregar backups.</div>}
-                                        {!backupsLoading && cloudBackups && cloudBackups.length === 0 && <p className="text-center text-muted-foreground p-4">Nenhum backup encontrado.</p>}
-                                        {cloudBackups?.map(backup => (
-                                            <div key={backup.id} className="flex items-center justify-between p-2 rounded-md hover:bg-accent">
-                                                <div className="truncate">
-                                                    <p className="font-medium truncate" title={backup.name}>{backup.name}</p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        <Clock className="inline h-3 w-3 mr-1" />
-                                                        {new Date(backup.createdAt.seconds * 1000).toLocaleString()}
-                                                        <span className="mx-2">|</span>
-                                                        {formatFileSize(backup.size)}
-                                                    </p>
-                                                </div>
-                                                <div className="flex gap-1">
-                                                    <TooltipProvider>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleLoadBackup(backup)} disabled={isProcessing}><HardDriveDownload className="h-4 w-4" /></Button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent><p>Carregar este Backup</p></TooltipContent>
-                                                        </Tooltip>
-                                                        <Tooltip>
-                                                            <TooltipTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => handleDeleteBackup(backup)} disabled={isProcessing}><Trash2 className="h-4 w-4" /></Button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent><p>Apagar este Backup</p></TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </ScrollArea>
                             </CardContent>
                         </Card>
 
