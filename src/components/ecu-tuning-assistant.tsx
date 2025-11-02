@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
@@ -33,7 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import IgnitionTimingAnalyzer from '@/components/ignition-timing-analyzer';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import { useUser, useFirestore, useAuth, useMemoFirebase } from '@/firebase';
@@ -376,20 +374,46 @@ function DynoEntryTable() {
             <div className="flex flex-col sm:flex-row gap-4 items-end">
                 <div className="flex-1 w-full space-y-2">
                     <Label>Eixo de Carga ({loadAxis.label})</Label>
-                    <Select value={selectedLoadToAdd} onValueChange={setSelectedLoadToAdd}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Selecione um valor de carga para adicionar..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {loadAxis.calculated.map((val, idx) => (
-                                <SelectItem key={idx} value={String(val)} disabled={currentLoadColumnValues.includes(Number(val))}>
-                                    {val}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-start">
+                                {currentLoadColumnValues.length > 0 ? `${currentLoadColumnValues.length} colunas selecionadas` : "Selecione um valor de carga para adicionar..."}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width)] p-0">
+                             <Command>
+                                <CommandInput placeholder="Procurar valor de carga..." />
+                                <CommandList>
+                                    <CommandEmpty>Nenhum resultado.</CommandEmpty>
+                                    <CommandGroup>
+                                        {loadAxis.calculated.map((val, idx) => {
+                                            const isSelected = currentLoadColumnValues.includes(Number(val));
+                                            return (
+                                                <CommandItem
+                                                    key={idx}
+                                                    onSelect={() => {
+                                                        const loadValue = Number(val);
+                                                        if (isSelected) {
+                                                            const indexToRemove = loadColumnFields.findIndex(f => f.value === loadValue);
+                                                            if (indexToRemove > -1) removeLoadColumn(indexToRemove);
+                                                        } else {
+                                                            appendLoadColumn({ id: `load_${loadValue}`, value: loadValue });
+                                                        }
+                                                    }}
+                                                >
+                                                    <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary", isSelected ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible")}>
+                                                        <Check className={cn("h-4 w-4")} />
+                                                    </div>
+                                                    <span>{val}</span>
+                                                </CommandItem>
+                                            )
+                                        })}
+                                    </CommandGroup>
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
                 </div>
-                <Button type="button" onClick={handleAddLoadColumn} disabled={!selectedLoadToAdd} className="w-full sm:w-auto"><PlusCircle className="mr-2 h-4 w-4" />Adicionar Coluna de Carga</Button>
             </div>
             
             {loadColumnFields.length > 0 && (
@@ -498,7 +522,7 @@ export default function EcuTuningAssistant() {
     const [logs, setLogs] = useState<LogMessage[]>([]);
     const [logHeaders, setLogHeaders] = useState<string[]>([]);
     const [selectedLogLoadColumn, setSelectedLogLoadColumn] = useState<string>('');
-    const [selectedLogLoadValue, setSelectedLogLoadValue] = useState<string>('');
+    const [selectedLoadValues, setSelectedLoadValues] = useState<string[]>([]);
     
     const [selectedMapIds, setSelectedMapIds] = useState<string[]>([]);
     const [activeMapId, setActiveMapId] = useState<string | null>(null);
@@ -523,7 +547,8 @@ export default function EcuTuningAssistant() {
     const [processedMapCache, setProcessedMapCache] = useState<Record<string, ProcessedMap>>({});
     const [originalMapCache, setOriginalMapCache] = useState<Record<string, ProcessedMap>>({});
     const [modifiedStatusCache, setModifiedStatusCache] = useState<Record<string, boolean>>({});
-    const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+    const [isMapSelectPopoverOpen, setIsMapSelectPopoverOpen] = useState(false);
+    const [isLoadPopoverOpen, setIsLoadPopoverOpen] = useState(false);
     
 
     const binInputRef = useRef<HTMLInputElement>(null);
@@ -620,7 +645,7 @@ export default function EcuTuningAssistant() {
         setLogData([]);
         setLogHeaders([]);
         setSelectedLogLoadColumn('');
-        setSelectedLogLoadValue('');
+        setSelectedLoadValues([]);
         dynoForm.reset({ loadColumns: [], logRows: [] });
         if (logInputRef.current) logInputRef.current.value = '';
         addLog('Dados de ensaio limpos.', 'success');
@@ -635,7 +660,7 @@ export default function EcuTuningAssistant() {
         setLogs([]);
         setLogHeaders([]);
         setSelectedLogLoadColumn('');
-        setSelectedLogLoadValue('');
+        setSelectedLoadValues([]);
         setSelectedMapIds([]);
         setActiveMapId(null);
         setProcessedMap(null);
@@ -793,7 +818,7 @@ export default function EcuTuningAssistant() {
                                 const loadHeader = cleanHeaders.find(h => /tps|map|load|carga/i.test(h));
                                 if (loadHeader) {
                                     setSelectedLogLoadColumn(loadHeader);
-                                    setSelectedLogLoadValue('');
+                                    setSelectedLoadValues([]);
                                 }
                             }
                             
@@ -964,7 +989,8 @@ export default function EcuTuningAssistant() {
             // Check cache for modified status, otherwise it's false
             setIsModified(modifiedStatusCache[mapId] ?? false);
             // Reset log load value when map changes
-            setSelectedLogLoadValue('');
+            setSelectedLoadValues([]);
+            setSelectedLogLoadColumn('');
         } else {
             setProcessedMap(null);
             setIsModified(false);
@@ -1184,12 +1210,13 @@ const handleSave = async () => {
 
     const handleAutoTune = async () => {
         const logSource = logFile || logData.length > 0;
+        const loadConditionSet = selectedLogLoadColumn || selectedLoadValues.length > 0;
         
-        if (selectedMapIds.length === 0 || !logSource || !targetLambda || !xdfFile || !binFile || (!selectedLogLoadColumn && !selectedLogLoadValue)) {
+        if (selectedMapIds.length === 0 || !logSource || !targetLambda || !xdfFile || !binFile || !loadConditionSet) {
             let msg = "Dados insuficientes para o ajuste. ";
             if (selectedMapIds.length === 0) msg += "Selecione pelo menos um mapa. ";
             if (!logSource) msg += "Carregue um ficheiro de log ou insira dados manualmente. ";
-            if (!selectedLogLoadColumn && !selectedLogLoadValue) msg += "Selecione a condição de carga do log. ";
+            if (!loadConditionSet) msg += "Selecione a condição de carga do log. ";
             if (!targetLambda) msg += "Defina um Lambda alvo. ";
         
             addLog(msg, 'error');
@@ -1239,7 +1266,7 @@ const handleSave = async () => {
                     numericTargetLambda, 
                     aggressiveness,
                     selectedLogLoadColumn, // For logs with load column
-                    selectedLogLoadValue ? parseFloat(selectedLogLoadValue) : undefined // For logs at a specific load
+                    selectedLoadValues.map(v => parseFloat(v)) // For logs at specific load points
                 );
                 
                 const newProcessedMap = { ...mapToProcess, calculatedMap: correctedMap };
@@ -1566,43 +1593,77 @@ const handleMapSelectionChange = (id: string) => {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="log-load-condition">Condição de Carga do Log</Label>
-                                    <Select
-                                        value={selectedLogLoadColumn || selectedLogLoadValue || ''}
-                                        onValueChange={(value) => {
-                                            if (!value) {
-                                                setSelectedLogLoadColumn('');
-                                                setSelectedLogLoadValue('');
-                                                return;
-                                            }
-                                            const isHeader = logHeaders.includes(value);
-                                            if (isHeader) {
-                                                setSelectedLogLoadColumn(value);
-                                                setSelectedLogLoadValue('');
-                                            } else {
-                                                setSelectedLogLoadValue(value);
-                                                setSelectedLogLoadColumn('');
-                                            }
-                                        }}
-                                        disabled={logData.length === 0 || !loadAxis}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione a condição de carga..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {logFile && logHeaders.length > 0 && logHeaders.filter(h => h).map((header) => (
-                                                <SelectItem key={header} value={header}>
-                                                    Coluna do Log: {header}
-                                                </SelectItem>
-                                            ))}
-                                            {loadAxis?.calculated.map((val, index) => (
-                                                <SelectItem key={index} value={String(val)}>
-                                                    Carga do Mapa: {typeof val === 'number' ? val.toFixed(2) : val}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <Popover open={isLoadPopoverOpen} onOpenChange={setIsLoadPopoverOpen}>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                className="w-full justify-between"
+                                                disabled={logData.length === 0 || !loadAxis}
+                                            >
+                                                <span className="truncate">
+                                                    {selectedLogLoadColumn
+                                                        ? `Coluna: ${selectedLogLoadColumn}`
+                                                        : selectedLoadValues.length > 0
+                                                        ? `${selectedLoadValues.length} cargas selecionadas`
+                                                        : "Selecione a condição de carga..."
+                                                    }
+                                                </span>
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[--radix-popover-trigger-width)] p-0" align="start">
+                                            <Command>
+                                                <CommandInput placeholder="Procurar condição..." />
+                                                <CommandList>
+                                                    <CommandEmpty>Nenhum resultado.</CommandEmpty>
+                                                    {logHeaders.length > 0 && logFile && (
+                                                        <CommandGroup heading="Coluna de Carga do Log">
+                                                            {logHeaders.filter(h => h && /tps|map|load|carga/i.test(h)).map((header) => (
+                                                                <CommandItem
+                                                                    key={header}
+                                                                    onSelect={() => {
+                                                                        setSelectedLogLoadColumn(header);
+                                                                        setSelectedLoadValues([]);
+                                                                        setIsLoadPopoverOpen(false);
+                                                                    }}
+                                                                >
+                                                                    <Check className={cn("mr-2 h-4 w-4", selectedLogLoadColumn === header ? "opacity-100" : "opacity-0")} />
+                                                                    {header}
+                                                                </CommandItem>
+                                                            ))}
+                                                        </CommandGroup>
+                                                    )}
+                                                    {loadAxis && <Separator />}
+                                                    <CommandGroup heading="Valores de Carga do Mapa">
+                                                        {loadAxis?.calculated.map((val, index) => {
+                                                            const valueStr = String(val);
+                                                            const isSelected = selectedLoadValues.includes(valueStr);
+                                                            return (
+                                                                <CommandItem
+                                                                    key={index}
+                                                                    onSelect={() => {
+                                                                        setSelectedLogLoadColumn('');
+                                                                        setSelectedLoadValues(prev => 
+                                                                            isSelected 
+                                                                                ? prev.filter(v => v !== valueStr)
+                                                                                : [...prev, valueStr]
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary", isSelected ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible")}>
+                                                                        <Check className={cn("h-4 w-4")} />
+                                                                    </div>
+                                                                    {typeof val === 'number' ? val.toFixed(2) : val}
+                                                                </CommandItem>
+                                                            );
+                                                        })}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
                                     <p className="text-xs text-muted-foreground">
-                                        Se o seu log tiver uma coluna de carga (TPS/MAP), selecione-a. Caso contrário, selecione o valor de carga do mapa que corresponde ao seu ensaio (ex: 100 para WOT).
+                                        Se o seu log tiver uma coluna de carga (TPS/MAP), selecione-a. Caso contrário, selecione o(s) valor(es) de carga do mapa que corresponde(m) ao seu ensaio.
                                     </p>
                                 </div>
                                 <div className="space-y-2">
@@ -1641,7 +1702,7 @@ const handleMapSelectionChange = (id: string) => {
                                         onValueChange={(value) => setAggressiveness(value[0])}
                                     />
                                 </div>
-                                <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing || (!selectedLogLoadColumn && !selectedLogLoadValue)}>
+                                <Button className="w-full" onClick={handleAutoTune} disabled={selectedMapIds.length === 0 || logData.length === 0 || isProcessing || (!selectedLogLoadColumn && selectedLoadValues.length === 0)}>
                                     <Wand2 className="mr-2" /> {isProcessing ? "Ajustando..." : `Ajustar ${selectedMapIds.length} Mapa(s)`}
                                 </Button>
 
@@ -1750,7 +1811,7 @@ const handleMapSelectionChange = (id: string) => {
                                 </CardTitle>
                             </CardHeader>
                              <CardContent>
-                                <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                                <Popover open={isMapSelectPopoverOpen} onOpenChange={setIsMapSelectPopoverOpen}>
                                 <PopoverTrigger asChild>
                                     <Button
                                         variant="outline"
@@ -2024,5 +2085,3 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
-
-    

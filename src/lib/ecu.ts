@@ -1,5 +1,3 @@
-
-
 import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig, FoundAxis } from './types';
 
 // #region Utility Functions
@@ -923,7 +921,7 @@ export function calculateCorrections(
     targetLambda: number,
     aggressiveness: number, // 0-100
     loadLogColumn?: string, // The name of the load column in the log file
-    loadMapValue?: number, // The specific load value from the map axis, if log has no load column
+    loadMapValues?: number[], // The specific load values from the map axis
 ): { correctedMap: MapData, modifiedIndices: ModifiedCell[] } {
     if (!processedMap || !processedMap.calculatedMap || !processedMap.axes) {
         throw new Error("Mapa processado inválido fornecido para correção.");
@@ -931,7 +929,7 @@ export function calculateCorrections(
      if (!logData || logData.length === 0) {
         throw new Error("Dados de ensaio estão vazios ou são inválidos.");
     }
-     if (!loadLogColumn && loadMapValue === undefined) {
+     if (!loadLogColumn && (!loadMapValues || loadMapValues.length === 0)) {
         throw new Error("É necessário fornecer uma coluna de carga do log ou um valor de carga do mapa.");
     }
 
@@ -964,12 +962,15 @@ export function calculateCorrections(
     if (!rpmLogKey) throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
     if (!lambdaLogKey) throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'Sonda' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
 
-    let fixedLoadIndex: number | undefined = undefined;
-    if (loadMapValue !== undefined) {
-        fixedLoadIndex = findClosestIndex(loadMapAxis.calculated, loadMapValue);
-        if (fixedLoadIndex === -1) {
-            throw new Error(`O valor de carga do mapa "${loadMapValue}" não foi encontrado no eixo de carga.`);
-        }
+    let fixedLoadIndices: number[] = [];
+    if (loadMapValues && loadMapValues.length > 0) {
+        fixedLoadIndices = loadMapValues.map(val => {
+            const idx = findClosestIndex(loadMapAxis.calculated, val);
+            if (idx === -1) {
+                throw new Error(`O valor de carga do mapa "${val}" não foi encontrado no eixo de carga.`);
+            }
+            return idx;
+        });
     }
     
     logData.forEach(logEntry => {
@@ -979,40 +980,53 @@ export function calculateCorrections(
         if (logRpm === undefined || measuredLambda === undefined || isNaN(logRpm) || isNaN(measuredLambda)) return;
 
         const rpmIndex = findClosestIndex(rpmMapAxis.calculated, logRpm);
+        if (rpmIndex === -1) return;
         
-        let currentLoadIndex = fixedLoadIndex;
+        let targetLoadIndices: number[] = [];
         
-        if (loadLogColumn && fixedLoadIndex === undefined) {
+        if (loadLogColumn) {
             const logLoad = logEntry[loadLogColumn];
-            if (logLoad === undefined || isNaN(logLoad)) return;
-            currentLoadIndex = findClosestIndex(loadMapAxis.calculated, logLoad);
+            if (logLoad !== undefined && !isNaN(logLoad)) {
+                const closestLoadIndex = findClosestIndex(loadMapAxis.calculated, logLoad);
+                if (closestLoadIndex !== -1) {
+                    targetLoadIndices.push(closestLoadIndex);
+                }
+            }
+        } else if (fixedLoadIndices.length > 0) {
+            targetLoadIndices = fixedLoadIndices;
         }
 
-        if (rpmIndex === -1 || currentLoadIndex === -1 || currentLoadIndex === undefined) return;
-        
-        const yIndex = rpmIsYAxis ? rpmIndex : currentLoadIndex;
-        const xIndex = rpmIsYAxis ? currentLoadIndex : rpmIndex;
+        if (targetLoadIndices.length === 0) return;
 
-        const currentValue = newMap[yIndex]?.[xIndex];
-        if (currentValue === null || currentValue === undefined) return;
+        targetLoadIndices.forEach(currentLoadIndex => {
+            const yIndex = rpmIsYAxis ? rpmIndex : currentLoadIndex;
+            const xIndex = rpmIsYAxis ? currentLoadIndex : rpmIndex;
 
-        // Corrected Logic: If mixture is lean (measured > target), we need to add fuel (increase map value).
-        // The correction factor should be > 1 to increase the value.
-        const correctionFactor = measuredLambda / targetLambda;
-        
-        // The value that would theoretically yield the target lambda.
-        // If measured is lean (1.1) and target is rich (0.9), factor is > 1.
-        // We need to multiply the current value by this factor to increase fuel.
-        const fullyCorrectedValue = currentValue * correctionFactor;
-        
-        const difference = fullyCorrectedValue - currentValue;
-        const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
+            const currentValue = newMap[yIndex]?.[xIndex];
+            if (currentValue === null || currentValue === undefined) return;
 
-        newMap[yIndex][xIndex] = finalCorrectedValue;
-        modifiedIndices.push({ y: yIndex, x: xIndex });
+            // Corrected Logic: If mixture is lean (measured > target), we need to add fuel (increase map value).
+            // The correction factor should be > 1 to increase the value.
+            const correctionFactor = measuredLambda / targetLambda;
+            
+            // The value that would theoretically yield the target lambda.
+            // If measured is lean (1.1) and target is rich (0.9), factor is > 1.
+            // We need to multiply the current value by this factor to increase fuel.
+            const fullyCorrectedValue = currentValue * correctionFactor;
+            
+            const difference = fullyCorrectedValue - currentValue;
+            const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
+
+            newMap[yIndex][xIndex] = finalCorrectedValue;
+            modifiedIndices.push({ y: yIndex, x: xIndex });
+        });
     });
+    
+    // Deduplicate modifiedIndices
+    const uniqueModifiedIndices = Array.from(new Set(modifiedIndices.map(cell => JSON.stringify(cell)))).map(str => JSON.parse(str));
 
-    return { correctedMap: newMap, modifiedIndices };
+
+    return { correctedMap: newMap, modifiedIndices: uniqueModifiedIndices };
 }
 
 
