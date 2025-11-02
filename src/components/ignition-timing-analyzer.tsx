@@ -774,18 +774,15 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                                             <CommandItem
                                                                 key={index}
                                                                 onSelect={() => {
+                                                                    const valueStr = String(val);
                                                                     setSelectedLoadValues(prev => 
                                                                         isSelected 
                                                                             ? prev.filter(v => v !== valueStr)
                                                                             : [...prev, valueStr]
                                                                     );
                                                                 }}
-                                                                className="flex items-center"
                                                             >
-                                                                <Checkbox
-                                                                    checked={isSelected}
-                                                                    className="mr-2"
-                                                                />
+                                                                <Checkbox checked={isSelected} className="mr-2" />
                                                                 <span>{typeof val === 'number' ? val.toFixed(2) : val}</span>
                                                             </CommandItem>
                                                         );

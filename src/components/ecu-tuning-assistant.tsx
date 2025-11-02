@@ -1634,6 +1634,7 @@ const handleMapSelectionChange = (id: string) => {
                                                         </CommandGroup>
                                                     )}
                                                     {loadAxis && <Separator />}
+                                                    {loadAxis && (
                                                     <CommandGroup heading="Valores de Carga do Mapa">
                                                         {loadAxis?.calculated.map((val, index) => {
                                                             const valueStr = String(val);
@@ -1653,14 +1654,15 @@ const handleMapSelectionChange = (id: string) => {
                                                                     className="flex items-center"
                                                                 >
                                                                     <Checkbox
+                                                                        id={`load-val-${index}`}
                                                                         checked={isSelected}
-                                                                        className="mr-2"
                                                                     />
-                                                                    <span>{typeof val === 'number' ? val.toFixed(2) : val}</span>
+                                                                    <label htmlFor={`load-val-${index}`} className="ml-2 flex-1 cursor-pointer">{typeof val === 'number' ? val.toFixed(2) : val}</label>
                                                                 </CommandItem>
                                                             );
                                                         })}
                                                     </CommandGroup>
+                                                    )}
                                                 </CommandList>
                                             </Command>
                                         </PopoverContent>
