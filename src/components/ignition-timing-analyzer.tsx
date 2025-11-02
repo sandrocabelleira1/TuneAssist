@@ -785,17 +785,6 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                                                 <Checkbox
                                                                     checked={isSelected}
                                                                     className="mr-2"
-                                                                    onClick={(e) => e.stopPropagation()} 
-                                                                    onCheckedChange={(checked) => {
-                                                                        setSelectedLoadValues(prev => {
-                                                                            const valueStr = String(val);
-                                                                            if (checked) {
-                                                                                return [...prev, valueStr];
-                                                                            } else {
-                                                                                return prev.filter(v => v !== valueStr);
-                                                                            }
-                                                                        });
-                                                                    }}
                                                                 />
                                                                 <span>{typeof val === 'number' ? val.toFixed(2) : val}</span>
                                                             </CommandItem>

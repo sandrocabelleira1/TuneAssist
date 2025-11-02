@@ -1641,7 +1641,7 @@ const handleMapSelectionChange = (id: string) => {
                                                             return (
                                                                 <CommandItem
                                                                     key={index}
-                                                                    onSelect={(currentValue) => {
+                                                                    onSelect={() => {
                                                                       const valueStr = String(val);
                                                                         setSelectedLogLoadColumn('');
                                                                         setSelectedLoadValues(prev => 
@@ -1655,17 +1655,6 @@ const handleMapSelectionChange = (id: string) => {
                                                                     <Checkbox
                                                                         checked={isSelected}
                                                                         className="mr-2"
-                                                                        onClick={(e) => e.stopPropagation()} 
-                                                                        onCheckedChange={(checked) => {
-                                                                            const valueStr = String(val);
-                                                                            setSelectedLoadValues(prev => {
-                                                                                if (checked) {
-                                                                                    return [...prev, valueStr];
-                                                                                } else {
-                                                                                    return prev.filter(v => v !== valueStr);
-                                                                                }
-                                                                            });
-                                                                        }}
                                                                     />
                                                                     <span>{typeof val === 'number' ? val.toFixed(2) : val}</span>
                                                                 </CommandItem>
