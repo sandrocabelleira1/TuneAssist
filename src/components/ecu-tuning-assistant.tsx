@@ -744,7 +744,7 @@ export default function EcuTuningAssistant() {
         }
         
         if (type === 'xdf') {
-            reader.readAsText(file);
+            reader.readAsText(file, 'ISO-8859-1');
         } else {
             reader.readAsArrayBuffer(file);
         }
@@ -1641,10 +1641,11 @@ const handleMapSelectionChange = (id: string) => {
                                                             return (
                                                                 <CommandItem
                                                                     key={index}
-                                                                    onSelect={() => {
+                                                                    onSelect={(currentValue) => {
+                                                                      const valueStr = String(val);
                                                                         setSelectedLogLoadColumn('');
                                                                         setSelectedLoadValues(prev => 
-                                                                            isSelected 
+                                                                            prev.includes(valueStr) 
                                                                                 ? prev.filter(v => v !== valueStr)
                                                                                 : [...prev, valueStr]
                                                                         );
