@@ -5,13 +5,17 @@ import Papa from 'papaparse';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Wand2, Download, AlertTriangle, Upload, Eraser, Loader2 } from 'lucide-react';
+import { Wand2, Download, AlertTriangle, Upload, Eraser, Loader2, ChevronsUpDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { IgnitionTimingRun, IgnitionTimingPoint, ProcessedMap, AxisData, XDFinition, LogMessage } from '@/lib/types';
 import IgnitionTimingPlot from '@/components/ignition-timing-plot';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Checkbox } from '@/components/ui/checkbox';
+
 
 type RunType = 'base' | 'modified';
 
@@ -243,7 +247,8 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         return { rpmAxis: x, loadAxis: y };
     }, [processedMap]);
 
-    const [selectedLoadValue, setSelectedLoadValue] = useState('');
+    const [selectedLoadValues, setSelectedLoadValues] = useState<string[]>([]);
+    const [isLoadPopoverOpen, setIsLoadPopoverOpen] = useState(false);
 
 
     const analysisResults = useMemo(() => {
@@ -384,8 +389,8 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     }, [runs, onRunsChange, toast]);
 
     const handleLoadFromMap = () => {
-        if (!processedMap || !rpmAxis || !loadAxis || !selectedLoadValue) {
-            toast({ title: "Dados insuficientes", description: "Mapa de ignição e linha de carga devem ser selecionados.", variant: "destructive" });
+        if (!processedMap || !rpmAxis || !loadAxis || selectedLoadValues.length === 0) {
+            toast({ title: "Dados insuficientes", description: "Mapa de ignição e pelo menos uma linha de carga devem ser selecionados.", variant: "destructive" });
             return;
         }
         if (runs.base.length === 0) {
@@ -398,38 +403,49 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     
         try {
             const loadIsYAxis = loadAxis === processedMap.axes.y;
-            
-            const loadIndex = processedMap.axes[loadIsYAxis ? 'y' : 'x'].calculated.findIndex(val => String(val) === selectedLoadValue);
-            
-            if (loadIndex === -1) {
-                throw new Error("Valor de carga selecionado não encontrado no eixo.");
-            }
     
             const newBaseRun = runs.base.map(point => {
                 const rpmValue = parseFloat(point.rpm);
                 if (isNaN(rpmValue)) return point;
     
                 const rpmIsYAxis = rpmAxis === processedMap.axes.y;
-                
-                // Find closest RPM index in the map's axis
                 const rpmAxisData = processedMap.axes[rpmIsYAxis ? 'y' : 'x'];
                 const closestRpmIndex = rpmAxisData.calculated.reduce((closest, current, idx) => {
                     const currentDiff = Math.abs(Number(current) - rpmValue);
                     const closestDiff = Math.abs(Number(rpmAxisData.calculated[closest]) - rpmValue);
                     return currentDiff < closestDiff ? idx : closest;
                 }, 0);
-
-                 if (closestRpmIndex !== -1) {
-                     const yIndex = rpmIsYAxis ? closestRpmIndex : loadIndex;
-                     const xIndex = rpmIsYAxis ? loadIndex : closestRpmIndex;
-                     const advance = processedMap.calculatedMap?.[yIndex]?.[xIndex];
-                      return { ...point, advance: advance !== null && advance !== undefined ? String(advance) : point.advance };
-                 }
+    
+                if (closestRpmIndex === -1) return point;
+    
+                // Average the advance values from all selected load lines
+                let totalAdvance = 0;
+                let validAdvanceCount = 0;
+    
+                selectedLoadValues.forEach(loadValueStr => {
+                    const loadIndex = processedMap.axes[loadIsYAxis ? 'y' : 'x'].calculated.findIndex(val => String(val) === loadValueStr);
+                    if (loadIndex === -1) return;
+    
+                    const yIndex = rpmIsYAxis ? closestRpmIndex : loadIndex;
+                    const xIndex = rpmIsYAxis ? loadIndex : closestRpmIndex;
+                    const advance = processedMap.calculatedMap?.[yIndex]?.[xIndex];
+    
+                    if (advance !== null && advance !== undefined) {
+                        totalAdvance += advance;
+                        validAdvanceCount++;
+                    }
+                });
+    
+                if (validAdvanceCount > 0) {
+                    const averageAdvance = totalAdvance / validAdvanceCount;
+                    return { ...point, advance: String(averageAdvance) };
+                }
+    
                 return point;
             });
     
             onRunsChange({ ...runs, base: newBaseRun });
-            toast({ title: "Avanço do Mapa Fundido", description: "Valores de avanço do mapa foram adicionados aos pontos do ensaio de base." });
+            toast({ title: "Avanço do Mapa Fundido", description: `Valores de avanço de ${selectedLoadValues.length} linha(s) de carga foram fundidos com os pontos do ensaio.` });
             addLog('Avanço do mapa fundido com sucesso com os dados do log.', 'success');
     
         } catch (error) {
@@ -545,7 +561,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         setIsApplyingSuggestion(true);
         addLog("A iniciar a otimização automática do mapa de ignição...", "info");
     
-        if (!processedMap || !processedMap.calculatedMap || !rpmAxis || !loadAxis || !selectedLoadValue || !selectedMapDefinition) {
+        if (!processedMap || !processedMap.calculatedMap || !rpmAxis || !loadAxis || selectedLoadValues.length === 0 || !selectedMapDefinition) {
             toast({ title: "Dados Incompletos", description: "Otimização falhou. Mapa ativo, eixos e linha de carga são necessários.", variant: "destructive" });
             setIsApplyingSuggestion(false);
             return;
@@ -554,7 +570,6 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         const newCalculatedMap = processedMap.calculatedMap.map(row => [...row]);
         const modifiedCells = new Set<string>();
         const loadIsYAxis = loadAxis === processedMap.axes.y;
-        const loadIndex = processedMap.axes[loadIsYAxis ? 'y' : 'x'].calculated.findIndex(val => String(val) === selectedLoadValue);
     
         let changesMade = 0;
     
@@ -582,17 +597,22 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                     rpmIndicesToChange.push(index);
                 }
             });
-    
-            rpmIndicesToChange.forEach(rpmIndex => {
-                const y = loadIsYAxis ? loadIndex : rpmIndex;
-                const x = loadIsYAxis ? rpmIndex : loadIndex;
-    
-                if (newCalculatedMap[y]?.[x] !== undefined && newCalculatedMap[y]?.[x] !== null) {
-                    const currentValue = newCalculatedMap[y][x]!;
-                    newCalculatedMap[y][x] = currentValue + advanceChange;
-                    modifiedCells.add(`${y}-${x}`);
-                    changesMade++;
-                }
+
+            selectedLoadValues.forEach(loadValueStr => {
+                const loadIndex = processedMap.axes[loadIsYAxis ? 'y' : 'x'].calculated.findIndex(val => String(val) === loadValueStr);
+                if (loadIndex === -1) return;
+
+                rpmIndicesToChange.forEach(rpmIndex => {
+                    const y = loadIsYAxis ? loadIndex : rpmIndex;
+                    const x = loadIsYAxis ? rpmIndex : loadIndex;
+        
+                    if (newCalculatedMap[y]?.[x] !== undefined && newCalculatedMap[y]?.[x] !== null) {
+                        const currentValue = newCalculatedMap[y][x]!;
+                        newCalculatedMap[y][x] = currentValue + advanceChange;
+                        modifiedCells.add(`${y}-${x}`);
+                        changesMade++;
+                    }
+                });
             });
         });
         
@@ -610,7 +630,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
 
         onMapUpdate(selectedMapDefinition.uniqueId, newMapState, modifiedCells);
 
-        const successMsg = `Otimização do mapa de ignição concluída. ${changesMade} células foram ajustadas.`;
+        const successMsg = `Otimização do mapa de ignição concluída. ${changesMade / selectedLoadValues.length} células foram ajustadas em ${selectedLoadValues.length} linhas de carga.`;
         toast({ title: "Otimização Aplicada", description: successMsg });
         addLog(successMsg, "success");
         setIsApplyingSuggestion(false);
@@ -724,19 +744,70 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                         </CardHeader>
                         <CardContent className="flex flex-col sm:flex-row gap-4 items-end">
                             <div className="flex-1 w-full space-y-2">
-                                <Label>Selecione a Linha de Carga do Mapa</Label>
-                                <Select value={selectedLoadValue} onValueChange={setSelectedLoadValue} disabled={!loadAxis}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Selecione um valor de carga..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {loadAxis?.calculated.map((val, idx) => (
-                                            <SelectItem key={idx} value={String(val)}>{val}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <Label>Selecione a(s) Linha(s) de Carga do Mapa</Label>
+                                <Popover open={isLoadPopoverOpen} onOpenChange={setIsLoadPopoverOpen}>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            className="w-full justify-between"
+                                            disabled={!loadAxis}
+                                        >
+                                            <span className="truncate">
+                                                {selectedLoadValues.length > 0
+                                                    ? `${selectedLoadValues.length} cargas selecionadas`
+                                                    : "Selecione valores de carga..."
+                                                }
+                                            </span>
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[--radix-popover-trigger-width)] p-0" align="start">
+                                        <Command>
+                                            <CommandInput placeholder="Procurar valor de carga..." />
+                                            <CommandList>
+                                                <CommandEmpty>Nenhum resultado.</CommandEmpty>
+                                                <CommandGroup>
+                                                    {loadAxis?.calculated.map((val, index) => {
+                                                        const valueStr = String(val);
+                                                        const isSelected = selectedLoadValues.includes(valueStr);
+                                                        return (
+                                                            <CommandItem
+                                                                key={index}
+                                                                onSelect={() => {
+                                                                    setSelectedLoadValues(prev => 
+                                                                        isSelected 
+                                                                            ? prev.filter(v => v !== valueStr)
+                                                                            : [...prev, valueStr]
+                                                                    );
+                                                                }}
+                                                                className="flex items-center"
+                                                            >
+                                                                <Checkbox
+                                                                    checked={isSelected}
+                                                                    className="mr-2"
+                                                                    onClick={(e) => e.stopPropagation()} // Prevent event bubbling to CommandItem
+                                                                    onCheckedChange={(checked) => {
+                                                                        const valueStr = String(val);
+                                                                        setSelectedLoadValues(prev => {
+                                                                            if(checked) {
+                                                                                return [...prev, valueStr];
+                                                                            } else {
+                                                                                return prev.filter(v => v !== valueStr)
+                                                                            }
+                                                                        })
+                                                                    }}
+                                                                />
+                                                                <span>{typeof val === 'number' ? val.toFixed(2) : val}</span>
+                                                            </CommandItem>
+                                                        );
+                                                    })}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
                             </div>
-                            <Button onClick={handleLoadFromMap} disabled={!selectedLoadValue || isLoadingMap || runs.base.length === 0} className="w-full sm:w-auto">
+                            <Button onClick={handleLoadFromMap} disabled={selectedLoadValues.length === 0 || isLoadingMap || runs.base.length === 0} className="w-full sm:w-auto">
                                 {isLoadingMap && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Carregar Dados do Mapa
                             </Button>
@@ -765,7 +836,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                              <Button 
                                 className="w-full"
                                 onClick={handleApplyIgnitionSuggestion}
-                                disabled={isApplyingSuggestion || !selectedLoadValue}
+                                disabled={isApplyingSuggestion || selectedLoadValues.length === 0}
                             >
                                 {isApplyingSuggestion ? (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -774,9 +845,9 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                 )}
                                 Otimizar Mapa com Base no Ensaio
                             </Button>
-                            {!selectedLoadValue && (
+                            {selectedLoadValues.length === 0 && (
                                 <p className="text-xs text-destructive text-center mt-2">
-                                    Por favor, selecione a linha de carga do mapa que corresponde ao ensaio antes de otimizar.
+                                    Por favor, selecione a(s) linha(s) de carga do mapa que corresponde(m) ao ensaio antes de otimizar.
                                 </p>
                             )}
                         </CardContent>
