@@ -576,7 +576,7 @@ export default function EcuTuningAssistant() {
 
     const isAnyFuelMapSelected = useMemo(() => {
         if (!xdfFile || selectedMapIds.length === 0) return false;
-        const fuelKeywords = ['fuel', 'combustível', 'injection', 'injeção', 'lambda'];
+        const fuelKeywords = ['fuel', 'combustível', 'injection', 'injeção', 'lambda', 'tps', 'map'];
         return selectedMapIds.some(id => {
             const def = xdfFile.definitions.find(d => d.uniqueId === id);
             return def && fuelKeywords.some(kw => def.name.toLowerCase().includes(kw));
@@ -1524,7 +1524,7 @@ const handleMapSelectionChange = (id: string) => {
                     <div className="flex h-[40vh] flex-col items-center justify-center text-center text-muted-foreground p-4">
                         <AlertTriangle className="h-12 w-12 text-amber-500 mb-4" />
                         <h3 className="text-lg font-semibold">Função Desativada</h3>
-                        <p className="max-w-md">A análise de combustível só pode ser usada com mapas de combustível. Por favor, selecione um mapa que contenha "combustível", "injeção" ou "lambda" no nome.</p>
+                        <p className="max-w-md">A análise de combustível só pode ser usada com mapas de combustível. Por favor, selecione um mapa que contenha "combustível", "injeção", "lambda", "tps" ou "map" no nome.</p>
                     </div>
                 );
             }
