@@ -138,7 +138,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
         return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [], mergedData: [] };
     }
 
-    const desiredKeys = ['potencia', 'potência', 'power']; // Removido 'torque'
+    const desiredKeys = ['potencia', 'potência', 'power'];
     const otherNumericKeys = logHeaders.filter(
       key => {
           const cleanKey = key.trim().toLowerCase();
@@ -149,7 +149,6 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
     
     let filteredLogData = logData;
 
-    // Apply filtering based on selected load conditions
     if (selectedLoadColumn && loadAxis) {
         const loadKey = findKeyInHeader(logHeaders, [selectedLoadColumn]);
         if (loadKey) {
@@ -163,8 +162,6 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 return Math.abs(logLoadValue - mapLoadValue) <= tolerance;
             });
         }
-    } else if (selectedLoadValues.length > 0 && loadAxis) {
-        filteredLogData = logData;
     }
 
     const processedLogData = filteredLogData
@@ -190,30 +187,39 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
             dataMap.set(rpm, { [rpmKey]: rpm });
         }
         const entry = dataMap.get(rpm);
+        // Assign all keys from logPoint to the entry
         Object.assign(entry, logPoint);
     });
 
     if (mapLineData) {
         mapLineData.forEach(mapPoint => {
             const rpm = mapPoint.rpm;
-            if (!dataMap.has(rpm)) {
-                dataMap.set(rpm, { [rpmKey]: rpm });
+            // Find the closest RPM in the existing map to merge data
+            let closestRpm = -1;
+            let minDiff = Infinity;
+            for (const key of dataMap.keys()) {
+                const diff = Math.abs(key - rpm);
+                if(diff < minDiff) {
+                    minDiff = diff;
+                    closestRpm = key;
+                }
             }
-            const entry = dataMap.get(rpm);
-            entry.mapValue = mapPoint.mapValue;
+
+            // Merge if the RPMs are very close (e.g., tolerance of 10 RPM)
+            if (minDiff < 10 && closestRpm !== -1) {
+                 const entry = dataMap.get(closestRpm)!;
+                 entry.mapValue = mapPoint.mapValue;
+            } else { // Or create a new entry if no close RPM exists
+                 if (!dataMap.has(rpm)) {
+                    dataMap.set(rpm, { [rpmKey]: rpm });
+                }
+                const entry = dataMap.get(rpm)!;
+                entry.mapValue = mapPoint.mapValue;
+            }
         });
     }
 
     const finalMergedData = Array.from(dataMap.values()).sort((a, b) => a[rpmKey] - b[rpmKey]);
-
-    const finalDataWithTimeCorrected = finalMergedData.map(d => {
-        const logPoint = processedLogData.find(p => p[rpmKey] === d[rpmKey]);
-        const timeValue = timeKey && logPoint ? logPoint[timeKey] : null;
-        return {
-            ...d,
-            ...(timeKey && { [timeKey]: timeValue })
-        };
-    })
 
     return {
       chartData: processedLogData,
@@ -221,7 +227,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
       lambdaKey,
       timeKey,
       otherKeys: otherNumericKeys,
-      mergedData: finalDataWithTimeCorrected,
+      mergedData: finalMergedData,
     };
   }, [logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues, mapLineData]);
 
@@ -378,3 +384,4 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
   );
 }
 
+    

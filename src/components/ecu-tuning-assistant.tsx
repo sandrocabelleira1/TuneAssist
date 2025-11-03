@@ -610,7 +610,7 @@ export default function EcuTuningAssistant() {
     }, [processedMap]);
     
     const mapLineData = useMemo(() => {
-        if (!processedMap || !processedMap.axes || !processedMap.rawMap || !rpmAxis || !loadAxis || selectedLoadValues.length === 0 || !selectedMapDefinition) {
+        if (!processedMap || !processedMap.axes || !rpmAxis || !loadAxis || selectedLoadValues.length === 0 || !selectedMapDefinition || !processedMap.calculatedMap) {
             return null;
         }
     
@@ -622,41 +622,23 @@ export default function EcuTuningAssistant() {
         // Find the index of the selected load value in the *sorted* axis
         const sortedLoadIndex = loadAxis.calculated.findIndex(val => Number(val) === loadValue);
         if (sortedLoadIndex === -1) return null;
-    
-        // Get the original, unsorted index of that load value from the axis data
-        const originalLoadIndex = loadAxis.originalIndices[sortedLoadIndex];
-        if (originalLoadIndex === undefined) return null;
-    
-        const equation = selectedMapDefinition.equation || 'x';
-        const data: { rpm: number, mapValue: number | null }[] = [];
+        
+        const data: { rpm: number; mapValue: number | null }[] = [];
     
         // Iterate through the sorted RPM axis
         rpmAxis.calculated.forEach((rpmValue, sortedRpmIndex) => {
-            // Get the original, unsorted index for the current RPM value
-            const originalRpmIndex = rpmAxis.originalIndices[sortedRpmIndex];
-            if (originalRpmIndex === undefined) return;
-    
-            // Determine the correct row and column in the original, unsorted rawMap
-            const rawMapRowIndex = loadIsYAxis ? originalLoadIndex : originalRpmIndex;
-            const rawMapColIndex = loadIsYAxis ? originalRpmIndex : originalLoadIndex;
+            // Determine the correct row and column in the sorted calculatedMap
+            const mapRowIndex = loadIsYAxis ? sortedLoadIndex : sortedRpmIndex;
+            const mapColIndex = loadIsYAxis ? sortedRpmIndex : sortedLoadIndex;
             
-            const rawValue = processedMap.rawMap?.[rawMapRowIndex]?.[rawMapColIndex];
-    
-            let calculatedValue = null;
-            if (rawValue !== null && rawValue !== undefined) {
-                // Apply the equation to the raw value
-                const result = evaluateEquation(equation, rawValue);
-                if (!isNaN(result)) {
-                    calculatedValue = result;
-                }
-            }
+            const calculatedValue = processedMap.calculatedMap?.[mapRowIndex]?.[mapColIndex];
             
             data.push({
                 rpm: Number(rpmValue),
-                mapValue: calculatedValue,
+                mapValue: calculatedValue !== undefined ? calculatedValue : null,
             });
         });
-    
+        
         return data.sort((a, b) => a.rpm - b.rpm);
     
     }, [processedMap, rpmAxis, loadAxis, selectedLoadValues, selectedMapDefinition]);
@@ -2189,3 +2171,5 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
+
+    
