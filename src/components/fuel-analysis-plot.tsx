@@ -14,15 +14,16 @@ import {
 } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import type { AxisData } from '@/lib/types';
 
 interface FuelAnalysisPlotProps {
   logData: any[];
   logHeaders: string[];
+  loadAxis: AxisData | null;
   selectedLoadColumn: string;
   selectedLoadValues: string[];
 }
 
-// Helper to find a key in the log data headers that matches a target label
 function findKeyInHeader(header: string[], targetLabels: string[]): string | undefined {
     for (const targetLabel of targetLabels) {
         const cleanTargetLabel = targetLabel.trim().toLowerCase();
@@ -36,8 +37,23 @@ function findKeyInHeader(header: string[], targetLabels: string[]): string | und
     return undefined;
 }
 
+function findClosestIndex(arr: (number | string)[], target: number): number {
+    let closestIndex = -1;
+    let minDiff = Infinity;
+    for (let i = 0; i < arr.length; i++) {
+        const val = Number(arr[i]);
+        if (isNaN(val)) continue;
+        const diff = Math.abs(val - target);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closestIndex = i;
+        }
+    }
+    return closestIndex;
+}
 
-export default function FuelAnalysisPlot({ logData, logHeaders, selectedLoadColumn, selectedLoadValues }: FuelAnalysisPlotProps) {
+
+export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues }: FuelAnalysisPlotProps) {
   const { chartData, rpmKey, lambdaKey, timeKey, otherKeys } = useMemo(() => {
     if (!logData || logData.length === 0) {
       return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [] };
@@ -60,7 +76,28 @@ export default function FuelAnalysisPlot({ logData, logHeaders, selectedLoadColu
       }
     );
     
-    const processedData = logData
+    let filteredLogData = logData;
+    if (selectedLoadColumn && loadAxis) {
+        const loadKey = findKeyInHeader(logHeaders, [selectedLoadColumn]);
+        if (loadKey) {
+            filteredLogData = logData.filter(row => {
+                const logLoadValue = Number(row[loadKey]);
+                if (isNaN(logLoadValue)) return false;
+                const closestMapLoadIndex = findClosestIndex(loadAxis.calculated, logLoadValue);
+                return closestMapLoadIndex !== -1;
+            });
+        }
+    } else if (selectedLoadValues.length > 0 && loadAxis) {
+        const targetLoadNumbers = selectedLoadValues.map(v => Number(v));
+        filteredLogData = logData.filter(row => {
+            const logRpm = Number(row[rpmKey]);
+             // Placeholder for load value if not in log - assume it matches the selected values
+            if (isNaN(logRpm)) return false;
+            return true;
+        });
+    }
+
+    const processedData = filteredLogData
       .map(row => {
           const newRow: any = {};
           newRow[rpmKey] = Number(row[rpmKey]);
@@ -83,7 +120,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, selectedLoadColu
       timeKey,
       otherKeys: otherNumericKeys,
     };
-  }, [logData, logHeaders]);
+  }, [logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues]);
 
   if (!rpmKey || !lambdaKey) {
     return (

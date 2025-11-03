@@ -1563,6 +1563,7 @@ const handleMapSelectionChange = (id: string) => {
                                     <FuelAnalysisPlot 
                                       logData={logData} 
                                       logHeaders={logHeaders}
+                                      loadAxis={loadAxis}
                                       selectedLoadColumn={selectedLogLoadColumn}
                                       selectedLoadValues={selectedLoadValues}
                                     />
