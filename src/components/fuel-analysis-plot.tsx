@@ -18,6 +18,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 interface FuelAnalysisPlotProps {
   logData: any[];
   logHeaders: string[];
+  selectedLoadColumn: string;
+  selectedLoadValues: string[];
 }
 
 // Helper to find a key in the log data headers that matches a target label
@@ -35,7 +37,7 @@ function findKeyInHeader(header: string[], targetLabels: string[]): string | und
 }
 
 
-export default function FuelAnalysisPlot({ logData, logHeaders }: FuelAnalysisPlotProps) {
+export default function FuelAnalysisPlot({ logData, logHeaders, selectedLoadColumn, selectedLoadValues }: FuelAnalysisPlotProps) {
   const { chartData, rpmKey, lambdaKey, timeKey, otherKeys } = useMemo(() => {
     if (!logData || logData.length === 0) {
       return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [] };

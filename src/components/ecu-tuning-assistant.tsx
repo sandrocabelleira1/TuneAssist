@@ -1560,7 +1560,12 @@ const handleMapSelectionChange = (id: string) => {
 
                             {logData.length > 0 && (
                                 <div className="space-y-4">
-                                    <FuelAnalysisPlot logData={logData} logHeaders={logHeaders} />
+                                    <FuelAnalysisPlot 
+                                      logData={logData} 
+                                      logHeaders={logHeaders}
+                                      selectedLoadColumn={selectedLogLoadColumn}
+                                      selectedLoadValues={selectedLoadValues}
+                                    />
                                     <Separator />
                                 </div>
                             )}
