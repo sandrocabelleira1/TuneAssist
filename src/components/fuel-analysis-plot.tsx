@@ -36,6 +36,8 @@ const CustomTooltipContent = ({ active, payload, label }: { active?: boolean; pa
         const potenciaPayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('potencia') || k.toLowerCase().includes('power')) || '');
         const torquePayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('torque')) || '');
         const mapPayload = findPayload('mapValue');
+        const timePayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('time') || k.toLowerCase().includes('tempo')) || '');
+
 
         return (
             <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
@@ -69,6 +71,14 @@ const CustomTooltipContent = ({ active, payload, label }: { active?: boolean; pa
                                 <td style={{ color: torquePayload.color }}>{torquePayload.name}</td>
                                 <td className="text-center font-semibold" style={{ color: torquePayload.color }}>
                                     {torquePayload.value !== undefined && torquePayload.value !== null ? torquePayload.value.toFixed(2) : '-'}
+                                </td>
+                            </tr>
+                        )}
+                        {timePayload && timePayload.value !== null && (
+                           <tr key={timePayload.dataKey}>
+                                <td style={{ color: "hsl(var(--muted-foreground))" }}>Tempo (s)</td>
+                                <td className="text-center font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>
+                                    {timePayload.value !== undefined && timePayload.value !== null ? timePayload.value.toFixed(2) : '-'}
                                 </td>
                             </tr>
                         )}
