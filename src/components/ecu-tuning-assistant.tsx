@@ -1594,7 +1594,7 @@ const handleMapSelectionChange = (id: string) => {
                                             <Button
                                                 variant="outline"
                                                 className="w-full justify-between"
-                                                disabled={logData.length === 0 || !loadAxis}
+                                                disabled={logData.length === 0 && !loadAxis}
                                             >
                                                 <span className="truncate">
                                                     {selectedLogLoadColumn
@@ -1612,7 +1612,7 @@ const handleMapSelectionChange = (id: string) => {
                                                 <CommandInput placeholder="Procurar condição..." />
                                                 <CommandList>
                                                     <CommandEmpty>Nenhum resultado.</CommandEmpty>
-                                                    <CommandGroup heading="Coluna de Carga do Log">
+                                                     <CommandGroup heading="Coluna de Carga do Log">
                                                         {logHeaders.filter(h => h && /tps|map|load|carga/i.test(h)).map((header) => (
                                                             <CommandItem
                                                                 key={header}
@@ -1631,22 +1631,24 @@ const handleMapSelectionChange = (id: string) => {
                                                     <CommandGroup heading="Valores de Carga do Mapa">
                                                         {loadAxis?.calculated.map((val, index) => {
                                                             const valueStr = String(val);
+                                                            const isSelected = selectedLoadValues.includes(valueStr);
                                                             return (
                                                                 <CommandItem
                                                                     key={index}
                                                                     onSelect={() => {
                                                                         setSelectedLogLoadColumn('');
                                                                         setSelectedLoadValues(prev => 
-                                                                            prev.includes(valueStr) 
+                                                                            isSelected
                                                                                 ? prev.filter(v => v !== valueStr)
                                                                                 : [...prev, valueStr]
                                                                         );
                                                                     }}
                                                                 >
                                                                     <Checkbox
-                                                                        checked={selectedLoadValues.includes(valueStr)}
+                                                                        checked={isSelected}
+                                                                        className="mr-2"
                                                                     />
-                                                                    <label className="ml-2 flex-1 cursor-pointer">{typeof val === 'number' ? val.toFixed(2) : val}</label>
+                                                                    <span>{typeof val === 'number' ? val.toFixed(2) : val}</span>
                                                                 </CommandItem>
                                                             );
                                                         })}

@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
@@ -774,7 +775,6 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                                             <CommandItem
                                                                 key={index}
                                                                 onSelect={() => {
-                                                                    const valueStr = String(val);
                                                                     setSelectedLoadValues(prev => 
                                                                         isSelected 
                                                                             ? prev.filter(v => v !== valueStr)
