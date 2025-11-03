@@ -167,7 +167,7 @@ interface IgnitionTimingPlotProps {
 export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: IgnitionTimingPlotProps) {
     const [editingPoint, setEditingPoint] = useState<{ runType: RunType; point: IgnitionTimingPoint } | null>(null);
 
-    const { chartData, rpmTicks, yAxisLabel, performanceDataKey } = useMemo(() => {
+    const { chartData, rpmTicks, yAxisLabel, performanceDataKey, timeDataKey } = useMemo(() => {
         const dataMap = new Map<number, any>();
         
         const hasTorqueData = runs.base.some(p => p.torque && !isNaN(parseFloat(p.torque))) || 
@@ -204,12 +204,15 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
         const finalChartData = Array.from(dataMap.values()).sort((a,b) => a.rpm - b.rpm);
 
         const rpmTicks = finalChartData.map(d => d.rpm).filter(r => !isNaN(r));
+        
+        const timeKey = runs.base.some(p => p.time !== '' && !isNaN(parseFloat(p.time))) ? 'base_time' : 'modified_time';
 
         return { 
             chartData: finalChartData,
             rpmTicks: [...new Set(rpmTicks)].sort((a,b) => a - b),
             yAxisLabel: perfLabel,
-            performanceDataKey: perfKey
+            performanceDataKey: perfKey,
+            timeDataKey: timeKey,
         };
     }, [runs]);
 
@@ -239,14 +242,6 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
         );
     };
     
-    const timeDataKey = useMemo(() => {
-        const baseHasTime = runs.base.some(p => p.time !== '' && !isNaN(parseFloat(p.time)));
-        const modifiedHasTime = runs.modified.some(p => p.time !== '' && !isNaN(parseFloat(p.time)));
-        if (baseHasTime) return 'base_time';
-        if (modifiedHasTime) return 'modified_time';
-        return 'base_time'; // fallback
-    }, [runs]);
-
 
     return (
         <Card>
@@ -368,5 +363,3 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
         </Card>
     );
 }
-
-    
