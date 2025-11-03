@@ -49,12 +49,13 @@ export default function FuelAnalysisPlot({ logData, logHeaders }: FuelAnalysisPl
         return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [] };
     }
 
+    const desiredKeys = ['potencia', 'potência', 'power', 'torque', 'torq'];
     const otherNumericKeys = logHeaders.filter(
-      key =>
-        key !== rpmKey &&
-        key !== lambdaKey &&
-        key !== timeKey &&
-        logData.every(row => typeof row[key] === 'number' || !isNaN(parseFloat(row[key])))
+      key => {
+          const cleanKey = key.trim().toLowerCase();
+          return desiredKeys.some(dk => cleanKey.includes(dk)) &&
+                 logData.every(row => typeof row[key] === 'number' || !isNaN(parseFloat(row[key])));
+      }
     );
     
     const processedData = logData
