@@ -35,7 +35,6 @@ const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition }
 
         const sondaPayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('lambda') || k.toLowerCase().includes('sonda')) || '');
         const potenciaPayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('potencia') || k.toLowerCase().includes('power')) || '');
-        const torquePayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('torque')) || '');
         const mapPayload = findPayload('mapValue');
         const timeValue = timeKey && data[timeKey] !== null && data[timeKey] !== undefined ? data[timeKey] : null;
 
@@ -67,14 +66,6 @@ const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition }
                                     {potenciaPayload.value !== undefined && potenciaPayload.value !== null 
                                         ? (isPotenciaInWatts ? potenciaPayload.value / 735.5 : potenciaPayload.value).toFixed(0) 
                                         : '-'}
-                                </td>
-                            </tr>
-                        )}
-                        {torquePayload && (
-                            <tr key={torquePayload.dataKey}>
-                                <td style={{ color: torquePayload.color }}>TORQUE NO MOTOR (N.m)</td>
-                                <td className="text-center font-semibold" style={{ color: torquePayload.color }}>
-                                    {torquePayload.value !== undefined && torquePayload.value !== null ? torquePayload.value.toFixed(2) : '-'}
                                 </td>
                             </tr>
                         )}
@@ -147,7 +138,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
         return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [], mergedData: [] };
     }
 
-    const desiredKeys = ['potencia', 'potência', 'power', 'torque', 'torq'];
+    const desiredKeys = ['potencia', 'potência', 'power']; // Removido 'torque'
     const otherNumericKeys = logHeaders.filter(
       key => {
           const cleanKey = key.trim().toLowerCase();
@@ -386,3 +377,4 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
     </Card>
   );
 }
+
