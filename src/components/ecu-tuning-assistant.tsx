@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
@@ -1792,15 +1793,19 @@ const handleMapSelectionChange = (id: string) => {
                                     <UploadCloud size={18} /> Ficheiros
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="flex flex-col gap-3">
+                             <CardContent className="flex flex-col gap-3">
                                 <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => binInputRef.current?.click()}
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => binInputRef.current?.click()}
+                                    className="justify-start text-left"
                                 >
-                                <Binary className="mr-2" />{' '}
-                                {binFile?.name ? 'Trocar BIN' : 'Carregar .BIN'}
+                                    <Binary className="mr-2 flex-shrink-0" />
+                                    <span className="flex-1 truncate">
+                                        {binFile?.name ? binFile.name : 'Carregar .BIN'}
+                                    </span>
                                 </Button>
+
                                 <input
                                 ref={binInputRef}
                                 type="file"
@@ -1810,12 +1815,15 @@ const handleMapSelectionChange = (id: string) => {
                                 />
 
                                 <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => xdfInputRef.current?.click()}
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => xdfInputRef.current?.click()}
+                                    className="justify-start text-left"
                                 >
-                                <FileCog className="mr-2" />{' '}
-                                {xdfFile?.name ? 'Trocar XDF' : 'Carregar .XDF'}
+                                    <FileCog className="mr-2 flex-shrink-0" />
+                                     <span className="flex-1 truncate">
+                                        {xdfFile?.name ? xdfFile.name : 'Carregar .XDF'}
+                                    </span>
                                 </Button>
                                 <input
                                 ref={xdfInputRef}
