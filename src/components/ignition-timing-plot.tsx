@@ -299,7 +299,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
                                 dataKey={`base_${performanceDataKey}`}
                                 name={`Base ${yAxisLabel}`}
                                 stroke={'hsl(var(--primary))'}
-                                strokeWidth={6}
+                                strokeWidth={2.5}
                                 dot={<CustomDot runType={'base'} dataKey={`base_${performanceDataKey}`} />}
                                 connectNulls
                             />
@@ -309,7 +309,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
                                 dataKey={`modified_${performanceDataKey}`}
                                 name={`Mod. ${yAxisLabel}`}
                                 stroke={'hsl(var(--destructive))'}
-                                strokeWidth={6}
+                                strokeWidth={2.5}
                                 dot={<CustomDot runType={'modified'} dataKey={`modified_${performanceDataKey}`} />}
                                 connectNulls
                             />
@@ -323,7 +323,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
                                 stroke={'hsl(142.1 70.6% 45.3%)'} // Green
                                 strokeDasharray="5 5"
                                 strokeOpacity={0.9}
-                                strokeWidth={6}
+                                strokeWidth={2.5}
                                 dot={<CustomDot runType={'base'} dataKey="base_advance" />}
                                 connectNulls
                             />
@@ -335,7 +335,7 @@ export default function IgnitionTimingPlot({ runs, onPointUpdate, onClearRun }: 
                                 stroke={'hsl(38.9 98.4% 50.4%)'} // Yellow/Orange
                                 strokeDasharray="5 5"
                                 strokeOpacity={0.9}
-                                strokeWidth={6}
+                                strokeWidth={2.5}
                                 dot={<CustomDot runType={'modified'} dataKey="modified_advance" />}
                                 connectNulls
                             />
