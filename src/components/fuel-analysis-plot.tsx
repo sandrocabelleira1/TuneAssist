@@ -16,6 +16,7 @@ import { ChartContainer } from '@/components/ui/chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { AxisData, XDFinition } from '@/lib/types';
 
+
 interface FuelAnalysisPlotProps {
   logData: any[];
   logHeaders: string[];
@@ -27,7 +28,7 @@ interface FuelAnalysisPlotProps {
 }
 
 
-const CustomTooltipContent = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string; }) => {
+const CustomTooltipContent = ({ active, payload, label, timeKey }: { active?: boolean; payload?: any[]; label?: string; timeKey: string | null; }) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
         const findPayload = (key: string) => payload.find(p => p.dataKey === key);
@@ -36,7 +37,7 @@ const CustomTooltipContent = ({ active, payload, label }: { active?: boolean; pa
         const potenciaPayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('potencia') || k.toLowerCase().includes('power')) || '');
         const torquePayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('torque')) || '');
         const mapPayload = findPayload('mapValue');
-        const timePayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('time') || k.toLowerCase().includes('tempo')) || '');
+        const timeValue = timeKey && data[timeKey] !== null && data[timeKey] !== undefined ? data[timeKey] : null;
 
 
         return (
@@ -74,11 +75,11 @@ const CustomTooltipContent = ({ active, payload, label }: { active?: boolean; pa
                                 </td>
                             </tr>
                         )}
-                        {timePayload && timePayload.value !== null && (
-                           <tr key={timePayload.dataKey}>
+                        {timeValue !== null && (
+                           <tr key="time">
                                 <td style={{ color: "hsl(var(--muted-foreground))" }}>Tempo (s)</td>
                                 <td className="text-center font-semibold" style={{ color: "hsl(var(--muted-foreground))" }}>
-                                    {timePayload.value !== undefined && timePayload.value !== null ? timePayload.value.toFixed(2) : '-'}
+                                    {timeValue.toFixed(2)}
                                 </td>
                             </tr>
                         )}
@@ -213,10 +214,11 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
 
     const finalDataWithTimeCorrected = finalMergedData.map(d => {
         const logPoint = processedLogData.find(p => p[rpmKey] === d[rpmKey]);
+        const timeValue = timeKey && logPoint ? logPoint[timeKey] : null;
         return {
             ...d,
-            [timeKey as string]: logPoint ? logPoint[timeKey as string] : null
-        }
+            ...(timeKey && { [timeKey]: timeValue })
+        };
     })
 
     return {
@@ -316,7 +318,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 />
               )}
 
-              <Tooltip content={<CustomTooltipContent />} />
+              <Tooltip content={<CustomTooltipContent timeKey={timeKey} />} />
               <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '10px'}}/>
 
               <Line 
