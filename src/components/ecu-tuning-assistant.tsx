@@ -41,6 +41,7 @@ import { collection, serverTimestamp, addDoc, deleteDoc, doc, query, orderBy } f
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { useCollection } from '@/firebase';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import FuelAnalysisPlot from './fuel-analysis-plot';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -1537,22 +1538,33 @@ const handleMapSelectionChange = (id: string) => {
                              <CardDescription>Carregue um ficheiro de log (.csv) ou insira os dados manualmente para que o sistema calcule as correções automaticamente com base no Lambda Alvo.</CardDescription>
                          </CardHeader>
                          <CardContent className="space-y-4">
-                             <div className="flex items-center gap-4">
-                                 <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
-                                     <UploadCloud className="mr-2" /> {logFile ? `Trocar: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
-                                 </Button>
-                                 <input
-                                 ref={logInputRef}
-                                 type="file"
-                                 accept=".csv"
-                                 className="hidden"
-                                 onChange={handleLogFileChange}
-                                 />
-                                 <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={!logFile && logData.length === 0}>
-                                     <Eraser className="h-4 w-4" />
-                                     <span className="sr-only">Limpar Dados de Ensaio</span>
-                                 </Button>
-                             </div>
+                            <div className="flex items-center gap-4">
+                                <Button variant="outline" onClick={() => logInputRef.current?.click()} className="flex-1">
+                                    <UploadCloud className="mr-2 h-4 w-4" /> 
+                                    <span className="truncate">
+                                        {logFile ? `Ficheiro: ${logFile.name}` : 'Carregar Log de Ensaio (.csv)'}
+                                    </span>
+                                </Button>
+                                <input
+                                ref={logInputRef}
+                                type="file"
+                                accept=".csv"
+                                className="hidden"
+                                onChange={handleLogFileChange}
+                                />
+                                <Button variant="outline" size="icon" onClick={handleClearLogData} disabled={!logFile && logData.length === 0}>
+                                    <Eraser className="h-4 w-4" />
+                                    <span className="sr-only">Limpar Dados de Ensaio</span>
+                                </Button>
+                            </div>
+
+                            {logData.length > 0 && (
+                                <div className="space-y-4">
+                                    <FuelAnalysisPlot logData={logData} logHeaders={logHeaders} />
+                                    <Separator />
+                                </div>
+                            )}
+
                              <div className="space-y-2">
                                  <Label htmlFor="log-load-condition">Condição de Carga do Log</Label>
                                  <Popover open={isLoadPopoverOpen} onOpenChange={setIsLoadPopoverOpen}>
@@ -1802,7 +1814,7 @@ const handleMapSelectionChange = (id: string) => {
                                 >
                                     <Binary className="mr-2 flex-shrink-0" />
                                     <span className="flex-1 truncate">
-                                        {binFile?.name ? binFile.name : 'Carregar .BIN'}
+                                        {binFile?.name ? `Ficheiro: ${binFile.name}` : 'Carregar .BIN'}
                                     </span>
                                 </Button>
 
@@ -1822,7 +1834,7 @@ const handleMapSelectionChange = (id: string) => {
                                 >
                                     <FileCog className="mr-2 flex-shrink-0" />
                                      <span className="flex-1 truncate">
-                                        {xdfFile?.name ? xdfFile.name : 'Carregar .XDF'}
+                                        {xdfFile?.name ? `Ficheiro: ${xdfFile.name}` : 'Carregar .XDF'}
                                     </span>
                                 </Button>
                                 <input
