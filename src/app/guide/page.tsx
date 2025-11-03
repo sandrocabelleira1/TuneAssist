@@ -4,7 +4,7 @@ import Header from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { ArrowLeft, Binary, BrainCircuit, ClipboardList, Cpu, Download, Eraser, FileCog, Flame, HardDriveDownload, LineChart, Play, Plus, Save, Search, Settings2, Star, Table2, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
+import { ArrowLeft, Binary, BrainCircuit, ClipboardList, Cpu, Download, Eraser, FileCog, Flame, HardDriveDownload, LineChart, Play, Plus, Save, Search, Settings2, Star, Table2, Trash2, UploadCloud, Wand2, X, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 
 const SectionTitle = ({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) => (
