@@ -36,22 +36,24 @@ function findKeyInHeader(header: string[], targetLabels: string[]): string | und
 
 
 export default function FuelAnalysisPlot({ logData, logHeaders }: FuelAnalysisPlotProps) {
-  const { chartData, rpmKey, lambdaKey, otherKeys } = useMemo(() => {
+  const { chartData, rpmKey, lambdaKey, timeKey, otherKeys } = useMemo(() => {
     if (!logData || logData.length === 0) {
-      return { chartData: [], rpmKey: null, lambdaKey: null, otherKeys: [] };
+      return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [] };
     }
 
     const rpmKey = findKeyInHeader(logHeaders, ['rpm', 'rotacao']);
     const lambdaKey = findKeyInHeader(logHeaders, ['lambda', 'sonda']);
+    const timeKey = findKeyInHeader(logHeaders, ['time', 'tempo', 'momento']);
 
     if (!rpmKey || !lambdaKey) {
-        return { chartData: [], rpmKey: null, lambdaKey: null, otherKeys: [] };
+        return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [] };
     }
 
     const otherNumericKeys = logHeaders.filter(
       key =>
         key !== rpmKey &&
         key !== lambdaKey &&
+        key !== timeKey &&
         logData.every(row => typeof row[key] === 'number' || !isNaN(parseFloat(row[key])))
     );
     
@@ -60,6 +62,8 @@ export default function FuelAnalysisPlot({ logData, logHeaders }: FuelAnalysisPl
           const newRow: any = {};
           newRow[rpmKey] = Number(row[rpmKey]);
           newRow[lambdaKey] = Number(row[lambdaKey]);
+          if (timeKey) newRow[timeKey] = Number(row[timeKey]);
+
           otherNumericKeys.forEach(k => {
               newRow[k] = Number(row[k]);
           });
@@ -73,6 +77,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders }: FuelAnalysisPl
       chartData: processedData,
       rpmKey,
       lambdaKey,
+      timeKey,
       otherKeys: otherNumericKeys,
     };
   }, [logData, logHeaders]);
@@ -101,7 +106,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders }: FuelAnalysisPl
       <CardContent>
         <ChartContainer config={{}} className="min-h-[300px] w-full">
           <ResponsiveContainer>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 20 }}>
+            <LineChart data={chartData} margin={{ top: 20, right: 20, left: -10, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey={rpmKey} 
@@ -110,6 +115,20 @@ export default function FuelAnalysisPlot({ logData, logHeaders }: FuelAnalysisPl
                 label={{ value: "RPM", position: 'insideBottom', offset: -10 }}
               />
               
+              {timeKey && (
+                  <XAxis 
+                    xAxisId="top"
+                    dataKey={timeKey}
+                    orientation="top"
+                    type="number"
+                    domain={['dataMin', 'dataMax']}
+                    label={{ value: "Tempo do Ensaio (s)", position: 'insideTop', offset: -15, dy: -5 }}
+                    stroke="transparent"
+                    tickLine={false}
+                    tickFormatter={(value) => value.toFixed(1)}
+                  />
+              )}
+
               <YAxis 
                 yAxisId="left" 
                 stroke={yAxisColors[0]}
