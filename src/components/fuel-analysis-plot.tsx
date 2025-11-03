@@ -314,7 +314,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     key={key}
                     yAxisId={`right-${index}`} 
                     orientation="right" 
-                    stroke={yAxisColors[index + 1]}
+                    stroke="transparent"
                     domain={domain as [number, number]}
                     tickFormatter={(value) => value.toFixed(0)}
                   />
@@ -325,7 +325,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 <YAxis
                     yAxisId="mapValue"
                     orientation="right"
-                    stroke={yAxisColors[yAxisColors.length-1]}
+                    stroke="transparent"
                 />
               )}
 
@@ -337,7 +337,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 dataKey={lambdaKey}
                 name={"Sonda O2 (Lambda)"}
                 stroke={yAxisColors[0]}
-                strokeWidth={3} 
+                strokeWidth={4} 
                 dot={<CustomDot dataKey={lambdaKey}/>} 
                 connectNulls
               />
@@ -359,7 +359,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                         data={data}
                         name={legendName}
                         stroke={yAxisColors[index + 1]}
-                        strokeWidth={3}
+                        strokeWidth={4}
                         dot={<CustomDot dataKey={key}/>}
                         connectNulls
                     />
@@ -374,7 +374,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     name={mapDefinition?.name || "Valor do Mapa"}
                     stroke={yAxisColors[yAxisColors.length-1]}
                     strokeDasharray="5 5"
-                    strokeWidth={3}
+                    strokeWidth={4}
                     dot={<CustomDot dataKey="mapValue"/>}
                     connectNulls
                 />
