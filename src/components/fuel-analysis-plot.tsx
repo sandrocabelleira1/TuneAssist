@@ -39,6 +39,7 @@ const CustomTooltipContent = ({ active, payload, label, timeKey }: { active?: bo
         const mapPayload = findPayload('mapValue');
         const timeValue = timeKey && data[timeKey] !== null && data[timeKey] !== undefined ? data[timeKey] : null;
 
+        const isPotenciaInWatts = potenciaPayload && (potenciaPayload.name.toLowerCase().includes('(w)') || !potenciaPayload.name.toLowerCase().includes('(cv)'));
 
         return (
             <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
@@ -53,7 +54,7 @@ const CustomTooltipContent = ({ active, payload, label, timeKey }: { active?: bo
                     <tbody>
                          {sondaPayload && (
                             <tr key={sondaPayload.dataKey}>
-                                <td style={{ color: sondaPayload.color }}>{sondaPayload.name}</td>
+                                <td style={{ color: sondaPayload.color }}>Sonda O2 (Lambda)</td>
                                 <td className="text-center font-semibold" style={{ color: sondaPayload.color }}>
                                     {sondaPayload.value !== undefined && sondaPayload.value !== null ? sondaPayload.value.toFixed(2) : '-'}
                                 </td>
@@ -61,15 +62,17 @@ const CustomTooltipContent = ({ active, payload, label, timeKey }: { active?: bo
                         )}
                         {potenciaPayload && (
                             <tr key={potenciaPayload.dataKey}>
-                                <td style={{ color: potenciaPayload.color }}>{potenciaPayload.name}</td>
+                                <td style={{ color: potenciaPayload.color }}>Potência (CV)</td>
                                 <td className="text-center font-semibold" style={{ color: potenciaPayload.color }}>
-                                    {potenciaPayload.value !== undefined && potenciaPayload.value !== null ? potenciaPayload.value.toFixed(0) : '-'}
+                                    {potenciaPayload.value !== undefined && potenciaPayload.value !== null 
+                                        ? (isPotenciaInWatts ? potenciaPayload.value / 735.5 : potenciaPayload.value).toFixed(0) 
+                                        : '-'}
                                 </td>
                             </tr>
                         )}
                         {torquePayload && (
                             <tr key={torquePayload.dataKey}>
-                                <td style={{ color: torquePayload.color }}>{torquePayload.name}</td>
+                                <td style={{ color: torquePayload.color }}>TORQUE NO MOTOR (N.m)</td>
                                 <td className="text-center font-semibold" style={{ color: torquePayload.color }}>
                                     {torquePayload.value !== undefined && torquePayload.value !== null ? torquePayload.value.toFixed(2) : '-'}
                                 </td>
@@ -284,7 +287,6 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     orientation="top"
                     type="number"
                     domain={['dataMin', 'dataMax']}
-                    label={{ value: "Tempo do Ensaio (s)", position: 'insideTop', offset: -15, dy: -5 }}
                     stroke="transparent"
                     tickLine={false}
                     tickFormatter={(value) => value ? value.toFixed(1) : ''}
@@ -298,14 +300,27 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 tickFormatter={(value) => value.toFixed(2)}
               />
 
-              {otherKeys.map((key, index) => (
-                <YAxis 
-                  key={key}
-                  yAxisId={`right-${index}`} 
-                  orientation="right" 
-                  stroke={yAxisColors[index + 1]}
-                />
-              ))}
+              {otherKeys.map((key, index) => {
+                const isPower = key.toLowerCase().includes('potencia') || key.toLowerCase().includes('power');
+                const yAxisData = isPower 
+                    ? mergedData.map(d => d[key] ? d[key] / 735.5 : null).filter(v => v !== null)
+                    : mergedData.map(d => d[key]).filter(v => v !== null);
+
+                const domain = yAxisData.length > 0
+                    ? [Math.min(...yAxisData as number[]), Math.max(...yAxisData as number[])]
+                    : ['auto', 'auto'];
+
+                return (
+                  <YAxis 
+                    key={key}
+                    yAxisId={`right-${index}`} 
+                    orientation="right" 
+                    stroke={yAxisColors[index + 1]}
+                    domain={domain as [number, number]}
+                    tickFormatter={(value) => value.toFixed(0)}
+                  />
+                )
+              })}
 
               {mapLineData && (
                 <YAxis
@@ -322,25 +337,35 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 yAxisId="left" 
                 type="monotone" 
                 dataKey={lambdaKey}
-                name={lambdaKey}
+                name={"Sonda O2 (Lambda)"}
                 stroke={yAxisColors[0]}
                 strokeWidth={2}
                 dot={<CustomDot dataKey={lambdaKey}/>} 
                 connectNulls
               />
               
-              {otherKeys.map((key, index) => (
-                 <Line 
-                    key={key}
-                    yAxisId={`right-${index}`} 
-                    type="monotone" 
-                    dataKey={key}
-                    name={key}
-                    stroke={yAxisColors[index + 1]}
-                    dot={<CustomDot dataKey={key}/>}
-                    connectNulls
-                />
-              ))}
+              {otherKeys.map((key, index) => {
+                 const isPowerInWatts = key.toLowerCase().includes('potencia') || key.toLowerCase().includes('power');
+                 const data = mergedData.map(d => {
+                     if (d[key] === null || d[key] === undefined) return {...d, [key]: null};
+                     const value = isPowerInWatts ? d[key] / 735.5 : d[key];
+                     return {...d, [key]: value};
+                 });
+                 const legendName = isPowerInWatts ? 'Potência (CV)' : key;
+                 return (
+                    <Line 
+                        key={key}
+                        yAxisId={`right-${index}`} 
+                        type="monotone" 
+                        dataKey={key}
+                        data={data}
+                        name={legendName}
+                        stroke={yAxisColors[index + 1]}
+                        dot={<CustomDot dataKey={key}/>}
+                        connectNulls
+                    />
+                 )
+              })}
               
               {mapLineData && (
                 <Line
