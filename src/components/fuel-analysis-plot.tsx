@@ -186,31 +186,32 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
         if (!dataMap.has(rpm)) {
             dataMap.set(rpm, { [rpmKey]: rpm });
         }
-        const entry = dataMap.get(rpm);
-        // Assign all keys from logPoint to the entry
+        const entry = dataMap.get(rpm)!;
         Object.assign(entry, logPoint);
     });
 
     if (mapLineData) {
         mapLineData.forEach(mapPoint => {
             const rpm = mapPoint.rpm;
-            // Find the closest RPM in the existing map to merge data
             let closestRpm = -1;
             let minDiff = Infinity;
+
             for (const key of dataMap.keys()) {
                 const diff = Math.abs(key - rpm);
-                if(diff < minDiff) {
+                if (diff < minDiff) {
                     minDiff = diff;
                     closestRpm = key;
                 }
             }
 
-            // Merge if the RPMs are very close (e.g., tolerance of 10 RPM)
-            if (minDiff < 10 && closestRpm !== -1) {
-                 const entry = dataMap.get(closestRpm)!;
-                 entry.mapValue = mapPoint.mapValue;
-            } else { // Or create a new entry if no close RPM exists
-                 if (!dataMap.has(rpm)) {
+            const mergeThreshold = 25; // RPM threshold to merge data
+            if (minDiff < mergeThreshold && closestRpm !== -1) {
+                const entry = dataMap.get(closestRpm)!;
+                if (entry.mapValue === undefined || entry.mapValue === null) {
+                    entry.mapValue = mapPoint.mapValue;
+                }
+            } else {
+                if (!dataMap.has(rpm)) {
                     dataMap.set(rpm, { [rpmKey]: rpm });
                 }
                 const entry = dataMap.get(rpm)!;
@@ -218,6 +219,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
             }
         });
     }
+
 
     const finalMergedData = Array.from(dataMap.values()).sort((a, b) => a[rpmKey] - b[rpmKey]);
 
@@ -335,7 +337,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 dataKey={lambdaKey}
                 name={"Sonda O2 (Lambda)"}
                 stroke={yAxisColors[0]}
-                strokeWidth={2}
+                strokeWidth={2.5} 
                 dot={<CustomDot dataKey={lambdaKey}/>} 
                 connectNulls
               />
@@ -357,6 +359,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                         data={data}
                         name={legendName}
                         stroke={yAxisColors[index + 1]}
+                        strokeWidth={2.5}
                         dot={<CustomDot dataKey={key}/>}
                         connectNulls
                     />
@@ -371,6 +374,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     name={mapDefinition?.name || "Valor do Mapa"}
                     stroke={yAxisColors[yAxisColors.length-1]}
                     strokeDasharray="5 5"
+                    strokeWidth={2.5}
                     dot={<CustomDot dataKey="mapValue"/>}
                     connectNulls
                 />
