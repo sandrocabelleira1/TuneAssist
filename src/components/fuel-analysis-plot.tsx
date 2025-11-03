@@ -26,6 +26,40 @@ interface FuelAnalysisPlotProps {
   mapDefinition: XDFinition | undefined;
 }
 
+
+const CustomTooltipContent = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string; }) => {
+    if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        
+        return (
+            <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
+                <p className="font-bold mb-2">RPM: {label}</p>
+                <table className="w-full text-left">
+                    <thead>
+                        <tr>
+                            <th className="pr-2">Métrica</th>
+                            <th className="pr-2 text-center">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                         {payload.map(p => (
+                            <tr key={p.dataKey}>
+                                <td style={{ color: p.color }}>{p.name}</td>
+                                <td className="text-center font-semibold" style={{ color: p.color }}>
+                                    {p.value !== undefined && p.value !== null ? p.value.toFixed(2) : '-'}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    }
+
+    return null;
+};
+
+
 function findKeyInHeader(header: string[], targetLabels: string[]): string | undefined {
     for (const targetLabel of targetLabels) {
         const cleanTargetLabel = targetLabel.trim().toLowerCase();
@@ -154,6 +188,19 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
   }
 
   const yAxisColors = ['hsl(var(--primary))', '#82ca9d', '#ffc658', '#ff8042', '#8884d8', '#ffbb28'];
+  
+  const CustomDot = ({ cx, cy, payload, dataKey }: any) => {
+    if (!payload || payload[dataKey] === undefined || payload[dataKey] === null) {
+        return null;
+    }
+    return (
+        <g className="group">
+            <circle cx={cx} cy={cy} r={6} fill="currentColor" className="opacity-0 group-hover:opacity-30 transition-opacity" />
+            <circle cx={cx} cy={cy} r={3} fill="currentColor" stroke="hsl(var(--background))" strokeWidth={1.5} />
+        </g>
+    );
+};
+
 
   return (
     <Card>
@@ -213,7 +260,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 />
               )}
 
-              <Tooltip content={<ChartTooltipContent indicator="dot" />} />
+              <Tooltip content={<CustomTooltipContent />} />
               <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '10px'}}/>
 
               <Line 
@@ -223,7 +270,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 name={lambdaKey}
                 stroke={yAxisColors[0]}
                 strokeWidth={2}
-                dot={false} 
+                dot={<CustomDot dataKey={lambdaKey}/>} 
                 connectNulls
               />
               
@@ -235,7 +282,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     dataKey={key}
                     name={key}
                     stroke={yAxisColors[index + 1]}
-                    dot={false}
+                    dot={<CustomDot dataKey={key}/>}
                     connectNulls
                 />
               ))}
@@ -247,8 +294,8 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     dataKey="mapValue"
                     name={mapDefinition?.name || "Valor do Mapa"}
                     stroke={yAxisColors[yAxisColors.length-1]}
-                    strokeDasharray="3 3"
-                    dot={false}
+                    strokeDasharray="5 5"
+                    dot={<CustomDot dataKey="mapValue"/>}
                     connectNulls
                 />
               )}
