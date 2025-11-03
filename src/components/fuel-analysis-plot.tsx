@@ -86,11 +86,11 @@ const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition }
                                 </td>
                             </tr>
                         )}
-                        {mapPayload && (
+                        {mapPayload && mapPayload.value !== null && (
                              <tr key={mapPayload.dataKey}>
                                 <td style={{ color: mapPayload.color }}>{mapDefinition?.name || "Valor do Mapa"}</td>
                                 <td className="text-center font-semibold" style={{ color: mapPayload.color }}>
-                                    {mapPayload.value !== undefined && mapPayload.value !== null ? mapPayload.value.toFixed(2) : '-'}
+                                    {mapPayload.value !== undefined ? mapPayload.value.toFixed(2) : '-'}
                                 </td>
                             </tr>
                         )}
@@ -334,7 +334,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
               <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '10px'}}/>
 
               <Line 
-                yAxisId="left" CRLFtype="monotone" 
+                yAxisId="left" type="monotone" 
                 dataKey={lambdaKey}
                 name={"Sonda O2 (Lambda)"}
                 stroke={yAxisColors[0]}
