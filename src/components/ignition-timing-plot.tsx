@@ -111,42 +111,32 @@ const CustomTooltipContent = ({ active, payload, label }: CustomTooltipProps) =>
     if (active && payload && payload.length) {
         const data = payload[0].payload;
         
-        const hasTorque = data.base_torque !== null || data.modified_torque !== null;
-        
         return (
             <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
                 <p className="font-bold mb-2">RPM: {label}</p>
                 <table className="w-full text-left">
                     <thead>
                         <tr>
-                            <th className="pr-2">Métrica</th>
-                            <th className="pr-2 text-center">Base</th>
-                            <th className="text-center">Modificado</th>
+                            <th className="pr-2 font-medium">Métrica</th>
+                            <th className="pr-2 text-center font-medium">Base</th>
+                            <th className="text-center font-medium">Modificado</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {hasTorque ? (
-                            <tr>
-                                <td>Torque (Nm)</td>
-                                <td className="text-center text-primary">{data.base_torque?.toFixed(2) ?? '-'}</td>
-                                <td className="text-center text-destructive">{data.modified_torque?.toFixed(2) ?? '-'}</td>
-                            </tr>
-                        ) : (
-                             <tr>
-                                <td>Tempo (s)</td>
-                                <td className="text-center text-primary">{data.base_time?.toFixed(3) ?? '-'}</td>
-                                <td className="text-center text-destructive">{data.modified_time?.toFixed(3) ?? '-'}</td>
-                            </tr>
-                        )}
                         <tr>
+                            <td>Torque (Nm)</td>
+                            <td className="text-center font-semibold text-primary">{data.base_torque?.toFixed(2) ?? '-'}</td>
+                            <td className="text-center font-semibold text-destructive">{data.modified_torque?.toFixed(2) ?? '-'}</td>
+                        </tr>
+                         <tr>
                             <td>Avanço (°)</td>
-                            <td className="text-center text-green-500">{data.base_advance?.toFixed(1) ?? '-'}</td>
-                            <td className="text-center text-yellow-500">{data.modified_advance?.toFixed(1) ?? '-'}</td>
+                            <td className="text-center font-semibold text-green-500">{data.base_advance?.toFixed(1) ?? '-'}</td>
+                            <td className="text-center font-semibold text-yellow-500">{data.modified_advance?.toFixed(1) ?? '-'}</td>
                         </tr>
                          <tr>
                             <td>Tempo (s)</td>
-                            <td className="text-center text-muted-foreground">{data.base_time?.toFixed(3) ?? '-'}</td>
-                            <td className="text-center text-muted-foreground">{data.modified_time?.toFixed(3) ?? '-'}</td>
+                            <td className="text-center font-semibold text-muted-foreground">{data.base_time?.toFixed(3) ?? '-'}</td>
+                            <td className="text-center font-semibold text-muted-foreground">{data.modified_time?.toFixed(3) ?? '-'}</td>
                         </tr>
                     </tbody>
                 </table>
