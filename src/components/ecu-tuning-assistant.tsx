@@ -1594,7 +1594,7 @@ const handleMapSelectionChange = (id: string) => {
                                             <Button
                                                 variant="outline"
                                                 className="w-full justify-between"
-                                                disabled={logData.length === 0 && !loadAxis}
+                                                disabled={!loadAxis}
                                             >
                                                 <span className="truncate">
                                                     {selectedLogLoadColumn
@@ -1612,47 +1612,51 @@ const handleMapSelectionChange = (id: string) => {
                                                 <CommandInput placeholder="Procurar condição..." />
                                                 <CommandList>
                                                     <CommandEmpty>Nenhum resultado.</CommandEmpty>
-                                                     <CommandGroup heading="Coluna de Carga do Log">
-                                                        {logHeaders.filter(h => h && /tps|map|load|carga/i.test(h)).map((header) => (
-                                                            <CommandItem
-                                                                key={header}
-                                                                onSelect={() => {
-                                                                    setSelectedLogLoadColumn(header);
-                                                                    setSelectedLoadValues([]);
-                                                                    setIsLoadPopoverOpen(false);
-                                                                }}
-                                                            >
-                                                                <Check className={cn("mr-2 h-4 w-4", selectedLogLoadColumn === header ? "opacity-100" : "opacity-0")} />
-                                                                {header}
-                                                            </CommandItem>
-                                                        ))}
-                                                    </CommandGroup>
-                                                    <Separator />
-                                                    <CommandGroup heading="Valores de Carga do Mapa">
-                                                        {loadAxis?.calculated.map((val, index) => {
-                                                            const valueStr = String(val);
-                                                            const isSelected = selectedLoadValues.includes(valueStr);
-                                                            return (
+                                                     {logHeaders.filter(h => h && /tps|map|load|carga/i.test(h)).length > 0 && (
+                                                        <CommandGroup heading="Coluna de Carga do Log">
+                                                            {logHeaders.filter(h => h && /tps|map|load|carga/i.test(h)).map((header) => (
                                                                 <CommandItem
-                                                                    key={index}
+                                                                    key={header}
                                                                     onSelect={() => {
-                                                                        setSelectedLogLoadColumn('');
-                                                                        setSelectedLoadValues(prev => 
-                                                                            isSelected
-                                                                                ? prev.filter(v => v !== valueStr)
-                                                                                : [...prev, valueStr]
-                                                                        );
+                                                                        setSelectedLogLoadColumn(header);
+                                                                        setSelectedLoadValues([]);
+                                                                        setIsLoadPopoverOpen(false);
                                                                     }}
                                                                 >
-                                                                    <Checkbox
-                                                                        checked={isSelected}
-                                                                        className="mr-2"
-                                                                    />
-                                                                    <span>{typeof val === 'number' ? val.toFixed(2) : val}</span>
+                                                                    <Check className={cn("mr-2 h-4 w-4", selectedLogLoadColumn === header ? "opacity-100" : "opacity-0")} />
+                                                                    {header}
                                                                 </CommandItem>
-                                                            );
-                                                        })}
-                                                    </CommandGroup>
+                                                            ))}
+                                                        </CommandGroup>
+                                                     )}
+                                                    {loadAxis && logHeaders.length > 0 && <Separator />}
+                                                    {loadAxis && (
+                                                        <CommandGroup heading="Valores de Carga do Mapa">
+                                                            {loadAxis.calculated.map((val, index) => {
+                                                                const valueStr = String(val);
+                                                                const isSelected = selectedLoadValues.includes(valueStr);
+                                                                return (
+                                                                    <CommandItem
+                                                                        key={index}
+                                                                        onSelect={() => {
+                                                                            setSelectedLogLoadColumn('');
+                                                                            setSelectedLoadValues(prev => 
+                                                                                isSelected
+                                                                                    ? prev.filter(v => v !== valueStr)
+                                                                                    : [...prev, valueStr]
+                                                                            );
+                                                                        }}
+                                                                    >
+                                                                        <Checkbox
+                                                                            checked={isSelected}
+                                                                            className="mr-2"
+                                                                        />
+                                                                        <span>{typeof val === 'number' ? val.toFixed(2) : val}</span>
+                                                                    </CommandItem>
+                                                                );
+                                                            })}
+                                                        </CommandGroup>
+                                                    )}
                                                 </CommandList>
                                             </Command>
                                         </PopoverContent>

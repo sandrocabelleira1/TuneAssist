@@ -767,8 +767,9 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                             <CommandInput placeholder="Procurar valor de carga..." />
                                             <CommandList>
                                                 <CommandEmpty>Nenhum resultado.</CommandEmpty>
+                                                {loadAxis && (
                                                 <CommandGroup>
-                                                    {loadAxis?.calculated.map((val, index) => {
+                                                    {loadAxis.calculated.map((val, index) => {
                                                         const valueStr = String(val);
                                                         const isSelected = selectedLoadValues.includes(valueStr);
                                                         return (
@@ -788,6 +789,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                                                         );
                                                     })}
                                                 </CommandGroup>
+                                                )}
                                             </CommandList>
                                         </Command>
                                     </PopoverContent>
