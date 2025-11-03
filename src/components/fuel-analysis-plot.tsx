@@ -77,24 +77,35 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
     );
     
     let filteredLogData = logData;
+
+    // Apply filtering based on selected load conditions
     if (selectedLoadColumn && loadAxis) {
         const loadKey = findKeyInHeader(logHeaders, [selectedLoadColumn]);
         if (loadKey) {
+            // This is a simplified filter. A more robust implementation might average
+            // log points that fall into the "bucket" of a map's load axis value.
             filteredLogData = logData.filter(row => {
                 const logLoadValue = Number(row[loadKey]);
                 if (isNaN(logLoadValue)) return false;
+                
+                // Check if the log's load value is "close enough" to any value on the map's load axis.
                 const closestMapLoadIndex = findClosestIndex(loadAxis.calculated, logLoadValue);
-                return closestMapLoadIndex !== -1;
+                if (closestMapLoadIndex === -1) return false;
+                
+                const mapLoadValue = Number(loadAxis.calculated[closestMapLoadIndex]);
+                const tolerance = (Number(loadAxis.calculated[1]) - Number(loadAxis.calculated[0])) / 2;
+                
+                return Math.abs(logLoadValue - mapLoadValue) <= tolerance;
             });
         }
     } else if (selectedLoadValues.length > 0 && loadAxis) {
         const targetLoadNumbers = selectedLoadValues.map(v => Number(v));
-        filteredLogData = logData.filter(row => {
-            const logRpm = Number(row[rpmKey]);
-             // Placeholder for load value if not in log - assume it matches the selected values
-            if (isNaN(logRpm)) return false;
-            return true;
-        });
+        
+        // This is a placeholder for a more complex scenario. When specific map loads are selected
+        // without a load column in the log, we assume all log points correspond to those loads.
+        // We are effectively just using all log points. If there was a way to know which point
+        // belongs to which load, we would filter here.
+        filteredLogData = logData;
     }
 
     const processedData = filteredLogData
