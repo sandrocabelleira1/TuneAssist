@@ -295,7 +295,6 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
               <YAxis 
                 yAxisId="left" 
                 stroke={yAxisColors[0]}
-                label={{ value: lambdaKey, angle: -90, position: 'insideLeft', fill: yAxisColors[0] }}
                 tickFormatter={(value) => value.toFixed(2)}
               />
 
@@ -305,7 +304,6 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                   yAxisId={`right-${index}`} 
                   orientation="right" 
                   stroke={yAxisColors[index + 1]}
-                  label={{ value: key, angle: 90, position: 'insideRight', fill: yAxisColors[index + 1] }}
                 />
               ))}
 
@@ -314,7 +312,6 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     yAxisId="mapValue"
                     orientation="right"
                     stroke={yAxisColors[yAxisColors.length-1]}
-                    label={{ value: mapDefinition?.name || "Valor do Mapa", angle: 90, position: 'insideRight', fill: yAxisColors[yAxisColors.length-1], dx: 15 }}
                 />
               )}
 
