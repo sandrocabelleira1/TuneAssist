@@ -29,6 +29,14 @@ interface FuelAnalysisPlotProps {
 
 const CustomTooltipContent = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string; }) => {
     if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        const findPayload = (key: string) => payload.find(p => p.dataKey === key);
+
+        const sondaPayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('lambda') || k.toLowerCase().includes('sonda')) || '');
+        const potenciaPayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('potencia') || k.toLowerCase().includes('power')) || '');
+        const torquePayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('torque')) || '');
+        const mapPayload = findPayload('mapValue');
+
         return (
             <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
                 <p className="font-bold mb-2">RPM: {label}</p>
@@ -40,14 +48,38 @@ const CustomTooltipContent = ({ active, payload, label }: { active?: boolean; pa
                         </tr>
                     </thead>
                     <tbody>
-                         {payload.map(p => (
-                            <tr key={p.dataKey}>
-                                <td style={{ color: p.color }}>{p.name}</td>
-                                <td className="text-center font-semibold" style={{ color: p.color }}>
-                                    {p.value !== undefined && p.value !== null ? p.value.toFixed(2) : '-'}
+                         {sondaPayload && (
+                            <tr key={sondaPayload.dataKey}>
+                                <td style={{ color: sondaPayload.color }}>{sondaPayload.name}</td>
+                                <td className="text-center font-semibold" style={{ color: sondaPayload.color }}>
+                                    {sondaPayload.value !== undefined && sondaPayload.value !== null ? sondaPayload.value.toFixed(2) : '-'}
                                 </td>
                             </tr>
-                        ))}
+                        )}
+                        {potenciaPayload && (
+                            <tr key={potenciaPayload.dataKey}>
+                                <td style={{ color: potenciaPayload.color }}>{potenciaPayload.name}</td>
+                                <td className="text-center font-semibold" style={{ color: potenciaPayload.color }}>
+                                    {potenciaPayload.value !== undefined && potenciaPayload.value !== null ? potenciaPayload.value.toFixed(0) : '-'}
+                                </td>
+                            </tr>
+                        )}
+                        {torquePayload && (
+                            <tr key={torquePayload.dataKey}>
+                                <td style={{ color: torquePayload.color }}>{torquePayload.name}</td>
+                                <td className="text-center font-semibold" style={{ color: torquePayload.color }}>
+                                    {torquePayload.value !== undefined && torquePayload.value !== null ? torquePayload.value.toFixed(2) : '-'}
+                                </td>
+                            </tr>
+                        )}
+                        {mapPayload && (
+                             <tr key={mapPayload.dataKey}>
+                                <td style={{ color: mapPayload.color }}>{mapPayload.name}</td>
+                                <td className="text-center font-semibold" style={{ color: mapPayload.color }}>
+                                    {mapPayload.value !== undefined && mapPayload.value !== null ? mapPayload.value.toFixed(2) : '-'}
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
