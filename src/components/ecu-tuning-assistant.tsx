@@ -610,7 +610,7 @@ export default function EcuTuningAssistant() {
     }, [processedMap]);
     
     const mapLineData = useMemo(() => {
-        if (!processedMap || !processedMap.axes || !rpmAxis || !loadAxis || selectedLoadValues.length === 0 || !selectedMapDefinition) {
+        if (!processedMap || !processedMap.axes || !processedMap.rawMap || !rpmAxis || !loadAxis || selectedLoadValues.length === 0 || !selectedMapDefinition) {
             return null;
         }
     
@@ -623,7 +623,7 @@ export default function EcuTuningAssistant() {
         const sortedLoadIndex = loadAxis.calculated.findIndex(val => Number(val) === loadValue);
         if (sortedLoadIndex === -1) return null;
     
-        // Get the original, unsorted index of that load value
+        // Get the original, unsorted index of that load value from the ProcessedMap
         const originalLoadIndex = loadAxis.originalIndices[sortedLoadIndex];
         if (originalLoadIndex === undefined) return null;
     
@@ -637,11 +637,11 @@ export default function EcuTuningAssistant() {
             const originalRpmIndex = rpmAxis.originalIndices[sortedRpmIndex];
             if (originalRpmIndex === undefined) return;
     
-            const y = loadIsYAxis ? originalLoadIndex : originalRpmIndex;
-            const x = loadIsYAxis ? originalRpmIndex : originalLoadIndex;
-            
             // Get the raw value from the original, unsorted map data
-            const rawValue = processedMap.rawMap?.[y]?.[x];
+            const rawMapRowIndex = loadIsYAxis ? originalLoadIndex : originalRpmIndex;
+            const rawMapColIndex = loadIsYAxis ? originalRpmIndex : originalLoadIndex;
+            
+            const rawValue = processedMap.rawMap?.[rawMapRowIndex]?.[rawMapColIndex];
     
             let calculatedValue = null;
             if (rawValue !== null && rawValue !== undefined) {

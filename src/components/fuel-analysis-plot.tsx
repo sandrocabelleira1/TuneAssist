@@ -12,7 +12,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+import { ChartContainer } from '@/components/ui/chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { AxisData, XDFinition } from '@/lib/types';
 
@@ -29,8 +29,6 @@ interface FuelAnalysisPlotProps {
 
 const CustomTooltipContent = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string; }) => {
     if (active && payload && payload.length) {
-        const data = payload[0].payload;
-        
         return (
             <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
                 <p className="font-bold mb-2">RPM: {label}</p>
@@ -129,9 +127,6 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
             });
         }
     } else if (selectedLoadValues.length > 0 && loadAxis) {
-        // This case is implicitly handled by mapLineData being generated based on these values.
-        // The log data itself doesn't need to be filtered here if we're just comparing against a specific map line.
-        // We will show all log data and the specific map line.
         filteredLogData = logData;
     }
 
@@ -150,7 +145,6 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
       .filter(row => !isNaN(row[rpmKey]))
       .sort((a, b) => a[rpmKey] - b[rpmKey]);
 
-    // Merge log data and map data for a unified chart axis
     const dataMap = new Map<number, any>();
 
     processedLogData.forEach(logPoint => {
@@ -175,6 +169,13 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
 
     const finalMergedData = Array.from(dataMap.values()).sort((a, b) => a[rpmKey] - b[rpmKey]);
 
+    const finalDataWithTimeCorrected = finalMergedData.map(d => {
+        const logPoint = processedLogData.find(p => p[rpmKey] === d[rpmKey]);
+        return {
+            ...d,
+            [timeKey as string]: logPoint ? logPoint[timeKey as string] : null
+        }
+    })
 
     return {
       chartData: processedLogData,
@@ -182,7 +183,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
       lambdaKey,
       timeKey,
       otherKeys: otherNumericKeys,
-      mergedData: finalMergedData,
+      mergedData: finalDataWithTimeCorrected,
     };
   }, [logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues, mapLineData]);
 
@@ -242,7 +243,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     label={{ value: "Tempo do Ensaio (s)", position: 'insideTop', offset: -15, dy: -5 }}
                     stroke="transparent"
                     tickLine={false}
-                    tickFormatter={(value) => value.toFixed(1)}
+                    tickFormatter={(value) => value ? value.toFixed(1) : ''}
                     connectNulls={false}
                   />
               )}
