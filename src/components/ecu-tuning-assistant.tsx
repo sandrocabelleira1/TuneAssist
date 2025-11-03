@@ -815,11 +815,6 @@ export default function EcuTuningAssistant() {
                             if (results.meta.fields) {
                                 const cleanHeaders = results.meta.fields.map(h => h.trim()).filter(Boolean); // Filter out empty headers
                                 setLogHeaders(cleanHeaders);
-                                const loadHeader = cleanHeaders.find(h => /tps|map|load|carga/i.test(h));
-                                if (loadHeader) {
-                                    setSelectedLogLoadColumn(loadHeader);
-                                    setSelectedLoadValues([]);
-                                }
                             }
                             
                             const cleanedData = results.data.map((row: any) => {
@@ -1643,7 +1638,7 @@ const handleMapSelectionChange = (id: string) => {
                                                                 <CommandItem
                                                                     key={index}
                                                                     onSelect={() => {
-                                                                      const valueStr = String(val);
+                                                                        const valueStr = String(val);
                                                                         setSelectedLogLoadColumn('');
                                                                         setSelectedLoadValues(prev => 
                                                                             prev.includes(valueStr) 
@@ -1656,6 +1651,16 @@ const handleMapSelectionChange = (id: string) => {
                                                                     <Checkbox
                                                                         id={`load-val-${index}`}
                                                                         checked={isSelected}
+                                                                        onCheckedChange={(checked) => {
+                                                                            const valueStr = String(val);
+                                                                            setSelectedLogLoadColumn('');
+                                                                            setSelectedLoadValues(prev =>
+                                                                                checked
+                                                                                ? [...prev, valueStr]
+                                                                                : prev.filter(v => v !== valueStr)
+                                                                            );
+                                                                        }}
+                                                                        onClick={(e) => e.stopPropagation()}
                                                                     />
                                                                     <label htmlFor={`load-val-${index}`} className="ml-2 flex-1 cursor-pointer">{typeof val === 'number' ? val.toFixed(2) : val}</label>
                                                                 </CommandItem>
