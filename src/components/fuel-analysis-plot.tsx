@@ -38,7 +38,7 @@ const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition }
         const mapPayload = findPayload('mapValue');
         const timeValue = timeKey && data[timeKey] !== null && data[timeKey] !== undefined ? data[timeKey] : null;
 
-        const isPotenciaInWatts = potenciaPayload && (potenciaPayload.name.toLowerCase().includes('(w)') || !potenciaPayload.name.toLowerCase().includes('(cv)'));
+        const isPotenciaInWatts = potenciaPayload && (potenciaPayload.name.toLowerCase().includes('(w)'));
 
         return (
             <div className="p-2 bg-background border border-border rounded-lg shadow-lg text-xs">
@@ -337,7 +337,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 dataKey={lambdaKey}
                 name={"Sonda O2 (Lambda)"}
                 stroke={yAxisColors[0]}
-                strokeWidth={2.5} 
+                strokeWidth={3} 
                 dot={<CustomDot dataKey={lambdaKey}/>} 
                 connectNulls
               />
@@ -359,7 +359,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                         data={data}
                         name={legendName}
                         stroke={yAxisColors[index + 1]}
-                        strokeWidth={2.5}
+                        strokeWidth={3}
                         dot={<CustomDot dataKey={key}/>}
                         connectNulls
                     />
@@ -374,7 +374,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     name={mapDefinition?.name || "Valor do Mapa"}
                     stroke={yAxisColors[yAxisColors.length-1]}
                     strokeDasharray="5 5"
-                    strokeWidth={2.5}
+                    strokeWidth={3}
                     dot={<CustomDot dataKey="mapValue"/>}
                     connectNulls
                 />
@@ -387,5 +387,3 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
     </Card>
   );
 }
-
-    
