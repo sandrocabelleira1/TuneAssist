@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import type { AxisData } from '@/lib/types';
+import type { AxisData, XDFinition } from '@/lib/types';
 
 interface FuelAnalysisPlotProps {
   logData: any[];
@@ -22,6 +22,8 @@ interface FuelAnalysisPlotProps {
   loadAxis: AxisData | null;
   selectedLoadColumn: string;
   selectedLoadValues: string[];
+  mapLineData: { rpm: number, mapValue: number | null }[] | null;
+  mapDefinition: XDFinition | undefined;
 }
 
 function findKeyInHeader(header: string[], targetLabels: string[]): string | undefined {
@@ -53,10 +55,10 @@ function findClosestIndex(arr: (number | string)[], target: number): number {
 }
 
 
-export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues }: FuelAnalysisPlotProps) {
-  const { chartData, rpmKey, lambdaKey, timeKey, otherKeys } = useMemo(() => {
+export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues, mapLineData, mapDefinition }: FuelAnalysisPlotProps) {
+  const { chartData, rpmKey, lambdaKey, timeKey, otherKeys, mergedData } = useMemo(() => {
     if (!logData || logData.length === 0) {
-      return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [] };
+      return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [], mergedData: [] };
     }
 
     const rpmKey = findKeyInHeader(logHeaders, ['rpm', 'rotacao']);
@@ -64,7 +66,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
     const timeKey = findKeyInHeader(logHeaders, ['time', 'tempo', 'momento']);
 
     if (!rpmKey || !lambdaKey) {
-        return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [] };
+        return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [], mergedData: [] };
     }
 
     const desiredKeys = ['potencia', 'potência', 'power', 'torque', 'torq'];
@@ -82,39 +84,27 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
     if (selectedLoadColumn && loadAxis) {
         const loadKey = findKeyInHeader(logHeaders, [selectedLoadColumn]);
         if (loadKey) {
-            // This is a simplified filter. A more robust implementation might average
-            // log points that fall into the "bucket" of a map's load axis value.
             filteredLogData = logData.filter(row => {
                 const logLoadValue = Number(row[loadKey]);
                 if (isNaN(logLoadValue)) return false;
-                
-                // Check if the log's load value is "close enough" to any value on the map's load axis.
                 const closestMapLoadIndex = findClosestIndex(loadAxis.calculated, logLoadValue);
                 if (closestMapLoadIndex === -1) return false;
-                
                 const mapLoadValue = Number(loadAxis.calculated[closestMapLoadIndex]);
                 const tolerance = (Number(loadAxis.calculated[1]) - Number(loadAxis.calculated[0])) / 2;
-                
                 return Math.abs(logLoadValue - mapLoadValue) <= tolerance;
             });
         }
     } else if (selectedLoadValues.length > 0 && loadAxis) {
-        const targetLoadNumbers = selectedLoadValues.map(v => Number(v));
-        
-        // This is a placeholder for a more complex scenario. When specific map loads are selected
-        // without a load column in the log, we assume all log points correspond to those loads.
-        // We are effectively just using all log points. If there was a way to know which point
-        // belongs to which load, we would filter here.
         filteredLogData = logData;
     }
 
     const processedData = filteredLogData
       .map(row => {
-          const newRow: any = {};
-          newRow[rpmKey] = Number(row[rpmKey]);
-          newRow[lambdaKey] = Number(row[lambdaKey]);
+          const newRow: any = {
+            [rpmKey]: Number(row[rpmKey]),
+            [lambdaKey]: Number(row[lambdaKey]),
+          };
           if (timeKey) newRow[timeKey] = Number(row[timeKey]);
-
           otherNumericKeys.forEach(k => {
               newRow[k] = Number(row[k]);
           });
@@ -123,6 +113,22 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
       .filter(row => !isNaN(row[rpmKey]))
       .sort((a, b) => a[rpmKey] - b[rpmKey]);
 
+    const finalMergedData: any[] = [...processedData];
+
+    if (mapLineData) {
+        mapLineData.forEach(mapPoint => {
+            const existingEntry = finalMergedData.find(d => d[rpmKey] === mapPoint.rpm);
+            if (existingEntry) {
+                existingEntry.mapValue = mapPoint.mapValue;
+            } else {
+                finalMergedData.push({
+                    [rpmKey]: mapPoint.rpm,
+                    mapValue: mapPoint.mapValue
+                });
+            }
+        });
+        finalMergedData.sort((a,b) => a[rpmKey] - b[rpmKey]);
+    }
 
     return {
       chartData: processedData,
@@ -130,8 +136,9 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
       lambdaKey,
       timeKey,
       otherKeys: otherNumericKeys,
+      mergedData: finalMergedData,
     };
-  }, [logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues]);
+  }, [logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues, mapLineData]);
 
   if (!rpmKey || !lambdaKey) {
     return (
@@ -146,18 +153,18 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
     );
   }
 
-  const yAxisColors = ['hsl(var(--primary))', '#82ca9d', '#ffc658', '#ff8042', '#8884d8'];
+  const yAxisColors = ['hsl(var(--primary))', '#82ca9d', '#ffc658', '#ff8042', '#8884d8', '#ffbb28'];
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Visualização do Ensaio</CardTitle>
-        <CardDescription>Gráfico dinâmico dos dados carregados do ficheiro de log.</CardDescription>
+        <CardDescription>Gráfico dinâmico dos dados carregados do ficheiro de log, comparado com o valor do mapa.</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={{}} className="min-h-[300px] w-full">
           <ResponsiveContainer>
-            <LineChart data={chartData} margin={{ top: 20, right: 20, left: -10, bottom: 20 }}>
+            <LineChart data={mergedData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey={rpmKey} 
@@ -197,8 +204,17 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 />
               ))}
 
+              {mapLineData && (
+                <YAxis
+                    yAxisId="mapValue"
+                    orientation="right"
+                    stroke={yAxisColors[yAxisColors.length-1]}
+                    label={{ value: mapDefinition?.name || "Valor do Mapa", angle: 90, position: 'insideRight', fill: yAxisColors[yAxisColors.length-1], dx: 15 }}
+                />
+              )}
+
               <Tooltip content={<ChartTooltipContent indicator="dot" />} />
-              <Legend verticalAlign="top" />
+              <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '10px'}}/>
 
               <Line 
                 yAxisId="left" 
@@ -208,6 +224,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 stroke={yAxisColors[0]}
                 strokeWidth={2}
                 dot={false} 
+                connectNulls
               />
               
               {otherKeys.map((key, index) => (
@@ -219,8 +236,22 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     name={key}
                     stroke={yAxisColors[index + 1]}
                     dot={false}
+                    connectNulls
                 />
               ))}
+              
+              {mapLineData && (
+                <Line
+                    yAxisId="mapValue"
+                    type="monotone"
+                    dataKey="mapValue"
+                    name={mapDefinition?.name || "Valor do Mapa"}
+                    stroke={yAxisColors[yAxisColors.length-1]}
+                    strokeDasharray="3 3"
+                    dot={false}
+                    connectNulls
+                />
+              )}
 
             </LineChart>
           </ResponsiveContainer>

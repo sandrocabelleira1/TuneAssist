@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw, Cloud, CloudUpload, Clock, HardDriveDownload } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
-import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile } from '@/lib/types';
+import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile, ChartPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -609,6 +609,37 @@ export default function EcuTuningAssistant() {
         return { rpmAxis: x, loadAxis: y };
     }, [processedMap]);
     
+    const mapLineData = useMemo(() => {
+        if (!processedMap || !rpmAxis || !loadAxis || selectedLoadValues.length === 0) {
+            return null;
+        }
+
+        const loadValue = parseFloat(selectedLoadValues[0]);
+        if (isNaN(loadValue)) return null;
+
+        const loadIndex = loadAxis.calculated.findIndex(val => Number(val) === loadValue);
+        if (loadIndex === -1) return null;
+
+        const loadIsYAxis = loadAxis === processedMap.axes.y;
+
+        const data: { rpm: number, mapValue: number | null }[] = [];
+
+        rpmAxis.calculated.forEach((rpmValue, rpmIndex) => {
+            const y = loadIsYAxis ? loadIndex : rpmIndex;
+            const x = loadIsYAxis ? rpmIndex : loadIndex;
+            const mapValue = processedMap.calculatedMap?.[y]?.[x];
+
+            data.push({
+                rpm: Number(rpmValue),
+                mapValue: mapValue ?? null,
+            });
+        });
+
+        return data;
+
+    }, [processedMap, rpmAxis, loadAxis, selectedLoadValues]);
+
+
     const handleMapUpdate = useCallback((mapId: string, newMap: ProcessedMap, modifiedCells?: Set<string>) => {
         if (mapId === activeMapId) {
             setProcessedMap(newMap);
@@ -1566,6 +1597,8 @@ const handleMapSelectionChange = (id: string) => {
                                       loadAxis={loadAxis}
                                       selectedLoadColumn={selectedLogLoadColumn}
                                       selectedLoadValues={selectedLoadValues}
+                                      mapLineData={mapLineData}
+                                      mapDefinition={selectedMapDefinition}
                                     />
                                     <Separator />
                                 </div>
