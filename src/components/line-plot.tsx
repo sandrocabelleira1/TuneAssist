@@ -299,7 +299,7 @@ export default function LinePlot2D({
                               name={lineDataKey}
                               type="monotone"
                               stroke="hsl(var(--primary))"
-                              strokeWidth={4}
+                              strokeWidth={6}
                               dot={<CustomDot />}
                               activeDot={false}
                               isAnimationActive={true}
