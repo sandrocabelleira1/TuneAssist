@@ -28,7 +28,7 @@ interface FuelAnalysisPlotProps {
 }
 
 
-const CustomTooltipContent = ({ active, payload, label, timeKey }: { active?: boolean; payload?: any[]; label?: string; timeKey: string | null; }) => {
+const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition }: { active?: boolean; payload?: any[]; label?: string; timeKey: string | null; mapDefinition: XDFinition | undefined }) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
         const findPayload = (key: string) => payload.find(p => p.dataKey === key);
@@ -88,7 +88,7 @@ const CustomTooltipContent = ({ active, payload, label, timeKey }: { active?: bo
                         )}
                         {mapPayload && (
                              <tr key={mapPayload.dataKey}>
-                                <td style={{ color: mapPayload.color }}>{mapPayload.name}</td>
+                                <td style={{ color: mapPayload.color }}>{mapDefinition?.name || "Valor do Mapa"}</td>
                                 <td className="text-center font-semibold" style={{ color: mapPayload.color }}>
                                     {mapPayload.value !== undefined && mapPayload.value !== null ? mapPayload.value.toFixed(2) : '-'}
                                 </td>
@@ -330,12 +330,11 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 />
               )}
 
-              <Tooltip content={<CustomTooltipContent timeKey={timeKey} />} />
+              <Tooltip content={<CustomTooltipContent timeKey={timeKey} mapDefinition={mapDefinition} />} />
               <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '10px'}}/>
 
               <Line 
-                yAxisId="left" 
-                type="monotone" 
+                yAxisId="left" CRLFtype="monotone" 
                 dataKey={lambdaKey}
                 name={"Sonda O2 (Lambda)"}
                 stroke={yAxisColors[0]}

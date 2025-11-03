@@ -623,7 +623,7 @@ export default function EcuTuningAssistant() {
         const sortedLoadIndex = loadAxis.calculated.findIndex(val => Number(val) === loadValue);
         if (sortedLoadIndex === -1) return null;
     
-        // Get the original, unsorted index of that load value
+        // Get the original, unsorted index of that load value from the axis data
         const originalLoadIndex = loadAxis.originalIndices[sortedLoadIndex];
         if (originalLoadIndex === undefined) return null;
     
