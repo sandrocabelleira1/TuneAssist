@@ -2,7 +2,7 @@ import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, Manual
 
 // #region Utility Functions
 
-function evaluateEquation(equation: string, value: number): number {
+export function evaluateEquation(equation: string, value: number): number {
     if (value === null || value === undefined || isNaN(value)) {
         return NaN;
     }

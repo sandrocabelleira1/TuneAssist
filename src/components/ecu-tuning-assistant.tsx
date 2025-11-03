@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw, Cloud, CloudUpload, Clock, HardDriveDownload } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections, evaluateEquation } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile, ChartPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -610,34 +610,57 @@ export default function EcuTuningAssistant() {
     }, [processedMap]);
     
     const mapLineData = useMemo(() => {
-        if (!processedMap || !rpmAxis || !loadAxis || selectedLoadValues.length === 0) {
+        if (!processedMap || !processedMap.axes || !rpmAxis || !loadAxis || selectedLoadValues.length === 0 || !selectedMapDefinition) {
             return null;
         }
-
+    
         const loadValue = parseFloat(selectedLoadValues[0]);
         if (isNaN(loadValue)) return null;
-
-        const loadIndex = loadAxis.calculated.findIndex(val => Number(val) === loadValue);
-        if (loadIndex === -1) return null;
-
+    
         const loadIsYAxis = loadAxis === processedMap.axes.y;
-
+    
+        // Find the index of the selected load value in the *sorted* axis
+        const sortedLoadIndex = loadAxis.calculated.findIndex(val => Number(val) === loadValue);
+        if (sortedLoadIndex === -1) return null;
+    
+        // Get the original, unsorted index of that load value
+        const originalLoadIndex = loadAxis.originalIndices[sortedLoadIndex];
+        if (originalLoadIndex === undefined) return null;
+    
+        const equation = selectedMapDefinition.equation || 'x';
+    
         const data: { rpm: number, mapValue: number | null }[] = [];
-
-        rpmAxis.calculated.forEach((rpmValue, rpmIndex) => {
-            const y = loadIsYAxis ? loadIndex : rpmIndex;
-            const x = loadIsYAxis ? rpmIndex : loadIndex;
-            const mapValue = processedMap.calculatedMap?.[y]?.[x];
-
+    
+        // Iterate through the sorted RPM axis
+        rpmAxis.calculated.forEach((rpmValue, sortedRpmIndex) => {
+            // Get the original, unsorted index for the current RPM value
+            const originalRpmIndex = rpmAxis.originalIndices[sortedRpmIndex];
+            if (originalRpmIndex === undefined) return;
+    
+            const y = loadIsYAxis ? originalLoadIndex : originalRpmIndex;
+            const x = loadIsYAxis ? originalRpmIndex : originalLoadIndex;
+            
+            // Get the raw value from the original, unsorted map data
+            const rawValue = processedMap.rawMap?.[y]?.[x];
+    
+            let calculatedValue = null;
+            if (rawValue !== null && rawValue !== undefined) {
+                // Apply the equation to the raw value
+                const result = evaluateEquation(equation, rawValue);
+                if (!isNaN(result)) {
+                    calculatedValue = result;
+                }
+            }
+            
             data.push({
                 rpm: Number(rpmValue),
-                mapValue: mapValue ?? null,
+                mapValue: calculatedValue,
             });
         });
-
-        return data;
-
-    }, [processedMap, rpmAxis, loadAxis, selectedLoadValues]);
+    
+        return data.sort((a, b) => a.rpm - b.rpm);
+    
+    }, [processedMap, rpmAxis, loadAxis, selectedLoadValues, selectedMapDefinition]);
 
 
     const handleMapUpdate = useCallback((mapId: string, newMap: ProcessedMap, modifiedCells?: Set<string>) => {

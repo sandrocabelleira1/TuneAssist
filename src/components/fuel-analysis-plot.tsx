@@ -129,10 +129,13 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
             });
         }
     } else if (selectedLoadValues.length > 0 && loadAxis) {
+        // This case is implicitly handled by mapLineData being generated based on these values.
+        // The log data itself doesn't need to be filtered here if we're just comparing against a specific map line.
+        // We will show all log data and the specific map line.
         filteredLogData = logData;
     }
 
-    const processedData = filteredLogData
+    const processedLogData = filteredLogData
       .map(row => {
           const newRow: any = {
             [rpmKey]: Number(row[rpmKey]),
@@ -147,25 +150,34 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
       .filter(row => !isNaN(row[rpmKey]))
       .sort((a, b) => a[rpmKey] - b[rpmKey]);
 
-    const finalMergedData: any[] = [...processedData];
+    // Merge log data and map data for a unified chart axis
+    const dataMap = new Map<number, any>();
+
+    processedLogData.forEach(logPoint => {
+        const rpm = logPoint[rpmKey];
+        if (!dataMap.has(rpm)) {
+            dataMap.set(rpm, { [rpmKey]: rpm });
+        }
+        const entry = dataMap.get(rpm);
+        Object.assign(entry, logPoint);
+    });
 
     if (mapLineData) {
         mapLineData.forEach(mapPoint => {
-            const existingEntry = finalMergedData.find(d => d[rpmKey] === mapPoint.rpm);
-            if (existingEntry) {
-                existingEntry.mapValue = mapPoint.mapValue;
-            } else {
-                finalMergedData.push({
-                    [rpmKey]: mapPoint.rpm,
-                    mapValue: mapPoint.mapValue
-                });
+            const rpm = mapPoint.rpm;
+            if (!dataMap.has(rpm)) {
+                dataMap.set(rpm, { [rpmKey]: rpm });
             }
+            const entry = dataMap.get(rpm);
+            entry.mapValue = mapPoint.mapValue;
         });
-        finalMergedData.sort((a,b) => a[rpmKey] - b[rpmKey]);
     }
 
+    const finalMergedData = Array.from(dataMap.values()).sort((a, b) => a[rpmKey] - b[rpmKey]);
+
+
     return {
-      chartData: processedData,
+      chartData: processedLogData,
       rpmKey,
       lambdaKey,
       timeKey,
@@ -231,6 +243,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     stroke="transparent"
                     tickLine={false}
                     tickFormatter={(value) => value.toFixed(1)}
+                    connectNulls={false}
                   />
               )}
 
