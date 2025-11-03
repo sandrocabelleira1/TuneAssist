@@ -623,12 +623,11 @@ export default function EcuTuningAssistant() {
         const sortedLoadIndex = loadAxis.calculated.findIndex(val => Number(val) === loadValue);
         if (sortedLoadIndex === -1) return null;
     
-        // Get the original, unsorted index of that load value from the ProcessedMap
+        // Get the original, unsorted index of that load value
         const originalLoadIndex = loadAxis.originalIndices[sortedLoadIndex];
         if (originalLoadIndex === undefined) return null;
     
         const equation = selectedMapDefinition.equation || 'x';
-    
         const data: { rpm: number, mapValue: number | null }[] = [];
     
         // Iterate through the sorted RPM axis
@@ -637,7 +636,7 @@ export default function EcuTuningAssistant() {
             const originalRpmIndex = rpmAxis.originalIndices[sortedRpmIndex];
             if (originalRpmIndex === undefined) return;
     
-            // Get the raw value from the original, unsorted map data
+            // Determine the correct row and column in the original, unsorted rawMap
             const rawMapRowIndex = loadIsYAxis ? originalLoadIndex : originalRpmIndex;
             const rawMapColIndex = loadIsYAxis ? originalRpmIndex : originalLoadIndex;
             
