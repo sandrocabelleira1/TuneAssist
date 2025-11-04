@@ -153,17 +153,16 @@ export async function decryptXdf(buffer: ArrayBuffer, password: string): Promise
         throw new Error("A senha não pode estar em branco.");
     }
     
-    const encryptedContent = buffer.slice(ENCRYPTION_SIG.length);
-    let xorBytes = new Uint8Array(encryptedContent);
+    const encryptedContent = new Uint8Array(buffer.slice(ENCRYPTION_SIG.length));
     const passwordBytes = iconv.encode(password, 'ISO-8859-1');
 
-    for (let i = 0; i < xorBytes.length; i++) {
-        xorBytes[i] ^= passwordBytes[i % passwordBytes.length];
+    for (let i = 0; i < encryptedContent.length; i++) {
+        encryptedContent[i] ^= passwordBytes[i % passwordBytes.length];
     }
     
     try {
         // Use pako.inflate for robust DEFLATE decompression
-        const decompressedBytes = pako.inflate(xorBytes);
+        const decompressedBytes = pako.inflate(encryptedContent);
 
         // The decompressed content is expected to be ISO-8859-1 (Latin-1)
         return iconv.decode(Buffer.from(decompressedBytes), 'ISO-8859-1');
@@ -1093,4 +1092,5 @@ export function calculateCorrections(
     
 
     
+
 
