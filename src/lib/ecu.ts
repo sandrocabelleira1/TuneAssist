@@ -1,6 +1,7 @@
 
 
 import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig, FoundAxis } from './types';
+import iconv from 'iconv-lite';
 
 // #region Utility Functions
 
@@ -150,18 +151,17 @@ export function decryptXdf(buffer: ArrayBuffer, password: string): string {
         throw new Error("A senha não pode estar em branco.");
     }
     
-    // The actual encrypted content starts AFTER the signature
     const encryptedContent = buffer.slice(ENCRYPTION_SIG.length);
-    const encryptedBytes = new Uint8Array(encryptedContent);
-    const passwordBytes = new TextEncoder().encode(password);
-    const decryptedBytes = new Uint8Array(encryptedBytes.length);
+    const encryptedBytes = Buffer.from(encryptedContent);
+    const passwordBytes = Buffer.from(password, 'utf-8');
+    const decryptedBytes = Buffer.alloc(encryptedBytes.length);
 
     for (let i = 0; i < encryptedBytes.length; i++) {
         decryptedBytes[i] = encryptedBytes[i] ^ passwordBytes[i % passwordBytes.length];
     }
     
     // The decrypted content is expected to be ISO-8859-1 (Latin-1)
-    return new TextDecoder('iso-8859-1').decode(decryptedBytes);
+    return iconv.decode(decryptedBytes, 'ISO-8859-1');
 }
 
 
