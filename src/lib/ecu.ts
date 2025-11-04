@@ -153,20 +153,19 @@ export async function decryptXdf(buffer: ArrayBuffer, password: string): Promise
         throw new Error("A senha não pode estar em branco.");
     }
     
-    const encryptedContent = new Uint8Array(buffer.slice(ENCRYPTION_SIG.length));
+    const xorContent = new Uint8Array(buffer.slice(ENCRYPTION_SIG.length));
     const passwordBytes = iconv.encode(password, 'ISO-8859-1');
 
-    for (let i = 0; i < encryptedContent.length; i++) {
-        encryptedContent[i] ^= passwordBytes[i % passwordBytes.length];
+    // Step 1: XOR Decryption
+    for (let i = 0; i < xorContent.length; i++) {
+        xorContent[i] ^= passwordBytes[i % passwordBytes.length];
     }
     
+    // Step 2: DEFLATE Decompression using pako
     try {
-        // Use pako.inflate for robust DEFLATE decompression
-        const decompressedBytes = pako.inflate(encryptedContent);
-
-        // The decompressed content is expected to be ISO-8859-1 (Latin-1)
+        const decompressedBytes = pako.inflate(xorContent);
+        // Step 3: Decode the resulting XML bytes using the correct character set
         return iconv.decode(Buffer.from(decompressedBytes), 'ISO-8859-1');
-
     } catch (error) {
         console.error("Falha na desencriptação/descompressão:", error);
         throw new Error("Falha ao processar o ficheiro XDF. A senha pode estar incorreta ou o ficheiro está corrompido.");
@@ -1092,5 +1091,6 @@ export function calculateCorrections(
     
 
     
+
 
 
