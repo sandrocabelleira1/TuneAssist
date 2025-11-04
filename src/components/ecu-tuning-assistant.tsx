@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw, Cloud, CloudUpload, Clock, HardDriveDownload } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections, evaluateEquation } from '@/lib/ecu';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw, Cloud, CloudUpload, Clock, HardDriveDownload, Key } from 'lucide-react';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections, evaluateEquation, isXdfEncrypted, decryptXdf } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile, ChartPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -477,6 +477,52 @@ function DynoEntryTable() {
     );
 }
 
+const XdfPasswordDialog = ({ request, onConfirm, onCancel }: {
+    request: { name: string; buffer: ArrayBuffer };
+    onConfirm: (password: string) => void;
+    onCancel: () => void;
+}) => {
+    const [password, setPassword] = useState('');
+
+    const handleSubmit = () => {
+        onConfirm(password);
+    };
+
+    return (
+        <Dialog open={true} onOpenChange={(open) => !open && onCancel()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Ficheiro XDF Protegido por Senha</DialogTitle>
+                    <DialogDescription>
+                        O ficheiro "{request.name}" está encriptado. Por favor, insira a senha para o desencriptar.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="xdf-password" className="text-right">
+                            Senha
+                        </Label>
+                        <Input
+                            id="xdf-password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="col-span-3"
+                            autoFocus
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                     <Button variant="outline" onClick={onCancel}>Cancelar</Button>
+                     <Button onClick={handleSubmit}><Key className="mr-2 h-4 w-4" />Desencriptar</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+
 const EcuTuningStateContext = React.createContext<{
     processedMap: ProcessedMap | null;
     loadAxis: AxisData | null;
@@ -520,6 +566,7 @@ export default function EcuTuningAssistant() {
 
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
     const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFinition[], allTables: Map<string, Element> } | null>(null);
+    const [xdfPasswordRequest, setXdfPasswordRequest] = useState<{ name: string, buffer: ArrayBuffer } | null>(null);
     const [logFile, setLogFile] = useState<{ name: string; content: string } | null>(null);
     const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
@@ -716,6 +763,7 @@ export default function EcuTuningAssistant() {
     const handleResetAll = useCallback(() => {
         setBinFile(null);
         setXdfFile(null);
+        setXdfPasswordRequest(null);
         setLogFile(null);
         setLogData([]);
         setLogs([]);
@@ -747,6 +795,41 @@ export default function EcuTuningAssistant() {
         toast({ title: 'Tudo Limpo', description: successMsg });
     }, [addLog, toast, dynoForm]);
 
+    const processAndSetXdf = (name: string, content: string) => {
+        try {
+            addLog('A processar o ficheiro XDF...', 'info');
+            const { definitions, allTables } = parseXDF(content, true); 
+            if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
+            
+            setXdfFile({ name, content, definitions, allTables });
+            const successMessage = `XDF carregado: ${name} com ${definitions.length} mapas.`;
+            addLog(successMessage, 'success');
+            toast({ title: 'Ficheiro Carregado', description: successMessage });
+         } catch (error) {
+            const errorMessage = `Erro ao processar XDF: ${(error as Error).message}`;
+            addLog(errorMessage, 'error');
+            toast({ title: 'Erro de XDF', description: errorMessage, variant: 'destructive' });
+            setXdfFile(null);
+         }
+    };
+    
+    const handleDecryptAndParseXdf = (password: string) => {
+        if (!xdfPasswordRequest) return;
+        
+        addLog(`A tentar desencriptar "${xdfPasswordRequest.name}"...`, 'info');
+        try {
+            const decryptedContent = decryptXdf(xdfPasswordRequest.buffer, password);
+            processAndSetXdf(xdfPasswordRequest.name, decryptedContent);
+        } catch (error) {
+            const msg = `Falha ao desencriptar: ${(error as Error).message}. Verifique a senha.`;
+            addLog(msg, 'error');
+            toast({ title: 'Erro de Senha', description: msg, variant: 'destructive' });
+        } finally {
+            setXdfPasswordRequest(null);
+        }
+    };
+
+
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -757,13 +840,13 @@ export default function EcuTuningAssistant() {
         
         reader.onload = (event) => {
             const buffer = event.target?.result;
-            if (!buffer) {
+            if (!buffer || !(buffer instanceof ArrayBuffer)) {
                 const errorMessage = `Erro ao ler o ficheiro ${file.name}`;
                 addLog(errorMessage, 'error');
                 toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
                 return;
             }
-            
+
             if ((type === 'bin' && binFile?.name !== file.name) || (type === 'xdf' && xdfFile?.name !== file.name)) {
                 clearMapState();
                 if (type === 'bin') {
@@ -774,26 +857,18 @@ export default function EcuTuningAssistant() {
                 if (type === 'xdf' && binFile) addLog(`Ficheiro BIN "${binFile.name}" mantido.`, "info");
             }
 
-            if (type === 'bin' && buffer instanceof ArrayBuffer) {
+            if (type === 'bin') {
                 setBinFile({ name: file.name, buffer });
                 const successMessage = `Ficheiro BIN carregado: ${file.name}`;
                 addLog(successMessage, 'success');
                 toast({ title: 'Ficheiro Carregado', description: successMessage });
-            } else if (type === 'xdf' && typeof buffer === 'string') {
-                 try {
-                    addLog('A processar o ficheiro XDF...', 'info');
-                    const { definitions, allTables } = parseXDF(buffer, true); 
-                    if (definitions.length === 0) throw new Error("Nenhuma definição de mapa válida encontrada no XDF.");
-                    
-                    setXdfFile({ name: file.name, content: buffer, definitions, allTables });
-                    const successMessage = `XDF carregado: ${file.name} com ${definitions.length} mapas.`;
-                    addLog(successMessage, 'success');
-                    toast({ title: 'Ficheiro Carregado', description: successMessage });
-                 } catch (error) {
-                    const errorMessage = `Erro ao processar XDF: ${(error as Error).message}`;
-                    addLog(errorMessage, 'error');
-                    toast({ title: 'Erro de XDF', description: errorMessage, variant: 'destructive' });
-                    setXdfFile(null);
+            } else if (type === 'xdf') {
+                 if (isXdfEncrypted(buffer)) {
+                    addLog(`O ficheiro XDF "${file.name}" parece estar encriptado. A pedir senha...`, 'info');
+                    setXdfPasswordRequest({ name: file.name, buffer });
+                 } else {
+                    const xmlContent = new TextDecoder('iso-8859-1').decode(buffer);
+                    processAndSetXdf(file.name, xmlContent);
                  }
             }
         };
@@ -804,11 +879,7 @@ export default function EcuTuningAssistant() {
              toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
         }
         
-        if (type === 'xdf') {
-            reader.readAsText(file, 'ISO-8859-1');
-        } else {
-            reader.readAsArrayBuffer(file);
-        }
+        reader.readAsArrayBuffer(file);
         
     };
 
@@ -2064,6 +2135,14 @@ const handleMapSelectionChange = (id: string) => {
          <div className="flex h-full w-full flex-col bg-background">
             <Header />
             <main className="flex-1 overflow-auto p-4 md:p-6">
+
+                {xdfPasswordRequest && (
+                    <XdfPasswordDialog 
+                        request={xdfPasswordRequest}
+                        onConfirm={handleDecryptAndParseXdf}
+                        onCancel={() => setXdfPasswordRequest(null)}
+                    />
+                )}
 
                 {ControlPanelAccordion}
                 

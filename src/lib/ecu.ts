@@ -119,6 +119,51 @@ function getDataSizeInBytes(element: Element | null, defaultSize: number = 1): n
 
 // #endregion
 
+// #region XDF Encryption/Decryption
+
+const ENCRYPTION_SIG = 'XOR'; // ASCII "XOR"
+
+/**
+ * Checks if an XDF file buffer appears to be encrypted.
+ * @param buffer The ArrayBuffer of the XDF file.
+ * @returns True if the file starts with the encryption signature.
+ */
+export function isXdfEncrypted(buffer: ArrayBuffer): boolean {
+    if (buffer.byteLength < ENCRYPTION_SIG.length) {
+        return false;
+    }
+    const view = new Uint8Array(buffer, 0, ENCRYPTION_SIG.length);
+    const signature = Array.from(view).map(byte => String.fromCharCode(byte)).join('');
+    return signature === ENCRYPTION_SIG;
+}
+
+/**
+ * Decrypts an XDF file buffer using a password.
+ * @param buffer The encrypted ArrayBuffer of the XDF file.
+ * @param password The password to use for decryption.
+ * @returns The decrypted XML content as a string.
+ */
+export function decryptXdf(buffer: ArrayBuffer, password: string): string {
+    if (password.length === 0) {
+        throw new Error("A senha não pode estar em branco.");
+    }
+    
+    const encryptedBytes = new Uint8Array(buffer);
+    const passwordBytes = new TextEncoder().encode(password);
+    const decryptedBytes = new Uint8Array(buffer.byteLength - ENCRYPTION_SIG.length);
+
+    for (let i = ENCRYPTION_SIG.length; i < encryptedBytes.length; i++) {
+        const contentIndex = i - ENCRYPTION_SIG.length;
+        decryptedBytes[contentIndex] = encryptedBytes[i] ^ passwordBytes[contentIndex % passwordBytes.length];
+    }
+    
+    // The decrypted content is expected to be ISO-8859-1 (Latin-1)
+    return new TextDecoder('iso-8859-1').decode(decryptedBytes);
+}
+
+
+// #endregion
+
 // #region XDF Parsing
 
 function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, manualEndian?: boolean | null): AxisDimension {
