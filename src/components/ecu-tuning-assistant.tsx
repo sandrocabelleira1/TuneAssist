@@ -624,10 +624,15 @@ export default function EcuTuningAssistant() {
 
     const isAnyFuelMapSelected = useMemo(() => {
         if (!xdfFile || selectedMapIds.length === 0) return false;
-        const fuelKeywords = ['fuel', 'combustível', 'injection', 'injeção', 'lambda', 'tps', 'map'];
+        
+        const isIgnitionMap = (name: string) => {
+            const ignitionKeywords = ['ignition', 'spark', 'advance', 'timing', 'ignição', 'avanço'];
+            return ignitionKeywords.some(kw => name.toLowerCase().includes(kw));
+        };
+    
         return selectedMapIds.some(id => {
             const def = xdfFile.definitions.find(d => d.uniqueId === id);
-            return def && fuelKeywords.some(kw => def.name.toLowerCase().includes(kw));
+            return def && !isIgnitionMap(def.name);
         });
     }, [selectedMapIds, xdfFile]);
 
@@ -643,15 +648,33 @@ export default function EcuTuningAssistant() {
     const { rpmAxis, loadAxis } = useMemo(() => {
         if (!processedMap?.axes) return { rpmAxis: null, loadAxis: null };
         const { x, y } = processedMap.axes;
-        const rpmRegex = /rpm/i;
     
-        if (x.label && rpmRegex.test(x.label)) {
-            return { rpmAxis: x, loadAxis: y };
+        const isRpm = (label: string) => /rpm|rotacao|rotação/i.test(label);
+        const isLoad = (label: string) => /load|carga|tps|map/i.test(label);
+    
+        const xIsRpm = x.label && isRpm(x.label);
+        const yIsRpm = y.label && isRpm(y.label);
+        const xIsLoad = x.label && isLoad(x.label);
+        const yIsLoad = y.label && isLoad(y.label);
+    
+        // Explicit identification
+        if (xIsRpm && yIsLoad) return { rpmAxis: x, loadAxis: y };
+        if (yIsRpm && xIsLoad) return { rpmAxis: y, loadAxis: x };
+        if (xIsRpm) return { rpmAxis: x, loadAxis: y };
+        if (yIsRpm) return { rpmAxis: y, loadAxis: x };
+    
+        // Heuristic based on value range and length if labels are ambiguous
+        const xMax = Math.max(...x.calculated.map(v => Number(v)).filter(isFinite));
+        const yMax = Math.max(...y.calculated.map(v => Number(v)).filter(isFinite));
+    
+        if (xMax > yMax && x.calculated.length >= y.calculated.length) {
+            return { rpmAxis: x, loadAxis: y }; // Assume axis with larger values/length is RPM
         }
-        if (y.label && rpmRegex.test(y.label)) {
+        if (yMax > xMax && y.calculated.length >= x.calculated.length) {
             return { rpmAxis: y, loadAxis: x };
         }
-        // Default assumption if no clear "rpm" label
+        
+        // Default fallback
         return { rpmAxis: x, loadAxis: y };
     }, [processedMap]);
     
@@ -803,7 +826,7 @@ export default function EcuTuningAssistant() {
             const successMessage = `XDF carregado: ${name} com ${definitions.length} mapas.`;
             addLog(successMessage, 'success');
             toast({ title: 'Ficheiro Carregado', description: successMessage });
-         } catch (error) {
+         } catch (error: any) {
             const errorMessage = `Erro ao processar XDF: ${(error as Error).message}`;
             addLog(errorMessage, 'error');
             toast({ title: 'Erro de XDF', description: errorMessage, variant: 'destructive' });
@@ -2199,7 +2222,7 @@ const handleMapSelectionChange = (id: string) => {
                                     <LineChartIcon className="mr-2" />
                                     Gráfico 2D
                                 </TabsTrigger>
-                                <TabsTrigger value="fuel-analysis" disabled={!isAnyFuelMapSelected}>
+                                <TabsTrigger value="fuel-analysis" disabled={!activeMapId}>
                                     <ClipboardList className="mr-2" />
                                     Análise de Combustível
                                 </TabsTrigger>
