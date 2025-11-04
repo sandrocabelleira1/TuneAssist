@@ -628,7 +628,7 @@ export function writeMultipleMapsToBin(
 
                 if (def.dataSize === 1) view.setUint8(address, clampedValue);
                 else if (def.dataSize === 2) view.setUint16(address, clampedValue, useLittleEndian);
-                else if (def.dataSize === 4) view.setUint32(address, clampedValue, useLittleEndian);
+                else if (def.dataSize === 4) view.setUint32(address, clampedValue);
             }
         }
     }
@@ -943,20 +943,37 @@ export function calculateCorrections(
 
     const header = Object.keys(logData[0] || {});
     
-    const rpmRegex = /rpm/i;
+    const isRpm = (label: string) => /rpm|rotacao|rotação/i.test(label);
+
+    const xIsRpm = xAxis.label && isRpm(xAxis.label);
+    const yIsRpm = yAxis.label && isRpm(yAxis.label);
+
     let rpmMapAxis: AxisData, loadMapAxis: AxisData;
     let rpmIsYAxis: boolean;
 
-    if (xAxis.label && rpmRegex.test(xAxis.label)) {
+    if (xIsRpm) {
         rpmMapAxis = xAxis;
         loadMapAxis = yAxis;
         rpmIsYAxis = false;
-    } else if (yAxis.label && rpmRegex.test(yAxis.label)) {
+    } else if (yIsRpm) {
         rpmMapAxis = yAxis;
         loadMapAxis = xAxis;
         rpmIsYAxis = true;
     } else {
-        throw new Error("Não foi possível identificar o eixo de RPM no mapa. Verifique as etiquetas dos eixos (deve incluir 'rpm').");
+        // Heuristic fallback if no explicit label found
+        const xMax = Math.max(...xAxis.calculated.map(v => Number(v)).filter(isFinite));
+        const yMax = Math.max(...yAxis.calculated.map(v => Number(v)).filter(isFinite));
+        if (xMax > yMax && xAxis.calculated.length >= yAxis.calculated.length) {
+            rpmMapAxis = xAxis;
+            loadMapAxis = yAxis;
+            rpmIsYAxis = false;
+        } else if (yMax > xMax && yAxis.calculated.length >= xAxis.calculated.length) {
+            rpmMapAxis = yAxis;
+            loadMapAxis = xAxis;
+            rpmIsYAxis = true;
+        } else {
+             throw new Error("Não foi possível identificar o eixo de RPM no mapa. Verifique as etiquetas dos eixos (deve incluir 'rpm', 'rotacao', etc).");
+        }
     }
 
     const rpmLogKey = findKeyInHeader(header, ['rpm', 'rotacao']);
@@ -1038,6 +1055,7 @@ export function calculateCorrections(
     
 
     
+
 
 
 
