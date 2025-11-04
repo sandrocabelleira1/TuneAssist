@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -27,6 +27,18 @@ interface CustomTooltipProps {
 }
 
 const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition, setActiveMapValue }: CustomTooltipProps) => {
+    useEffect(() => {
+        if (active && payload && payload.length) {
+            const mapPayload = payload.find(p => p.dataKey === 'mapValue');
+            if (mapPayload && mapPayload.value !== undefined) {
+                setActiveMapValue(mapPayload.value);
+            } else if (payload.some(p => p.dataKey === 'mapValue')) {
+                // Clear the value when hovering over a gap in the map data line
+                setActiveMapValue(null);
+            }
+        }
+    }, [active, payload, setActiveMapValue]);
+
     if (active && payload && payload.length) {
         const data = payload[0].payload;
         const findPayload = (key: string) => payload.find(p => p.dataKey === key);
@@ -35,16 +47,6 @@ const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition, 
         const potenciaPayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('potencia') || k.toLowerCase().includes('power')) || '');
         const mapPayload = findPayload('mapValue');
         const timeValue = timeKey && data[timeKey] !== null && data[timeKey] !== undefined ? data[timeKey] : null;
-
-        // Update the active map value state
-        if (mapPayload && mapPayload.value !== undefined) {
-             setActiveMapValue(mapPayload.value);
-        } else {
-             // When hovering over a gap in the map data, clear the value
-             if (payload.some(p => p.dataKey === 'mapValue')) {
-                setActiveMapValue(null);
-             }
-        }
 
         const isPotenciaInWatts = potenciaPayload && (potenciaPayload.name.toLowerCase().includes('(w)'));
 
