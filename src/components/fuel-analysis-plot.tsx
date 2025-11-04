@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   LineChart,
   Line,
@@ -23,21 +23,24 @@ interface CustomTooltipProps {
     label?: string;
     timeKey: string | null;
     mapDefinition: XDFinition | undefined;
-    setActiveMapValue: (value: number | null) => void;
+    setActiveMapValue: (value: { value: number | null, time: number | null }) => void;
 }
 
 const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition, setActiveMapValue }: CustomTooltipProps) => {
     useEffect(() => {
         if (active && payload && payload.length) {
             const mapPayload = payload.find(p => p.dataKey === 'mapValue');
+            const data = payload[0].payload;
+            const timeValue = timeKey && data[timeKey] !== null && data[timeKey] !== undefined ? data[timeKey] : null;
+
             if (mapPayload && mapPayload.value !== undefined) {
-                setActiveMapValue(mapPayload.value);
+                setActiveMapValue({ value: mapPayload.value, time: timeValue });
             } else if (payload.some(p => p.dataKey === 'mapValue')) {
                 // Clear the value when hovering over a gap in the map data line
-                setActiveMapValue(null);
+                setActiveMapValue({ value: null, time: timeValue });
             }
         }
-    }, [active, payload, setActiveMapValue]);
+    }, [active, payload, setActiveMapValue, timeKey]);
 
     if (active && payload && payload.length) {
         const data = payload[0].payload;
@@ -135,7 +138,29 @@ function findClosestIndex(arr: (number | string)[], target: number): number {
 
 
 export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues, mapLineData, mapDefinition }: FuelAnalysisPlotProps) {
-  const [activeMapValue, setActiveMapValue] = useState<number | null>(null);
+  const [activeMapState, setActiveMapState] = useState<{ value: number | null, time: number | null }>({ value: null, time: null });
+  const [timeOnPreviousValue, setTimeOnPreviousValue] = useState<number | null>(null);
+  
+  const previousMapValueRef = useRef<number | null>(null);
+  const valueStartTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const { value: currentValue, time: currentTime } = activeMapState;
+
+    if (currentValue !== previousMapValueRef.current) {
+      if (previousMapValueRef.current !== null && valueStartTimeRef.current !== null && currentTime !== null) {
+        const duration = currentTime - valueStartTimeRef.current;
+        if (duration > 0) {
+            setTimeOnPreviousValue(duration);
+        }
+      } else {
+        setTimeOnPreviousValue(null);
+      }
+      
+      previousMapValueRef.current = currentValue;
+      valueStartTimeRef.current = currentTime;
+    }
+  }, [activeMapState]);
 
   const { chartData, rpmKey, lambdaKey, timeKey, otherKeys, mergedData } = useMemo(() => {
     if (!logData || logData.length === 0) {
@@ -281,11 +306,19 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
             Gráfico dinâmico dos dados carregados. Passe o rato para ver os valores e a célula do mapa ativa.
         </CardDescription>
          {mapDefinition && (
-             <div className="pt-2">
-                 <h4 className="text-sm font-medium text-muted-foreground">Valor do Mapa Ativo ({mapDefinition.name})</h4>
-                 <p className="text-3xl font-bold text-primary transition-colors duration-200">
-                     {activeMapValue !== null ? activeMapValue.toFixed(2) : '-.--'}
-                 </p>
+             <div className="pt-2 grid grid-cols-2 gap-4">
+                 <div>
+                     <h4 className="text-sm font-medium text-muted-foreground">Valor do Mapa Ativo ({mapDefinition.name})</h4>
+                     <p className="text-3xl font-bold text-primary transition-colors duration-200">
+                         {activeMapState.value !== null ? activeMapState.value.toFixed(2) : '-.--'}
+                     </p>
+                 </div>
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground">Tempo no Valor Anterior</h4>
+                    <p className="text-3xl font-bold text-amber-400 transition-colors duration-200">
+                        {timeOnPreviousValue !== null ? `${timeOnPreviousValue.toFixed(3)}s` : '-.--'}
+                    </p>
+                </div>
              </div>
          )}
       </CardHeader>
@@ -295,7 +328,12 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
             <LineChart 
                 data={mergedData} 
                 margin={{ top: 20, right: 20, left: 0, bottom: 20 }}
-                onMouseLeave={() => setActiveMapValue(null)}
+                onMouseLeave={() => {
+                    setActiveMapState({ value: null, time: null });
+                    setTimeOnPreviousValue(null);
+                    previousMapValueRef.current = null;
+                    valueStartTimeRef.current = null;
+                }}
             >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
@@ -356,7 +394,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
               )}
 
               <Tooltip 
-                content={<CustomTooltipContent timeKey={timeKey} mapDefinition={mapDefinition} setActiveMapValue={setActiveMapValue} />} 
+                content={<CustomTooltipContent timeKey={timeKey} mapDefinition={mapDefinition} setActiveMapValue={setActiveMapState} />} 
                 cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1, strokeDasharray: '3 3' }}
               />
 
@@ -427,3 +465,5 @@ interface FuelAnalysisPlotProps {
   mapLineData: { rpm: number, mapValue: number | null }[] | null;
   mapDefinition: XDFinition | undefined;
 }
+
+    
