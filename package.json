@@ -40,6 +40,7 @@
     "lucide-react": "^0.475.0",
     "mercadopago": "^2.0.10",
     "next": "15.3.3",
+    "pako": "^2.1.0",
     "papaparse": "^5.4.1",
     "patch-package": "^8.0.0",
     "plotly.js-dist-min": "^2.33.0",
@@ -57,6 +58,7 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.13",
     "@types/node": "^20",
+    "@types/pako": "^2.0.3",
     "@types/papaparse": "^5.3.14",
     "@types/plotly.js-dist-min": "^2.3.4",
     "@types/react": "^18",

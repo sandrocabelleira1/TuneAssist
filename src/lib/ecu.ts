@@ -2,6 +2,7 @@
 
 import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig, FoundAxis } from './types';
 import iconv from 'iconv-lite';
+import pako from 'pako';
 
 // #region Utility Functions
 
@@ -142,6 +143,7 @@ export function isXdfEncrypted(buffer: ArrayBuffer): boolean {
 
 /**
  * Decrypts an XDF file buffer using a password.
+ * This now handles XOR decryption followed by DEFLATE decompression.
  * @param buffer The encrypted ArrayBuffer of the XDF file.
  * @param password The password to use for decryption.
  * @returns The decrypted XML content as a string.
@@ -160,28 +162,15 @@ export async function decryptXdf(buffer: ArrayBuffer, password: string): Promise
     }
     
     try {
-        const decompressionStream = new DecompressionStream('deflate');
-        const writer = decompressionStream.writable.getWriter();
-        writer.write(xorBytes);
-        writer.close();
-        
-        const chunks = [];
-        const reader = decompressionStream.readable.getReader();
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-        }
-
-        const decompressedBlob = new Blob(chunks);
-        const decompressedBuffer = await decompressedBlob.arrayBuffer();
+        // Use pako.inflate for robust DEFLATE decompression
+        const decompressedBytes = pako.inflate(xorBytes);
 
         // The decompressed content is expected to be ISO-8859-1 (Latin-1)
-        return iconv.decode(Buffer.from(decompressedBuffer), 'ISO-8859-1');
+        return iconv.decode(Buffer.from(decompressedBytes), 'ISO-8859-1');
 
     } catch (error) {
-        console.error("Falha na descompressão:", error);
-        throw new Error("Falha ao descomprimir o ficheiro XDF. A senha pode estar incorreta ou o ficheiro está corrompido.");
+        console.error("Falha na desencriptação/descompressão:", error);
+        throw new Error("Falha ao processar o ficheiro XDF. A senha pode estar incorreta ou o ficheiro está corrompido.");
     }
 }
 
@@ -1104,3 +1093,4 @@ export function calculateCorrections(
     
 
     
+
