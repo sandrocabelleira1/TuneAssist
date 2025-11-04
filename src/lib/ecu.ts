@@ -2,7 +2,6 @@
 
 import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig, FoundAxis } from './types';
 import iconv from 'iconv-lite';
-import pako from 'pako';
 
 // #region Utility Functions
 
@@ -120,58 +119,6 @@ function getDataSizeInBytes(element: Element | null, defaultSize: number = 1): n
     }
     return defaultSize; 
 }
-
-// #endregion
-
-// #region XDF Encryption/Decryption
-
-const ENCRYPTION_SIG = 'XOR'; // ASCII "XOR"
-
-/**
- * Checks if an XDF file buffer appears to be encrypted.
- * @param buffer The ArrayBuffer of the XDF file.
- * @returns True if the file starts with the encryption signature.
- */
-export function isXdfEncrypted(buffer: ArrayBuffer): boolean {
-    if (buffer.byteLength < ENCRYPTION_SIG.length) {
-        return false;
-    }
-    const view = new Uint8Array(buffer, 0, ENCRYPTION_SIG.length);
-    const signature = Array.from(view).map(byte => String.fromCharCode(byte)).join('');
-    return signature === ENCRYPTION_SIG;
-}
-
-/**
- * Decrypts an XDF file buffer using a password.
- * This now handles XOR decryption followed by DEFLATE decompression.
- * @param buffer The encrypted ArrayBuffer of the XDF file.
- * @param password The password to use for decryption.
- * @returns The decrypted XML content as a string.
- */
-export async function decryptXdf(buffer: ArrayBuffer, password: string): Promise<string> {
-    if (password.length === 0) {
-        throw new Error("A senha não pode estar em branco.");
-    }
-    
-    const xorContent = new Uint8Array(buffer.slice(ENCRYPTION_SIG.length));
-    const passwordBytes = iconv.encode(password, 'ISO-8859-1');
-
-    // Step 1: XOR Decryption
-    for (let i = 0; i < xorContent.length; i++) {
-        xorContent[i] ^= passwordBytes[i % passwordBytes.length];
-    }
-    
-    // Step 2: DEFLATE Decompression using pako
-    try {
-        const decompressedBytes = pako.inflate(xorContent);
-        // Step 3: Decode the resulting XML bytes using the correct character set
-        return iconv.decode(Buffer.from(decompressedBytes), 'ISO-8859-1');
-    } catch (error) {
-        console.error("Falha na desencriptação/descompressão:", error);
-        throw new Error("Falha ao processar o ficheiro XDF. A senha pode estar incorreta ou o ficheiro está corrompido.");
-    }
-}
-
 
 // #endregion
 
@@ -1091,6 +1038,7 @@ export function calculateCorrections(
     
 
     
+
 
 
 

@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw, Cloud, CloudUpload, Clock, HardDriveDownload, Key } from 'lucide-react';
-import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections, evaluateEquation, isXdfEncrypted, decryptXdf } from '@/lib/ecu';
+import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections, evaluateEquation } from '@/lib/ecu';
 import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile, ChartPoint } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
@@ -566,7 +566,6 @@ export default function EcuTuningAssistant() {
 
     const [binFile, setBinFile] = useState<{ name: string; buffer: ArrayBuffer } | null>(null);
     const [xdfFile, setXdfFile] = useState<{ name: string; content: string, definitions: XDFinition[], allTables: Map<string, Element> } | null>(null);
-    const [xdfPasswordRequest, setXdfPasswordRequest] = useState<{ name: string, buffer: ArrayBuffer } | null>(null);
     const [logFile, setLogFile] = useState<{ name: string; content: string } | null>(null);
     const [logData, setLogData] = useState<any[]>([]);
     const [logs, setLogs] = useState<LogMessage[]>([]);
@@ -763,7 +762,6 @@ export default function EcuTuningAssistant() {
     const handleResetAll = useCallback(() => {
         setBinFile(null);
         setXdfFile(null);
-        setXdfPasswordRequest(null);
         setLogFile(null);
         setLogData([]);
         setLogs([]);
@@ -812,23 +810,6 @@ export default function EcuTuningAssistant() {
             setXdfFile(null);
          }
     };
-    
-    const handleDecryptAndParseXdf = async (password: string) => {
-        if (!xdfPasswordRequest) return;
-        
-        addLog(`A tentar desencriptar "${xdfPasswordRequest.name}"...`, 'info');
-        try {
-            const decryptedContent = await decryptXdf(xdfPasswordRequest.buffer, password);
-            processAndSetXdf(xdfPasswordRequest.name, decryptedContent);
-        } catch (error) {
-            const msg = `Falha ao desencriptar: ${(error as Error).message}. Verifique a senha.`;
-            addLog(msg, 'error');
-            toast({ title: 'Erro de Senha', description: msg, variant: 'destructive' });
-        } finally {
-            setXdfPasswordRequest(null);
-        }
-    };
-
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'bin' | 'xdf') => {
         const file = e.target.files?.[0];
@@ -836,51 +817,37 @@ export default function EcuTuningAssistant() {
 
         addLog(`A ler o ficheiro ${file.name}...`, 'info');
         
-        const reader = new FileReader();
-        
-        reader.onload = (event) => {
-            const buffer = event.target?.result;
-            if (!buffer || !(buffer instanceof ArrayBuffer)) {
-                const errorMessage = `Erro ao ler o ficheiro ${file.name}`;
-                addLog(errorMessage, 'error');
-                toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
-                return;
-            }
-
-            if ((type === 'bin' && binFile?.name !== file.name) || (type === 'xdf' && xdfFile?.name !== file.name)) {
-                clearMapState();
-                if (type === 'bin') {
-                    addLog(`Ficheiro BIN "${binFile?.name ?? 'anterior'}" substituído. A limpar dados de ensaio...`, "info");
-                    handleClearLogData();
-                    if(xdfFile) addLog(`Ficheiro XDF "${xdfFile.name}" mantido.`, "info");
-                }
-                if (type === 'xdf' && binFile) addLog(`Ficheiro BIN "${binFile.name}" mantido.`, "info");
-            }
-
+        if ((type === 'bin' && binFile?.name !== file.name) || (type === 'xdf' && xdfFile?.name !== file.name)) {
+            clearMapState();
             if (type === 'bin') {
-                setBinFile({ name: file.name, buffer });
-                const successMessage = `Ficheiro BIN carregado: ${file.name}`;
-                addLog(successMessage, 'success');
-                toast({ title: 'Ficheiro Carregado', description: successMessage });
-            } else if (type === 'xdf') {
-                 if (isXdfEncrypted(buffer)) {
-                    addLog(`O ficheiro XDF "${file.name}" parece estar encriptado. A pedir senha...`, 'info');
-                    setXdfPasswordRequest({ name: file.name, buffer });
-                 } else {
-                    const xmlContent = new TextDecoder('iso-8859-1').decode(buffer);
-                    processAndSetXdf(file.name, xmlContent);
-                 }
+                addLog(`Ficheiro BIN "${binFile?.name ?? 'anterior'}" substituído. A limpar dados de ensaio...`, "info");
+                handleClearLogData();
+                if(xdfFile) addLog(`Ficheiro XDF "${xdfFile.name}" mantido.`, "info");
             }
-        };
-        
-        reader.onerror = () => {
-             const errorMessage = `Erro fatal ao ler o ficheiro ${file.name}.`;
-             addLog(errorMessage, 'error');
-             toast({ title: 'Erro de Leitura', description: errorMessage, variant: 'destructive' });
+            if (type === 'xdf' && binFile) addLog(`Ficheiro BIN "${binFile.name}" mantido.`, "info");
         }
-        
-        reader.readAsArrayBuffer(file);
-        
+
+        if (type === 'bin') {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const buffer = event.target?.result;
+                if (buffer instanceof ArrayBuffer) {
+                    setBinFile({ name: file.name, buffer });
+                    const successMessage = `Ficheiro BIN carregado: ${file.name}`;
+                    addLog(successMessage, 'success');
+                    toast({ title: 'Ficheiro Carregado', description: successMessage });
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        } else if (type === 'xdf') {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const content = event.target?.result as string;
+                processAndSetXdf(file.name, content);
+            };
+            // Read as text, assuming it's decrypted
+            reader.readAsText(file, 'ISO-8859-1');
+        }
     };
 
     const handleLogFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1557,9 +1524,9 @@ const handleMapSelectionChange = (id: string) => {
             toast({ title: 'Backup Carregado', description: `Ficheiro "${backup.name}" está pronto a ser usado.` });
     
         } catch (error) {
-            const msg = `Falha ao carregar backup: ${(error as Error).message}`;
-            addLog(msg, 'error');
-            toast({ title: 'Erro ao Carregar', description: msg, variant: 'destructive' });
+             const msg = `Falha ao carregar backup: ${(error as Error).message}`;
+             addLog(msg, 'error');
+             toast({ title: 'Erro ao Carregar', description: msg, variant: 'destructive' });
         } finally {
              setIsProcessing(false);
         }
@@ -2135,15 +2102,6 @@ const handleMapSelectionChange = (id: string) => {
          <div className="flex h-full w-full flex-col bg-background">
             <Header />
             <main className="flex-1 overflow-auto p-4 md:p-6">
-
-                {xdfPasswordRequest && (
-                    <XdfPasswordDialog 
-                        request={xdfPasswordRequest}
-                        onConfirm={handleDecryptAndParseXdf}
-                        onCancel={() => setXdfPasswordRequest(null)}
-                    />
-                )}
-
                 {ControlPanelAccordion}
                 
                 <Accordion type="single" collapsible className="w-full mb-6">
