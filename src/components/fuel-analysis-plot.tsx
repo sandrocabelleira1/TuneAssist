@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   LineChart,
   Line,
@@ -12,23 +12,21 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+import { ChartContainer } from '@/components/ui/chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { AxisData, XDFinition } from '@/lib/types';
 
 
-interface FuelAnalysisPlotProps {
-  logData: any[];
-  logHeaders: string[];
-  loadAxis: AxisData | null;
-  selectedLoadColumn: string;
-  selectedLoadValues: string[];
-  mapLineData: { rpm: number, mapValue: number | null }[] | null;
-  mapDefinition: XDFinition | undefined;
+interface CustomTooltipProps {
+    active?: boolean;
+    payload?: any[];
+    label?: string;
+    timeKey: string | null;
+    mapDefinition: XDFinition | undefined;
+    setActiveMapValue: (value: number | null) => void;
 }
 
-
-const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition }: { active?: boolean; payload?: any[]; label?: string; timeKey: string | null; mapDefinition: XDFinition | undefined }) => {
+const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition, setActiveMapValue }: CustomTooltipProps) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
         const findPayload = (key: string) => payload.find(p => p.dataKey === key);
@@ -37,6 +35,16 @@ const CustomTooltipContent = ({ active, payload, label, timeKey, mapDefinition }
         const potenciaPayload = findPayload(Object.keys(data).find(k => k.toLowerCase().includes('potencia') || k.toLowerCase().includes('power')) || '');
         const mapPayload = findPayload('mapValue');
         const timeValue = timeKey && data[timeKey] !== null && data[timeKey] !== undefined ? data[timeKey] : null;
+
+        // Update the active map value state
+        if (mapPayload && mapPayload.value !== undefined) {
+             setActiveMapValue(mapPayload.value);
+        } else {
+             // When hovering over a gap in the map data, clear the value
+             if (payload.some(p => p.dataKey === 'mapValue')) {
+                setActiveMapValue(null);
+             }
+        }
 
         const isPotenciaInWatts = potenciaPayload && (potenciaPayload.name.toLowerCase().includes('(w)'));
 
@@ -125,6 +133,8 @@ function findClosestIndex(arr: (number | string)[], target: number): number {
 
 
 export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, selectedLoadColumn, selectedLoadValues, mapLineData, mapDefinition }: FuelAnalysisPlotProps) {
+  const [activeMapValue, setActiveMapValue] = useState<number | null>(null);
+
   const { chartData, rpmKey, lambdaKey, timeKey, otherKeys, mergedData } = useMemo(() => {
     if (!logData || logData.length === 0) {
       return { chartData: [], rpmKey: null, lambdaKey: null, timeKey: null, otherKeys: [], mergedData: [] };
@@ -265,12 +275,26 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
     <Card>
       <CardHeader>
         <CardTitle>Visualização do Ensaio</CardTitle>
-        <CardDescription>Gráfico dinâmico dos dados carregados do ficheiro de log, comparado com o valor do mapa.</CardDescription>
+        <CardDescription>
+            Gráfico dinâmico dos dados carregados. Passe o rato para ver os valores e a célula do mapa ativa.
+        </CardDescription>
+         {mapDefinition && (
+             <div className="pt-2">
+                 <h4 className="text-sm font-medium text-muted-foreground">Valor do Mapa Ativo ({mapDefinition.name})</h4>
+                 <p className="text-3xl font-bold text-primary transition-colors duration-200">
+                     {activeMapValue !== null ? activeMapValue.toFixed(2) : '-.--'}
+                 </p>
+             </div>
+         )}
       </CardHeader>
       <CardContent>
         <ChartContainer config={{}} className="min-h-[300px] w-full">
           <ResponsiveContainer>
-            <LineChart data={mergedData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+            <LineChart 
+                data={mergedData} 
+                margin={{ top: 20, right: 20, left: 0, bottom: 20 }}
+                onMouseLeave={() => setActiveMapValue(null)}
+            >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey={rpmKey} 
@@ -329,7 +353,11 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 />
               )}
 
-              <Tooltip content={<CustomTooltipContent timeKey={timeKey} mapDefinition={mapDefinition} />} />
+              <Tooltip 
+                content={<CustomTooltipContent timeKey={timeKey} mapDefinition={mapDefinition} setActiveMapValue={setActiveMapValue} />} 
+                cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1, strokeDasharray: '3 3' }}
+              />
+
               <Legend verticalAlign="top" wrapperStyle={{paddingBottom: '10px'}}/>
 
               <Line 
@@ -337,7 +365,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 dataKey={lambdaKey}
                 name={"Sonda O2 (Lambda)"}
                 stroke={yAxisColors[0]}
-                strokeWidth={12} 
+                strokeWidth={6}
                 dot={<CustomDot dataKey={lambdaKey}/>} 
                 connectNulls
               />
@@ -359,7 +387,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                         data={data}
                         name={legendName}
                         stroke={yAxisColors[index + 1]}
-                        strokeWidth={12}
+                        strokeWidth={6}
                         dot={<CustomDot dataKey={key}/>}
                         connectNulls
                     />
@@ -374,7 +402,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     name={mapDefinition?.name || "Valor do Mapa"}
                     stroke={yAxisColors[yAxisColors.length-1]}
                     strokeDasharray="5 5"
-                    strokeWidth={12}
+                    strokeWidth={6}
                     dot={<CustomDot dataKey="mapValue"/>}
                     connectNulls
                 />
@@ -386,4 +414,14 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
       </CardContent>
     </Card>
   );
+}
+
+interface FuelAnalysisPlotProps {
+  logData: any[];
+  logHeaders: string[];
+  loadAxis: AxisData | null;
+  selectedLoadColumn: string;
+  selectedLoadValues: string[];
+  mapLineData: { rpm: number, mapValue: number | null }[] | null;
+  mapDefinition: XDFinition | undefined;
 }
