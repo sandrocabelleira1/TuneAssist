@@ -1,4 +1,5 @@
 
+
 import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig, FoundAxis } from './types';
 
 // #region Utility Functions
@@ -149,13 +150,14 @@ export function decryptXdf(buffer: ArrayBuffer, password: string): string {
         throw new Error("A senha não pode estar em branco.");
     }
     
-    const encryptedBytes = new Uint8Array(buffer);
+    // The actual encrypted content starts AFTER the signature
+    const encryptedContent = buffer.slice(ENCRYPTION_SIG.length);
+    const encryptedBytes = new Uint8Array(encryptedContent);
     const passwordBytes = new TextEncoder().encode(password);
-    const decryptedBytes = new Uint8Array(buffer.byteLength - ENCRYPTION_SIG.length);
+    const decryptedBytes = new Uint8Array(encryptedBytes.length);
 
-    for (let i = ENCRYPTION_SIG.length; i < encryptedBytes.length; i++) {
-        const contentIndex = i - ENCRYPTION_SIG.length;
-        decryptedBytes[contentIndex] = encryptedBytes[i] ^ passwordBytes[contentIndex % passwordBytes.length];
+    for (let i = 0; i < encryptedBytes.length; i++) {
+        decryptedBytes[i] = encryptedBytes[i] ^ passwordBytes[i % passwordBytes.length];
     }
     
     // The decrypted content is expected to be ISO-8859-1 (Latin-1)
