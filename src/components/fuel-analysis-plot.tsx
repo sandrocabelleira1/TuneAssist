@@ -405,7 +405,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                 dataKey={lambdaKey}
                 name={"Sonda O2 (Lambda)"}
                 stroke={yAxisColors[0]}
-                strokeWidth={6}
+                strokeWidth={15}
                 dot={<CustomDot dataKey={lambdaKey}/>} 
                 connectNulls
               />
@@ -427,7 +427,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                         data={data}
                         name={legendName}
                         stroke={yAxisColors[index + 1]}
-                        strokeWidth={6}
+                        strokeWidth={15}
                         dot={<CustomDot dataKey={key}/>}
                         connectNulls
                     />
@@ -442,7 +442,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     name={mapDefinition?.name || "Valor do Mapa"}
                     stroke={yAxisColors[yAxisColors.length-1]}
                     strokeDasharray="5 5"
-                    strokeWidth={6}
+                    strokeWidth={15}
                     dot={<CustomDot dataKey="mapValue"/>}
                     connectNulls
                 />
@@ -465,5 +465,3 @@ interface FuelAnalysisPlotProps {
   mapLineData: { rpm: number, mapValue: number | null }[] | null;
   mapDefinition: XDFinition | undefined;
 }
-
-    
