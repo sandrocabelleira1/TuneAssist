@@ -813,12 +813,12 @@ export default function EcuTuningAssistant() {
          }
     };
     
-    const handleDecryptAndParseXdf = (password: string) => {
+    const handleDecryptAndParseXdf = async (password: string) => {
         if (!xdfPasswordRequest) return;
         
         addLog(`A tentar desencriptar "${xdfPasswordRequest.name}"...`, 'info');
         try {
-            const decryptedContent = decryptXdf(xdfPasswordRequest.buffer, password);
+            const decryptedContent = await decryptXdf(xdfPasswordRequest.buffer, password);
             processAndSetXdf(xdfPasswordRequest.name, decryptedContent);
         } catch (error) {
             const msg = `Falha ao desencriptar: ${(error as Error).message}. Verifique a senha.`;
@@ -1561,7 +1561,7 @@ const handleMapSelectionChange = (id: string) => {
             addLog(msg, 'error');
             toast({ title: 'Erro ao Carregar', description: msg, variant: 'destructive' });
         } finally {
-            setIsProcessing(false);
+             setIsProcessing(false);
         }
     };
     
@@ -2264,3 +2264,5 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
+
+    

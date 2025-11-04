@@ -146,22 +146,43 @@ export function isXdfEncrypted(buffer: ArrayBuffer): boolean {
  * @param password The password to use for decryption.
  * @returns The decrypted XML content as a string.
  */
-export function decryptXdf(buffer: ArrayBuffer, password: string): string {
+export async function decryptXdf(buffer: ArrayBuffer, password: string): Promise<string> {
     if (password.length === 0) {
         throw new Error("A senha não pode estar em branco.");
     }
     
     const encryptedContent = buffer.slice(ENCRYPTION_SIG.length);
-    const encryptedBytes = Buffer.from(encryptedContent);
-    const passwordBytes = Buffer.from(password, 'utf-8');
-    const decryptedBytes = Buffer.alloc(encryptedBytes.length);
+    let xorBytes = new Uint8Array(encryptedContent);
+    const passwordBytes = iconv.encode(password, 'ISO-8859-1');
 
-    for (let i = 0; i < encryptedBytes.length; i++) {
-        decryptedBytes[i] = encryptedBytes[i] ^ passwordBytes[i % passwordBytes.length];
+    for (let i = 0; i < xorBytes.length; i++) {
+        xorBytes[i] ^= passwordBytes[i % passwordBytes.length];
     }
     
-    // The decrypted content is expected to be ISO-8859-1 (Latin-1)
-    return iconv.decode(decryptedBytes, 'ISO-8859-1');
+    try {
+        const decompressionStream = new DecompressionStream('deflate');
+        const writer = decompressionStream.writable.getWriter();
+        writer.write(xorBytes);
+        writer.close();
+        
+        const chunks = [];
+        const reader = decompressionStream.readable.getReader();
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+        }
+
+        const decompressedBlob = new Blob(chunks);
+        const decompressedBuffer = await decompressedBlob.arrayBuffer();
+
+        // The decompressed content is expected to be ISO-8859-1 (Latin-1)
+        return iconv.decode(Buffer.from(decompressedBuffer), 'ISO-8859-1');
+
+    } catch (error) {
+        console.error("Falha na descompressão:", error);
+        throw new Error("Falha ao descomprimir o ficheiro XDF. A senha pode estar incorreta ou o ficheiro está corrompido.");
+    }
 }
 
 
@@ -1079,5 +1100,7 @@ export function calculateCorrections(
 
 
 // #endregion
+
+    
 
     
