@@ -14,6 +14,7 @@
  * - /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}
  * - /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}/logEntries/{logEntryId}
  * - /users/{userId}/tuningSessions/{tuningSessionId}
+ * - /users/{userId}/backups/{backupId}
  *
  * Key Security Decisions:
  * - User listing is disallowed.
@@ -164,5 +165,24 @@ service cloud.firestore {
       allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
       allow delete: if isExistingOwner(userId);
     }
+
+    /**
+     * @description Security rules for the user's backup files.
+     * @path /users/{userId}/backups/{backupId}
+     * @allow (read, list) User 'user123' can read and list their own backups.
+     * @allow (create, delete) User 'user123' can create and delete their own backups.
+     * @deny (update) No one can update a backup document directly.
+     * @deny (read, write) User 'user456' cannot access backups of user 'user123'.
+     * @principle Enforces strict user ownership for all backup operations.
+     */
+    match /users/{userId}/backups/{backupId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId);
+        allow delete: if isExistingOwner(userId);
+        allow update: if false; // Backups are immutable
+    }
   }
 }
+
+    
