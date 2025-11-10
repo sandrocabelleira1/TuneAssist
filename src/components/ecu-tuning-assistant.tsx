@@ -1264,8 +1264,12 @@ const handleSave = async () => {
         toast({ title: 'Erro ao Salvar', description: msg, variant: 'destructive' });
         return;
     }
+    if (!user) {
+        toast({ title: 'Autenticação Necessária', description: 'Por favor, faça login para descarregar o ficheiro.', variant: 'destructive'});
+        return;
+    }
 
-    addLog("A gerar o ficheiro .bin modificado...", 'info');
+    addLog("A iniciar processo de pagamento para o ficheiro .bin modificado...", 'info');
     setIsProcessing(true);
 
     try {
@@ -1285,25 +1289,42 @@ const handleSave = async () => {
 
         const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
         const modifiedFileName = binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`;
-
-        // Trigger direct download
-        const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = modifiedFileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
         
-        addLog(`Ficheiro "${modifiedFileName}" descarregado com sucesso.`, "success");
-        toast({ title: 'Download Iniciado', description: `O seu ficheiro ${modifiedFileName} está a ser descarregado.` });
+        // Save file to localStorage to be retrieved after payment
+        const bufferArray = Array.from(new Uint8Array(newBinBuffer));
+        localStorage.setItem('pendingBinFile', JSON.stringify(bufferArray));
+        localStorage.setItem('pendingBinFileName', modifiedFileName);
+        
+        const response = await fetch('/api/create-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: `Download Ficheiro ${modifiedFileName}`,
+                unit_price: 1, // This will be handled by credits logic later
+                quantity: 1,
+                userId: user.uid,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Falha ao criar a preferência de pagamento.');
+        }
+
+        const data = await response.json();
+
+        if (data.init_point) {
+            addLog(`Redirecionando para o Mercado Pago...`, "info");
+            window.location.href = data.init_point;
+        } else {
+            throw new Error('Ponto de inicialização do Mercado Pago não recebido.');
+        }
 
     } catch (error) {
-        const errorMsg = `Falha ao salvar: ${(error as Error).message}`;
+        const errorMsg = `Falha ao processar o pagamento: ${(error as Error).message}`;
         addLog(errorMsg, 'error');
-        toast({ title: 'Erro Crítico', description: errorMsg, variant: 'destructive' });
+        toast({ title: 'Erro de Pagamento', description: errorMsg, variant: 'destructive' });
+        localStorage.removeItem('pendingBinFile');
+        localStorage.removeItem('pendingBinFileName');
     } finally {
         setIsProcessing(false);
     }
