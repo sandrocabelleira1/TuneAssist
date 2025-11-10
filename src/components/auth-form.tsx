@@ -8,14 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAuth, useUser } from '@/firebase';
+import { useAuth } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
-import { useEffect } from 'react';
 
 const authSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um email válido.' }),
@@ -33,51 +32,13 @@ interface AuthFormProps {
 export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
   const { toast } = useToast();
   const auth = useAuth();
-  const { user, isUserLoading } = useUser();
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   
   const form = useForm<AuthFormValues>({
     resolver: zodResolver(authSchema),
     defaultValues: { email: '', password: '' },
   });
-
-  const [authAction, setAuthAction] = useState<'login' | 'register' | null>(null);
-
-  useEffect(() => {
-    if (!isUserLoading && user && authAction) {
-        setIsLoading(false);
-        if (authAction === 'register') {
-            toast({
-                title: 'Registo bem-sucedido!',
-                description: 'A sua conta foi criada.',
-            });
-        } else {
-            toast({ title: 'Login bem-sucedido!', description: 'Bem-vindo de volta.' });
-        }
-        onAuthSuccess();
-        setAuthAction(null);
-    }
-  }, [user, isUserLoading, authAction, onAuthSuccess, toast]);
-
-  const handleAuth = (data: AuthFormValues, isRegister: boolean) => {
-    setIsLoading(true);
-    setError(null);
-    setAuthAction(isRegister ? 'register' : 'login');
-
-    try {
-      if (isRegister) {
-        createUserWithEmailAndPassword(auth, data.email, data.password)
-            .catch(handleAuthError);
-      } else {
-        signInWithEmailAndPassword(auth, data.email, data.password)
-            .catch(handleAuthError);
-      }
-    } catch (err) {
-        // Catch synchronous errors if any, though unlikely with firebase auth
-        handleAuthError(err);
-    }
-  };
 
   const handleAuthError = (err: any) => {
       let friendlyMessage = 'Ocorreu um erro. Por favor, tente novamente.';
@@ -95,27 +56,53 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
             friendlyMessage = 'O email fornecido não é válido.';
             break;
           default:
-             friendlyMessage = `Erro: ${err.message}`;
+             friendlyMessage = `Erro de autenticação.`;
         }
       }
-      setError(friendlyMessage);
       toast({
         title: 'Erro de Autenticação',
         description: friendlyMessage,
         variant: 'destructive',
       });
       setIsLoading(false);
-      setAuthAction(null);
+  }
+
+  const handleAuth = async (data: AuthFormValues) => {
+    setIsLoading(true);
+
+    const authPromise = activeTab === 'register'
+        ? createUserWithEmailAndPassword(auth, data.email, data.password)
+        : signInWithEmailAndPassword(auth, data.email, data.password);
+    
+    try {
+        const userCredential = await authPromise;
+        if (userCredential.user) {
+            toast({
+                title: activeTab === 'register' ? 'Registo bem-sucedido!' : 'Login bem-sucedido!',
+                description: activeTab === 'register' ? 'A sua conta foi criada.' : 'Bem-vindo de volta.',
+            });
+            onAuthSuccess();
+        }
+    } catch (error) {
+        handleAuthError(error);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  const onTabChange = (value: string) => {
+      setActiveTab(value as 'login' | 'register');
+      form.reset();
   }
 
   return (
-    <Tabs defaultValue="login" className="w-full">
+    <Tabs defaultValue="login" className="w-full" onValueChange={onTabChange} value={activeTab}>
       <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="login">Login</TabsTrigger>
         <TabsTrigger value="register">Registar</TabsTrigger>
       </TabsList>
       <TabsContent value="login">
-        <form onSubmit={form.handleSubmit((data) => handleAuth(data, false))} className="space-y-4">
+        <form onSubmit={form.handleSubmit(handleAuth)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="login-email">Email</Label>
             <Input id="login-email" type="email" {...form.register('email')} />
@@ -126,7 +113,6 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
             <Input id="login-password" type="password" {...form.register('password')} />
              {form.formState.errors.password && <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>}
           </div>
-           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Entrar
@@ -134,7 +120,7 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
         </form>
       </TabsContent>
       <TabsContent value="register">
-        <form onSubmit={form.handleSubmit((data) => handleAuth(data, true))} className="space-y-4">
+        <form onSubmit={form.handleSubmit(handleAuth)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="register-email">Email</Label>
             <Input id="register-email" type="email" {...form.register('email')} />
@@ -145,7 +131,6 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
             <Input id="register-password" type="password" {...form.register('password')} />
             {form.formState.errors.password && <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>}
           </div>
-           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={isLoading}>
              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Criar Conta
