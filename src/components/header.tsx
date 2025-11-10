@@ -2,11 +2,12 @@
 'use client';
 
 import Link from 'next/link';
-import { Sparkles, User, Loader2, LogIn, LogOut, Wrench, BookOpen } from 'lucide-react';
-import { useUser, useAuth } from '@/firebase';
+import { Sparkles, User, Loader2, LogIn, LogOut, Wrench, BookOpen, Coins } from 'lucide-react';
+import { useUser, useFirestore, useAuth, useDoc, useMemoFirebase } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { signOut } from 'firebase/auth';
+import { doc } from 'firebase/firestore';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,13 +29,69 @@ import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+
+interface UserProfile {
+    credits?: number;
+}
+
+const BuyCreditsMenuItem = ({ userId, onPurchaseStart }: { userId: string, onPurchaseStart: () => void }) => {
+    const { toast } = useToast();
+
+    const handleBuyCredits = async () => {
+        onPurchaseStart();
+        try {
+            const response = await fetch('/api/create-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'credits',
+                    title: 'Pacote de 10 Créditos',
+                    unit_price: 198.00,
+                    quantity: 1,
+                    userId: userId,
+                }),
+            });
+            if (!response.ok) throw new Error('Falha ao criar preferência de pagamento.');
+            const data = await response.json();
+            if (data.init_point) {
+                window.location.href = data.init_point;
+            } else {
+                throw new Error('Ponto de inicialização do Mercado Pago não recebido.');
+            }
+        } catch (error) {
+            toast({
+                title: 'Erro de Pagamento',
+                description: (error as Error).message || 'Não foi possível iniciar o processo de pagamento.',
+                variant: 'destructive',
+            });
+            onPurchaseStart(); // Re-enable button on error
+        }
+    };
+
+    return (
+        <DropdownMenuItem onSelect={handleBuyCredits}>
+            <Coins className="mr-2 h-4 w-4" />
+            <span>Comprar Créditos</span>
+        </DropdownMenuItem>
+    );
+};
 
 
 export default function Header({ className }: { className?: string }) {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
+  const firestore = useFirestore();
   const pathname = usePathname();
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  const userDocRef = useMemoFirebase(() => {
+    if (!firestore || !user?.uid) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user?.uid]);
+
+  const { data: userProfile } = useDoc<UserProfile>(userDocRef);
 
 
   const handleSignOut = async () => {
@@ -46,7 +103,7 @@ export default function Header({ className }: { className?: string }) {
   };
 
   const renderUserStatus = () => {
-    if (isUserLoading) {
+    if (isUserLoading || isProcessingPayment) {
       return <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />;
     }
 
@@ -63,6 +120,12 @@ export default function Header({ className }: { className?: string }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
                 <DropdownMenuLabel>{user.displayName || user.email}</DropdownMenuLabel>
+                <DropdownMenuLabel className="font-normal text-muted-foreground flex items-center">
+                    <Coins className="mr-2 h-4 w-4 text-amber-400"/>
+                    Créditos: {userProfile?.credits ?? 0}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <BuyCreditsMenuItem userId={user.uid} onPurchaseStart={() => setIsProcessingPayment(true)} />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
                     <LogOut className="mr-2 h-4 w-4" />
