@@ -29,41 +29,51 @@ export async function POST(req: NextRequest) {
   const client = new MercadoPagoConfig({ accessToken });
   const preference = new Preference(client);
 
-  let back_urls;
+  let back_urls: any;
   let metadata: any = {};
   let finalPayerEmail = providedPayerEmail;
   if (!finalPayerEmail && userId) {
     finalPayerEmail = await getPayerEmail(userId);
   }
 
-  if (type === 'license') {
-    back_urls = {
+  const baseSuccessUrl = `${req.nextUrl.origin}/payment/success`;
+  const baseFailureUrl = `${req.nextUrl.origin}/payment/failure`;
+
+  switch (type) {
+    case 'license':
+      back_urls = {
         success: `${req.nextUrl.origin}/payment/register-success`,
-        failure: `${req.nextUrl.origin}/payment/failure`,
-        pending: `${req.nextUrl.origin}/payment/failure`,
-    };
-    metadata = { type: 'license' };
-  } else if (type === 'renewal') {
-     back_urls = {
-        success: `${req.nextUrl.origin}/payment/success?type=renewal&userId=${userId}`,
-        failure: `${req.nextUrl.origin}/payment/failure`,
-        pending: `${req.nextUrl.origin}/payment/failure`,
-    };
-    metadata = { user_id: userId, type: 'renewal' };
-  } else if (type === 'credits') {
-    back_urls = {
-        success: `${req.nextUrl.origin}/payment/success?type=credits&userId=${userId}`,
-        failure: `${req.nextUrl.origin}/payment/failure`,
-        pending: `${req.nextUrl.origin}/payment/failure`,
-    };
-    metadata = { user_id: userId, type: 'credits', quantity: 10 };
-  } else { // 'download'
-    back_urls = {
-        success: `${req.nextUrl.origin}/payment/success?type=download`,
-        failure: `${req.nextUrl.origin}/payment/failure`,
-        pending: `${req.nextUrl.origin}/payment/pending`,
-    };
-    metadata = { user_id: userId, type: 'download' };
+        failure: baseFailureUrl,
+        pending: baseFailureUrl,
+      };
+      metadata = { type: 'license' };
+      break;
+    case 'renewal':
+      back_urls = {
+        success: `${baseSuccessUrl}?type=renewal&userId=${userId}`,
+        failure: baseFailureUrl,
+        pending: baseFailureUrl,
+      };
+      metadata = { user_id: userId, type: 'renewal' };
+      break;
+    case 'credits':
+      back_urls = {
+        success: `${baseSuccessUrl}?type=credits&userId=${userId}`,
+        failure: baseFailureUrl,
+        pending: baseFailureUrl,
+      };
+      metadata = { user_id: userId, type: 'credits', quantity: 10 };
+      break;
+    case 'download':
+       back_urls = {
+        success: `${baseSuccessUrl}?type=download`,
+        failure: baseFailureUrl,
+        pending: baseFailureUrl, // Using failure for pending as well
+      };
+      metadata = { user_id: userId, type: 'download' };
+      break;
+    default:
+        return NextResponse.json({ error: 'Invalid payment type provided.' }, { status: 400 });
   }
 
 
