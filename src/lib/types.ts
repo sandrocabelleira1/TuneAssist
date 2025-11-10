@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 
 // This is a placeholder as the actual schema is gone.
@@ -179,4 +180,9 @@ export interface BackupFile {
     nanoseconds: number;
   };
   userId: string;
+}
+
+export interface UserProfile {
+    credits?: number;
+    licenseExpiryDate?: string;
 }

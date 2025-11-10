@@ -12,9 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw, Cloud, CloudUpload, Clock, HardDriveDownload, Key } from 'lucide-react';
+import { UploadCloud, FileCog, Save, BrainCircuit, Cpu, BarChart3, Binary, Table2, Settings2, Loader2, Play, AlertTriangle, Star, Plus, Minus, Blend, Edit, ArrowRightLeft, ClipboardList, PlusCircle, Wand2, Trash2, Eraser, X, ChevronsUpDown, Check, Flame, Search, Download, LineChart as LineChartIcon, FolderClock, ChevronDown, Info, RotateCcw, Cloud, CloudUpload, Clock, HardDriveDownload, Key, ShieldOff } from 'lucide-react';
 import { parseXDF, readAndCalculateMapFromBinManual, writeMultipleMapsToBin, calculateCorrections, evaluateEquation } from '@/lib/ecu';
-import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile, ChartPoint } from '@/lib/types';
+import type { XDFinition, MapData, LogMessage, ProcessedMap, ManualAxisConfig, AxisData, PlotOrientation, ModifiedCell, IgnitionTimingRun, BackupFile, ChartPoint, UserProfile } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/header';
 import LinePlot2D from '@/components/line-plot';
@@ -36,12 +36,13 @@ import IgnitionTimingAnalyzer from '@/components/ignition-timing-analyzer';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
-import { useUser, useFirestore, useAuth, useMemoFirebase } from '@/firebase';
+import { useUser, useFirestore, useAuth, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, serverTimestamp, addDoc, deleteDoc, doc, query, orderBy, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { useCollection } from '@/firebase';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import FuelAnalysisPlot from './fuel-analysis-plot';
+import { isAfter } from 'date-fns';
 
 
 const SurfacePlot3D = dynamic(() => import('@/components/surface-plot'), {
@@ -554,11 +555,48 @@ const formatFileSize = (bytes: number): string => {
 };
 
 
+function LicenseExpiredScreen({ onRenew }: { onRenew: () => void }) {
+    return (
+        <div className="flex h-full flex-col items-center justify-center text-center text-foreground">
+            <Card className="max-w-md">
+                <CardHeader>
+                    <div className="flex justify-center mb-4">
+                        <ShieldOff className="h-16 w-16 text-destructive" />
+                    </div>
+                    <CardTitle>Licença Expirada</CardTitle>
+                    <CardDescription>O seu acesso de 6 meses à ferramenta terminou. Por favor, renove a sua licença para continuar a usar todas as funcionalidades.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Button className="w-full" onClick={onRenew}>
+                        Renovar Licença Agora
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
 export default function EcuTuningAssistant() {
     const { toast } = useToast();
     const { user, isUserLoading } = useUser();
-    const auth = useAuth();
     const firestore = useFirestore();
+
+    const userDocRef = useMemoFirebase(() => {
+        if (!firestore || !user?.uid) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user?.uid]);
+
+    const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
+
+    const isLicenseExpired = useMemo(() => {
+        if (!userProfile?.licenseExpiryDate) {
+            // If there's no expiry date but the user exists, assume they need a license (e.g. legacy user)
+            return user ? true : false;
+        }
+        return isAfter(new Date(), new Date(userProfile.licenseExpiryDate));
+    }, [userProfile, user]);
+
+
     const addLog = useCallback((message: string, type: LogMessage['type'] = 'info') => {
         const id = `${Date.now()}-${Math.random()}`;
         setLogs(prev => [{ id, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), message, type }, ...prev].slice(0, 100));
@@ -1614,6 +1652,13 @@ const handleMapSelectionChange = (id: string) => {
         }
     };
 
+    const handleRenewLicense = () => {
+        // Placeholder for payment logic
+        toast({
+            title: "Renovação de Licença",
+            description: "A iniciar o processo de pagamento para a renovação da sua licença."
+        });
+    };
 
     const renderContent = () => {
         if (isProcessing && !processedMap) {
@@ -2148,6 +2193,26 @@ const handleMapSelectionChange = (id: string) => {
         </Accordion>
     );
 
+    if (isUserLoading || isProfileLoading) {
+        return (
+            <div className="flex h-full w-full flex-col items-center justify-center bg-background">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p className="mt-4 text-muted-foreground">A verificar autenticação e licença...</p>
+            </div>
+        );
+    }
+    
+    if (isLicenseExpired) {
+        return (
+            <div className="flex h-full w-full flex-col bg-background">
+                 <Header />
+                 <main className="flex-1 overflow-auto p-4 md:p-6">
+                    <LicenseExpiredScreen onRenew={handleRenewLicense} />
+                 </main>
+            </div>
+        );
+    }
+
     return (
       <EcuTuningStateContext.Provider value={{ processedMap, loadAxis }}>
          <div className="flex h-full w-full flex-col bg-background">
@@ -2273,5 +2338,3 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
-
-    
