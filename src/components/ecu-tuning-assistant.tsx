@@ -37,7 +37,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Image from 'next/image';
 import { useUser, useFirestore, useAuth, useMemoFirebase } from '@/firebase';
-import { collection, serverTimestamp, addDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import { collection, serverTimestamp, addDoc, deleteDoc, doc, query, orderBy, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { useCollection } from '@/firebase';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -1257,78 +1257,85 @@ export default function EcuTuningAssistant() {
         addLog(`Operação em massa "${operation}" aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
     };
     
-const handleSave = async () => {
-    if (!binFile || !xdfFile || !anyMapModified) {
-        const msg = "Faltam dados para salvar. Carregue os ficheiros e modifique um mapa primeiro.";
-        addLog(msg, 'error');
-        toast({ title: 'Erro ao Salvar', description: msg, variant: 'destructive' });
-        return;
-    }
-    if (!user) {
-        toast({ title: 'Autenticação Necessária', description: 'Por favor, faça login para descarregar o ficheiro.', variant: 'destructive'});
-        return;
-    }
-
-    addLog("A iniciar processo de pagamento para o ficheiro .bin modificado...", 'info');
-    setIsProcessing(true);
-
-    try {
-        const mapsToSave = Object.entries(processedMapCache)
-            .filter(([mapId, _]) => modifiedStatusCache[mapId])
-            .map(([mapId, mapData]) => ({
-                definition: xdfFile.definitions.find(def => def.uniqueId === mapId)!,
-                processedMap: mapData,
-            }));
-        
-        if (mapsToSave.length === 0) {
-            addLog("Nenhuma modificação para salvar.", "info");
-            toast({ title: "Nenhuma Alteração", description: "Não há modificações para salvar."});
-            setIsProcessing(false);
+    const handleSave = async () => {
+        if (!binFile || !xdfFile || !anyMapModified) {
+            toast({ title: 'Erro ao Salvar', description: "Carregue os ficheiros e modifique um mapa primeiro.", variant: 'destructive' });
             return;
         }
-
-        const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
-        const modifiedFileName = binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`;
-        
-        // Save file to localStorage to be retrieved after payment
-        const bufferArray = Array.from(new Uint8Array(newBinBuffer));
-        localStorage.setItem('pendingBinFile', JSON.stringify(bufferArray));
-        localStorage.setItem('pendingBinFileName', modifiedFileName);
-        
-        const response = await fetch('/api/create-payment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                title: `Download Ficheiro ${modifiedFileName}`,
-                unit_price: 1, // This will be handled by credits logic later
-                quantity: 1,
-                userId: user.uid,
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Falha ao criar a preferência de pagamento.');
+        if (!user || !firestore) {
+            toast({ title: 'Autenticação Necessária', description: 'Por favor, faça login para descarregar o ficheiro.', variant: 'destructive'});
+            return;
         }
-
-        const data = await response.json();
-
-        if (data.init_point) {
-            addLog(`Redirecionando para o Mercado Pago...`, "info");
-            window.location.href = data.init_point;
-        } else {
-            throw new Error('Ponto de inicialização do Mercado Pago não recebido.');
+    
+        setIsProcessing(true);
+        const creditsToDeduct = 3;
+    
+        try {
+            // 1. Check user credits
+            const userDocRef = doc(firestore, 'users', user.uid);
+            const userDoc = await getDoc(userDocRef);
+    
+            if (!userDoc.exists() || (userDoc.data().credits ?? 0) < creditsToDeduct) {
+                toast({
+                    title: 'Créditos Insuficientes',
+                    description: `Você precisa de pelo menos ${creditsToDeduct} créditos para descarregar. O seu saldo é de ${userDoc.data()?.credits ?? 0}. Por favor, compre mais créditos.`,
+                    variant: 'destructive',
+                    duration: 7000,
+                });
+                setIsProcessing(false);
+                return;
+            }
+    
+            // 2. Prepare the modified file
+            addLog("A preparar ficheiro .bin modificado...", 'info');
+            const mapsToSave = Object.entries(processedMapCache)
+                .filter(([mapId, _]) => modifiedStatusCache[mapId])
+                .map(([mapId, mapData]) => ({
+                    definition: xdfFile.definitions.find(def => def.uniqueId === mapId)!,
+                    processedMap: mapData,
+                }));
+            
+            if (mapsToSave.length === 0) {
+                toast({ title: "Nenhuma Alteração", description: "Não há modificações para salvar."});
+                setIsProcessing(false);
+                return;
+            }
+    
+            const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
+            const modifiedFileName = binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`;
+    
+            // 3. Deduct credits
+            addLog(`A deduzir ${creditsToDeduct} créditos...`, 'info');
+            await updateDoc(userDocRef, {
+                credits: increment(-creditsToDeduct)
+            });
+    
+            // 4. Trigger download
+            addLog('Download a iniciar...', 'success');
+            const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = modifiedFileName;
+            document.body.appendChild(a);
+a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+    
+            toast({
+                title: 'Download Iniciado!',
+                description: `${creditsToDeduct} créditos foram deduzidos da sua conta.`,
+            });
+    
+        } catch (error) {
+            const errorMsg = `Falha ao processar o download: ${(error as Error).message}`;
+            addLog(errorMsg, 'error');
+            toast({ title: 'Erro no Download', description: errorMsg, variant: 'destructive' });
+            // Note: We don't automatically refund credits here to prevent abuse. This should be handled via support.
+        } finally {
+            setIsProcessing(false);
         }
-
-    } catch (error) {
-        const errorMsg = `Falha ao processar o pagamento: ${(error as Error).message}`;
-        addLog(errorMsg, 'error');
-        toast({ title: 'Erro de Pagamento', description: errorMsg, variant: 'destructive' });
-        localStorage.removeItem('pendingBinFile');
-        localStorage.removeItem('pendingBinFileName');
-    } finally {
-        setIsProcessing(false);
     }
-}
     
     const handleSetTemplate = () => {
         if (!selectedMapDefinition) {
