@@ -67,27 +67,68 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
       setIsLoading(false);
   }
 
-  const handleAuth = async (data: AuthFormValues) => {
+  const handleRegistrationPayment = async (data: AuthFormValues) => {
     setIsLoading(true);
-
-    const authPromise = activeTab === 'register'
-        ? createUserWithEmailAndPassword(auth, data.email, data.password)
-        : signInWithEmailAndPassword(auth, data.email, data.password);
-    
     try {
-        const userCredential = await authPromise;
-        if (userCredential.user) {
-            toast({
-                title: activeTab === 'register' ? 'Registo bem-sucedido!' : 'Login bem-sucedido!',
-                description: activeTab === 'register' ? 'A sua conta foi criada.' : 'Bem-vindo de volta.',
-            });
-            onAuthSuccess();
+        // Store credentials in localStorage to be retrieved after payment
+        localStorage.setItem('pendingRegistration', JSON.stringify({ email: data.email, password: data.password }));
+
+        const response = await fetch('/api/create-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'license',
+                title: 'Licença TuneAssist AI (6 Meses)',
+                unit_price: 149.00,
+                quantity: 1,
+                payerEmail: data.email
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Falha ao criar a preferência de pagamento.');
+        }
+
+        const paymentData = await response.json();
+        if (paymentData.init_point) {
+            window.location.href = paymentData.init_point;
+        } else {
+            throw new Error('Ponto de inicialização do Mercado Pago não recebido.');
         }
     } catch (error) {
-        handleAuthError(error);
-    } finally {
+        toast({
+            title: 'Erro de Pagamento',
+            description: (error as Error).message || 'Não foi possível iniciar o processo de pagamento.',
+            variant: 'destructive',
+        });
+        localStorage.removeItem('pendingRegistration');
         setIsLoading(false);
     }
+  };
+
+  const handleAuth = async (data: AuthFormValues) => {
+    setIsLoading(true);
+    
+    if (activeTab === 'register') {
+      await handleRegistrationPayment(data);
+      return;
+    }
+
+    // Handle Login
+    signInWithEmailAndPassword(auth, data.email, data.password)
+      .then((userCredential) => {
+        if (userCredential.user) {
+          toast({
+            title: 'Login bem-sucedido!',
+            description: 'Bem-vindo de volta.',
+          });
+          onAuthSuccess();
+        }
+      })
+      .catch(handleAuthError)
+      .finally(() => {
+        setIsLoading(false);
+      });
   };
 
   const onTabChange = (value: string) => {
@@ -111,7 +152,7 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
           <div className="space-y-2">
             <Label htmlFor="login-password">Palavra-passe</Label>
             <Input id="login-password" type="password" {...form.register('password')} />
-             {form.formState.errors.password && <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>}
+             {form.formState.errors.password && <p className="text-sm text-destructive">{form.formstate.errors.password.message}</p>}
           </div>
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -133,7 +174,7 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
           </div>
           <Button type="submit" className="w-full" disabled={isLoading}>
              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Criar Conta
+            Pagar e Criar Conta
           </Button>
         </form>
       </TabsContent>

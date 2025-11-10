@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 
 export async function POST(req: NextRequest) {
-  const { title, unit_price, quantity, userId } = await req.json();
+  const { type, title, unit_price, quantity, userId, payerEmail } = await req.json();
 
   if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
     return NextResponse.json({ error: 'Mercado Pago access token is not configured.' }, { status: 500 });
@@ -11,6 +11,25 @@ export async function POST(req: NextRequest) {
 
   const client = new MercadoPagoConfig({ accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN });
   const preference = new Preference(client);
+
+  let back_urls;
+  let metadata: any = {};
+
+  if (type === 'license') {
+    back_urls = {
+        success: `${req.nextUrl.origin}/payment/register-success`,
+        failure: `${req.nextUrl.origin}/payment/failure`,
+        pending: `${req.nextUrl.origin}/payment/failure`,
+    };
+    metadata = { type: 'license' };
+  } else { // 'credits' or regular download
+    back_urls = {
+        success: `${req.nextUrl.origin}/payment/success`,
+        failure: `${req.nextUrl.origin}/payment/failure`,
+        pending: `${req.nextUrl.origin}/payment/pending`,
+    };
+    metadata = { user_id: userId, type: 'download' };
+  }
 
   try {
     const result = await preference.create({
@@ -24,17 +43,11 @@ export async function POST(req: NextRequest) {
           },
         ],
         payer: {
-            // Eventually you might pass user email here
+            email: payerEmail,
         },
-        back_urls: {
-          success: `${req.nextUrl.origin}/payment/success`,
-          failure: `${req.nextUrl.origin}/payment/failure`,
-          pending: `${req.nextUrl.origin}/payment/pending`,
-        },
+        back_urls: back_urls,
         auto_return: 'approved',
-        metadata: {
-            user_id: userId
-        }
+        metadata: metadata
       },
     });
 
