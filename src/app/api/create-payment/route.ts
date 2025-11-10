@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
        back_urls = {
         success: `${baseSuccessUrl}?type=download`,
         failure: baseFailureUrl,
-        pending: baseFailureUrl, // Using failure for pending as well
+        pending: baseFailureUrl,
       };
       metadata = { user_id: userId, type: 'download' };
       break;
@@ -89,7 +89,12 @@ export async function POST(req: NextRequest) {
         ],
         back_urls: back_urls,
         auto_return: 'approved',
-        metadata: metadata
+        metadata: metadata,
+        payment_methods: {
+            excluded_payment_methods: [],
+            excluded_payment_types: [],
+            installments: 1, // Number of installments
+        },
       };
 
     if (finalPayerEmail) {
