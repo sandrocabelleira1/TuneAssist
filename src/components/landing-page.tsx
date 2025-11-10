@@ -138,7 +138,7 @@ export default function LandingPage() {
                             width={600}
                             height={400}
                             className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
-                            {...feature.image['data-ai-hint'] && { 'data-ai-hint': feature.image['data-ai-hint'] }}
+                            data-ai-hint={feature.image['data-ai-hint']}
                         />
                       </div>
                     </CardContent>
