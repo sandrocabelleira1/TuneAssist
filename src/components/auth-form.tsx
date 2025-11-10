@@ -8,13 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAuth } from '@/firebase';
+import { useAuth, useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
+import { useEffect } from 'react';
 
 const authSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um email válido.' }),
@@ -32,6 +33,7 @@ interface AuthFormProps {
 export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
   const { toast } = useToast();
   const auth = useAuth();
+  const { user, isUserLoading } = useUser();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -40,22 +42,44 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
     defaultValues: { email: '', password: '' },
   });
 
-  const handleAuth = async (data: AuthFormValues, isRegister: boolean) => {
+  const [authAction, setAuthAction] = useState<'login' | 'register' | null>(null);
+
+  useEffect(() => {
+    if (!isUserLoading && user && authAction) {
+        setIsLoading(false);
+        if (authAction === 'register') {
+            toast({
+                title: 'Registo bem-sucedido!',
+                description: 'A sua conta foi criada.',
+            });
+        } else {
+            toast({ title: 'Login bem-sucedido!', description: 'Bem-vindo de volta.' });
+        }
+        onAuthSuccess();
+        setAuthAction(null);
+    }
+  }, [user, isUserLoading, authAction, onAuthSuccess, toast]);
+
+  const handleAuth = (data: AuthFormValues, isRegister: boolean) => {
     setIsLoading(true);
     setError(null);
+    setAuthAction(isRegister ? 'register' : 'login');
+
     try {
       if (isRegister) {
-        await createUserWithEmailAndPassword(auth, data.email, data.password);
-        toast({
-          title: 'Registo bem-sucedido!',
-          description: 'A sua conta foi criada.',
-        });
+        createUserWithEmailAndPassword(auth, data.email, data.password)
+            .catch(handleAuthError);
       } else {
-        await signInWithEmailAndPassword(auth, data.email, data.password);
-        toast({ title: 'Login bem-sucedido!', description: 'Bem-vindo de volta.' });
+        signInWithEmailAndPassword(auth, data.email, data.password)
+            .catch(handleAuthError);
       }
-      onAuthSuccess();
-    } catch (err: any) {
+    } catch (err) {
+        // Catch synchronous errors if any, though unlikely with firebase auth
+        handleAuthError(err);
+    }
+  };
+
+  const handleAuthError = (err: any) => {
       let friendlyMessage = 'Ocorreu um erro. Por favor, tente novamente.';
       if (err.code) {
         switch (err.code) {
@@ -64,6 +88,7 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
             break;
           case 'auth/user-not-found':
           case 'auth/wrong-password':
+          case 'auth/invalid-credential':
              friendlyMessage = 'Email ou palavra-passe incorretos.';
              break;
           case 'auth/invalid-email':
@@ -79,10 +104,9 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
         description: friendlyMessage,
         variant: 'destructive',
       });
-    } finally {
       setIsLoading(false);
-    }
-  };
+      setAuthAction(null);
+  }
 
   return (
     <Tabs defaultValue="login" className="w-full">
