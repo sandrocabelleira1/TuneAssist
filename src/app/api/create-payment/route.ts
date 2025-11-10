@@ -17,6 +17,15 @@ const getPayerEmail = async (userId?: string): Promise<string | undefined> => {
     return undefined;
 };
 
+// Helper function to determine the base URL
+const getBaseUrl = (req: NextRequest) => {
+    if (process.env.NEXT_PUBLIC_SITE_URL) {
+        return process.env.NEXT_PUBLIC_SITE_URL;
+    }
+    // Fallback for local development
+    return req.nextUrl.origin;
+};
+
 
 export async function POST(req: NextRequest) {
   const { type, title, unit_price, quantity, userId, payerEmail: providedPayerEmail } = await req.json();
@@ -36,13 +45,14 @@ export async function POST(req: NextRequest) {
     finalPayerEmail = await getPayerEmail(userId);
   }
 
-  const baseSuccessUrl = `${req.nextUrl.origin}/payment/success`;
-  const baseFailureUrl = `${req.nextUrl.origin}/payment/failure`;
+  const baseUrl = getBaseUrl(req);
+  const baseSuccessUrl = `${baseUrl}/payment/success`;
+  const baseFailureUrl = `${baseUrl}/payment/failure`;
 
   switch (type) {
     case 'license':
       back_urls = {
-        success: `${req.nextUrl.origin}/payment/register-success`,
+        success: `${baseUrl}/payment/register-success`,
         failure: baseFailureUrl,
         pending: baseFailureUrl,
       };
