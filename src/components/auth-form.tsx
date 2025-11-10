@@ -14,7 +14,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 const authSchema = z.object({
   email: z.string().email({ message: 'Por favor, insira um email válido.' }),
@@ -34,6 +34,7 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
   const auth = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [showPassword, setShowPassword] = useState(false);
   
   const form = useForm<AuthFormValues>({
     resolver: zodResolver(authSchema),
@@ -137,6 +138,8 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
       form.reset();
   }
 
+  const togglePasswordVisibility = () => setShowPassword(prev => !prev);
+
   return (
     <Tabs defaultValue="login" className="w-full" onValueChange={onTabChange} value={activeTab}>
       <TabsList className="grid w-full grid-cols-2">
@@ -150,9 +153,12 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
             <Input id="login-email" type="email" {...form.register('email')} />
              {form.formState.errors.email && <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>}
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 relative">
             <Label htmlFor="login-password">Palavra-passe</Label>
-            <Input id="login-password" type="password" {...form.register('password')} />
+            <Input id="login-password" type={showPassword ? 'text' : 'password'} {...form.register('password')} />
+            <Button type="button" variant="ghost" size="icon" className="absolute bottom-1 right-1 h-7 w-7" onClick={togglePasswordVisibility}>
+                {showPassword ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+            </Button>
              {form.formState.errors.password && <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>}
           </div>
           <Button type="submit" className="w-full" disabled={isLoading}>
@@ -168,9 +174,12 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
             <Input id="register-email" type="email" {...form.register('email')} />
              {form.formState.errors.email && <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>}
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 relative">
             <Label htmlFor="register-password">Palavra-passe</Label>
-            <Input id="register-password" type="password" {...form.register('password')} />
+            <Input id="register-password" type={showPassword ? 'text' : 'password'} {...form.register('password')} />
+            <Button type="button" variant="ghost" size="icon" className="absolute bottom-1 right-1 h-7 w-7" onClick={togglePasswordVisibility}>
+                {showPassword ? <EyeOff className="h-4 w-4 text-muted-foreground" /> : <Eye className="h-4 w-4 text-muted-foreground" />}
+            </Button>
             {form.formState.errors.password && <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>}
           </div>
           <Button type="submit" className="w-full" disabled={isLoading}>
