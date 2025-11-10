@@ -617,7 +617,6 @@ export default function EcuTuningAssistant() {
     const [activeTab, setActiveTab] = useState('view-table');
 
     const [processedMap, setProcessedMap] = useState<ProcessedMap | null>(null);
-    const [isModified, setIsModified] = useState(false);
     const [aiModifiedCells, setAiModifiedCells] = useState<Set<string>>(new Set());
     const [aiModifiedCellsCache, setAiModifiedCellsCache] = useState<Record<string, Set<string>>>({});
     
@@ -780,7 +779,6 @@ export default function EcuTuningAssistant() {
             setAiModifiedCellsCache(prev => ({...prev, [mapId]: modifiedCells}));
         }
 
-        setIsModified(true);
     }, [activeMapId]);
 
     const clearAiModifications = () => {
@@ -799,7 +797,6 @@ export default function EcuTuningAssistant() {
         setSelectedMapIds([]);
         setActiveMapId(null);
         setProcessedMap(null);
-        setIsModified(false);
         setAiModifiedCells(new Set());
         setAiModifiedCellsCache({});
         setProcessedMapCache({});
@@ -833,7 +830,6 @@ export default function EcuTuningAssistant() {
         setSelectedMapIds([]);
         setActiveMapId(null);
         setProcessedMap(null);
-        setIsModified(false);
         setAiModifiedCells(new Set());
         setAiModifiedCellsCache({});
         setProcessedMapCache({});
@@ -1094,13 +1090,13 @@ export default function EcuTuningAssistant() {
         if (!mapId) {
             setActiveMapId(null);
             setProcessedMap(null);
-            setIsModified(false);
+            setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: anyMapModified}));
             return;
         }
     
         if (!xdfFile || !binFile) return;
     
-        if (isModified && activeMapId && processedMap) {
+        if (anyMapModified && activeMapId && processedMap) {
             const currentDef = xdfFile.definitions.find(d => d.uniqueId === activeMapId);
             if (currentDef) {
                 addLog(`A salvar alterações para "${currentDef.name}" na cache antes de trocar.`, 'info');
@@ -1142,17 +1138,16 @@ export default function EcuTuningAssistant() {
         
         if (result) {
             setProcessedMap(result);
-            // Check cache for modified status, otherwise it's false
-            setIsModified(modifiedStatusCache[mapId] ?? false);
+            setModifiedStatusCache(prev => ({...prev, [mapId]: prev[mapId] ?? false}));
             // Reset log load value when map changes
             setSelectedLoadValues([]);
             setSelectedLogLoadColumn('');
         } else {
             setProcessedMap(null);
-            setIsModified(false);
+            setModifiedStatusCache(prev => ({...prev, [mapId]: false}));
         }
     
-    }, [activeMapId, xdfFile, binFile, isModified, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap]);
+    }, [activeMapId, xdfFile, binFile, anyMapModified, processedMap, processedMapCache, modifiedStatusCache, addLog, templateConfig, processAndCacheMap]);
 
 
     const handleManualConfigChange = (axis: 'x' | 'y' | 'z' | 'sortX' | 'sortY' | 'isBigEndian', value: any, subfield: 'equation' | 'stride' | 'rowStride' | null = null) => {
@@ -1176,7 +1171,6 @@ export default function EcuTuningAssistant() {
              if(result) {
                  setProcessedMap(result);
                  setModifiedStatusCache(prev => ({...prev, [activeMapId]: false}));
-                 setIsModified(false);
                  clearAiModifications();
              }
         });
@@ -1192,10 +1186,9 @@ export default function EcuTuningAssistant() {
         const newProcessedMap = { ...processedMap, calculatedMap: newMap };
         setProcessedMap(newProcessedMap);
         
-        setIsModified(true);
+        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
         clearAiModifications();
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
     };
 
     const handlePointChange = (rowIndex: number, colIndex: number, newValue: number) => {
@@ -1215,10 +1208,9 @@ export default function EcuTuningAssistant() {
         const newProcessedMap = { ...processedMap, calculatedMap: newMap };
         setProcessedMap(newProcessedMap);
         
-        setIsModified(true);
+        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
         clearAiModifications();
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
     };
 
 
@@ -1289,10 +1281,9 @@ export default function EcuTuningAssistant() {
         const newProcessedMap = { ...processedMap, calculatedMap: newMap };
         setProcessedMap(newProcessedMap);
         
-        setIsModified(true);
+        setModifiedStatusCache(prev => ({ ...prev, [activeMapId as string]: true}));
         if(operation !== 'revert') clearAiModifications();
         setProcessedMapCache(prev => ({ ...prev, [activeMapId as string]: newProcessedMap }));
-        setModifiedStatusCache(prev => ({...prev, [activeMapId as string]: true}));
         addLog(`Operação em massa "${operation}" aplicada a ${ (maxY - minY + 1) * (maxX - minX + 1)} células.`, 'success');
     };
     
@@ -1464,7 +1455,6 @@ a.click();
 
                 if (mapId === activeMapId) {
                     setProcessedMap(newProcessedMap);
-                    setIsModified(true);
                     setAiModifiedCells(modifiedSet);
                 }
 
@@ -2332,7 +2322,7 @@ const handleMapSelectionChange = (id: string) => {
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                 <div>
                                 <CardTitle>{selectedMapDefinition?.name || (!xdfFile ? 'Carregue um .XDF' : 'Nenhum Mapa Selecionado')}</CardTitle>
-                                {isModified && (
+                                {anyMapModified && (
                                     <span className="text-xs font-semibold text-primary/80 bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
                                         Modificado
                                     </span>
