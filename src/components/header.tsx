@@ -70,7 +70,7 @@ const BuyCreditsMenuItem = ({ userId, onPurchaseStart }: { userId: string, onPur
     };
 
     return (
-        <DropdownMenuItem onSelect={handleBuyCredits}>
+        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleBuyCredits(); }}>
             <Coins className="mr-2 h-4 w-4" />
             <span>Comprar Créditos</span>
         </DropdownMenuItem>
