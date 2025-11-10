@@ -86,7 +86,8 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
         });
 
         if (!response.ok) {
-            throw new Error('Falha ao criar a preferência de pagamento.');
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Falha ao criar a preferência de pagamento.');
         }
 
         const paymentData = await response.json();
@@ -152,7 +153,7 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
           <div className="space-y-2">
             <Label htmlFor="login-password">Palavra-passe</Label>
             <Input id="login-password" type="password" {...form.register('password')} />
-             {form.formState.errors.password && <p className="text-sm text-destructive">{form.formstate.errors.password.message}</p>}
+             {form.formState.errors.password && <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>}
           </div>
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

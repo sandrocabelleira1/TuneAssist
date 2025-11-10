@@ -24,7 +24,8 @@ function SuccessContent() {
         const processPayment = async () => {
              const userId = searchParams.get('userId');
              if (!userId || !firestore) {
-                if (paymentType !== 'download') { // Download doesn't need userId from params
+                // Download type is handled separately inside its own block
+                if (paymentType !== 'download') { 
                     setStatus('error');
                     setMessage('ID do utilizador em falta ou serviço indisponível.');
                     return;
@@ -70,50 +71,9 @@ function SuccessContent() {
                     setMessage('Ocorreu um erro ao renovar a sua licença. Por favor, contacte o suporte.');
                 }
             } else if (paymentType === 'download') {
-                setMessage('A preparar o seu ficheiro...');
-                const pendingFileString = localStorage.getItem('pendingBinFile');
-                const pendingFileName = localStorage.getItem('pendingBinFileName');
-                const pendingUserId = localStorage.getItem('pendingBinFileUserId'); // Use a different name to avoid conflict
-                const creditsToDeduct = 3;
-
-                if (pendingFileString && pendingFileName && pendingUserId && firestore) {
-                    try {
-                        // Deduct credits
-                        const userDocRef = doc(firestore, 'users', pendingUserId);
-                        await updateDoc(userDocRef, {
-                            credits: increment(-creditsToDeduct)
-                        });
-
-                        // Trigger download
-                        const bufferArray = JSON.parse(pendingFileString);
-                        const newBinBuffer = new Uint8Array(bufferArray).buffer;
-                        
-                        const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = pendingFileName;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        
-                        setStatus('success');
-                        setMessage(`Download iniciado! ${creditsToDeduct} créditos foram deduzidos.`);
-
-                    } catch (e) {
-                         console.error("Error processing download or deducting credits:", e);
-                         setStatus('error');
-                         setMessage('Ocorreu um erro ao processar o seu download. Os créditos não foram deduzidos.');
-                    } finally {
-                        localStorage.removeItem('pendingBinFile');
-                        localStorage.removeItem('pendingBinFileName');
-                        localStorage.removeItem('pendingBinFileUserId');
-                    }
-                } else {
-                     setStatus('error');
-                     setMessage('Não foi possível encontrar os dados do ficheiro para download.');
-                }
+                setStatus('success');
+                setMessage('Ficheiro pronto! O seu download deve começar em breve. Será redirecionado em instantes.');
+                setTimeout(() => router.push('/tuner'), 5000);
             } else {
                  setStatus('success');
                  setMessage('O seu pagamento foi processado com sucesso.');
