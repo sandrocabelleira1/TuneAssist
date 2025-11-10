@@ -1,72 +1,338 @@
-
 {
   "entities": {
-    "UserProfile": {
-      "title": "User Profile",
-      "description": "Stores user-specific data, including application credits.",
+    "BinFile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "BinFile",
       "type": "object",
+      "description": "Represents a binary file loaded into the system for ECU tuning.",
       "properties": {
-        "email": {
+        "id": {
           "type": "string",
-          "format": "email",
-          "description": "The user's email address."
+          "description": "Unique identifier for the BIN file."
         },
-        "displayName": {
-          "type": "string",
-          "description": "The user's display name."
-        },
-        "credits": {
-          "type": "number",
-          "description": "The number of credits the user has available."
-        }
-      },
-      "required": ["email", "credits"]
-    },
-    "BackupFile": {
-      "title": "Backup File",
-      "description": "Metadata for a user's backed-up BIN file.",
-      "type": "object",
-      "properties": {
         "name": {
           "type": "string",
-          "description": "The name of the backup file."
+          "description": "The name of the BIN file."
         },
-        "storagePath": {
+        "uploadDate": {
           "type": "string",
-          "description": "The full path to the file in Firebase Storage."
+          "description": "The date and time when the BIN file was uploaded.",
+          "format": "date-time"
         },
-        "size": {
+        "checksum": {
+          "type": "string",
+          "description": "Checksum of the BIN file for integrity verification."
+        },
+        "fileSizeBytes": {
           "type": "number",
-          "description": "The size of the file in bytes."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "The timestamp when the backup was created."
-        },
-        "userId": {
-          "type": "string",
-          "description": "The UID of the user who owns this backup."
+          "description": "Size of the BIN file in bytes."
         }
       },
-      "required": ["name", "storagePath", "size", "createdAt", "userId"]
+      "required": [
+        "id",
+        "name",
+        "uploadDate",
+        "checksum",
+        "fileSizeBytes"
+      ]
+    },
+    "XdfFile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "XdfFile",
+      "type": "object",
+      "description": "Represents an XDF (ECU definition) file loaded into the system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the XDF file."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the XDF file."
+        },
+        "uploadDate": {
+          "type": "string",
+          "description": "The date and time when the XDF file was uploaded.",
+          "format": "date-time"
+        },
+        "fileSizeBytes": {
+          "type": "number",
+          "description": "Size of the XDF file in bytes."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "uploadDate",
+        "fileSizeBytes"
+      ]
+    },
+    "EcuMap": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "EcuMap",
+      "type": "object",
+      "description": "Represents an ECU map definition extracted from an XDF file.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ECU map."
+        },
+        "xdfFileId": {
+          "type": "string",
+          "description": "Reference to XdfFile. (Relationship: XdfFile 1:N EcuMap)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the ECU map."
+        },
+        "address": {
+          "type": "number",
+          "description": "Memory address of the map in the BIN file."
+        },
+        "rows": {
+          "type": "number",
+          "description": "Number of rows in the map."
+        },
+        "cols": {
+          "type": "number",
+          "description": "Number of columns in the map."
+        },
+        "dataSize": {
+          "type": "number",
+          "description": "Size of each data element in the map (in bytes)."
+        },
+        "isBigEndian": {
+          "type": "boolean",
+          "description": "Indicates if the data is stored in big-endian format."
+        },
+        "equation": {
+          "type": "string",
+          "description": "Equation used to convert raw data values to real-world values."
+        },
+        "xAxisTitle": {
+          "type": "string",
+          "description": "Label of X axis"
+        },
+        "yAxisTitle": {
+          "type": "string",
+          "description": "Label of Y axis"
+        }
+      },
+      "required": [
+        "id",
+        "xdfFileId",
+        "name",
+        "address",
+        "rows",
+        "cols",
+        "dataSize",
+        "isBigEndian",
+        "equation"
+      ]
+    },
+    "LogEntry": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "LogEntry",
+      "type": "object",
+      "description": "Represents a single log entry with test data.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the log entry."
+        },
+        "rpm": {
+          "type": "number",
+          "description": "Engine RPM at the time of the log entry."
+        },
+        "carga": {
+          "type": "number",
+          "description": "Engine load percentage at the time of the log entry."
+        },
+        "afr": {
+          "type": "number",
+          "description": "Air-Fuel Ratio at the time of the log entry."
+        },
+        "ecuMapId": {
+          "type": "string",
+          "description": "Reference to EcuMap. (Relationship: EcuMap 1:N LogEntry)"
+        }
+      },
+      "required": [
+        "id",
+        "rpm",
+        "carga",
+        "afr",
+        "ecuMapId"
+      ]
+    },
+    "TuningSession": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TuningSession",
+      "type": "object",
+      "description": "Represents a single tuning session, linking together the BIN file, XDF file, ECU map, and any modifications made.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the tuning session."
+        },
+        "binFileId": {
+          "type": "string",
+          "description": "Reference to BinFile. (Relationship: BinFile 1:N TuningSession)"
+        },
+        "xdfFileId": {
+          "type": "string",
+          "description": "Reference to XdfFile. (Relationship: XdfFile 1:N TuningSession)"
+        },
+        "ecuMapId": {
+          "type": "string",
+          "description": "Reference to EcuMap. (Relationship: EcuMap 1:N TuningSession)"
+        },
+        "tuningDate": {
+          "type": "string",
+          "description": "Date and time when the tuning session was performed.",
+          "format": "date-time"
+        },
+        "aggressiveness": {
+          "type": "number",
+          "description": "User-defined aggressiveness setting applied during map correction."
+        },
+        "modifiedMapData": {
+          "type": "string",
+          "description": "JSON string of the map after AI modification."
+        }
+      },
+      "required": [
+        "id",
+        "binFileId",
+        "xdfFileId",
+        "ecuMapId",
+        "tuningDate",
+        "aggressiveness",
+        "modifiedMapData"
+      ]
     }
   },
   "auth": {
-    "providers": ["password"]
+    "providers": [
+      "password",
+      "anonymous"
+    ]
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": {
-        "$ref": "#/entities/UserProfile"
+    "structure": [
+      {
+        "path": "/users/{userId}/binFiles/{binFileId}",
+        "definition": {
+          "entityName": "BinFile",
+          "schema": {
+            "$ref": "#/backend/entities/BinFile"
+          },
+          "description": "Stores binary files uploaded by users. Path-based ownership ensures only the user can access their own files.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the BIN file."
+            },
+            {
+              "name": "binFileId",
+              "description": "The unique ID of the BIN file."
+            }
+          ]
+        }
       },
-      "description": "Stores user profile information."
-    },
-    "/users/{userId}/backups/{backupId}": {
-      "schema": {
-        "$ref": "#/entities/BackupFile"
+      {
+        "path": "/users/{userId}/xdfFiles/{xdfFileId}",
+        "definition": {
+          "entityName": "XdfFile",
+          "schema": {
+            "$ref": "#/backend/entities/XdfFile"
+          },
+          "description": "Stores XDF files uploaded by users. Path-based ownership ensures only the user can access their own files.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the XDF file."
+            },
+            {
+              "name": "xdfFileId",
+              "description": "The unique ID of the XDF file."
+            }
+          ]
+        }
       },
-      "description": "Stores metadata for file backups belonging to a specific user."
-    }
+      {
+        "path": "/users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}",
+        "definition": {
+          "entityName": "EcuMap",
+          "schema": {
+            "$ref": "#/backend/entities/EcuMap"
+          },
+          "description": "Stores ECU map definitions associated with an XDF file. Continues path-based ownership from parent.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the XDF file (and thus the ECU map)."
+            },
+            {
+              "name": "xdfFileId",
+              "description": "The unique ID of the XDF file."
+            },
+            {
+              "name": "ecuMapId",
+              "description": "The unique ID of the ECU map."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}/logEntries/{logEntryId}",
+        "definition": {
+          "entityName": "LogEntry",
+          "schema": {
+            "$ref": "#/backend/entities/LogEntry"
+          },
+          "description": "Stores log entries associated with an ECU map. Continues path-based ownership from parent.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the XDF file and ECU map (and thus the log entry)."
+            },
+            {
+              "name": "xdfFileId",
+              "description": "The unique ID of the XDF file."
+            },
+            {
+              "name": "ecuMapId",
+              "description": "The unique ID of the ECU map."
+            },
+            {
+              "name": "logEntryId",
+              "description": "The unique ID of the log entry."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/tuningSessions/{tuningSessionId}",
+        "definition": {
+          "entityName": "TuningSession",
+          "schema": {
+            "$ref": "#/backend/entities/TuningSession"
+          },
+          "description": "Stores tuning sessions for a user. Path-based ownership ensures only the user can access their own sessions.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the tuning session."
+            },
+            {
+              "name": "tuningSessionId",
+              "description": "The unique ID of the tuning session."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to organize data related to ECU tuning, focusing on binary files, XDF files, ECU maps, log entries, and tuning sessions. The structure follows the principles of Authorization Independence, Structural Segregation, and Access Modeling. The core principle is to ensure easy debuggability. \n\nAuthorization Independence is achieved by not relying on hierarchical `get()` calls in security rules. Instead, authorization information is embedded or derived directly from the document or the document path itself.\n\nStructural Segregation is enforced by keeping data with similar access control requirements in the same collections. For instance, all user-owned data is stored under the `/users/{userId}` path.\n\nAccess Modeling leverages path-based ownership for private user data and uses the Membership Map pattern where applicable, although in this schema, path-based ownership is favored due to the clear 1:N relationships between Users and their associated entities.\n\nThe structure ensures the QAPs by using clearly defined paths for user-owned data, thus enabling secure `list` operations using path-based security rules. The use of explicit ownership via `/users/{userId}` makes it simple to restrict data access based on the authenticated user's ID."
   }
 }

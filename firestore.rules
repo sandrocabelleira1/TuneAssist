@@ -1,56 +1,168 @@
 /**
- * @fileoverview Firestore Security Rules for Prototyping.
+ * @fileoverview Firestore Security Rules for ECU Tuning Application
  *
  * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for backups. Each user can only access their own backup data.
+ * This ruleset enforces a strict user-ownership model. All data is nested under
+ * /users/{userId}, ensuring that only the authenticated user can access their own
+ * data.
  *
  * Data Structure:
- * All backup data is nested under /users/{userId}/backups/{backupId}.
+ * The data is organized hierarchically under the /users/{userId} path, with
+ * subcollections for binFiles, xdfFiles, ecuMaps, logEntries, and tuningSessions.
+ * - /users/{userId}/binFiles/{binFileId}
+ * - /users/{userId}/xdfFiles/{xdfFileId}
+ * - /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}
+ * - /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}/logEntries/{logEntryId}
+ * - /users/{userId}/tuningSessions/{tuningSessionId}
  *
  * Key Security Decisions:
- * - Users can only list backups they own, mitigating unauthorized data discovery.
+ * - User listing is disallowed.
+ * - Path-based ownership is strictly enforced.
+ * - Data validation is minimized for rapid prototyping, focusing on authorization-critical
+ *   fields only (e.g., userId consistency).
  *
  * Denormalization for Authorization:
- * - The 'userId' field within the 'BackupFile' entity is used to enforce ownership.
+ *  - The rules rely on path-based ownership, avoiding `get()` calls to separate
+ *    documents for authorization. The userId is derived directly from the path.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Enforces user-ownership for file backups stored under /users/{userId}/backups/{backupId}.
-     * @path /databases/{database}/documents/users/{userId}/backups/{backupId}
-     * @allow (create) - A user with UID 'user123' can create a backup under /users/user123/backups/backup001.
-     * @allow (get) - A user with UID 'user123' can retrieve a backup from /users/user123/backups/backup001.
-     * @allow (list) - A user with UID 'user123' can list backups under /users/user123/backups.
-     * @allow (update) - A user with UID 'user123' can update a backup at /users/user123/backups/backup001.
-     * @allow (delete) - A user with UID 'user123' can delete a backup at /users/user123/backups/backup001.
-     * @deny (create) - A user with UID 'user456' cannot create a backup under /users/user123/backups/backup001.
-     * @deny (get) - A user with UID 'user456' cannot retrieve a backup from /users/user123/backups/backup001.
-     * @deny (list) - A user with UID 'user456' cannot list backups under /users/user123/backups.
-     * @deny (update) - A user with UID 'user456' cannot update a backup at /users/user123/backups/backup001.
-     * @deny (delete) - A user with UID 'user456' cannot delete a backup at /users/user123/backups/backup001.
-     * @principle Enforces document ownership for writes and restricts listing to the owner.
+     * @description Checks if the request is authenticated.
+     * @return {boolean} True if the user is signed in, false otherwise.
      */
-    match /users/{userId}/backups/{backupId} {
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId) && resource.data.userId == userId;
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-    }
-
-    // Define helper functions
     function isSignedIn() {
       return request.auth != null;
     }
 
+    /**
+     * @description Checks if the authenticated user ID matches the provided user ID.
+     * @param {string} userId The user ID to compare against the authenticated user's ID.
+     * @return {boolean} True if the user IDs match, false otherwise.
+     */
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
+    /**
+     * @description Checks if the authenticated user is the owner of an existing document.
+     * @param {string} userId The user ID to compare against the authenticated user's ID.
+     * @return {boolean} True if the user IDs match and the resource exists, false otherwise.
+     */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Security rules for binFiles collection.
+     * @path /users/{userId}/binFiles/{binFileId}
+     * @allow (create) User 'user123' can create a new binFile with ID 'bin456' under their user ID if authenticated.
+     * @allow (get) User 'user123' can retrieve their binFile with ID 'bin456' if authenticated.
+     * @allow (list) User 'user123' can list their binFiles if authenticated.
+     * @allow (update) User 'user123' can update their binFile with ID 'bin456' if authenticated and the binFile exists.
+     * @allow (delete) User 'user123' can delete their binFile with ID 'bin456' if authenticated and the binFile exists.
+     * @deny (create) User 'user456' cannot create a binFile with ID 'bin456' under user 'user123''s ID.
+     * @deny (get) User 'user456' cannot retrieve binFile with ID 'bin456' under user 'user123''s ID.
+     * @deny (update) User 'user456' cannot update binFile with ID 'bin456' under user 'user123''s ID.
+     * @deny (delete) User 'user456' cannot delete binFile with ID 'bin456' under user 'user123''s ID.
+     * @principle Enforces document ownership for writes. Restricts access to a user's own data tree.
+     */
+    match /users/{userId}/binFiles/{binFileId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == binFileId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Security rules for xdfFiles collection.
+     * @path /users/{userId}/xdfFiles/{xdfFileId}
+     * @allow (create) User 'user123' can create a new xdfFile with ID 'xdf456' under their user ID if authenticated.
+     * @allow (get) User 'user123' can retrieve their xdfFile with ID 'xdf456' if authenticated.
+     * @allow (list) User 'user123' can list their xdfFiles if authenticated.
+     * @allow (update) User 'user123' can update their xdfFile with ID 'xdf456' if authenticated and the xdfFile exists.
+     * @allow (delete) User 'user123' can delete their xdfFile with ID 'xdf456' if authenticated and the xdfFile exists.
+     * @deny (create) User 'user456' cannot create a xdfFile with ID 'xdf456' under user 'user123''s ID.
+     * @deny (get) User 'user456' cannot retrieve xdfFile with ID 'xdf456' under user 'user123''s ID.
+     * @deny (update) User 'user456' cannot update xdfFile with ID 'xdf456' under user 'user123''s ID.
+     * @deny (delete) User 'user456' cannot delete xdfFile with ID 'xdf456' under user 'user123''s ID.
+     * @principle Enforces document ownership for writes. Restricts access to a user's own data tree.
+     */
+    match /users/{userId}/xdfFiles/{xdfFileId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == xdfFileId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Security rules for ecuMaps collection.
+     * @path /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}
+     * @allow (create) User 'user123' can create a new ecuMap with ID 'ecu789' under their xdfFile if authenticated.
+     * @allow (get) User 'user123' can retrieve their ecuMap with ID 'ecu789' under their xdfFile if authenticated.
+     * @allow (list) User 'user123' can list their ecuMaps under their xdfFile if authenticated.
+     * @allow (update) User 'user123' can update their ecuMap with ID 'ecu789' under their xdfFile if authenticated and the ecuMap exists.
+     * @allow (delete) User 'user123' can delete their ecuMap with ID 'ecu789' under their xdfFile if authenticated and the ecuMap exists.
+     * @deny (create) User 'user456' cannot create an ecuMap with ID 'ecu789' under user 'user123''s xdfFile.
+     * @deny (get) User 'user456' cannot retrieve ecuMap with ID 'ecu789' under user 'user123''s xdfFile.
+     * @deny (update) User 'user456' cannot update ecuMap with ID 'ecu789' under user 'user123''s xdfFile.
+     * @deny (delete) User 'user456' cannot delete ecuMap with ID 'ecu789' under user 'user123''s xdfFile.
+     * @principle Enforces document ownership for writes. Restricts access to a user's own data tree.
+     */
+    match /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == ecuMapId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Security rules for logEntries collection.
+     * @path /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}/logEntries/{logEntryId}
+     * @allow (create) User 'user123' can create a new logEntry with ID 'log901' under their ecuMap if authenticated.
+     * @allow (get) User 'user123' can retrieve their logEntry with ID 'log901' under their ecuMap if authenticated.
+     * @allow (list) User 'user123' can list their logEntries under their ecuMap if authenticated.
+     * @allow (update) User 'user123' can update their logEntry with ID 'log901' under their ecuMap if authenticated and the logEntry exists.
+     * @allow (delete) User 'user123' can delete their logEntry with ID 'log901' under their ecuMap if authenticated and the logEntry exists.
+     * @deny (create) User 'user456' cannot create a logEntry with ID 'log901' under user 'user123''s ecuMap.
+     * @deny (get) User 'user456' cannot retrieve logEntry with ID 'log901' under user 'user123''s ecuMap.
+     * @deny (update) User 'user456' cannot update logEntry with ID 'log901' under user 'user123''s ecuMap.
+     * @deny (delete) User 'user456' cannot delete logEntry with ID 'log901' under user 'user123''s ecuMap.
+     * @principle Enforces document ownership for writes. Restricts access to a user's own data tree.
+     */
+    match /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}/logEntries/{logEntryId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == logEntryId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Security rules for tuningSessions collection.
+     * @path /users/{userId}/tuningSessions/{tuningSessionId}
+     * @allow (create) User 'user123' can create a new tuningSession with ID 'tune123' under their user ID if authenticated.
+     * @allow (get) User 'user123' can retrieve their tuningSession with ID 'tune123' if authenticated.
+     * @allow (list) User 'user123' can list their tuningSessions if authenticated.
+     * @allow (update) User 'user123' can update their tuningSession with ID 'tune123' if authenticated and the tuningSession exists.
+     * @allow (delete) User 'user123' can delete their tuningSession with ID 'tune123' if authenticated and the tuningSession exists.
+     * @deny (create) User 'user456' cannot create a tuningSession with ID 'tune123' under user 'user123''s ID.
+     * @deny (get) User 'user456' cannot retrieve tuningSession with ID 'tune123' under user 'user123''s ID.
+     * @deny (update) User 'user456' cannot update tuningSession with ID 'tune123' under user 'user123''s ID.
+     * @deny (delete) User 'user456' cannot delete tuningSession with ID 'tune123' under user 'user123''s ID.
+     * @principle Enforces document ownership for writes. Restricts access to a user's own data tree.
+     */
+    match /users/{userId}/tuningSessions/{tuningSessionId} {
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == tuningSessionId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
     }
   }
 }
