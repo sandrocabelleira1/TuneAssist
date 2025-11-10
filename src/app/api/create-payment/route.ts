@@ -32,28 +32,32 @@ export async function POST(req: NextRequest) {
   let back_urls;
   let metadata: any = {};
   let finalPayerEmail = providedPayerEmail;
+  if (!finalPayerEmail && userId) {
+    finalPayerEmail = await getPayerEmail(userId);
+  }
 
   if (type === 'license') {
     back_urls = {
         success: `${req.nextUrl.origin}/payment/register-success`,
         failure: `${req.nextUrl.origin}/payment/failure`,
-        pending: `${req.nextUrl.origin}/payment/failure`, // Treat pending as failure for registration
+        pending: `${req.nextUrl.origin}/payment/failure`,
     };
     metadata = { type: 'license' };
-  } else if (type === 'credits') { // Handle credits purchase
-    if (!finalPayerEmail && userId) {
-        finalPayerEmail = await getPayerEmail(userId);
-    }
+  } else if (type === 'renewal') {
+     back_urls = {
+        success: `${req.nextUrl.origin}/payment/success?type=renewal&userId=${userId}`,
+        failure: `${req.nextUrl.origin}/payment/failure`,
+        pending: `${req.nextUrl.origin}/payment/failure`,
+    };
+    metadata = { user_id: userId, type: 'renewal' };
+  } else if (type === 'credits') {
     back_urls = {
         success: `${req.nextUrl.origin}/payment/success?type=credits&userId=${userId}`,
         failure: `${req.nextUrl.origin}/payment/failure`,
         pending: `${req.nextUrl.origin}/payment/failure`,
     };
-    metadata = { user_id: userId, type: 'credits', quantity: 10 }; // Store credits quantity in metadata
+    metadata = { user_id: userId, type: 'credits', quantity: 10 };
   } else { // 'download'
-    if (!finalPayerEmail && userId) {
-        finalPayerEmail = await getPayerEmail(userId);
-    }
     back_urls = {
         success: `${req.nextUrl.origin}/payment/success?type=download`,
         failure: `${req.nextUrl.origin}/payment/failure`,

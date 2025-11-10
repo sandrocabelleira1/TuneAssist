@@ -42,6 +42,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "fire
 import { useCollection } from '@/firebase';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import FuelAnalysisPlot from './fuel-analysis-plot';
+import { add } from 'date-fns';
 import { isAfter } from 'date-fns';
 
 
@@ -1652,12 +1653,47 @@ const handleMapSelectionChange = (id: string) => {
         }
     };
 
-    const handleRenewLicense = () => {
-        // Placeholder for payment logic
-        toast({
-            title: "Renovação de Licença",
-            description: "A iniciar o processo de pagamento para a renovação da sua licença."
-        });
+    const handleRenewLicense = async () => {
+        if (!user) {
+            toast({ title: 'Utilizador não encontrado', description: 'Por favor, faça login novamente para renovar.', variant: 'destructive' });
+            return;
+        }
+    
+        setIsProcessing(true);
+        toast({ title: "A iniciar renovação...", description: "Será redirecionado para o Mercado Pago." });
+    
+        try {
+            const response = await fetch('/api/create-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'renewal',
+                    title: 'Renovação de Licença TuneAssist AI (6 Meses)',
+                    unit_price: 149.00,
+                    quantity: 1,
+                    userId: user.uid,
+                }),
+            });
+    
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Falha ao criar a preferência de pagamento.');
+            }
+    
+            const paymentData = await response.json();
+            if (paymentData.init_point) {
+                window.location.href = paymentData.init_point;
+            } else {
+                throw new Error('Ponto de inicialização do Mercado Pago não recebido.');
+            }
+        } catch (error) {
+            toast({
+                title: 'Erro de Pagamento',
+                description: (error as Error).message || 'Não foi possível iniciar o processo de pagamento.',
+                variant: 'destructive',
+            });
+            setIsProcessing(false);
+        }
     };
 
     const renderContent = () => {
