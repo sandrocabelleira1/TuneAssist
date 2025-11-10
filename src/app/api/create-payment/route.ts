@@ -82,8 +82,8 @@ export async function POST(req: NextRequest) {
         items: [
           {
             title: title,
-            quantity: quantity,
-            unit_price: unit_price,
+            quantity: Number(quantity),
+            unit_price: Number(unit_price),
             currency_id: 'BRL',
           },
         ],
@@ -91,9 +91,17 @@ export async function POST(req: NextRequest) {
         auto_return: 'approved',
         metadata: metadata,
         payment_methods: {
-            excluded_payment_methods: [],
-            excluded_payment_types: [],
-            installments: 1, // Number of installments
+          excluded_payment_methods: [],
+          excluded_payment_types: [],
+          installments: 1, // Number of installments
+          accepted_payment_methods: [
+            "credit_card",
+            "debit_card",
+            "mercadopago_cc",
+            "bolbradesco",
+            "pec"
+          ],
+          default_payment_method_id: "pix",
         },
       };
 
@@ -107,12 +115,8 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Mercado Pago Error:', error);
-    let errorMessage = 'Failed to create payment preference';
-    if (typeof error === 'object' && error !== null && 'message' in error) {
-        errorMessage = error.message as string;
-    } else if (error instanceof Error) {
-        errorMessage = error.message;
-    }
+    // Mercado Pago errors are often objects with response data
+    const errorMessage = error?.response?.data?.message || error.message || 'Failed to create payment preference';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
