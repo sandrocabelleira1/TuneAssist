@@ -90,9 +90,14 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ id: result.id, init_point: result.init_point });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Mercado Pago Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create payment preference';
+    let errorMessage = 'Failed to create payment preference';
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+        errorMessage = error.message as string;
+    } else if (error instanceof Error) {
+        errorMessage = error.message;
+    }
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
