@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CheckCircle2, Loader2, Download, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useFirestore } from '@/firebase';
-import { doc, updateDoc, increment } from 'firebase/firestore';
+import { doc, updateDoc, increment, getDoc } from 'firebase/firestore';
 import { add } from 'date-fns';
 
 function SuccessContent() {
@@ -50,7 +50,14 @@ function SuccessContent() {
                  try {
                     setMessage('A renovar a sua licença...');
                     const userDocRef = doc(firestore, 'users', userId);
-                    const newExpiryDate = add(new Date(), { months: 6 });
+                    
+                    // Get current expiry to add 6 months, or set from now if missing
+                    const userDoc = await getDoc(userDocRef);
+                    const currentUserData = userDoc.data();
+                    const currentExpiry = currentUserData?.licenseExpiryDate ? new Date(currentUserData.licenseExpiryDate) : new Date();
+
+                    const newExpiryDate = add(currentExpiry, { months: 6 });
+
                     await updateDoc(userDocRef, {
                         licenseExpiryDate: newExpiryDate.toISOString()
                     });
@@ -156,4 +163,3 @@ export default function PaymentSuccessPage() {
         </div>
     );
 }
-
