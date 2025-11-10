@@ -9,6 +9,7 @@
  * Data Structure:
  * The data is organized hierarchically under the /users/{userId} path, with
  * subcollections for binFiles, xdfFiles, ecuMaps, logEntries, and tuningSessions.
+ * - /users/{userId}
  * - /users/{userId}/binFiles/{binFileId}
  * - /users/{userId}/xdfFiles/{xdfFileId}
  * - /users/{userId}/xdfFiles/{xdfFileId}/ecuMaps/{ecuMapId}
@@ -54,6 +55,20 @@ service cloud.firestore {
      */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
+    }
+    
+    /**
+     * @description Security rules for user profile documents.
+     * @path /users/{userId}
+     * @allow (create) A user can create their own profile document.
+     * @allow (get, update) A user can read or update their own profile document.
+     * @deny (list, delete) No one can list all users or delete a profile directly.
+     * @principle Enforces strict ownership. A user's profile is their own.
+     */
+    match /users/{userId} {
+      allow get, update: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow list, delete: if false;
     }
 
     /**
@@ -184,5 +199,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
