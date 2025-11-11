@@ -20,7 +20,7 @@ const getPayerEmail = async (userId?: string): Promise<string | undefined> => {
 // Helper function to determine the base URL
 const getBaseUrl = (req: NextRequest) => {
     if (process.env.NEXT_PUBLIC_SITE_URL) {
-        return process.env.NEXT_PUBLIC_SITE_URL;
+        return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, ""); // Remove trailing slash if exists
     }
     // Fallback for local development
     return req.nextUrl.origin;
@@ -104,13 +104,6 @@ export async function POST(req: NextRequest) {
           excluded_payment_methods: [],
           excluded_payment_types: [],
           installments: 1, // Number of installments
-          accepted_payment_methods: [
-            "credit_card",
-            "debit_card",
-            "mercadopago_cc",
-            "bolbradesco",
-            "pec"
-          ],
           default_payment_method_id: "pix",
         },
       };
