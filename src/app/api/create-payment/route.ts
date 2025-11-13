@@ -19,10 +19,12 @@ const getPayerEmail = async (userId?: string): Promise<string | undefined> => {
 
 // Helper function to determine the base URL
 const getBaseUrl = (req: NextRequest) => {
-    if (process.env.NEXT_PUBLIC_SITE_URL) {
-        return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, ""); // Remove trailing slash if exists
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    if (siteUrl) {
+        // Use the environment variable and remove any trailing slash
+        return siteUrl.replace(/\/$/, "");
     }
-    // Fallback for local development
+    // Fallback for local development or if the env var is not set
     return req.nextUrl.origin;
 };
 
@@ -46,39 +48,43 @@ export async function POST(req: NextRequest) {
   }
 
   const baseUrl = getBaseUrl(req);
-  const baseSuccessUrl = `${baseUrl}/payment/success`;
-  const baseFailureUrl = `${baseUrl}/payment/failure`;
+  
+  // Define success and failure paths without leading slashes
+  const successPath = 'payment/success';
+  const registerSuccessPath = 'payment/register-success';
+  const failurePath = 'payment/failure';
+
 
   switch (type) {
     case 'license':
       back_urls = {
-        success: `${baseUrl}/payment/register-success`,
-        failure: baseFailureUrl,
-        pending: baseFailureUrl,
+        success: `${baseUrl}/${registerSuccessPath}`,
+        failure: `${baseUrl}/${failurePath}`,
+        pending: `${baseUrl}/${failurePath}`,
       };
       metadata = { type: 'license' };
       break;
     case 'renewal':
       back_urls = {
-        success: `${baseSuccessUrl}?type=renewal&userId=${userId}`,
-        failure: baseFailureUrl,
-        pending: baseFailureUrl,
+        success: `${baseUrl}/${successPath}?type=renewal&userId=${userId}`,
+        failure: `${baseUrl}/${failurePath}`,
+        pending: `${baseUrl}/${failurePath}`,
       };
       metadata = { user_id: userId, type: 'renewal' };
       break;
     case 'credits':
       back_urls = {
-        success: `${baseSuccessUrl}?type=credits&userId=${userId}`,
-        failure: baseFailureUrl,
-        pending: baseFailureUrl,
+        success: `${baseUrl}/${successPath}?type=credits&userId=${userId}`,
+        failure: `${baseUrl}/${failurePath}`,
+        pending: `${baseUrl}/${failurePath}`,
       };
       metadata = { user_id: userId, type: 'credits', quantity: 10 };
       break;
     case 'download':
        back_urls = {
-        success: `${baseSuccessUrl}?type=download`,
-        failure: baseFailureUrl,
-        pending: baseFailureUrl,
+        success: `${baseUrl}/${successPath}?type=download`,
+        failure: `${baseUrl}/${failurePath}`,
+        pending: `${baseUrl}/${failurePath}`,
       };
       metadata = { user_id: userId, type: 'download' };
       break;
@@ -101,10 +107,10 @@ export async function POST(req: NextRequest) {
         auto_return: 'approved',
         metadata: metadata,
         payment_methods: {
-          excluded_payment_methods: [],
-          excluded_payment_types: [],
-          installments: 1, // Number of installments
-          default_payment_method_id: "pix",
+            excluded_payment_types: [],
+            installments: 1,
+            default_payment_method_id: 'pix',
+            accepted_payment_methods: ["credit_card", "debit_card", "ticket", "pix"]
         },
       };
 
