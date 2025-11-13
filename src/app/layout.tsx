@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   title: 'TuneAssist AI',
   description: 'Assistente de Afinação de ECU Potenciado por IA',
   icons: {
-    icon: 'https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/logo%20tune%20(1).png?alt=media&token=6f3185ef-72f4-43e8-b0c6-75eb8aaafe03',
-    apple: 'https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/logo%20tune%20(1).png?alt=media&token=6f3185ef-72f4-43e8-b0c6-75eb8aaafe03',
+    icon: '/favicon.ico',
+    apple: '/favicon.ico',
   },
 };
 
@@ -21,7 +21,6 @@ export default function RootLayout({
   return (
     <html lang="pt" className="dark h-full" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/logo%20tune%20(1).png?alt=media&token=6f3185ef-72f4-43e8-b0c6-75eb8aaafe03" sizes="any" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
