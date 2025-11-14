@@ -4,10 +4,12 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import Header from '@/components/header';
-import { ArrowRight, Cpu, BarChart3, Wand2, FolderClock, UploadCloud, Edit, Save, Flame, ClipboardList, Key, Download, Package, Check } from 'lucide-react';
+import { ArrowRight, Cpu, BarChart3, Wand2, FolderClock, UploadCloud, Edit, Save, Flame, ClipboardList, Key, Download, Package, Star, Check } from 'lucide-react';
 import Image from 'next/image';
 import placeholderImages from '@/app/lib/placeholder-images.json';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+
 
 const features = [
   {
@@ -53,6 +55,30 @@ const howItWorksSteps = [
         description: "Guarde o .BIN modificado, pague e descarregue-o, pronto para a ECU."
     }
 ]
+
+const testimonials = [
+  {
+    name: 'Roberto "Betinho" Almeida',
+    title: 'Preparador de Performance',
+    quote: 'O TuneAssist AI cortou o meu tempo de acerto de injeção em 80%. O que antes levava horas de pista, agora consigo em minutos no dinamómetro. É uma mudança de jogo completa.',
+    avatar: 'https://i.pravatar.cc/100?u=betinho',
+    rating: 5,
+  },
+  {
+    name: 'Felipe Martins',
+    title: 'Dono de Oficina',
+    quote: 'A função de busca por MBT é simplesmente incrível. Consigo extrair o máximo de cada motor com segurança e repetibilidade. Os meus clientes nunca estiveram tão satisfeitos.',
+    avatar: 'https://i.pravatar.cc/100?u=felipe',
+    rating: 5,
+  },
+   {
+    name: 'Carla Viana',
+    title: 'Engenheira Mecânica',
+    quote: 'A capacidade de visualizar os mapas em 3D e fazer edições em massa de forma interpolada é uma mais-valia técnica enorme. Poupa-me um tempo de cálculo imenso e permite ajustes muito mais finos.',
+    avatar: 'https://i.pravatar.cc/100?u=carla',
+    rating: 5,
+  },
+];
 
 export default function LandingPage() {
   return (
@@ -236,6 +262,42 @@ export default function LandingPage() {
                     </Card>
                 </div>
             </div>
+        </section>
+
+        {/* Testimonials Section */}
+        <section id="testimonials" className="py-20 sm:py-32">
+          <div className="container mx-auto px-4">
+            <div className="max-w-2xl mx-auto text-center mb-16">
+              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">O Que Dizem os Nossos Clientes</h2>
+              <p className="mt-4 text-lg text-muted-foreground">
+                Descubra como o TuneAssist AI está a transformar o trabalho de preparadores em todo o país.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {testimonials.map((testimonial, index) => (
+                <Card key={index} className="bg-accent/30 flex flex-col">
+                  <CardContent className="pt-6 flex-1 flex flex-col">
+                    <div className="flex mb-4">
+                        {Array.from({ length: testimonial.rating }).map((_, i) => (
+                            <Star key={i} className="w-5 h-5 text-amber-400 fill-amber-400" />
+                        ))}
+                    </div>
+                    <p className="text-muted-foreground italic flex-1">"{testimonial.quote}"</p>
+                    <div className="mt-6 flex items-center gap-4">
+                      <Avatar>
+                        <AvatarImage src={testimonial.avatar} alt={testimonial.name} />
+                        <AvatarFallback>{testimonial.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-semibold">{testimonial.name}</p>
+                        <p className="text-sm text-muted-foreground">{testimonial.title}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         </section>
 
         {/* Footer */}
