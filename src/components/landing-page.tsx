@@ -166,7 +166,7 @@ export default function LandingPage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 justify-center">
                     {/* License Card */}
-                    <Card className="flex flex-col">
+                    <Card className="flex flex-col border-primary shadow-lg shadow-primary/20">
                         <CardHeader>
                             <div className="flex justify-center mb-4"><Key className="w-12 h-12 text-primary" /></div>
                             <CardTitle className="text-center">Licença de Acesso</CardTitle>
@@ -213,7 +213,7 @@ export default function LandingPage() {
                     </Card>
 
                     {/* Credits Card */}
-                     <Card className="flex flex-col">
+                     <Card className="flex flex-col border-primary shadow-lg shadow-primary/20">
                         <CardHeader>
                            <div className="flex justify-center mb-4"><Package className="w-12 h-12 text-primary" /></div>
                            <CardTitle className="text-center">Pacote de Créditos</CardTitle>
