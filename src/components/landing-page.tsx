@@ -61,7 +61,7 @@ const testimonials = [
     name: 'Roberto "Betinho" Almeida',
     title: 'Preparador de Performance',
     quote: 'O TuneAssist AI cortou o meu tempo de acerto de injeção em 80%. O que antes levava horas de pista, agora consigo em minutos no dinamómetro. É uma mudança de jogo completa.',
-    avatar: 'https://i.pravatar.cc/100?u=betinho',
+    avatar: 'https://i.pravatar.cc/100?u=roberto',
     rating: 5,
   },
   {
