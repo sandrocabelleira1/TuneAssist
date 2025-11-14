@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import Header from '@/components/header';
-import { ArrowRight, Cpu, BarChart3, Wand2, FolderClock, UploadCloud, Edit, Save, Flame, ClipboardList } from 'lucide-react';
+import { ArrowRight, Cpu, BarChart3, Wand2, FolderClock, UploadCloud, Edit, Save, Flame, ClipboardList, Key, Download, Package, Check } from 'lucide-react';
 import Image from 'next/image';
 import placeholderImages from '@/app/lib/placeholder-images.json';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -153,6 +153,89 @@ export default function LandingPage() {
                 </Button>
             </div>
           </div>
+        </section>
+
+        {/* Pricing Section */}
+        <section id="pricing" className="py-20 sm:py-24 bg-accent/30">
+            <div className="container mx-auto px-4">
+                <div className="max-w-2xl mx-auto text-center mb-16">
+                    <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Preços Simples e Transparentes</h2>
+                    <p className="mt-4 text-lg text-muted-foreground">
+                        Aceda a todas as funcionalidades com a nossa licença e pague apenas pelos downloads que precisar.
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 justify-center">
+                    {/* License Card */}
+                    <Card className="flex flex-col">
+                        <CardHeader>
+                            <div className="flex justify-center mb-4"><Key className="w-12 h-12 text-primary" /></div>
+                            <CardTitle className="text-center">Licença de Acesso</CardTitle>
+                            <CardDescription className="text-center">Acesso completo à plataforma TuneAssist AI.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col justify-between">
+                            <div className="text-center">
+                                <p className="text-4xl font-bold">R$149,00</p>
+                                <p className="text-muted-foreground">/ 6 meses</p>
+                            </div>
+                            <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
+                                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Análise de combustível e ignição</li>
+                                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Edição de mapas 2D e 3D</li>
+                                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Backups na nuvem</li>
+                                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Suporte prioritário</li>
+                            </ul>
+                            <Button asChild className="w-full mt-6">
+                               <Link href="/tuner">Obter Licença</Link>
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Download Card */}
+                    <Card className="flex flex-col border-primary shadow-lg shadow-primary/20">
+                         <CardHeader>
+                            <div className="flex justify-center mb-4"><Download className="w-12 h-12 text-primary" /></div>
+                            <CardTitle className="text-center">Download de Ficheiro</CardTitle>
+                            <CardDescription className="text-center">Cada download de um ficheiro .BIN modificado.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col justify-between">
+                             <div className="text-center">
+                                <p className="text-4xl font-bold">3 Créditos</p>
+                                <p className="text-muted-foreground">/ por ficheiro</p>
+                            </div>
+                            <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
+                                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Ficheiro .BIN pronto a programar</li>
+                                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Inclui todas as modificações</li>
+                                <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Sem limite de mapas por ficheiro</li>
+                            </ul>
+                             <Button asChild className="w-full mt-6" variant="outline">
+                                <Link href="/tuner">Ir para a Ferramenta</Link>
+                             </Button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Credits Card */}
+                     <Card className="flex flex-col">
+                        <CardHeader>
+                           <div className="flex justify-center mb-4"><Package className="w-12 h-12 text-primary" /></div>
+                           <CardTitle className="text-center">Pacote de Créditos</CardTitle>
+                           <CardDescription className="text-center">Recarregue a sua conta para mais downloads.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col justify-between">
+                           <div className="text-center">
+                              <p className="text-4xl font-bold">R$198,00</p>
+                              <p className="text-muted-foreground">/ 10 créditos</p>
+                           </div>
+                           <ul className="mt-6 space-y-2 text-sm text-muted-foreground">
+                               <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Adicionados instantaneamente</li>
+                               <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Não expiram</li>
+                               <li className="flex items-center gap-2"><Check className="h-4 w-4 text-green-500" /> Use quando precisar</li>
+                           </ul>
+                           <Button asChild className="w-full mt-6">
+                              <Link href="/tuner">Comprar Créditos</Link>
+                           </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
         </section>
 
         {/* Footer */}
