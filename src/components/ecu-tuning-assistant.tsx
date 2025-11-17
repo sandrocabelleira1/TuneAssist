@@ -590,6 +590,9 @@ export default function EcuTuningAssistant() {
     const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
     const isLicenseExpired = useMemo(() => {
+        if (user?.email === 'master@tuneassist.tech') {
+            return false;
+        }
         if (!userProfile?.licenseExpiryDate) {
             // If there's no expiry date but the user exists, assume they need a license (e.g. legacy user)
             return user ? true : false;
@@ -1299,21 +1302,24 @@ export default function EcuTuningAssistant() {
     
         setIsProcessing(true);
         const creditsToDeduct = 3;
-    
+        const isMasterUser = user.email === 'master@tuneassist.tech';
+
         try {
-            // 1. Check user credits
-            const userDocRef = doc(firestore, 'users', user.uid);
-            const userDoc = await getDoc(userDocRef);
-    
-            if (!userDoc.exists() || (userDoc.data().credits ?? 0) < creditsToDeduct) {
-                toast({
-                    title: 'Créditos Insuficientes',
-                    description: `Você precisa de pelo menos ${creditsToDeduct} créditos para descarregar. O seu saldo é de ${userDoc.data()?.credits ?? 0}. Por favor, compre mais créditos.`,
-                    variant: 'destructive',
-                    duration: 7000,
-                });
-                setIsProcessing(false);
-                return;
+            // 1. Check user credits (unless master user)
+            if (!isMasterUser) {
+                const userDocRef = doc(firestore, 'users', user.uid);
+                const userDoc = await getDoc(userDocRef);
+        
+                if (!userDoc.exists() || (userDoc.data().credits ?? 0) < creditsToDeduct) {
+                    toast({
+                        title: 'Créditos Insuficientes',
+                        description: `Você precisa de pelo menos ${creditsToDeduct} créditos para descarregar. O seu saldo é de ${userDoc.data()?.credits ?? 0}. Por favor, compre mais créditos.`,
+                        variant: 'destructive',
+                        duration: 7000,
+                    });
+                    setIsProcessing(false);
+                    return;
+                }
             }
     
             // 2. Prepare the modified file
@@ -1334,11 +1340,14 @@ export default function EcuTuningAssistant() {
             const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
             const modifiedFileName = binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`;
     
-            // 3. Deduct credits
-            addLog(`A deduzir ${creditsToDeduct} créditos...`, 'info');
-            await updateDoc(userDocRef, {
-                credits: increment(-creditsToDeduct)
-            });
+            // 3. Deduct credits (if not master user)
+            if (!isMasterUser) {
+                addLog(`A deduzir ${creditsToDeduct} créditos...`, 'info');
+                const userDocRef = doc(firestore, 'users', user.uid);
+                await updateDoc(userDocRef, {
+                    credits: increment(-creditsToDeduct)
+                });
+            }
     
             // 4. Trigger download
             addLog('Download a iniciar...', 'success');
@@ -1348,13 +1357,15 @@ export default function EcuTuningAssistant() {
             a.href = url;
             a.download = modifiedFileName;
             document.body.appendChild(a);
-a.click();
+            a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
     
             toast({
                 title: 'Download Iniciado!',
-                description: `${creditsToDeduct} créditos foram deduzidos da sua conta.`,
+                description: isMasterUser
+                    ? 'Download como utilizador master.'
+                    : `${creditsToDeduct} créditos foram deduzidos da sua conta.`,
             });
     
         } catch (error) {
