@@ -24,6 +24,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+        <link rel="icon" href="https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/favicon.ico%20(2).png?alt=media&token=e0ce39f4-0452-47d0-b193-c34b49fd9c02" type="image/png" sizes="any" />
       </head>
       <body className="h-full font-sans antialiased">
         <FirebaseClientProvider>
