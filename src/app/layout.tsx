@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   title: 'TuneAssist AI',
   description: 'Assistente de Afinação de ECU Potenciado por IA',
   icons: {
-    icon: 'https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/favicon%20png.png?alt=media&token=96aa7c2d-8abb-4eda-b277-435a4bbb431f',
-    apple: 'https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/favicon%20png.png?alt=media&token=96aa7c2d-8abb-4eda-b277-435a4bbb431f',
+    icon: 'https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/tuneia%20sem%20fundo%20png.png?alt=media&token=71719ad7-be28-4aae-82ef-4a68ff2a0c8f',
+    apple: 'https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/tuneia%20sem%20fundo%20png.png?alt=media&token=71719ad7-be28-4aae-82ef-4a68ff2a0c8f',
   },
 };
 
