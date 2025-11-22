@@ -313,6 +313,16 @@ export default function LandingPage() {
                 <p className="text-muted-foreground">
                     O Futuro do Remapeamento de ECUs.
                 </p>
+                <div className="mt-8 pt-8 border-t border-border/10">
+                    <p className="text-sm text-muted-foreground mb-4">Desenvolvido por</p>
+                    <Image
+                        src="https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/mototech%20sem%20fundo.png?alt=media&token=12020fdb-9d71-467d-81d8-aba85319b6de"
+                        alt="Xtreme MotoTech Logo"
+                        width={200}
+                        height={50}
+                        className="mx-auto invert"
+                    />
+                </div>
             </div>
         </footer>
       </main>
