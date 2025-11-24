@@ -316,7 +316,7 @@ export default function LandingPage() {
                 <div className="mt-8 pt-8 border-t border-border/10">
                     <p className="text-sm text-muted-foreground mb-4">Desenvolvido por</p>
                     <Image
-                        src="https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/mototech%20sem%20fundo.png?alt=media&token=12020fdb-9d71-467d-81d8-aba85319b6de"
+                        src="https://firebasestorage.googleapis.com/v0/b/tuneassist-pronto-337764-396c8.firebasestorage.app/o/ChatGPT%20Image%2024_11_2025%2C%2000_44_55.png?alt=media&token=6691a2ae-8d65-4b72-921a-e45b46b9d098"
                         alt="Xtreme MotoTech Logo"
                         width={200}
                         height={50}
@@ -334,7 +334,3 @@ export default function LandingPage() {
     </div>
   );
 }
-
-    
-
-    
