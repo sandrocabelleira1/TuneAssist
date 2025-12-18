@@ -39,7 +39,7 @@
     "iconv-lite": "^0.6.3",
     "lucide-react": "^0.475.0",
     "mercadopago": "^2.0.10",
-    "next": "15.3.3",
+    "next": "15.3.8",
     "papaparse": "^5.4.1",
     "patch-package": "^8.0.0",
     "plotly.js-dist-min": "^2.33.0",

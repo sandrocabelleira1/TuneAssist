@@ -1025,13 +1025,14 @@ export function calculateCorrections(
             const currentValue = newMap[yIndex]?.[xIndex];
             if (currentValue === null || currentValue === undefined) return;
 
-            // Corrected Logic: If mixture is lean (measured > target), we need to add fuel (increase map value).
-            // The correction factor should be > 1 to increase the value.
+            // Correction logic:
+            // If mixture is lean (measuredLambda > targetLambda), we need MORE fuel.
+            // If mixture is rich (measuredLambda < targetLambda), we need LESS fuel.
+            // Assuming higher map values mean more fuel (e.g., injector open time),
+            // the correction factor should be > 1 for lean, < 1 for rich.
             const correctionFactor = measuredLambda / targetLambda;
             
             // The value that would theoretically yield the target lambda.
-            // If measured is lean (1.1) and target is rich (0.9), factor is > 1.
-            // We need to multiply the current value by this factor to increase fuel.
             const fullyCorrectedValue = currentValue * correctionFactor;
             
             const difference = fullyCorrectedValue - currentValue;
@@ -1055,6 +1056,7 @@ export function calculateCorrections(
     
 
     
+
 
 
 
