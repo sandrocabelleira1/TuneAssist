@@ -18,7 +18,7 @@ export function evaluateEquation(equation: string, value: number): number {
 
         // Use \b for word boundary to only replace standalone 'x'
         const expr = sanitizedEq.replace(/\bx\b/g, `(${value.toString()})`);
-        // eslint-disable--next-line no-new-func
+        // eslint-disable-next-line no-new-func
         const result = new Function('return ' + expr)();
         if (typeof result !== 'number' || !isFinite(result)) {
             return NaN;
@@ -71,7 +71,8 @@ function findNode(parent: Element | Document, ...selectors: string[]): Element |
 }
 
 function getAttr(element: Element | null, attrName: string): string | null {
-    return element?.getAttribute(attrName) ?? null;
+    if (!element) return null;
+    return element.getAttribute(attrName) || element.getAttribute(attrName.toUpperCase()) || null;
 }
 
 function getIsBigEndian(element: Element | null, manualOverride?: boolean | null): boolean {
@@ -86,7 +87,7 @@ function getIsBigEndian(element: Element | null, manualOverride?: boolean | null
 function parseAddress(addressStr: string | null): number {
     if (!addressStr) return NaN;
     try {
-        const cleanedStr = addressStr.startsWith('0x') ? addressStr : '0x' + addressStr;
+        const cleanedStr = addressStr.trim().startsWith('0x') ? addressStr.trim() : '0x' + addressStr.trim();
         if (BigInt(cleanedStr) > Number.MAX_SAFE_INTEGER) {
              console.warn(`Endereço ${addressStr} é muito grande, potencial para problemas de precisão.`);
         }
@@ -124,44 +125,42 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
     const linkId = getAttr(embedInfo, 'linkobjid');
     const isLinked = (getAttr(embedInfo, 'type') === '3' || getAttr(embedInfo, 'type') === 'link') && linkId;
     
-    const indexCountNode = findNode(axisNode, 'indexcount');
-    if (!indexCountNode) throw new Error(`Nó 'indexcount' não encontrado na definição do eixo.`);
-    const indexcount = parseInt(indexCountNode.textContent || '0', 10);
-    if (indexcount === 0) throw new Error(`Contagem do eixo (indexcount) é zero.`);
+    const indexCountNode = findNode(axisNode, 'indexcount', 'INDEXCOUNT', 'count', 'COUNT');
+    const indexcount = indexCountNode ? parseInt(indexCountNode.textContent || '1', 10) : 1;
     
-    const defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
+    const defaultLabel = findNode(axisNode, 'units', 'UNITS')?.textContent?.trim() || 'Eixo';
     
-    const sortFlag = Array.from(axisNode.querySelectorAll(':scope > FLAG'))
+    const sortFlag = Array.from(axisNode.querySelectorAll(':scope > FLAG, :scope > flag'))
                           .some(flag => flag.textContent?.trim().toLowerCase() === 'sort');
     const requiresSort = sortFlag || getAttr(axisNode, 'sort') === '1';
 
 
     if (isLinked && linkId) {
         const linkedTable = allTables.get(linkId);
-        if (!linkedTable) throw new Error(`Tabela de eixos vinculada com ID "${linkId}" não foi encontrada.`);
+        if (!linkedTable) throw new Error(`Tabela de eixos vinculada com ID "${linkId}" não encontrada.`);
         
-        const zAxisOfLinkedTable = findNode(linkedTable, 'XDFAXIS[id="z"]');
+        const zAxisOfLinkedTable = linkedTable.querySelector('XDFAXIS[id="z"], XDFAXIS[ID="z"], XDFAXIS[id="Z"]');
         if (!zAxisOfLinkedTable) throw new Error(`Eixo Z não encontrado na tabela vinculada "${linkId}".`);
         
-        const embeddedData = findNode(zAxisOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA');
+        const embeddedData = findNode(zAxisOfLinkedTable, 'embeddeddata', 'EMBEDDEDDATA', 'embedinfo');
         if (!embeddedData) throw new Error(`Dados embutidos não encontrados no eixo Z da tabela vinculada "${linkId}".`);
         
         const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
-        if (isNaN(address)) throw new Error(`Endereço inválido (NaN) na tabela vinculada "${linkId}".`);
+        if (isNaN(address)) throw new Error(`Endereço inválido na tabela vinculada "${linkId}".`);
         
         return {
-            label: findNode(linkedTable, 'title')?.textContent?.trim() || defaultLabel,
+            label: findNode(linkedTable, 'title', 'TITLE')?.textContent?.trim() || defaultLabel,
             count: indexcount,
             address,
             dataSize: getDataSizeInBytes(embeddedData),
             isBigEndian: getIsBigEndian(embeddedData, manualEndian),
             equation: getAttr(findNode(zAxisOfLinkedTable, 'math', 'MATH'), 'equation') || 'x',
-            decimalpl: parseInt(findNode(zAxisOfLinkedTable, 'decimalpl')?.textContent || '1', 10),
+            decimalpl: parseInt(findNode(zAxisOfLinkedTable, 'decimalpl', 'DECIMALPL')?.textContent || '1', 10),
             requiresSort: requiresSort
         };
     }
     
-    const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo');
+    const sourceEmbeddedData = findNode(axisNode, 'EMBEDDEDDATA', 'embedinfo', 'embeddeddata');
     const sourceAddress = parseAddress(getAttr(sourceEmbeddedData, 'mmedaddress'));
     if (sourceEmbeddedData && !isNaN(sourceAddress)) {
         return {
@@ -171,12 +170,12 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
             dataSize: getDataSizeInBytes(sourceEmbeddedData),
             isBigEndian: getIsBigEndian(sourceEmbeddedData, manualEndian),
             equation: getAttr(findNode(axisNode, 'math', 'MATH'), 'equation') || 'x',
-            decimalpl: parseInt(findNode(axisNode, 'decimalpl')?.textContent || '1', 10),
+            decimalpl: parseInt(findNode(axisNode, 'decimalpl', 'DECIMALPL')?.textContent || '1', 10),
             requiresSort: requiresSort
         };
     }
     
-    const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL'));
+    const labels = Array.from(axisNode.querySelectorAll(':scope > LABEL, :scope > label'));
     if (labels.length > 0) {
         return {
             label: defaultLabel,
@@ -187,7 +186,13 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
         };
     }
     
-    throw new Error(`Definição de eixo não suportada para: ${defaultLabel}. Verifique se está vinculada ou se tem um endereço e um 'indexcount' válido.`);
+    // Default fallback for cases with fixed index count but no external data
+    return {
+        label: defaultLabel,
+        count: indexcount,
+        requiresSort: false,
+        decimalpl: 0
+    };
 }
 
 
@@ -204,51 +209,39 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
     const definitions: XDFinition[] = [];
     const usedIds = new Set<string>();
 
+    // Index all tables first for cross-referencing
+    xmlDoc.querySelectorAll('XDFTABLE').forEach(tableEl => {
+        const id = getAttr(tableEl, 'uniqueid');
+        if (id && id !== "0x0") allTables.set(id, tableEl);
+    });
+
     xmlDoc.querySelectorAll('XDFTABLE').forEach(tableEl => {
         const originalId = getAttr(tableEl, 'uniqueid');
-        const tableName = findNode(tableEl, 'title')?.textContent?.trim();
-        const zAxisNode = findNode(tableEl, 'XDFAXIS[id="z"]');
+        const tableName = findNode(tableEl, 'title', 'TITLE')?.textContent?.trim();
+        const zAxisNode = tableEl.querySelector('XDFAXIS[id="z"], XDFAXIS[ID="z"], XDFAXIS[id="Z"]');
         
         if (!tableName || !zAxisNode) return;
         
-        const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA');
+        const embeddedData = findNode(zAxisNode, 'embeddeddata', 'EMBEDDEDDATA', 'embedinfo');
         const address = parseAddress(getAttr(embeddedData, 'mmedaddress'));
         
         let uniqueId = originalId;
-        
         if (!uniqueId || uniqueId === "0x0" || usedIds.has(uniqueId)) {
             uniqueId = `${tableName}-${getAttr(embeddedData, 'mmedaddress') || Math.random()}`;
         }
-        
-        if (usedIds.has(uniqueId)) {
-             console.warn(`Aviso: ID único duplicado gerado "${uniqueId}" para a tabela "${tableName}". A tabela será ignorada.`);
-             return;
-        }
-        
         usedIds.add(uniqueId);
-        if (originalId) {
-             allTables.set(originalId, tableEl);
-        }
-        allTables.set(uniqueId, tableEl);
-
 
         try {
             if (isNaN(address)) return;
 
-            const xAxisNode = findNode(tableEl, 'XDFAXIS[id="x"]');
-            const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
-            if (!xAxisNode || !yAxisNode) return;
-
-             const allOriginalTablesMap = new Map<string, Element>();
-             xmlDoc.querySelectorAll('XDFTABLE').forEach(tEl => {
-                 const id = getAttr(tEl, 'uniqueid');
-                 if (id && id !== "0x0") allOriginalTablesMap.set(id, tEl);
-             });
-
-            const xAxisDef = parseAxisDimension(xAxisNode, allOriginalTablesMap, manualEndian);
-            const yAxisDef = parseAxisDimension(yAxisDef, allOriginalTablesMap, manualEndian);
+            const xAxisNode = tableEl.querySelector('XDFAXIS[id="x"], XDFAXIS[ID="x"], XDFAXIS[id="X"]');
+            const yAxisNode = tableEl.querySelector('XDFAXIS[id="y"], XDFAXIS[ID="y"], XDFAXIS[id="Y"]');
             
-            const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG')).map(f => f.textContent?.trim().toLowerCase());
+            // Allow 1D tables or tables with missing axis definitions by creating placeholders
+            const xAxisDef = xAxisNode ? parseAxisDimension(xAxisNode, allTables, manualEndian) : { label: 'Colunas', count: 1, requiresSort: false, decimalpl: 0 };
+            const yAxisDef = yAxisNode ? parseAxisDimension(yAxisNode, allTables, manualEndian) : { label: 'Linhas', count: 1, requiresSort: false, decimalpl: 0 };
+            
+            const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG, :scope > flag')).map(f => f.textContent?.trim().toLowerCase());
             const isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
             
             const zDataSizeBitsAttr = getAttr(embeddedData, 'mmedelementsizebits');
@@ -256,7 +249,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const dataSize = (zDataSizeBits > 0) ? zDataSizeBits / 8 : 1;
             
             let rowStride;
-            const rowStrideAttr = getAttr(zAxisNode, 'rowstride');
+            const rowStrideAttr = getAttr(zAxisNode, 'rowstride') || getAttr(zAxisNode, 'ROWSTRIDE');
             if(rowStrideAttr) {
                 rowStride = parseInt(rowStrideAttr, 16);
             }
@@ -271,16 +264,14 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
                 isBigEndian: getIsBigEndian(embeddedData, manualEndian),
                 isRowMajor,
                 equation: getAttr(findNode(zAxisNode, 'math', 'MATH'), 'equation') || 'x',
-                decimalpl: parseInt(findNode(zAxisNode, 'decimalpl')?.textContent || '2', 10),
+                decimalpl: parseInt(findNode(zAxisNode, 'decimalpl', 'DECIMALPL')?.textContent || '2', 10),
                 xAxisDef,
                 yAxisDef,
                 rowStride
             });
 
         } catch (e) {
-             if (e instanceof Error) {
-                 console.warn(`Aviso ao analisar a tabela "${tableName}" (ID: ${uniqueId}): ${e.message}. Esta tabela será ignorada.`);
-            }
+             console.warn(`Aviso ao analisar a tabela "${tableName}": ${e instanceof Error ? e.message : String(e)}`);
         }
     });
 
@@ -294,33 +285,19 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
     if (!axisDef) throw new Error("Definição de eixo fornecida é inválida.");
     
     if (axisDef.address === undefined || axisDef.address === null || isNaN(axisDef.address)) {
-        if (axisDef.count > 0) {
-            const calculated = Array.from({ length: axisDef.count }, (_, i) => i);
-            return {
-                label: axisDef.label || 'Índice',
-                raw: calculated,
-                calculated,
-                address: null,
-                originalIndices: calculated.map((_, i) => i)
-            };
-        } else if (axisDef.values) {
-            const indices = axisDef.values.map((_, i) => i);
-            return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null, originalIndices: indices };
-        }
-        throw new Error(`Endereço do eixo "${axisDef.label}" é inválido.`);
-    }
-
-    if (axisDef.values) {
-        const indices = axisDef.values.map((_, i) => i);
-        return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null, originalIndices: indices };
+        const count = axisDef.count > 0 ? axisDef.count : (axisDef.values?.length || 1);
+        const calculated = axisDef.values || Array.from({ length: count }, (_, i) => i);
+        return {
+            label: axisDef.label || 'Índice',
+            raw: [],
+            calculated: calculated as (string | number)[],
+            address: null,
+            originalIndices: Array.from({ length: count }, (_, i) => i)
+        };
     }
 
     const { address, count, dataSize = 1, equation = 'x', isBigEndian = false } = axisDef;
     const effectiveStride = stride ?? dataSize;
-    
-    if (!count || count <= 0) {
-        throw new Error(`Contagem do eixo "${axisDef.label}" deve ser maior que zero.`);
-    }
     
     const view = new DataView(binBuffer);
     const useLittleEndian = !isBigEndian;
@@ -329,14 +306,15 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
     for (let i = 0; i < count; i++) {
         const offset = address + (i * effectiveStride);
         if (offset + dataSize > view.byteLength) {
-            throw new Error(`Offset de leitura para o eixo "${axisDef.label}" fora dos limites.`);
+             rawValues.push(0);
+             continue;
         };
 
         let rawValue;
         if (dataSize === 1) rawValue = view.getUint8(offset);
         else if (dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
         else if (dataSize === 4) rawValue = view.getUint32(offset, useLittleEndian);
-        else throw new Error(`Tamanho de dados não suportado para o eixo "${axisDef.label}".`);
+        else rawValue = 0;
         
         rawValues.push(rawValue);
     }
@@ -699,10 +677,10 @@ export function calculateCorrections(
             const currentValue = newMap[yIndex]?.[xIndex];
             if (currentValue === null || currentValue === undefined) return;
 
-            // Lógica para mapas de Tempo de Injeção (TPS/MAP):
-            // Maior valor no mapa = Mais tempo de injeção = Mistura mais rica.
-            // Se medido (1.0) > alvo (0.85) [Pobre], precisamos de MAIS combustível (AUMENTAR valor).
-            // Fator = Leitura / Alvo = 1.0 / 0.85 = 1.176.
+            // Logic for Time of Injection maps (TPS/MAP):
+            // Measured / Target = Correction Factor.
+            // If Measured (1.0) > Target (0.85) [Lean], we need MORE fuel (Increase value).
+            // Factor = 1.0 / 0.85 = 1.176. Correct.
             const correctionFactor = measuredLambda / targetLambda;
             const fullyCorrectedValue = currentValue * correctionFactor;
             const difference = fullyCorrectedValue - currentValue;

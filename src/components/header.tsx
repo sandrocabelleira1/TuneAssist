@@ -168,7 +168,7 @@ export default function Header({ className }: { className?: string }) {
                 width={150}
                 height={38}
                 priority
-                className="invert"
+                style={{ filter: 'invert(1) hue-rotate(180deg)' }}
             />
         </Link>
         

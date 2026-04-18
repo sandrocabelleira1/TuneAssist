@@ -68,7 +68,7 @@ const testimonials = [
     name: 'Felipe Martins',
     title: 'Dono de Oficina',
     quote: 'A função de busca por MBT é simplesmente incrível. Consigo extrair o máximo de cada motor com segurança e repetibilidade. Os meus clientes nunca estiveram tão satisfeitos.',
-    avatar: 'https://i.pravatar.cc/100?u=felipe-martins',
+    avatar: 'https://i.pravatar.cc/100?u=felipe-multins',
     rating: 5,
   },
    {
@@ -308,7 +308,8 @@ export default function LandingPage() {
                     alt="TuneAssist AI Logo"
                     width={180}
                     height={45}
-                    className="mx-auto mb-4 invert"
+                    className="mx-auto mb-4"
+                    style={{ filter: 'invert(1) hue-rotate(180deg)' }}
                 />
                 <p className="text-muted-foreground">
                     O Futuro do Remapeamento de ECUs.
