@@ -1,5 +1,4 @@
 
-
 import type { XDFinition, AxisDimension, MapData, AxisData, ProcessedMap, ManualAxisConfig, ModifiedCell, PotentialMap, ScanConfig, FoundAxis } from './types';
 import iconv from 'iconv-lite';
 
@@ -41,7 +40,6 @@ function invertEquation(equation: string, value: number): number {
         if (sanitizedEq === 'x' || sanitizedEq === '') return value;
 
         // Simple inverse for common patterns: y = x * a -> x = y / a, y = x + a -> x = y - a etc.
-        // This is a simplified approach and won't handle complex math.
         const mult = /^\s*x\s*\*\s*([\d\.]+)\s*$/.exec(sanitizedEq);
         if (mult) return value / parseFloat(mult[1]);
 
@@ -55,7 +53,6 @@ function invertEquation(equation: string, value: number): number {
         if (sub) return value + parseFloat(sub[1]);
         
         console.warn(`A inversão da equação "${equation}" não é suportada, o valor bruto pode estar incorreto.`);
-        // Fallback for non-trivial equations - this is a weak point.
         return value;
 
     } catch (e) {
@@ -103,10 +100,8 @@ function parseAddress(addressStr: string | null): number {
 function getDataSizeInBytes(element: Element | null, defaultSize: number = 1): number {
     if (!element) return defaultSize;
 
-    // Favor 'mmedelementsizebits' as it's the most specific for raw data reads.
     let sizeBitsAttr = getAttr(element, 'mmedelementsizebits');
     
-    // Fallback to 'elementsizebits' on the parent axis definition if specific one not found.
     if (!sizeBitsAttr && element.parentElement) {
          sizeBitsAttr = getAttr(element.parentElement, 'elementsizebits');
     }
@@ -136,7 +131,6 @@ function parseAxisDimension(axisNode: Element, allTables: Map<string, Element>, 
     
     const defaultLabel = findNode(axisNode, 'units')?.textContent?.trim() || 'Eixo Desconhecido';
     
-    // Check for sorting flag
     const sortFlag = Array.from(axisNode.querySelectorAll(':scope > FLAG'))
                           .some(flag => flag.textContent?.trim().toLowerCase() === 'sort');
     const requiresSort = sortFlag || getAttr(axisNode, 'sort') === '1';
@@ -232,7 +226,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
         }
         
         usedIds.add(uniqueId);
-        if (originalId) { // Still map the original ID for lookups
+        if (originalId) {
              allTables.set(originalId, tableEl);
         }
         allTables.set(uniqueId, tableEl);
@@ -245,7 +239,6 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
             const yAxisNode = findNode(tableEl, 'XDFAXIS[id="y"]');
             if (!xAxisNode || !yAxisNode) return;
 
-            // When parsing axis, we must provide the full map of tables using original IDs for lookups
              const allOriginalTablesMap = new Map<string, Element>();
              xmlDoc.querySelectorAll('XDFTABLE').forEach(tEl => {
                  const id = getAttr(tEl, 'uniqueid');
@@ -300,10 +293,9 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
 export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, stride?: number): AxisData {
     if (!axisDef) throw new Error("Definição de eixo fornecida é inválida.");
     
-    // For virtual axes that don't have a real address
     if (axisDef.address === undefined || axisDef.address === null || isNaN(axisDef.address)) {
         if (axisDef.count > 0) {
-            const calculated = Array.from({ length: axisDef.count }, (_, i) => i); // Simple index
+            const calculated = Array.from({ length: axisDef.count }, (_, i) => i);
             return {
                 label: axisDef.label || 'Índice',
                 raw: calculated,
@@ -315,7 +307,7 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
             const indices = axisDef.values.map((_, i) => i);
             return { label: axisDef.label, raw: [], calculated: axisDef.values, address: null, originalIndices: indices };
         }
-        throw new Error(`Endereço do eixo "${axisDef.label}" é inválido e não há valores ou contagem para gerar um eixo virtual.`);
+        throw new Error(`Endereço do eixo "${axisDef.label}" é inválido.`);
     }
 
     if (axisDef.values) {
@@ -337,26 +329,19 @@ export function readAxisFromBin(binBuffer: ArrayBuffer, axisDef: AxisDimension, 
     for (let i = 0; i < count; i++) {
         const offset = address + (i * effectiveStride);
         if (offset + dataSize > view.byteLength) {
-            throw new Error(`Offset de leitura (0x${offset.toString(16)}) para o eixo "${axisDef.label}" está fora dos limites do ficheiro BIN.`);
+            throw new Error(`Offset de leitura para o eixo "${axisDef.label}" fora dos limites.`);
         };
 
         let rawValue;
         if (dataSize === 1) rawValue = view.getUint8(offset);
         else if (dataSize === 2) rawValue = view.getUint16(offset, useLittleEndian);
         else if (dataSize === 4) rawValue = view.getUint32(offset, useLittleEndian);
-        else throw new Error(`Tamanho de dados não suportado (${dataSize} bytes) para o eixo "${axisDef.label}".`);
+        else throw new Error(`Tamanho de dados não suportado para o eixo "${axisDef.label}".`);
         
         rawValues.push(rawValue);
     }
     
     const calculatedValues = rawValues.map(r => evaluateEquation(equation, r));
-    if(calculatedValues.some(isNaN)) {
-        // Only throw error if equation was something other than 'x'
-        if (equation !== 'x') {
-            throw new Error(`Erro ao aplicar equação "${equation}" ao eixo "${axisDef.label}". Verifique a equação e os dados.`);
-        }
-    }
-
     const originalIndices = rawValues.map((_, i) => i);
     
     return { raw: rawValues, calculated: calculatedValues, label: axisDef.label, address, originalIndices };
@@ -389,7 +374,7 @@ function processMap(
             
             if (mapDef.isRowMajor) {
                  offset = mapDef.address + (r * rowStride) + (c * effectiveZStride);
-            } else { // col_major
+            } else {
                  offset = mapDef.address + (c * colStride) + (r * effectiveZStride);
             }
             
@@ -444,7 +429,7 @@ function processMap(
                 sortedRow.push(null);
             } else {
                 const calculatedValue = evaluateEquation(mapDef.equation, rawValue);
-                sortedRow.push(isNaN(calculatedValue) ? null : calculatedValue); // Use null if calc fails
+                sortedRow.push(isNaN(calculatedValue) ? null : calculatedValue);
             }
         }
         calculatedMap.push(sortedRow);
@@ -465,7 +450,7 @@ function processMap(
 
 
 export function readAndCalculateMapFromBin(binBuffer: ArrayBuffer, def: XDFinition): ProcessedMap {
-    if (!def.xAxisDef || !def.yAxisDef) throw new Error(`Definições de eixo para o mapa "${def.name}" estão em falta.`);
+    if (!def.xAxisDef || !def.yAxisDef) throw new Error(`Definições de eixo ausentes.`);
     
     const tempConfig: ManualAxisConfig = {
         x: { equation: def.xAxisDef.equation || 'x', stride: def.xAxisDef.dataSize },
@@ -486,14 +471,13 @@ export function readAndCalculateMapFromBinManual(
 ): ProcessedMap {
 
     if(!def.xAxisDef || !def.yAxisDef){
-         throw new Error("As definições de eixo originais são inválidas e necessárias para o recálculo manual.");
+         throw new Error("Definições de eixo originais necessárias.");
     }
     
     const xStride = manualConfig.x.stride ?? def.xAxisDef.dataSize;
     const yStride = manualConfig.y.stride ?? def.yAxisDef.dataSize;
     const zStride = manualConfig.z.stride ?? def.dataSize;
 
-    // Create new definitions with manual overrides
     const manualXAxisDef: AxisDimension = { 
         ...def.xAxisDef, 
         equation: manualConfig.x.equation,
@@ -516,26 +500,18 @@ export function readAndCalculateMapFromBinManual(
     let sortX = manualConfig.sortX ?? def.xAxisDef.requiresSort;
     let sortY = manualConfig.sortY ?? def.yAxisDef.requiresSort;
     
-    // Reread axes and map from scratch using manual configuration
     const xAxisData = readAxisFromBin(binBuffer, manualXAxisDef, manualXAxisDef.dataSize);
     const yAxisData = readAxisFromBin(binBuffer, manualYAxisDef, manualYAxisDef.dataSize);
     
-    if (xAxisData.calculated.length !== def.cols) {
-         throw new Error(`Contagem de colunas do eixo X (${xAxisData.label}: ${xAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.cols}).`);
-    }
-    if(yAxisData.calculated.length !== def.rows){
-         throw new Error(`Contagem de linhas do eixo Y (${yAxisData.label}: ${yAxisData.calculated.length}) não corresponde à dimensão do mapa (${def.rows}).`);
-    }
-
     return processMap(binBuffer, manualMapDef, xAxisData, yAxisData, sortX, sortY, zStride, manualConfig.z.rowStride);
 }
 
 export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processedMap: ProcessedMap): ArrayBuffer {
     if (!processedMap || !processedMap.calculatedMap || !processedMap.addresses) {
-        throw new Error("Dados do mapa processado são inválidos ou estão em falta para a escrita.");
+        throw new Error("Dados inválidos para escrita.");
     }
 
-    const newBuffer = binBuffer.slice(0); // Create a mutable copy
+    const newBuffer = binBuffer.slice(0);
     const view = new DataView(newBuffer);
     const useLittleEndian = !def.isBigEndian;
 
@@ -547,16 +523,12 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
             const address = addresses[r]?.[c];
 
             if (calculatedValue === null || calculatedValue === undefined || address === null || address === undefined) {
-                continue; // Skip if no value or address
+                continue;
             }
             
             const rawValue = invertEquation(def.equation, calculatedValue);
-            if (isNaN(rawValue)) {
-                console.warn(`Aviso: O valor invertido para ${calculatedValue} na célula [${r},${c}] é NaN. A saltar a escrita.`);
-                continue;
-            }
+            if (isNaN(rawValue)) continue;
 
-            // Ensure the raw value fits within the data type
             let maxVal;
             if (def.dataSize === 1) maxVal = 0xFF;
             else if (def.dataSize === 2) maxVal = 0xFFFF;
@@ -565,18 +537,11 @@ export function writeMapToBin(binBuffer: ArrayBuffer, def: XDFinition, processed
 
             const clampedValue = Math.max(0, Math.min(Math.round(rawValue), maxVal));
 
-            if (address + def.dataSize > view.byteLength) {
-                 console.error(`Erro: Endereço de escrita 0x${address.toString(16)} está fora dos limites do ficheiro.`);
-                 continue;
-            }
+            if (address + def.dataSize > view.byteLength) continue;
 
-            if (def.dataSize === 1) {
-                view.setUint8(address, clampedValue);
-            } else if (def.dataSize === 2) {
-                view.setUint16(address, clampedValue, useLittleEndian);
-            } else if (def.dataSize === 4) {
-                view.setUint32(address, clampedValue, useLittleEndian);
-            }
+            if (def.dataSize === 1) view.setUint8(address, clampedValue);
+            else if (def.dataSize === 2) view.setUint16(address, clampedValue, useLittleEndian);
+            else if (def.dataSize === 4) view.setUint32(address, clampedValue, useLittleEndian);
         }
     }
 
@@ -587,14 +552,11 @@ export function writeMultipleMapsToBin(
     originalBinBuffer: ArrayBuffer,
     mapsToSave: { definition: XDFinition; processedMap: ProcessedMap }[]
 ): ArrayBuffer {
-    const newBuffer = originalBinBuffer.slice(0); // Create a mutable copy
+    const newBuffer = originalBinBuffer.slice(0);
     const view = new DataView(newBuffer);
 
     for (const { definition: def, processedMap } of mapsToSave) {
-        if (!processedMap || !processedMap.calculatedMap || !processedMap.addresses) {
-            console.warn(`A saltar o mapa "${def.name}" devido a dados inválidos.`);
-            continue;
-        }
+        if (!processedMap || !processedMap.calculatedMap || !processedMap.addresses) continue;
 
         const { calculatedMap, addresses } = processedMap;
         const useLittleEndian = !def.isBigEndian;
@@ -604,15 +566,10 @@ export function writeMultipleMapsToBin(
                 const calculatedValue = calculatedMap[r][c];
                 const address = addresses[r]?.[c];
 
-                if (calculatedValue === null || calculatedValue === undefined || address === null || address === undefined) {
-                    continue;
-                }
+                if (calculatedValue === null || calculatedValue === undefined || address === null || address === undefined) continue;
 
                 const rawValue = invertEquation(def.equation, calculatedValue);
-                if (isNaN(rawValue)) {
-                    console.warn(`Aviso: O valor invertido para ${calculatedValue} no mapa "${def.name}" [${r},${c}] é NaN. A saltar.`);
-                    continue;
-                }
+                if (isNaN(rawValue)) continue;
 
                 let maxVal;
                 if (def.dataSize === 1) maxVal = 0xFF;
@@ -621,14 +578,11 @@ export function writeMultipleMapsToBin(
                 else maxVal = Infinity;
                 const clampedValue = Math.max(0, Math.min(Math.round(rawValue), maxVal));
 
-                if (address + def.dataSize > view.byteLength) {
-                    console.error(`Erro: Endereço de escrita 0x${address.toString(16)} para o mapa "${def.name}" está fora dos limites.`);
-                    continue;
-                }
+                if (address + def.dataSize > view.byteLength) continue;
 
                 if (def.dataSize === 1) view.setUint8(address, clampedValue);
                 else if (def.dataSize === 2) view.setUint16(address, clampedValue, useLittleEndian);
-                else if (def.dataSize === 4) view.setUint32(address, clampedValue);
+                else if (def.dataSize === 4) view.setUint32(address, clampedValue, useLittleEndian);
             }
         }
     }
@@ -638,261 +592,14 @@ export function writeMultipleMapsToBin(
 // #endregion
 
 
-// #region Intelligent Map Scanner
-
-// Helper to read a sequence of numbers from a given address.
-const readDataFromAddress = (view: DataView, startAddr: number, count: number, dataSize: number, useLittleEndian: boolean): number[] | null => {
-    if (startAddr + count * dataSize > view.byteLength) return null;
-    const data: number[] = [];
-    for (let i = 0; i < count; i++) {
-        const addr = startAddr + i * dataSize;
-        if (dataSize === 1) data.push(view.getUint8(addr));
-        else if (dataSize === 2) data.push(view.getUint16(addr, useLittleEndian));
-        else return null; // Only supports 8/16 bit for now
-    }
-    return data;
-};
-
-// Check if an array of numbers is strictly monotonic (always increasing or always decreasing).
-const isStrictlyMonotonic = (arr: number[]): boolean => {
-    if (arr.length < 2) return false;
-    const direction = arr[1] - arr[0];
-    if (direction === 0) return false; // Not strictly monotonic if it starts flat.
-    for (let i = 2; i < arr.length; i++) {
-        if ((arr[i] - arr[i - 1]) * direction <= 0) return false;
-    }
-    return true;
-};
-
-// Analyze a monotonic array to guess if it's RPM or Load.
-const analyzeAxis = (data: number[]): 'RPM' | 'Carga' | 'Desconhecido' => {
-    if (data.length < 2) return 'Desconhecido';
-    const maxVal = Math.max(...data);
-    const minVal = Math.min(...data);
-    if (maxVal > 1000 && maxVal - minVal > 500 && data.every(v => v >= 0)) return 'RPM';
-    if (maxVal < 300 && data.every(v => v >= 0)) return 'Carga';
-    return 'Desconhecido';
-};
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function findPotentialAxes(
-    view: DataView,
-    config: Required<ScanConfig>,
-    onProgress: (progress: number, status: string) => void,
-    signal: AbortSignal
-): Promise<FoundAxis[]> {
-    const { minSize, maxSize, dataSize, isBigEndian } = config;
-    const totalLength = view.byteLength;
-    const useLittleEndian = !isBigEndian;
-    const ALIGNMENT = dataSize > 1 ? 2 : 1;
-    const foundAxes: FoundAxis[] = [];
-
-    const CHUNK_SIZE = 1024 * 16; // Process 16KB chunks
-    const YIELD_INTERVAL_MS = 0; // Yield to browser event loop
-
-    for (let addr = 0; addr < totalLength; addr += CHUNK_SIZE) {
-        const chunkEnd = Math.min(addr + CHUNK_SIZE, totalLength);
-        
-        for (let currentAddr = addr; currentAddr < chunkEnd; currentAddr += ALIGNMENT) {
-            for (let len = minSize; len <= maxSize; len++) {
-                 if (signal.aborted) throw new Error('AbortError');
-                const axisData = readDataFromAddress(view, currentAddr, len, dataSize, useLittleEndian);
-                if (axisData && isStrictlyMonotonic(axisData)) {
-                    const type = analyzeAxis(axisData);
-                    if (type !== 'Desconhecido') {
-                        foundAxes.push({
-                            id: `axis_${currentAddr}_${len}`,
-                            address: currentAddr,
-                            length: len,
-                            type,
-                            data: axisData
-                        });
-                    }
-                }
-            }
-        }
-        
-        onProgress((chunkEnd / totalLength) * 50, `A procurar eixos... Encontrados ${foundAxes.length}`);
-        await sleep(YIELD_INTERVAL_MS);
-    }
-    return foundAxes;
-}
-
-function calculateMapConfidence(mapData: (number | null)[][]): { confidence: number, suggestion: string, name: string, equation: string } {
-    if (mapData.length < 4 || mapData[0].length < 4) return { confidence: 0, suggestion: "Mapa muito pequeno", name: "Mapa Pequeno", equation: "x" };
-
-    const flatData = mapData.flat().filter(v => v !== null && isFinite(v as number)) as number[];
-    if (flatData.length < 10) return { confidence: 0.1, suggestion: "Poucos dados válidos", name: "Dados Inválidos", equation: "x" };
-
-    const avg = flatData.reduce((a, b) => a + b, 0) / flatData.length;
-    const stdDev = Math.sqrt(flatData.map(x => Math.pow(x - avg, 2)).reduce((a, b) => a + b, 0) / flatData.length);
-    
-    let confidence = 0.4;
-    let suggestion = "Mapa genérico";
-    let name = "Mapa Genérico";
-    let equation = "x";
-
-    // Smoothness check
-    let totalDiff = 0;
-    let diffCount = 0;
-    for (let r = 0; r < mapData.length; r++) {
-        for (let c = 0; c < mapData[r].length; c++) {
-            if (c > 0 && mapData[r][c] !== null && mapData[r][c-1] !== null) {
-                totalDiff += Math.abs((mapData[r][c] as number) - (mapData[r][c-1] as number));
-                diffCount++;
-            }
-             if (r > 0 && mapData[r][c] !== null && mapData[r-1][c] !== null) {
-                totalDiff += Math.abs((mapData[r][c] as number) - (mapData[r-1][c] as number));
-                diffCount++;
-            }
-        }
-    }
-    const avgDiff = diffCount > 0 ? totalDiff / diffCount : 0;
-
-    if (avgDiff > 0 && avgDiff < avg * 0.25) { 
-      confidence += 0.3; // Smooth maps are more likely
-    } else if (avgDiff > avg * 0.6) { 
-      confidence -= 0.15; // Very noisy maps are less likely
-    }
-
-    if (stdDev / avg < 0.5) { // Low relative standard deviation
-      confidence += 0.2;
-    }
-    
-    if (avg > 50 && stdDev > 10) {
-      suggestion = "Valores e distribuição consistentes com mapa de Combustível ou Ignição.";
-      name = "Potencial Mapa de Combustível/Ignição"
-      equation = "x * 0.1";
-    } else if (avg < 50 && stdDev < 15) {
-      suggestion = "Valores baixos e consistentes, possível mapa de Ignição em baixa carga.";
-      name = "Potencial Mapa de Ignição";
-      equation = "x * 0.5 - 30";
-    } else if (avg > 200) {
-       suggestion = "Valores altos, pode ser um mapa de tempo de injeção ou fator de correção.";
-       name = "Potencial Mapa de Combustível";
-       equation = "x * 0.01";
-    }
-
-
-    return { confidence: Math.max(0, Math.min(1, confidence)), suggestion, name, equation };
-}
-
-
-export async function findPotentialMaps(
-    binBuffer: ArrayBuffer,
-    config: Required<ScanConfig>,
-    onProgress: (progress: number, status: string) => void,
-    signal: AbortSignal
-): Promise<PotentialMap[]> {
-    const { dataSize, isBigEndian } = config;
-    const YIELD_INTERVAL_MS = 0;
-    const view = new DataView(binBuffer);
-    const useLittleEndian = !isBigEndian;
-    const dataTypeString = `${config.dataSize * 8}-bit${config.dataSize > 1 ? (isBigEndian ? ' BE' : ' LE') : ''}`;
-
-    onProgress(0, "A procurar eixos potenciais...");
-    const allAxes = await findPotentialAxes(view, config, onProgress, signal);
-    
-    const rpmAxes = allAxes.filter(a => a.type === 'RPM');
-    const loadAxes = allAxes.filter(a => a.type === 'Carga');
-    
-    if (signal.aborted) throw new Error('AbortError');
-    
-    onProgress(50, `Encontrados ${rpmAxes.length} eixos de RPM e ${loadAxes.length} de carga. A procurar mapas...`);
-    await sleep(YIELD_INTERVAL_MS);
-
-    const potentialMaps: PotentialMap[] = [];
-    const totalCombinations = rpmAxes.length * loadAxes.length;
-    if (totalCombinations === 0) {
-        onProgress(100, "Análise concluída. Nenhum par de eixos RPM/Carga encontrado.");
-        return [];
-    }
-
-    let combinationsDone = 0;
-    
-    for (const yAxis of loadAxes) { // Assume Load is Y axis
-        for (const xAxis of rpmAxes) { // Assume RPM is X axis
-            combinationsDone++;
-             if (signal.aborted) throw new Error('AbortError');
-
-            if (combinationsDone % 500 === 0) { // Update progress periodically and yield
-                 onProgress(50 + (combinationsDone / totalCombinations * 50), `A verificar combinação ${combinationsDone} de ${totalCombinations}`);
-                 await sleep(YIELD_INTERVAL_MS);
-            }
-
-            const mapCols = xAxis.length;
-            const mapRows = yAxis.length;
-            const mapSizeInBytes = mapRows * mapCols * dataSize;
-            
-            // Heuristic: The map data block starts immediately after one of the axes ends.
-            // Check for map start right after X axis and right after Y axis.
-            const potentialStartAddresses = [
-                xAxis.address + xAxis.length * dataSize,
-                yAxis.address + yAxis.length * dataSize,
-            ];
-
-            for (const mapStartAddress of potentialStartAddresses) {
-                if (mapStartAddress + mapSizeInBytes > view.byteLength) continue;
-
-                const mapDataBlock: MapData = [];
-                let isValidBlock = true;
-                for(let r=0; r<mapRows; r++){
-                    // Assuming row-major order for scanning
-                    const rowData = readDataFromAddress(view, mapStartAddress + (r * mapCols * dataSize), mapCols, dataSize, useLittleEndian);
-                    if (rowData === null) {
-                        isValidBlock = false;
-                        break;
-                    }
-                    mapDataBlock.push(rowData);
-                }
-                
-                if (isValidBlock) {
-                    const { confidence, suggestion, name, equation } = calculateMapConfidence(mapDataBlock);
-                    if (confidence > 0.55) { // Use a reasonable confidence threshold
-                        if (!potentialMaps.some(p => p.address === mapStartAddress && p.rows === mapRows && p.cols === mapCols)) {
-                            potentialMaps.push({
-                                address: mapStartAddress,
-                                name,
-                                rows: mapRows,
-                                cols: mapCols,
-                                dataSize: dataSize,
-                                isBigEndian: isBigEndian,
-                                confidence,
-                                suggestion,
-                                dataType: dataTypeString,
-                                equation,
-                                rowStride: mapCols * dataSize,
-                                previewData: mapDataBlock.slice(0, 5).map(row => row.slice(0, 10)), // smaller preview
-                                xAxisAddress: xAxis.address,
-                                yAxisAddress: yAxis.address,
-                                xAxisType: xAxis.type,
-                                yAxisType: yAxis.type,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    onProgress(100, "Análise concluída.");
-    return potentialMaps;
-}
-
-// #endregion
-
-
 // #region AI Tuning Logic
 
 function findClosestIndex(arr: (number | string)[], target: number): number {
     let closestIndex = -1;
     let minDiff = Infinity;
-
     for (let i = 0; i < arr.length; i++) {
         const val = Number(arr[i]);
         if (isNaN(val)) continue;
-
         const diff = Math.abs(val - target);
         if (diff < minDiff) {
             minDiff = diff;
@@ -902,16 +609,12 @@ function findClosestIndex(arr: (number | string)[], target: number): number {
     return closestIndex;
 }
 
-// Find a key in the log data headers that matches a target label
 function findKeyInHeader(header: string[], targetLabels: string[]): string | undefined {
     for (const targetLabel of targetLabels) {
         const cleanTargetLabel = targetLabel.trim().toLowerCase();
-        
         for (const key of header) {
             const cleanKey = key.trim().toLowerCase();
-            if (cleanKey.includes(cleanTargetLabel)) {
-                return key;
-            }
+            if (cleanKey.includes(cleanTargetLabel)) return key;
         }
     }
     return undefined;
@@ -922,27 +625,23 @@ export function calculateCorrections(
     processedMap: ProcessedMap,
     logData: any[],
     targetLambda: number,
-    aggressiveness: number, // 0-100
-    loadLogColumn?: string, // The name of the load column in the log file
-    loadMapValues?: number[], // The specific load values from the map axis
+    aggressiveness: number,
+    loadLogColumn?: string,
+    loadMapValues?: number[],
 ): { correctedMap: MapData, modifiedIndices: ModifiedCell[] } {
     if (!processedMap || !processedMap.calculatedMap || !processedMap.axes) {
-        throw new Error("Mapa processado inválido fornecido para correção.");
+        throw new Error("Mapa processado inválido.");
     }
      if (!logData || logData.length === 0) {
-        throw new Error("Dados de ensaio estão vazios ou são inválidos.");
-    }
-     if (!loadLogColumn && (!loadMapValues || loadMapValues.length === 0)) {
-        throw new Error("É necessário fornecer uma coluna de carga do log ou um valor de carga do mapa.");
+        throw new Error("Dados de ensaio vazios.");
     }
 
     const { calculatedMap, axes } = processedMap;
     const { x: xAxis, y: yAxis } = axes;
-    const newMap = calculatedMap.map(row => [...row]); // Create a mutable copy
+    const newMap = calculatedMap.map(row => [...row]);
     const modifiedIndices: ModifiedCell[] = [];
 
     const header = Object.keys(logData[0] || {});
-    
     const isRpm = (label: string) => /rpm|rotacao|rotação/i.test(label);
 
     const xIsRpm = xAxis.label && isRpm(xAxis.label);
@@ -952,45 +651,27 @@ export function calculateCorrections(
     let rpmIsYAxis: boolean;
 
     if (xIsRpm) {
-        rpmMapAxis = xAxis;
-        loadMapAxis = yAxis;
-        rpmIsYAxis = false;
+        rpmMapAxis = xAxis; loadMapAxis = yAxis; rpmIsYAxis = false;
     } else if (yIsRpm) {
-        rpmMapAxis = yAxis;
-        loadMapAxis = xAxis;
-        rpmIsYAxis = true;
+        rpmMapAxis = yAxis; loadMapAxis = xAxis; rpmIsYAxis = true;
     } else {
-        // Heuristic fallback if no explicit label found
         const xMax = Math.max(...xAxis.calculated.map(v => Number(v)).filter(isFinite));
         const yMax = Math.max(...yAxis.calculated.map(v => Number(v)).filter(isFinite));
-        if (xMax > yMax && xAxis.calculated.length >= yAxis.calculated.length) {
-            rpmMapAxis = xAxis;
-            loadMapAxis = yAxis;
-            rpmIsYAxis = false;
-        } else if (yMax > xMax && yAxis.calculated.length >= xAxis.calculated.length) {
-            rpmMapAxis = yAxis;
-            loadMapAxis = xAxis;
-            rpmIsYAxis = true;
+        if (xMax > yMax) {
+            rpmMapAxis = xAxis; loadMapAxis = yAxis; rpmIsYAxis = false;
         } else {
-             throw new Error("Não foi possível identificar o eixo de RPM no mapa. Verifique as etiquetas dos eixos (deve incluir 'rpm', 'rotacao', etc).");
+            rpmMapAxis = yAxis; loadMapAxis = xAxis; rpmIsYAxis = true;
         }
     }
 
     const rpmLogKey = findKeyInHeader(header, ['rpm', 'rotacao']);
     const lambdaLogKey = findKeyInHeader(header, ['lambda', 'sonda']);
     
-    if (!rpmLogKey) throw new Error(`Não foi possível encontrar a coluna 'RPM' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
-    if (!lambdaLogKey) throw new Error(`Não foi possível encontrar a coluna 'Lambda' ou 'Sonda' nos dados do ensaio. Cabeçalhos: ${header.join(', ')}`);
+    if (!rpmLogKey || !lambdaLogKey) throw new Error(`Colunas RPM ou Lambda não encontradas.`);
 
     let fixedLoadIndices: number[] = [];
     if (loadMapValues && loadMapValues.length > 0) {
-        fixedLoadIndices = loadMapValues.map(val => {
-            const idx = findClosestIndex(loadMapAxis.calculated, val);
-            if (idx === -1) {
-                throw new Error(`O valor de carga do mapa "${val}" não foi encontrado no eixo de carga.`);
-            }
-            return idx;
-        });
+        fixedLoadIndices = loadMapValues.map(val => findClosestIndex(loadMapAxis.calculated, val));
     }
     
     logData.forEach(logEntry => {
@@ -1003,20 +684,13 @@ export function calculateCorrections(
         if (rpmIndex === -1) return;
         
         let targetLoadIndices: number[] = [];
-        
         if (loadLogColumn) {
             const logLoad = logEntry[loadLogColumn];
-            if (logLoad !== undefined && !isNaN(logLoad)) {
-                const closestLoadIndex = findClosestIndex(loadMapAxis.calculated, logLoad);
-                if (closestLoadIndex !== -1) {
-                    targetLoadIndices.push(closestLoadIndex);
-                }
-            }
+            const idx = findClosestIndex(loadMapAxis.calculated, logLoad);
+            if (idx !== -1) targetLoadIndices.push(idx);
         } else if (fixedLoadIndices.length > 0) {
             targetLoadIndices = fixedLoadIndices;
         }
-
-        if (targetLoadIndices.length === 0) return;
 
         targetLoadIndices.forEach(currentLoadIndex => {
             const yIndex = rpmIsYAxis ? rpmIndex : currentLoadIndex;
@@ -1025,16 +699,12 @@ export function calculateCorrections(
             const currentValue = newMap[yIndex]?.[xIndex];
             if (currentValue === null || currentValue === undefined) return;
 
-            // Correction logic:
-            // If mixture is lean (measuredLambda > targetLambda), we need MORE fuel.
-            // If mixture is rich (measuredLambda < targetLambda), we need LESS fuel.
-            // Assuming higher map values mean more fuel (e.g., injector open time),
-            // the correction factor should be > 1 for lean, < 1 for rich.
-            const correctionFactor = measuredLambda / targetLambda;
-            
-            // The value that would theoretically yield the target lambda.
+            // Inverted logic for Yamaha R3 / Target Lambda maps:
+            // Higher map value = Leaner mixture.
+            // If measured (1.0) > target (0.85) [Lean], we want MORE fuel, so we need a LOWER value.
+            // Factor = target / measured = 0.85 / 1.0 = 0.85.
+            const correctionFactor = targetLambda / measuredLambda;
             const fullyCorrectedValue = currentValue * correctionFactor;
-            
             const difference = fullyCorrectedValue - currentValue;
             const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
 
@@ -1043,22 +713,7 @@ export function calculateCorrections(
         });
     });
     
-    // Deduplicate modifiedIndices
     const uniqueModifiedIndices = Array.from(new Set(modifiedIndices.map(cell => JSON.stringify(cell)))).map(str => JSON.parse(str));
-
-
     return { correctedMap: newMap, modifiedIndices: uniqueModifiedIndices };
 }
-
-
 // #endregion
-
-    
-
-    
-
-
-
-
-
-
