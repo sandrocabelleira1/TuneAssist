@@ -699,11 +699,11 @@ export function calculateCorrections(
             const currentValue = newMap[yIndex]?.[xIndex];
             if (currentValue === null || currentValue === undefined) return;
 
-            // Inverted logic for Yamaha R3 / Target Lambda maps:
-            // Higher map value = Leaner mixture.
-            // If measured (1.0) > target (0.85) [Lean], we want MORE fuel, so we need a LOWER value.
-            // Factor = target / measured = 0.85 / 1.0 = 0.85.
-            const correctionFactor = targetLambda / measuredLambda;
+            // Logic for Injection Time maps (TPS/MAP):
+            // Higher map value = More injection time = Richer mixture.
+            // If measured (1.0) > target (0.85) [Lean], we want MORE fuel, so we need a HIGHER value.
+            // Factor = measured / target = 1.0 / 0.85 = 1.176.
+            const correctionFactor = measuredLambda / targetLambda;
             const fullyCorrectedValue = currentValue * correctionFactor;
             const difference = fullyCorrectedValue - currentValue;
             const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));
