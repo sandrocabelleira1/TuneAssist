@@ -308,7 +308,7 @@ export default function LandingPage() {
                     alt="TuneAssist AI Logo"
                     width={180}
                     height={45}
-                    className="mx-auto mb-4"
+                    className="mx-auto mb-4 invert"
                 />
                 <p className="text-muted-foreground">
                     O Futuro do Remapeamento de ECUs.

@@ -246,7 +246,7 @@ export function parseXDF(xmlString: string, manualEndian?: boolean | null): { de
              });
 
             const xAxisDef = parseAxisDimension(xAxisNode, allOriginalTablesMap, manualEndian);
-            const yAxisDef = parseAxisDimension(yAxisNode, allOriginalTablesMap, manualEndian);
+            const yAxisDef = parseAxisDimension(yAxisDef, allOriginalTablesMap, manualEndian);
             
             const tableFlags = Array.from(zAxisNode.querySelectorAll(':scope > FLAG')).map(f => f.textContent?.trim().toLowerCase());
             const isRowMajor = tableFlags.includes('row_major') || !tableFlags.includes('col_major');
@@ -699,10 +699,10 @@ export function calculateCorrections(
             const currentValue = newMap[yIndex]?.[xIndex];
             if (currentValue === null || currentValue === undefined) return;
 
-            // Logic for Injection Time maps (TPS/MAP):
-            // Higher map value = More injection time = Richer mixture.
-            // If measured (1.0) > target (0.85) [Lean], we want MORE fuel, so we need a HIGHER value.
-            // Factor = measured / target = 1.0 / 0.85 = 1.176.
+            // Lógica para mapas de Tempo de Injeção (TPS/MAP):
+            // Maior valor no mapa = Mais tempo de injeção = Mistura mais rica.
+            // Se medido (1.0) > alvo (0.85) [Pobre], precisamos de MAIS combustível (AUMENTAR valor).
+            // Fator = Leitura / Alvo = 1.0 / 0.85 = 1.176.
             const correctionFactor = measuredLambda / targetLambda;
             const fullyCorrectedValue = currentValue * correctionFactor;
             const difference = fullyCorrectedValue - currentValue;
