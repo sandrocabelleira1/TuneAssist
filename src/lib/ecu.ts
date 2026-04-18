@@ -651,12 +651,22 @@ export function calculateCorrections(
     if (loadMapValues && loadMapValues.length > 0) {
         fixedLoadIndices = loadMapValues.map(val => findClosestIndex(loadMapAxis.calculated, val));
     }
+
+    // Intervalo de Sonda Lambda realista para um motor em funcionamento (0.70 a 1.20)
+    // Valores fora disto (como 0.50, 1.30, 3.0) são erros ou cut-off e devem ser ignorados.
+    const MIN_SANE_LAMBDA = 0.70;
+    const MAX_SANE_LAMBDA = 1.20;
     
     logData.forEach(logEntry => {
         const logRpm = logEntry[rpmLogKey];
         const measuredLambda = logEntry[lambdaLogKey];
 
-        if (logRpm === undefined || measuredLambda === undefined || isNaN(logRpm) || isNaN(measuredLambda)) return;
+        // Software inteligente: descarta leituras absurdas de sonda
+        if (
+            logRpm === undefined || measuredLambda === undefined || 
+            isNaN(logRpm) || isNaN(measuredLambda) ||
+            measuredLambda < MIN_SANE_LAMBDA || measuredLambda > MAX_SANE_LAMBDA
+        ) return;
 
         const rpmIndex = findClosestIndex(rpmMapAxis.calculated, logRpm);
         if (rpmIndex === -1) return;
