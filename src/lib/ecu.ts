@@ -602,7 +602,7 @@ function findKeyInHeader(header: string[], targetLabels: string[]): string | und
 export function calculateCorrections(
     processedMap: ProcessedMap,
     logData: any[],
-    targetLambda: number,
+    targetLambda: number | { low: number, high: number, threshold: number },
     aggressiveness: number,
     loadLogColumn?: string,
     loadMapValues?: number[],
@@ -671,6 +671,14 @@ export function calculateCorrections(
         const rpmIndex = findClosestIndex(rpmMapAxis.calculated, logRpm);
         if (rpmIndex === -1) return;
         
+        // Determinar o alvo dinâmico se configurado
+        let currentTarget: number;
+        if (typeof targetLambda === 'number') {
+            currentTarget = targetLambda;
+        } else {
+            currentTarget = logRpm < targetLambda.threshold ? targetLambda.low : targetLambda.high;
+        }
+
         let targetLoadIndices: number[] = [];
         if (loadLogColumn) {
             const logLoad = logEntry[loadLogColumn];
@@ -687,11 +695,10 @@ export function calculateCorrections(
             const currentValue = newMap[yIndex]?.[xIndex];
             if (currentValue === null || currentValue === undefined) return;
 
-            // Logic for Time of Injection maps (TPS/MAP):
-            // Measured / Target = Correction Factor.
-            // If Measured (1.0) > Target (0.85) [Lean], we need MORE fuel (Increase value).
-            // Factor = 1.0 / 0.85 = 1.176. Correct.
-            const correctionFactor = measuredLambda / targetLambda;
+            // Fator de correção para Tempo de Injeção:
+            // Sonda Lida / Sonda Alvo = Fator de Correção
+            // Ex: Lida 1.0 (Pobre) / Alvo 0.85 = 1.176. Aumenta o tempo de injeção corretamente.
+            const correctionFactor = measuredLambda / currentTarget;
             const fullyCorrectedValue = currentValue * correctionFactor;
             const difference = fullyCorrectedValue - currentValue;
             const finalCorrectedValue = currentValue + (difference * (aggressiveness / 100));

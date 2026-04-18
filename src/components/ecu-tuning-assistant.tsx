@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
@@ -631,6 +630,10 @@ export default function EcuTuningAssistant() {
     
     const [templateConfig, setTemplateConfig] = useState<StructureTemplate | null>(null);
     const [targetLambda, setTargetLambda] = useState<number | ''>(0.87);
+    const [isDualTarget, setIsDualTarget] = useState(false);
+    const [targetLambdaLow, setTargetLambdaLow] = useState<number>(0.98);
+    const [targetLambdaHigh, setTargetLambdaHigh] = useState<number>(0.85);
+    const [transitionRpm, setTransitionRpm] = useState<number>(6000);
     const [aggressiveness, setAggressiveness] = useState<number>(100);
     const [ignitionRuns, setIgnitionRuns] = useState<IgnitionTimingRun>({ base: [], modified: [] });
 
@@ -841,6 +844,7 @@ export default function EcuTuningAssistant() {
         setManualConfig(initialManualConfig);
         setTemplateConfig(null);
         setTargetLambda(0.87);
+        setIsDualTarget(false);
         setAggressiveness(100);
         setIgnitionRuns({ base: [], modified: [] });
         dynoForm.reset();
@@ -1398,12 +1402,11 @@ export default function EcuTuningAssistant() {
         const logSource = logFile || logData.length > 0;
         const loadConditionSet = selectedLogLoadColumn || selectedLoadValues.length > 0;
         
-        if (selectedMapIds.length === 0 || !logSource || !targetLambda || !xdfFile || !binFile || !loadConditionSet) {
+        if (selectedMapIds.length === 0 || !logSource || !xdfFile || !binFile || !loadConditionSet) {
             let msg = "Dados insuficientes para o ajuste. ";
             if (selectedMapIds.length === 0) msg += "Selecione pelo menos um mapa. ";
             if (!logSource) msg += "Carregue um ficheiro de log ou insira dados manualmente. ";
             if (!loadConditionSet) msg += "Selecione a condição de carga do log. ";
-            if (!targetLambda) msg += "Defina um Lambda alvo. ";
         
             addLog(msg, 'error');
             toast({ title: 'Ajuste Falhou', description: msg, variant: 'destructive' });
@@ -1411,14 +1414,22 @@ export default function EcuTuningAssistant() {
         }
 
         const numericTargetLambda = Number(targetLambda);
-        if(isNaN(numericTargetLambda)) {
+        const targetConfig = isDualTarget 
+            ? { low: targetLambdaLow, high: targetLambdaHigh, threshold: transitionRpm }
+            : numericTargetLambda;
+
+        if(!isDualTarget && isNaN(numericTargetLambda)) {
             addLog("Lambda Alvo inválido.", 'error');
             toast({ title: 'Ajuste Falhou', description: 'O Lambda Alvo deve ser um número.', variant: 'destructive' });
             return;
         }
 
         setIsProcessing(true);
-        addLog(`A iniciar ajuste automático em ${selectedMapIds.length} mapas com Lambda Alvo ${numericTargetLambda.toFixed(2)} e agressividade de ${aggressiveness}%...`, 'info');
+        const targetDesc = isDualTarget 
+            ? `Alvo Baixa: ${targetLambdaLow.toFixed(2)}, Alvo Alta: ${targetLambdaHigh.toFixed(2)} (Transição: ${transitionRpm} RPM)`
+            : `Lambda Alvo: ${numericTargetLambda.toFixed(2)}`;
+
+        addLog(`A iniciar ajuste automático em ${selectedMapIds.length} mapas com ${targetDesc} e agressividade de ${aggressiveness}%...`, 'info');
         
         let totalModifiedCells = 0;
         const newAiModifiedCellsByMap: Record<string, Set<string>> = {};
@@ -1449,7 +1460,7 @@ export default function EcuTuningAssistant() {
                 const { correctedMap, modifiedIndices } = calculateCorrections(
                     mapToProcess, 
                     logData, 
-                    numericTargetLambda, 
+                    targetConfig, 
                     aggressiveness,
                     selectedLogLoadColumn, // For logs with load column
                     selectedLoadValues.map(v => parseFloat(v)) // For logs at specific load points
@@ -1867,23 +1878,48 @@ const handleMapSelectionChange = (id: string) => {
                                          </Command>
                                      </PopoverContent>
                                  </Popover>
-                                 <p className="text-xs text-muted-foreground">
-                                     Se o seu log tiver uma coluna de carga (TPS/MAP), selecione-a. Caso contrário, selecione o(s) valor(es) de carga do mapa que corresponde(m) ao seu ensaio.
-                                 </p>
                              </div>
-                             <div className="space-y-2">
-                                 <Label htmlFor="target-lambda">Lambda Alvo</Label>
-                                 <Input 
-                                     id="target-lambda" 
-                                     type="number" 
-                                     step="0.01"
-                                     value={targetLambda}
-                                     onChange={(e) => {
-                                         const value = e.target.value;
-                                         setTargetLambda(value === '' ? '' : parseFloat(value));
-                                     }}
-                                 />
+
+                             <Separator />
+
+                             <div className="space-y-4">
+                                 <div className="flex items-center justify-between">
+                                     <Label htmlFor="dual-target-toggle" className="font-semibold">Alvo Dinâmico por RPM</Label>
+                                     <Switch id="dual-target-toggle" checked={isDualTarget} onCheckedChange={setIsDualTarget} />
+                                 </div>
+
+                                 {isDualTarget ? (
+                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 border rounded-lg bg-accent/20">
+                                         <div className="space-y-2">
+                                             <Label>Alvo Baixa (Cruzeiro)</Label>
+                                             <Input type="number" step="0.01" value={targetLambdaLow} onChange={(e) => setTargetLambdaLow(parseFloat(e.target.value))} />
+                                         </div>
+                                         <div className="space-y-2">
+                                             <Label>Alvo Alta (Potência)</Label>
+                                             <Input type="number" step="0.01" value={targetLambdaHigh} onChange={(e) => setTargetLambdaHigh(parseFloat(e.target.value))} />
+                                         </div>
+                                         <div className="space-y-2">
+                                             <Label>RPM Transição</Label>
+                                             <Input type="number" step="100" value={transitionRpm} onChange={(e) => setTransitionRpm(parseInt(e.target.value))} />
+                                         </div>
+                                     </div>
+                                 ) : (
+                                     <div className="space-y-2">
+                                         <Label htmlFor="target-lambda">Lambda Alvo Único</Label>
+                                         <Input 
+                                             id="target-lambda" 
+                                             type="number" 
+                                             step="0.01"
+                                             value={targetLambda}
+                                             onChange={(e) => {
+                                                 const value = e.target.value;
+                                                 setTargetLambda(value === '' ? '' : parseFloat(value));
+                                             }}
+                                         />
+                                     </div>
+                                 )}
                              </div>
+
                              <div className="space-y-2">
                                  <div className="flex items-center gap-2">
                                      <Label htmlFor="aggressiveness">Agressividade ({aggressiveness}%)</Label>
@@ -1893,7 +1929,7 @@ const handleMapSelectionChange = (id: string) => {
                                                  <Info className="h-4 w-4 text-muted-foreground cursor-help" />
                                              </TooltipTrigger>
                                              <TooltipContent className="max-w-xs">
-                                                 <p>Controla a intensidade da correção. 100% aplica a correção total calculada (valorAtual * (sondaLida/sondaAlvo)). 50% aplica metade da diferença entre o valor atual e o valor totalmente corrigido. Valores mais baixos são mais seguros.</p>
+                                                 <p>Controla a intensidade da correção. 100% aplica a correção total calculada. Valores mais baixos são mais seguros.</p>
                                              </TooltipContent>
                                          </Tooltip>
                                      </TooltipProvider>
