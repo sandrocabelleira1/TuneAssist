@@ -589,9 +589,6 @@ export default function EcuTuningAssistant() {
     const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userDocRef);
 
     const isLicenseExpired = useMemo(() => {
-        if (user?.email === 'master@tuneassist.tech') {
-            return false;
-        }
         if (!userProfile?.licenseExpiryDate) {
             // If there's no expiry date but the user exists, assume they need a license (e.g. legacy user)
             return user ? true : false;
@@ -998,7 +995,7 @@ export default function EcuTuningAssistant() {
                             addLog(successMessage, 'success');
                             toast({ title: 'Log Carregado', description: successMessage });
                         },
-                        error: (error) => {
+                        error: (error: Error) => {
                              const errorMessage = `Erro ao processar CSV: ${error.message}`;
                              addLog(errorMessage, 'error');
                              toast({ title: 'Erro de CSV', description: errorMessage, variant: 'destructive' });
@@ -1124,7 +1121,7 @@ export default function EcuTuningAssistant() {
     
         const mapStructureKey = `${newActiveMapDef.rows}x${newActiveMapDef.cols}`;
         
-        let configToApply = {
+        let configToApply: ManualAxisConfig = {
             ...initialManualConfig,
             x: { equation: newActiveMapDef.xAxisDef?.equation || 'x', stride: newActiveMapDef.xAxisDef?.dataSize },
             y: { equation: newActiveMapDef.yAxisDef?.equation || 'x', stride: newActiveMapDef.yAxisDef?.dataSize },
@@ -1306,7 +1303,7 @@ export default function EcuTuningAssistant() {
     
         setIsProcessing(true);
         const creditsToDeduct = 3;
-        const isMasterUser = user.email === 'master@tuneassist.tech';
+        const isMasterUser = false;
 
         try {
             // 1. Check user credits (unless master user)
@@ -1331,7 +1328,7 @@ export default function EcuTuningAssistant() {
             const mapsToSave = Object.entries(processedMapCache)
                 .filter(([mapId, _]) => modifiedStatusCache[mapId])
                 .map(([mapId, mapData]) => ({
-                    definition: xdfFile.definitions.find(def => def.uniqueId === mapId)!,
+                    definition: xdfFile!.definitions.find(def => def.uniqueId === mapId)!,
                     processedMap: mapData,
                 }));
             
@@ -1344,15 +1341,13 @@ export default function EcuTuningAssistant() {
             const newBinBuffer = writeMultipleMapsToBin(binFile.buffer, mapsToSave as any);
             const modifiedFileName = binFile.name.replace(/\.[^/.]+$/, "") + `_mod_${mapsToSave.length}map.bin`;
     
-            // 3. Deduct credits (if not master user)
-            if (!isMasterUser) {
-                addLog(`A deduzir ${creditsToDeduct} créditos...`, 'info');
-                const userDocRef = doc(firestore, 'users', user.uid);
-                await updateDoc(userDocRef, {
-                    credits: increment(-creditsToDeduct)
-                });
-            }
-    
+            const token = await user.getIdToken();
+            const debit = await fetch('/api/consume-credits', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + token },
+            });
+            if (!debit.ok) throw new Error('Não foi possível autorizar o débito de créditos.');
+
             // 4. Trigger download
             addLog('Download a iniciar...', 'success');
             const blob = new Blob([newBinBuffer], { type: 'application/octet-stream' });
@@ -1440,7 +1435,7 @@ export default function EcuTuningAssistant() {
 
             addLog(`Ajustando o mapa: ${def.name}...`, 'info');
             
-            let mapToProcess = processedMapCache[mapId];
+            let mapToProcess: ProcessedMap | undefined = processedMapCache[mapId];
             if (!mapToProcess) {
                  const config = {
                     x: { equation: def.xAxisDef?.equation || 'x', stride: def.xAxisDef?.dataSize },
@@ -1547,7 +1542,7 @@ const handleMapSelectionChange = (id: string) => {
     };
 
     const handleSaveBackup = async () => {
-        if (!binFile || !anyMapModified) {
+        if (!binFile || !xdfFile || !anyMapModified) {
             toast({ title: 'Nada para Salvar', description: 'Modifique um mapa antes de guardar um backup.', variant: 'default' });
             return;
         }
@@ -1563,7 +1558,7 @@ const handleMapSelectionChange = (id: string) => {
             const mapsToSave = Object.entries(processedMapCache)
                 .filter(([mapId, _]) => modifiedStatusCache[mapId])
                 .map(([mapId, mapData]) => ({
-                    definition: xdfFile.definitions.find(def => def.uniqueId === mapId)!,
+                    definition: xdfFile!.definitions.find(def => def.uniqueId === mapId)!,
                     processedMap: mapData,
                 }));
     
@@ -1675,9 +1670,10 @@ const handleMapSelectionChange = (id: string) => {
         toast({ title: "A iniciar renovação...", description: "Será redirecionado para o Mercado Pago." });
     
         try {
+            const token = await user.getIdToken();
             const response = await fetch('/api/create-payment', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
                 body: JSON.stringify({
                     type: 'renewal',
                     title: 'Renovação de Licença TuneAssist AI (6 Meses)',
@@ -2411,3 +2407,4 @@ const handleMapSelectionChange = (id: string) => {
       </EcuTuningStateContext.Provider>
     );
 }
+

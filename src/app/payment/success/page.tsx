@@ -1,125 +1,26 @@
-
 'use client';
-
-import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle2, Loader2, Download, AlertTriangle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useUser } from '@/firebase';
 import Link from 'next/link';
-import { useFirestore } from '@/firebase';
-import { doc, updateDoc, increment, getDoc } from 'firebase/firestore';
-import { add } from 'date-fns';
-
-function SuccessContent() {
-    const firestore = useFirestore();
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
-    const [message, setMessage] = useState('A processar o seu pedido...');
-
-    useEffect(() => {
-        const paymentType = searchParams.get('type');
-        
-        const processPayment = async () => {
-             const userId = searchParams.get('userId');
-             if (!userId || !firestore) {
-                // Download type is handled separately inside its own block
-                if (paymentType !== 'download') { 
-                    setStatus('error');
-                    setMessage('ID do utilizador em falta ou serviço indisponível.');
-                    return;
-                }
-            }
-
-            if (paymentType === 'credits' && userId) {
-                try {
-                    setMessage('A adicionar créditos à sua conta...');
-                    const userDocRef = doc(firestore, 'users', userId);
-                    await updateDoc(userDocRef, {
-                        credits: increment(10)
-                    });
-                    setStatus('success');
-                    setMessage('10 créditos foram adicionados com sucesso à sua conta!');
-                    setTimeout(() => router.push('/tuner'), 3000);
-                } catch (error) {
-                    console.error("Error updating credits:", error);
-                    setStatus('error');
-                    setMessage('Ocorreu um erro ao adicionar os créditos. Por favor, contacte o suporte.');
-                }
-            } else if (paymentType === 'renewal' && userId) {
-                 try {
-                    setMessage('A renovar a sua licença...');
-                    const userDocRef = doc(firestore, 'users', userId);
-                    
-                    // Get current expiry to add 6 months, or set from now if missing
-                    const userDoc = await getDoc(userDocRef);
-                    const currentUserData = userDoc.data();
-                    const currentExpiry = currentUserData?.licenseExpiryDate ? new Date(currentUserData.licenseExpiryDate) : new Date();
-
-                    const newExpiryDate = add(currentExpiry, { months: 6 });
-
-                    await updateDoc(userDocRef, {
-                        licenseExpiryDate: newExpiryDate.toISOString()
-                    });
-                    setStatus('success');
-                    setMessage('A sua licença foi renovada com sucesso por mais 6 meses!');
-                    setTimeout(() => router.push('/tuner'), 3000);
-                } catch (error) {
-                    console.error("Error renewing license:", error);
-                    setStatus('error');
-                    setMessage('Ocorreu um erro ao renovar a sua licença. Por favor, contacte o suporte.');
-                }
-            } else if (paymentType === 'download') {
-                setStatus('success');
-                setMessage('Ficheiro pronto! O seu download deve começar em breve. Será redirecionado em instantes.');
-                setTimeout(() => router.push('/tuner'), 5000);
-            } else {
-                 setStatus('success');
-                 setMessage('O seu pagamento foi processado com sucesso.');
-            }
-        };
-
-        processPayment();
-    }, [searchParams, firestore, router]);
-
-
-    const renderStatus = () => {
-        switch (status) {
-            case 'processing':
-                return <Loader2 className="h-10 w-10 text-primary animate-spin" />;
-            case 'success':
-                return <CheckCircle2 className="h-10 w-10 text-green-600" />;
-            case 'error':
-                return <AlertTriangle className="h-10 w-10 text-destructive" />;
-        }
-    }
-
-    return (
-        <Card className="w-full max-w-md text-center">
-            <CardHeader>
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                    {renderStatus()}
-                </div>
-                <CardTitle className="mt-4 text-2xl font-bold">Pagamento Aprovado!</CardTitle>
-                <CardDescription>{message}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <Button asChild className="w-full">
-                    <Link href="/tuner">Voltar para a Ferramenta</Link>
-                </Button>
-            </CardContent>
-        </Card>
-    );
-}
-
-
 export default function PaymentSuccessPage() {
-    return (
-        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-            <Suspense fallback={<Loader2 className="h-16 w-16 animate-spin" />}>
-                <SuccessContent />
-            </Suspense>
-        </div>
-    );
+  const { user, isUserLoading } = useUser();
+  const [message, setMessage] = useState('A verificar o pagamento...');
+  useEffect(() => {
+    if (isUserLoading) return;
+    if (!user) { setMessage('Entre na conta usada no pagamento e volte a esta página para confirmar.'); return; }
+    let active = true;
+    async function verify() {
+      try {
+        const paymentId = new URLSearchParams(window.location.search).get('payment_id');
+        const token = await user!.getIdToken();
+        const response = await fetch('/api/verify-payment', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ paymentId }) });
+        const data = await response.json();
+        if (active) setMessage(response.ok ? 'Pagamento confirmado. Sua conta foi atualizada.' : data.error);
+      } catch { if (active) setMessage('Verificação indisponível. Recarregue esta página para tentar novamente.'); }
+    }
+    void verify();
+    return () => { active = false; };
+  }, [user, isUserLoading]);
+  return <main className="min-h-screen grid place-content-center gap-6 p-6 text-center"><h1 className="text-2xl">Confirmação de pagamento</h1><p>{message}</p><Link href="/tuner">Voltar para a ferramenta</Link></main>;
 }
+

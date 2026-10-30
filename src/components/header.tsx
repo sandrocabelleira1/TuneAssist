@@ -37,13 +37,16 @@ interface UserProfile {
 
 const BuyCreditsMenuItem = ({ userId, onPurchaseStart }: { userId: string, onPurchaseStart: () => void }) => {
     const { toast } = useToast();
+    const auth = useAuth();
 
     const handleBuyCredits = async () => {
         onPurchaseStart();
         try {
+            const token = await auth.currentUser?.getIdToken();
+            if (!token) throw new Error('Faça login para pagar.');
             const response = await fetch('/api/create-payment', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
                 body: JSON.stringify({
                     type: 'credits',
                     title: 'Pacote de 10 Créditos',
@@ -125,7 +128,7 @@ export default function Header({ className }: { className?: string }) {
                     Créditos: {userProfile?.credits ?? 0}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <BuyCreditsMenuItem userId={user.uid} onPurchaseStart={() => setIsProcessingPayment(true)} />
+                <BuyCreditsMenuItem userId={user.uid} onPurchaseStart={() => setIsProcessingPayment(value => !value)} />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
                     <LogOut className="mr-2 h-4 w-4" />
@@ -195,3 +198,4 @@ export default function Header({ className }: { className?: string }) {
     </header>
   );
 }
+

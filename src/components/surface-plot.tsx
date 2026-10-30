@@ -69,22 +69,22 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
         cmax: maxVal,
         reversescale: false,
         colorbar: {
-          title: zAxisLabel,
+          title: { text: zAxisLabel },
           tickfont: { color: 'hsl(var(--foreground))' },
-          titlefont: { color: 'hsl(var(--foreground))' }
+
         }
     }];
 
     const layout: Partial<Layout> = {
-        title: '',
+        title: { text: '' },
         autosize: true,
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         font: { color: 'hsl(var(--foreground))' },
         scene: {
-          xaxis: { title: xAxisLabel ?? 'Eixo X', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--background))' },
-          yaxis: { title: yAxisLabel ?? 'Eixo Y', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--background))' },
-          zaxis: { title: zAxisLabel ?? 'Valor', color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--background))' },
+          xaxis: { title: { text: xAxisLabel ?? 'Eixo X' }, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--background))' },
+          yaxis: { title: { text: yAxisLabel ?? 'Eixo Y' }, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--background))' },
+          zaxis: { title: { text: zAxisLabel ?? 'Valor' }, color: 'hsl(var(--foreground))', gridcolor: 'hsl(var(--border))', backgroundcolor: 'hsl(var(--background))' },
           camera: { eye: {x: 1.8, y: -1.8, z: 1.2} }
         },
         margin: { l: 0, r: 0, b: 0, t: 0 },
@@ -99,7 +99,7 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
       Plotly.newPlot(plotRef.current, plotData, layout, { responsive: true, displaylogo: false });
       
       const resizeObserver = new ResizeObserver(() => {
-          Plotly.Plots.resize(plotRef.current as PlotlyHTMLElement);
+          Plotly.Plots.resize(plotRef.current as unknown as PlotlyHTMLElement);
       });
       resizeObserver.observe(plotRef.current);
       
@@ -138,3 +138,4 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
     </div>
   );
 }
+

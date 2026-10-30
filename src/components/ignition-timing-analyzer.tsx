@@ -411,7 +411,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
     
                 const rpmIsYAxis = rpmAxis === processedMap.axes.y;
                 const rpmAxisData = processedMap.axes[rpmIsYAxis ? 'y' : 'x'];
-                const closestRpmIndex = rpmAxisData.calculated.reduce((closest, current, idx) => {
+                const closestRpmIndex = rpmAxisData.calculated.reduce<number>((closest, current, idx) => {
                     const currentDiff = Math.abs(Number(current) - rpmValue);
                     const closestDiff = Math.abs(Number(rpmAxisData.calculated[closest]) - rpmValue);
                     return currentDiff < closestDiff ? idx : closest;
@@ -540,7 +540,7 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
                             }}));
                             
                         },
-                        error: (error) => {
+                        error: (error: Error) => {
                             toast({ title: 'Erro de Leitura de Log', description: error.message, variant: "destructive" });
                             addLog(`Erro ao ler log de ignição: ${error.message}`, 'error');
                         }
@@ -845,3 +845,4 @@ export default function IgnitionTimingAnalyzer({ runs, onRunsChange, binFile, pr
         </div>
     );
 }
+

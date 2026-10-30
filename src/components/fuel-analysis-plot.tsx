@@ -353,7 +353,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
                     stroke="transparent"
                     tickLine={false}
                     tickFormatter={(value) => value ? value.toFixed(1) : ''}
-                    connectNulls={false}
+
                   />
               )}
 
@@ -394,7 +394,7 @@ export default function FuelAnalysisPlot({ logData, logHeaders, loadAxis, select
               )}
 
               <Tooltip 
-                content={<CustomTooltipContent timeKey={timeKey} mapDefinition={mapDefinition} setActiveMapValue={setActiveMapState} />} 
+                content={<CustomTooltipContent timeKey={timeKey ?? null} mapDefinition={mapDefinition} setActiveMapValue={setActiveMapState} />} 
                 cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1, strokeDasharray: '3 3' }}
               />
 
@@ -465,3 +465,4 @@ interface FuelAnalysisPlotProps {
   mapLineData: { rpm: number, mapValue: number | null }[] | null;
   mapDefinition: XDFinition | undefined;
 }
+

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:security": "node --test scripts/security-tests.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -36,6 +37,7 @@
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
     "firebase": "^12.3.0",
+    "firebase-admin": "^13.10.0",
     "iconv-lite": "^0.6.3",
     "lucide-react": "^0.475.0",
     "mercadopago": "^2.0.10",

@@ -66,8 +66,9 @@ service cloud.firestore {
      * @principle Enforces strict ownership. A user's profile is their own.
      */
     match /users/{userId} {
-      allow get, update: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      // Profiles and paid entitlements are written only by the trusted server.
+      allow get: if isOwner(userId);
+      allow create, update: if false;
       allow list, delete: if false;
     }
 
