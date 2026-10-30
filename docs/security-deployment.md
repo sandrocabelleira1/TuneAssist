@@ -13,7 +13,7 @@ This change requires a coordinated deployment. Do not treat a source commit as p
 
 ## History audit scope
 
-The initial review fetched all 1,300 commit diffs successfully and found no matches for the selected credential patterns. A separate full historical blob review is required because GitHub diffs may omit or truncate content. Firebase web configuration and public image download URLs are not server credentials.
+The initial review fetched all 1,300 commit diffs successfully and found no matches for the selected credential patterns. A subsequent review enumerated all 2,008 unique historical blobs from all 1,300 commit trees and scanned text contents with selected payment-token, personal-access-token, private-key and secret-assignment patterns. No pattern matches or fetch errors were reported. Ordinary image/icon/font assets were excluded. Pattern matching is not proof that no secrets exist; unrecognized formats and nonliteral credentials can be missed. Firebase web configuration and public image download URLs are not server credentials.
 
 ## Validation status
 
