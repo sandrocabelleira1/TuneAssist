@@ -1,131 +1,32 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
-import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
-import { db } from '@/lib/firebase/client'; // Assuming you have a client-initialized db export
-
-const getPayerEmail = async (userId?: string): Promise<string | undefined> => {
-    if (!userId) return undefined;
-    try {
-        const userDoc = await getDoc(doc(db, 'users', userId));
-        if (userDoc.exists()) {
-            return userDoc.data().email;
-        }
-    } catch (error) {
-        console.error("Error fetching user email:", error);
-    }
-    return undefined;
-};
-
-// Helper function to determine the base URL
-const getBaseUrl = (req: NextRequest) => {
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-    if (siteUrl) {
-        // Use the environment variable and remove any trailing slash
-        return siteUrl.replace(/\/$/, "");
-    }
-    // Fallback for local development or if the env var is not set
-    return req.nextUrl.origin;
-};
-
-
+import { authenticatedUser } from '@/lib/firebase/admin';
+import { paymentProducts, PaymentType } from '@/lib/payment-products';
 export async function POST(req: NextRequest) {
-  const { type, title, unit_price, quantity, userId, payerEmail: providedPayerEmail } = await req.json();
-
-  if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
-    return NextResponse.json({ error: 'Mercado Pago access token is not configured.' }, { status: 500 });
-  }
-  const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-
-  const client = new MercadoPagoConfig({ accessToken });
-  const preference = new Preference(client);
-
-  let back_urls: any;
-  let metadata: any = {};
-  let finalPayerEmail = providedPayerEmail;
-  if (!finalPayerEmail && userId) {
-    finalPayerEmail = await getPayerEmail(userId);
-  }
-
-  const baseUrl = getBaseUrl(req);
-  
-  // Define success and failure paths without leading slashes
-  const successPath = 'payment/success';
-  const registerSuccessPath = 'payment/register-success';
-  const failurePath = 'payment/failure';
-
-
-  switch (type) {
-    case 'license':
-      back_urls = {
-        success: `${baseUrl}/${registerSuccessPath}`,
-        failure: `${baseUrl}/${failurePath}`,
-        pending: `${baseUrl}/${failurePath}`,
-      };
-      metadata = { type: 'license' };
-      break;
-    case 'renewal':
-      back_urls = {
-        success: `${baseUrl}/${successPath}?type=renewal&userId=${userId}`,
-        failure: `${baseUrl}/${failurePath}`,
-        pending: `${baseUrl}/${failurePath}`,
-      };
-      metadata = { user_id: userId, type: 'renewal' };
-      break;
-    case 'credits':
-      back_urls = {
-        success: `${baseUrl}/${successPath}?type=credits&userId=${userId}`,
-        failure: `${baseUrl}/${failurePath}`,
-        pending: `${baseUrl}/${failurePath}`,
-      };
-      metadata = { user_id: userId, type: 'credits', quantity: 10 };
-      break;
-    case 'download':
-       back_urls = {
-        success: `${baseUrl}/${successPath}?type=download`,
-        failure: `${baseUrl}/${failurePath}`,
-        pending: `${baseUrl}/${failurePath}`,
-      };
-      metadata = { user_id: userId, type: 'download' };
-      break;
-    default:
-        return NextResponse.json({ error: 'Invalid payment type provided.' }, { status: 400 });
-  }
-
-
   try {
-    const body: any = {
-        items: [
-          {
-            title: title,
-            quantity: Number(quantity),
-            unit_price: Number(unit_price),
-            currency_id: 'BRL',
-          },
-        ],
-        back_urls: back_urls,
-        auto_return: 'approved',
-        metadata: metadata,
-        payment_methods: {
-            excluded_payment_types: [],
-            installments: 1,
-            default_payment_method_id: 'pix',
-            accepted_payment_methods: ["credit_card", "debit_card", "ticket", "pix"]
-        },
-      };
-
-    if (finalPayerEmail) {
-        body.payer = { email: finalPayerEmail };
+    const user = await authenticatedUser(req);
+    const { type } = await req.json();
+    if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(paymentProducts, type)) {
+      return NextResponse.json({ error: 'Produto inválido.' }, { status: 400 });
     }
-
-    const result = await preference.create({ body });
-
+    const product = paymentProducts[type as PaymentType];
+    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    if (!accessToken || !siteUrl) return NextResponse.json({ error: 'Pagamentos indisponíveis.' }, { status: 503 });
+    const origin = new URL(siteUrl).origin;
+    if (!origin.startsWith('https://')) return NextResponse.json({ error: 'Configuração inválida.' }, { status: 503 });
+    const result = await new Preference(new MercadoPagoConfig({ accessToken })).create({ body: {
+      items: [{ id: type, title: product.title, quantity: 1, unit_price: product.price, currency_id: 'BRL' }],
+      external_reference: user.uid,
+      metadata: { user_id: user.uid, type },
+      payer: user.email ? { email: user.email } : undefined,
+      back_urls: { success: origin + '/payment/success', failure: origin + '/payment/failure', pending: origin + '/payment/failure' },
+      auto_return: 'approved',
+    } });
     return NextResponse.json({ id: result.id, init_point: result.init_point });
-
-  } catch (error: any) {
-    console.error('Mercado Pago Error:', error);
-    // Mercado Pago errors are often objects with response data
-    const errorMessage = error?.response?.data?.message || error.message || 'Failed to create payment preference';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+  } catch (error) {
+    const unauthorized = error instanceof Error && error.message === 'UNAUTHORIZED';
+    return NextResponse.json({ error: unauthorized ? 'Faça login para pagar.' : 'Não foi possível iniciar o pagamento.' }, { status: unauthorized ? 401 : 500 });
   }
 }
+

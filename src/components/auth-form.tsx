@@ -32,6 +32,7 @@ interface AuthFormProps {
 export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
   const { toast } = useToast();
   const auth = useAuth();
+  React.useEffect(() => { localStorage.removeItem('pendingRegistration'); }, []);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   const [showPassword, setShowPassword] = useState(false);
@@ -71,12 +72,17 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
   const handleRegistrationPayment = async (data: AuthFormValues) => {
     setIsLoading(true);
     try {
-        // Store credentials in localStorage to be retrieved after payment
-        localStorage.setItem('pendingRegistration', JSON.stringify({ email: data.email, password: data.password }));
+        localStorage.removeItem('pendingRegistration');
+        const availability = await fetch('/api/payment-status', { cache: 'no-store' });
+        if (!availability.ok || !(await availability.json()).available) {
+            throw new Error('Novos pagamentos estão temporariamente indisponíveis. Tente novamente mais tarde.');
+        }
+        const credential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+        const token = await credential.user.getIdToken();
 
         const response = await fetch('/api/create-payment', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
             body: JSON.stringify({
                 type: 'license',
                 title: 'Licença TuneAssist AI (6 Meses)',
@@ -88,7 +94,7 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || 'Falha ao criar a preferência de pagamento.');
+            throw new Error(errorData.error || 'Conta criada. Entre na conta e tente renovar a licença para concluir o pagamento.');
         }
 
         const paymentData = await response.json();
@@ -191,3 +197,4 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
     </Tabs>
   );
 }
+

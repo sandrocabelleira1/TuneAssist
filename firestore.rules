@@ -60,14 +60,14 @@ service cloud.firestore {
     /**
      * @description Security rules for user profile documents.
      * @path /users/{userId}
-     * @allow (create) A user can create their own profile document.
-     * @allow (get, update) A user can read or update their own profile document.
-     * @deny (list, delete) No one can list all users or delete a profile directly.
-     * @principle Enforces strict ownership. A user's profile is their own.
+     * @allow (get) A user can read their own profile document.
+     * @deny (create, update, list, delete) Client writes are forbidden.
+     * @principle Only the authenticated server updates paid entitlements.
      */
     match /users/{userId} {
-      allow get, update: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      // Profiles and paid entitlements are written only by the trusted server.
+      allow get: if isOwner(userId);
+      allow create, update: if false;
       allow list, delete: if false;
     }
 
