@@ -73,6 +73,10 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
     setIsLoading(true);
     try {
         localStorage.removeItem('pendingRegistration');
+        const availability = await fetch('/api/payment-status', { cache: 'no-store' });
+        if (!availability.ok || !(await availability.json()).available) {
+            throw new Error('Novos pagamentos estão temporariamente indisponíveis. Tente novamente mais tarde.');
+        }
         const credential = await createUserWithEmailAndPassword(auth, data.email, data.password);
         const token = await credential.user.getIdToken();
 

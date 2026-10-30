@@ -25,14 +25,14 @@ function fixture(payment, authenticated = true) {
   new Function('require','module','exports',code)(name => { assert.ok(name in dependencies, name); return dependencies[name]; },module,module.exports);
   return { post: module.exports.POST, documents };
 }
-const valid = () => ({id:123,status:'approved',currency_id:'BRL',transaction_amount:198,transaction_amount_refunded:0,external_reference:'owner',metadata:{user_id:'owner',type:'credits'}});
+const valid = () => ({id:123,status:'approved',live_mode:true,currency_id:'BRL',transaction_amount:198,transaction_amount_refunded:0,external_reference:'owner',metadata:{user_id:'owner',type:'credits'}});
 const request = () => ({json:async()=>({paymentId:'123'})});
 process.env.MERCADO_PAGO_ACCESS_TOKEN = 'test-only-placeholder';
 test('unauthenticated calls are rejected', async () => {
   const f=fixture(valid(),false); assert.equal((await f.post(request())).status,401); assert.equal(f.documents.size,0);
 });
 test('foreign, pending, underpaid and refunded payments grant nothing', async () => {
-  for (const changes of [{external_reference:'other'},{metadata:{user_id:'other',type:'credits'}},{status:'pending'},{transaction_amount:1},{currency_id:'USD'},{transaction_amount_refunded:1},{metadata:{user_id:'owner',type:'toString'}}]) {
+  for (const changes of [{external_reference:'other'},{metadata:{user_id:'other',type:'credits'}},{status:'pending'},{live_mode:false},{transaction_amount:1},{currency_id:'USD'},{transaction_amount_refunded:1},{metadata:{user_id:'owner',type:'toString'}}]) {
     const f=fixture({...valid(),...changes}); assert.equal((await f.post(request())).status,409); assert.equal(f.documents.size,0);
   }
 });

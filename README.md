@@ -34,7 +34,7 @@ Configure as credenciais somente no ambiente de execução. Consulte [a migraç�
 - Importação de logs CSV e entrada manual de ensaios.
 - Cálculos de correção de combustível e comparação de ignição.
 - Backups na nuvem associados à conta.
-- Checkout de licença e créditos, com confirmação no servidor nesta proposta de migração.
+- Checkout de licença e créditos, com confirmação e autorização no servidor.
 
 O projeto requer validação independente dos arquivos gerados e dos resultados dos cálculos antes de uso em uma ECU real. Licenciamento, conciliação e cobrança possuem limitações descritas na documentação de segurança.
 

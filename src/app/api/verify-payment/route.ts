@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     if (!accessToken) return NextResponse.json({ error: 'Verificação indisponível.' }, { status: 503 });
     const payment = await new Payment(new MercadoPagoConfig({ accessToken })).get({ id: String(paymentId) });
     const type = payment.metadata?.type as PaymentType;
-    if (!Object.prototype.hasOwnProperty.call(paymentProducts, type ?? '') || payment.metadata?.user_id !== user.uid || payment.external_reference !== user.uid || payment.status !== 'approved' || payment.currency_id !== 'BRL' || payment.transaction_amount !== paymentProducts[type].price || (payment.transaction_amount_refunded ?? 0) !== 0) {
+    if (!Object.prototype.hasOwnProperty.call(paymentProducts, type ?? '') || payment.metadata?.user_id !== user.uid || payment.external_reference !== user.uid || payment.status !== 'approved' || payment.live_mode !== true || payment.currency_id !== 'BRL' || payment.transaction_amount !== paymentProducts[type].price || (payment.transaction_amount_refunded ?? 0) !== 0) {
       return NextResponse.json({ error: 'Pagamento ainda não confirmado para esta conta.' }, { status: 409 });
     }
     const receipt = adminDb.doc('paymentReceipts/' + payment.id);

@@ -58,11 +58,11 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
         };
     }, { minVal: Infinity, maxVal: -Infinity });
 
-    const data: Data[] = [{
+    const surface = {
         x: xAxis,
         y: yAxis,
         z: numericMapData as any[][],
-        type: 'surface',
+        type: 'surface' as const,
         connectgaps: false,
         colorscale: getPlotlyHeatmapScale(),
         cmin: minVal,
@@ -73,7 +73,8 @@ export default function SurfacePlot3D({ mapData, xAxis, yAxis, xAxisLabel, yAxis
           tickfont: { color: 'hsl(var(--foreground))' },
 
         }
-    }];
+    };
+    const data: Data[] = [surface];
 
     const layout: Partial<Layout> = {
         title: { text: '' },

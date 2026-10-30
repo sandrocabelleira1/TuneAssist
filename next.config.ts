@@ -3,9 +3,11 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   transpilePackages: ['react-markdown', 'remark-gfm'],
+  outputFileTracingRoot: process.cwd(),
+  experimental: { cpus: 1, webpackMemoryOptimizations: true },
   /* config options here */
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -35,3 +37,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
